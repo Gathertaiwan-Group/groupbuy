@@ -207,20 +207,52 @@ async function transition(ctx: RequestContext, key: keyof typeof TRANSITIONS): P
   if (error) throw new Error(`[accounting] ${error.message}`);
   const rows = (data ?? []) as RrRow[];
   if (rows.length !== ids.length) throw badRequest("找不到部分退款單（可能已被刪除）");
-  const ok = rows.filter((r) => t.from.includes(r.status));
-  const skipped = rows.filter((r) => !t.from.includes(r.status));
+  const skipped: string[] = [];
+  let candidates = rows.filter((r) => t.from.includes(r.status));
+  for (const r of rows) if (!t.from.includes(r.status)) skipped.push(`#${r.id}：狀態不符`);
+  // 核准／已退款前重新檢查可退金額（訂單已付金額可能在申請後變動，例如取消入帳）
+  if (key === "approve" || key === "refund") {
+    const ok: RrRow[] = [];
+    for (const r of candidates) {
+      const order = r.sales_order_id ? await orderById(session, r.sales_order_id) : null;
+      if (!order) {
+        skipped.push(`#${r.id}：找不到訂單`);
+        continue;
+      }
+      const max = await refundableOf(session, order, r.id);
+      if (Number(r.amount) > max + 0.001) {
+        skipped.push(`#${r.id}：退款金額 ${money(r.amount)} 超過目前可退金額 ${money(Math.max(0, max))}`);
+        continue;
+      }
+      ok.push(r);
+    }
+    candidates = ok;
+  }
   const fromLabels = await Promise.all(t.from.map((s) => enumLabel(STATUS_ENUM, s)));
-  if (!ok.length) throw badRequest(`只有「${fromLabels.join("／")}」的退款單可以${t.verb}`);
+  if (!candidates.length) {
+    throw badRequest([`沒有可${t.verb}的退款單（只有「${fromLabels.join("／")}」且金額未超過可退金額者可以${t.verb}）`, ...skipped].join("<br>"));
+  }
   const now = new Date().toISOString();
   const patch: Row = { status: t.to };
   if (key === "approve" || key === "reject") patch.approver = session.account;
   if (key === "refund") patch.date_refunded = now;
-  const upd = await db.from("refund_requisitions").update(patch).eq("tenant_id", session.tenantId).in("id", ok.map((r) => r.id));
+  // 條件式更新（狀態仍在允許的來源狀態才更新）：同時按兩次／兩人同時操作時只會有一個請求成功
+  const upd = await db
+    .from("refund_requisitions")
+    .update(patch)
+    .eq("tenant_id", session.tenantId)
+    .in("id", candidates.map((r) => r.id))
+    .in("status", t.from)
+    .select("id");
   if (upd.error) throw new Error(`[accounting] ${upd.error.message}`);
-  const lines = [`已${t.verb} ${ok.length} 筆` + (skipped.length ? `，略過 ${skipped.length} 筆（狀態不符）` : "")];
-  if (key === "refund") {
-    // 退款紀錄寫入金流交易紀錄（金流對帳「檢核」會列出退款）；實際退刷／匯款未串接
-    const txs = ok
+  const doneIds = new Set(((upd.data ?? []) as { id: number }[]).map((r) => r.id));
+  const done = candidates.filter((r) => doneIds.has(r.id));
+  for (const r of candidates) if (!doneIds.has(r.id)) skipped.push(`#${r.id}：狀態已被其他人變更`);
+  const lines = [`已${t.verb} ${done.length} 筆` + (skipped.length ? `，略過 ${skipped.length} 筆` : "")];
+  lines.push(...skipped);
+  if (key === "refund" && done.length) {
+    // 退款紀錄寫入金流交易紀錄（金流對帳「檢核」會列出退款）；實際退刷／匯款／點數回補未串接
+    const txs = done
       .filter((r) => r.sales_order_id)
       .map((r) => ({
         tenant_id: session.tenantId,
@@ -238,8 +270,10 @@ async function transition(ctx: RequestContext, key: keyof typeof TRANSITIONS): P
       const ins = await db.from("sales_order_transactions").insert(txs);
       if (ins.error) throw new Error(`[accounting] ${ins.error.message}`);
     }
-    if (ok.some((r) => r.refund_method === "CREDIT_CARD")) lines.push(notIntegrated("信用卡退刷（金流）").message + "（請至金流後台手動退刷）");
+    if (done.some((r) => r.refund_method === "CREDIT_CARD")) lines.push(notIntegrated("信用卡退刷（金流）").message + "（請至金流後台手動退刷）");
+    if (done.some((r) => r.refund_method === "POINT")) lines.push("【未串接】退回點數不會自動回補，請至會員點數手動調整");
   }
+  if (!done.length) throw badRequest(lines.join("<br>"));
   return actionOk(lines.join("<br>"));
 }
 

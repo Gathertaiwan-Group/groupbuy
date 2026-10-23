@@ -24,7 +24,7 @@ import { editorIds, editorResponse, flattenDotted, parseEditorRequest } from "@/
 import { enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { accountModeOf, bankCsvTemplate, decodeBankFile, digitsOf, parseBankFile, parseManualText, type BankLine } from "./bank-csv";
 import { matchBankLines, type ExistingBankTx, type MatchCode, type MatchOrder } from "./bank-match";
-import { fetchAll, parseIdList, requireGroupBuyId, taipeiDay, taipeiIso } from "./common";
+import { fetchAll, parseIdList, requireGroupBuyId, taipeiDay, taipeiIso, taipeiTime } from "./common";
 
 const PROVIDER_ENUM = "BankTransaction.bankProvider";
 const MAX_LINES = 3000;
@@ -112,26 +112,31 @@ async function loadOrders(tenantId: number, groupBuyId: number): Promise<MatchOr
   }));
 }
 
+/** 同租戶既有明細（重複匯入／跨團購重複入帳防呆用）；其他團購的明細只有已對應或已入帳才會被 bank-match 視為重複 */
 async function loadExisting(tenantId: number, groupBuyId: number): Promise<ExistingBankTx[]> {
   const db = getServiceClient();
-  const rows = await fetchAll<{ id: number; date_paid: string | null; amount: string | number; account: string | null; sales_order_id: number | null; checked: boolean }>(
+  const rows = await fetchAll<{ id: number; group_buy_id: number | null; date_paid: string | null; amount: string | number; account: string | null; sales_order_id: number | null; checked: boolean }>(
     (from, to) =>
       db
         .from("bank_transactions")
-        .select("id, date_paid, amount, account, sales_order_id, checked")
+        .select("id, group_buy_id, date_paid, amount, account, sales_order_id, checked")
         .eq("tenant_id", tenantId)
-        .eq("group_buy_id", groupBuyId)
         .order("id")
         .range(from, to),
   );
-  return rows.map((r) => ({
-    bankTransactionId: r.id,
-    date: taipeiDay(r.date_paid),
-    amount: Number(r.amount),
-    account: digitsOf(r.account),
-    salesOrderId: r.sales_order_id,
-    checked: !!r.checked,
-  }));
+  return rows.map((r) => {
+    const t = r.date_paid ? taipeiTime(r.date_paid) : null;
+    return {
+      bankTransactionId: r.id,
+      date: taipeiDay(r.date_paid),
+      time: t && t !== "00:00:00" ? t : null,
+      sameGroupBuy: r.group_buy_id === groupBuyId,
+      amount: Number(r.amount),
+      account: digitsOf(r.account),
+      salesOrderId: r.sales_order_id,
+      checked: !!r.checked,
+    };
+  });
 }
 
 /** Editor upload id＝`<16 hex>_<檔名>`（原站 display(path) 直接顯示 id） */

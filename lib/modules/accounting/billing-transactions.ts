@@ -127,19 +127,33 @@ async function billRecords(session: AdminSession, bill: BillRow): Promise<Row[]>
     const col = bill.billing_type === "START" ? "date_start" : "date_end";
     gbs = ((await db.from("group_buys").select("id, title, date_start, date_end").eq("tenant_id", session.tenantId).gte(col, from).lt(col, to).order(col)).data ?? []) as Gb[];
   }
+  // 一次分頁讀出這些團購的訂單（PostgREST 單次上限 1000 筆，不可用 limit 截斷），再依團購彙總
+  const gbIds = gbs.map((g) => g.id);
+  const orders = gbIds.length
+    ? await fetchAll<{ group_buy_id: number; grand_total: string | number; state: string }>((f, t) => {
+        let q = db.from("sales_orders").select("group_buy_id, grand_total, state").eq("tenant_id", session.tenantId).in("group_buy_id", gbIds);
+        if (bill.billing_type === "ORDERS") q = q.gte("created_at", from).lt("created_at", to);
+        return q.order("id").range(f, t);
+      }, 200000)
+    : [];
+  const agg = new Map<number, { orders: number; revenue: number }>();
+  for (const o of orders) {
+    if (INVALID_STATES.includes(o.state)) continue;
+    const a = agg.get(o.group_buy_id) ?? { orders: 0, revenue: 0 };
+    a.orders++;
+    a.revenue += Number(o.grand_total);
+    agg.set(o.group_buy_id, a);
+  }
   const out: Row[] = [];
   for (const gb of gbs) {
-    let q = db.from("sales_orders").select("grand_total, state").eq("tenant_id", session.tenantId).eq("group_buy_id", gb.id);
-    if (bill.billing_type === "ORDERS") q = q.gte("created_at", from).lt("created_at", to);
-    const orders = ((await q.limit(10000)).data ?? []) as { grand_total: string | number; state: string }[];
-    const valid = orders.filter((o) => !INVALID_STATES.includes(o.state));
-    const revenue = Math.round(valid.reduce((a, o) => a + Number(o.grand_total), 0));
+    const a = agg.get(gb.id) ?? { orders: 0, revenue: 0 };
+    const revenue = Math.round(a.revenue);
     out.push({
       groupBuyId: gb.id,
       groupBuyTitle: gb.title,
       dateStartString: taipeiDay(gb.date_start) ?? "",
       dateEndString: taipeiDay(gb.date_end) ?? "",
-      orders: valid.length,
+      orders: a.orders,
       groupBuyRevenue: revenue,
       rate,
       fee: Math.round((revenue * rate) / 100),

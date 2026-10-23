@@ -55,6 +55,11 @@ export function digitsOf(s: string | null | undefined): string {
   return String(s ?? "").replace(/\D+/g, "");
 }
 
+/** 帳號顯示值：只留數字、遮罩 *、連字號與空白（避免把任意文字／HTML 存進明細） */
+export function cleanAccount(s: string | null | undefined): string {
+  return String(s ?? "").replace(/[^0-9*\-\s]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
+}
+
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
@@ -183,7 +188,7 @@ export function parseManualText(text: string): ParseResult {
       return;
     }
     k++;
-    const accountRaw = tokens[k] ?? "";
+    const accountRaw = cleanAccount(tokens[k] ?? "");
     const account = digitsOf(accountRaw);
     if (!account) {
       out.issues.push({ lineNo, raw, message: `第 ${lineNo} 行：缺少匯入帳號` });
@@ -261,7 +266,7 @@ const HEADER_KEYS = {
   deposit: ["存入金額", "存入", "轉入金額", "收入金額", "存款金額", "入帳金額", "貸方金額", "貸方", "收款金額", "繳款金額", "交易金額", "金額", "credit", "amount"],
   withdrawal: ["支出金額", "支出", "提款金額", "提款", "轉出金額", "借方金額", "借方", "debit"],
   account: ["轉出帳號", "匯款帳號", "對方帳號", "轉出入帳號", "轉入帳號", "付款帳號", "帳號", "account"],
-  virtual: ["虛擬帳號", "銷帳編號", "繳款帳號", "收款帳號"],
+  virtual: ["虛擬帳號", "銷帳編號", "繳款帳號"],
   card: ["卡號", "信用卡號", "card"],
   memo: ["備註", "附言", "附註", "摘要", "說明", "交易說明", "存摺摘要", "remark", "memo", "note"],
 } as const;
@@ -302,7 +307,7 @@ interface ColumnMap {
   memo: number[];
 }
 
-function findHeader(rows: string[][]): { index: number; map: ColumnMap } | null {
+function findHeader(rows: string[][], mode: "account" | "virtual" | "card"): { index: number; map: ColumnMap } | null {
   for (let r = 0; r < Math.min(rows.length, 40); r++) {
     const row = rows[r];
     if (row.length < 2) continue;
@@ -330,9 +335,12 @@ function findHeader(rows: string[][]): { index: number; map: ColumnMap } | null 
     if (time >= 0) taken.add(time);
     const withdrawal = pick("withdrawal", taken);
     if (withdrawal >= 0) taken.add(withdrawal);
-    let account = pick("virtual", taken);
-    if (account < 0) account = pick("account", taken);
-    if (account < 0) account = pick("card", taken);
+    // 付款人帳號欄：一般格式先找「轉出帳號／匯款帳號…」，虛擬帳號格式先找「虛擬帳號／銷帳編號」，卡號格式先找「卡號」
+    const order: HeaderField[] = mode === "virtual" ? ["virtual", "account", "card"] : mode === "card" ? ["card", "account", "virtual"] : ["account", "virtual", "card"];
+    let account = -1;
+    for (const f of order) {
+      if (account < 0) account = pick(f, taken);
+    }
     if (account >= 0) taken.add(account);
     const memo: number[] = [];
     row.forEach((h, i) => {
@@ -384,7 +392,7 @@ export function parseBankFile(text: string, bankProvider: string): ParseResult {
   const nonEmpty = srcLines.filter((l) => l.trim() !== "");
   const delim = detectDelimiter(nonEmpty);
   const rows = srcLines.map((l) => (l.trim() === "" ? [] : splitCsvRow(l, delim)));
-  const header = findHeader(rows);
+  const header = findHeader(rows, mode);
   const out: ParseResult = { lines: [], issues: [], skipped: 0, format: "tokens" };
 
   if (header) {
@@ -404,7 +412,7 @@ export function parseBankFile(text: string, bankProvider: string): ParseResult {
         continue;
       }
       const memo = map.memo.map((i) => row[i] ?? "").filter(Boolean).join(" ");
-      let accountRaw = accountCol >= 0 ? row[accountCol] ?? "" : "";
+      let accountRaw = cleanAccount(accountCol >= 0 ? row[accountCol] ?? "" : "");
       let account = digitsOf(accountRaw);
       if (account.length < 4) {
         const fromMemo = accountFromText(memo);
@@ -465,10 +473,10 @@ export function parseBankFile(text: string, bankProvider: string): ParseResult {
       const d = digitsOf(c);
       if (d.length >= 5 && d.length > account.length && !parseDateTime(c)) {
         account = d;
-        accountRaw = c;
+        accountRaw = cleanAccount(c);
       }
     }
-    const memo = rest.filter((c) => c !== accountRaw).join(" ");
+    const memo = rest.filter((c) => cleanAccount(c) !== accountRaw).join(" ");
     out.lines.push({ lineNo, raw, date: dt.date, time, amount, account, accountRaw, uuidHint: uuidFromText(memo), memo });
   });
   return out;

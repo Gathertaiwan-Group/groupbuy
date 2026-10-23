@@ -51,6 +51,14 @@ export function taipeiDay(v: unknown): string | null {
   return new Date(d.getTime() + OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** timestamptz → 台灣時間 HH:mm:ss */
+export function taipeiTime(v: unknown): string | null {
+  if (v == null || v === "") return null;
+  const d = new Date(String(v));
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getTime() + OFFSET_MS).toISOString().slice(11, 19);
+}
+
 /** 讀取全部（PostgREST 每次最多 1000 筆）；build 回傳已加好條件的查詢 */
 export async function fetchAll<T>(build: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>, max = 20000): Promise<T[]> {
   const out: T[] = [];

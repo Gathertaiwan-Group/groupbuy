@@ -1,7 +1,9 @@
 // 匯款對帳：銀行明細 ↔ 訂單 比對（純函式，無 I/O；單元測試見 tests/bank-match.test.mjs）。
 //
 // 規則（可追溯：每筆結果都附 code＋中文狀態，寫入 bank_transactions.status）：
-//  0. 重複匯入：同「付款日期＋金額＋帳號」已存在（既有明細或同批前面的行）→ DUPLICATE，不對應訂單。
+//  0. 重複匯入：同「付款日期＋時間（有的話）＋金額＋帳號」已存在 → DUPLICATE，不對應訂單。
+//     比對對象：同團購的既有明細（全部）、同租戶其他團購「已對應訂單／已入帳」的明細、同批前面的行。
+//     帶「指定訂單編號」的行（更正多筆候選／未對到）不會被同團購「尚未對應、未入帳」的舊明細擋下。
 //  1. 候選訂單：階段 NEW/PROCESSING、付款方式為轉帳類（帳號模式：銀行轉帳 1、虛擬帳戶 2；
 //     卡號模式：信用卡 4／定期定額 128／銀聯 16384）、訂單成立日 ≤ 付款日（時間條件）。
 //  2. 帳號條件（必要）：
@@ -40,6 +42,10 @@ export interface ExistingBankTx {
   bankTransactionId: number;
   /** 付款日期 YYYY-MM-DD（台灣日期），沒有則 null */
   date: string | null;
+  /** 付款時間 HH:mm:ss（台灣時間；00:00:00 視為沒有時間 → null） */
+  time?: string | null;
+  /** 是否為同一個團購的明細（其他團購的明細只有已對應／已入帳時才算重複） */
+  sameGroupBuy?: boolean;
   amount: number;
   /** 帳號（只留數字） */
   account: string;
@@ -104,8 +110,9 @@ export function accountMatch(lineAccount: string, o: MatchOrder, mode: AccountMo
   return a.slice(-n) === b.slice(-n) ? "TAIL" : null;
 }
 
-export function duplicateKey(date: string | null, amount: number, account: string): string {
-  return `${date ?? ""}|${cents(amount)}|${digits(account)}`;
+export function duplicateKey(date: string | null, time: string | null | undefined, amount: number, account: string): string {
+  const t = time && time !== "00:00:00" ? time : "";
+  return `${date ?? ""}|${t}|${cents(amount)}|${digits(account)}`;
 }
 
 function uuidList(os: { uuid: string }[], max = 5): string {
@@ -125,10 +132,18 @@ export function matchBankLines(
   mode: AccountMode = "account",
 ): MatchResult[] {
   const methods = mode === "card" ? CARD_METHODS : TRANSFER_METHODS;
-  const seenKeys = new Map<string, string>(); // key → 說明（既有 #id／第 N 行）
+  // key → { 說明, 是否為「同團購且尚未對應、未入帳」（可被指定訂單的更正行覆蓋）}
+  const seenKeys = new Map<string, { label: string; resolvable: boolean }>();
   for (const e of existing) {
-    const k = duplicateKey(e.date, e.amount, e.account);
-    if (!seenKeys.has(k)) seenKeys.set(k, `既有明細 #${e.bankTransactionId}`);
+    const same = e.sameGroupBuy !== false;
+    const linked = e.salesOrderId != null || e.checked;
+    if (!same && !linked) continue; // 其他團購未對應的明細不擋
+    const k = duplicateKey(e.date, e.time, e.amount, e.account);
+    const prev = seenKeys.get(k);
+    const resolvable = same && !linked;
+    if (!prev || (prev.resolvable && !resolvable)) {
+      seenKeys.set(k, { label: `${same ? "" : "其他團購的"}既有明細 #${e.bankTransactionId}`, resolvable });
+    }
   }
   const takenBy = new Map<number, string>(); // salesOrderId → 說明
   for (const e of existing) {
@@ -141,13 +156,13 @@ export function matchBankLines(
   const results: MatchResult[] = [];
   for (const line of lines) {
     const base = { lineNo: line.lineNo, salesOrderId: null, uuid: null, candidates: [] as { salesOrderId: number; uuid: string }[] };
-    const key = duplicateKey(line.date, line.amount, line.account);
+    const key = duplicateKey(line.date, line.time, line.amount, line.account);
     const dupOf = seenKeys.get(key);
-    if (dupOf) {
-      results.push({ ...base, code: "DUPLICATE", status: `重複匯入（與${dupOf}相同），略過` });
+    if (dupOf && !(line.uuidHint && dupOf.resolvable)) {
+      results.push({ ...base, code: "DUPLICATE", status: `重複匯入（與${dupOf.label}相同），略過` });
       continue;
     }
-    seenKeys.set(key, `第 ${line.lineNo} 行`);
+    seenKeys.set(key, { label: `第 ${line.lineNo} 行`, resolvable: false });
 
     const pick = (o: MatchOrder, status: string): MatchResult => {
       const taken = takenBy.get(o.salesOrderId);

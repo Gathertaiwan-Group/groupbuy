@@ -82,10 +82,11 @@ var editor; // use a global for the submit and return data rendering in the exam
 			language:DataTableConfig.i18n,
 			columns: [
 				{ data: 'datePaidStr' },
-				{ data: 'account' },
+				{{!-- 安全：帳號／訂單編號／狀態以純文字輸出（原站未設 render） --}}
+				{ data: 'account', render: $.fn.dataTable.render.text() },
 				{ data: 'amount' },
-				{ data: 'salesOrderUUID', defaultContent:'' },
-				{ data: 'status', defaultContent:'' },
+				{ data: 'salesOrderUUID', defaultContent:'', render: $.fn.dataTable.render.text() },
+				{ data: 'status', defaultContent:'', render: $.fn.dataTable.render.text() },
 			],
 			"order": [[ 3, "desc" ]],
 			select: DataTableConfig.selectOptionsOS,
