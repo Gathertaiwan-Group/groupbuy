@@ -105,7 +105,7 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 只用 `groupbuy` schema；service-role client（`lib/supabase/server.ts`，`cache: no-store`）；**每個查詢以 session 的 tenant_id 過濾**（`crud.ts`、`dtQuery` 自動加）。anon/authenticated 對所有表無權限（RLS＋revoke）。
 - 原站 JSON 鍵 ↔ 欄位：datamodel 的 `EntityDef`（`lib/db/entity-types.ts` 介面合約）＋ `rowToApi/apiToRow`。
 - 列舉：`groupbuy.enum_options` → `lib/core/enums.ts`（每個執行個體快取 10 分鐘）。
-- 系統設定（`groupbuy.system_preferences`，tenant＋name 唯一）：示範租戶 guest_ep 的值由 migration 0102 寫入（原站「進階設定」列表中「來自系統設定」的 43 個鍵，2026-10-23 唯讀擷取；不含金鑰／密碼）。groupbuy 進階設定頁以同名鍵讀取。
+- 系統設定（`groupbuy.system_preferences`，tenant＋name 唯一）：示範租戶 guest_ep 的值由 migration 0103 寫入推導的預設值（系統信主旨／內容為通用文字、無庫存顯示＝OUT_OF_STOCK、電子發票／信用卡服務商＝NONE；原站樣板未擷取）。0102 已作廢（內容移除）。groupbuy 進階設定頁以同名鍵讀取。
 - 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage（`gb/` 檔名含 UUID、內容不變 → 轉址可快取：瀏覽器 1 天、Vercel 邊緣一年〔每次部署清除〕；轉址目標含 Supabase 專案網址，所以瀏覽器不設長期）；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN（快取一天）。
 - Migration：`scripts/apply-migrations.mjs`（Management API，單一交易＋帳本），CI 在 main push 且 migration 有變更時自動套用；**禁止 `supabase db push`**（共用庫）。
 
