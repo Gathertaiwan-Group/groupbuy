@@ -11,7 +11,6 @@ import * as item from "./item";
 import * as bundle from "./bundle";
 import * as io from "./template-io";
 import * as lookup from "./lookup";
-import { extraRoutes } from "./extras";
 import { itemModalRoutes } from "./item-modals";
 
 const LIST: ("GET" | "POST")[] = ["GET", "POST"];
@@ -86,5 +85,4 @@ export const routes: RouteDef[] = [
   get("/ajax/Lookup/item", lookup.lookupItem),
 
   ...itemModalRoutes,
-  ...extraRoutes,
 ];

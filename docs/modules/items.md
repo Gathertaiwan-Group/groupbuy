@@ -37,7 +37,7 @@
 - 商品：`/ajax/Item/list`、`save|update|delete`、`unbindParentItem`、`cacheToStock`、`batchOnline`、`reseq`、`groupSeqItem`、`unGroupSeqItem`、`syncChild`、`batchNameEdit`、`uniqueList`、`cloneItems`、`get`、`copyToGroupBuy`（JSON）、`uploadFromUrl`（未串接）、`/ajax/Log/itemStockLog`。
 - 組合商品：`/ajax/ItemBundleV2/list|delete|template|getBundle|saveBundle|previewSyncNames|executeSyncNames|previewSyncContent|executeSyncContent|updateItemTag|updateBatchItemTags`。
 - 匯入／匯出：`GET /backend/ItemTemplate/exportItemTemplate`（XLSX）、`POST /backend/ItemTemplate/exportStock`、`POST /ajax/ItemTemplate/importItemCSV`、`POST /ajax/ItemTemplate/importItemStock`。
-- select2：`/ajax/Lookup/itemSet`、`/ajax/Lookup/groupBuyItemSet`、`/ajax/Lookup/item`；`/ajax/Lookup/flatRateShipping` 以 ANY＋priority 900 暫代（屬 shipping，shipping 登錄後自動讓位）。
+- select2：`/ajax/Lookup/itemSet`、`/ajax/Lookup/groupBuyItemSet`、`/ajax/Lookup/item`；運費規則下拉 `/ajax/Lookup/flatRateShipping` 由 shipping 模組提供（items 暫代版已移除）。
 
 資料表：`group_buy_item_sets`、`item_sets`、`items`、`item_bundles`、`item_sales_rules`、`item_sales_rule_tags`、`group_buy_item_set_sales_rules`、`group_buy_item_set_sales_rule_tags`、`group_buy_item_set_flat_rate_shippings`；唯讀 `group_buys`、`sales_rules`、`shipping_tags`、`flat_rate_shippings`、`order_items`＋`sales_orders`（盤點／未盤點數）。
 Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock()`（原子增減、下限 0、只給 service_role）。

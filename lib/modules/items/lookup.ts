@@ -1,5 +1,5 @@
-// select2 查詢端點（items 模組）：/ajax/Lookup/itemSet、/ajax/Lookup/groupBuyItemSet、/ajax/Lookup/item，
-// 以及暫代的 /ajax/Lookup/flatRateShipping（運費規則屬 shipping 模組；低優先權登錄，shipping 實作後自動讓位）。
+// select2 查詢端點（items 模組）：/ajax/Lookup/itemSet、/ajax/Lookup/groupBuyItemSet、/ajax/Lookup/item。
+// （運費規則下拉 /ajax/Lookup/flatRateShipping 由 shipping 模組提供。）
 import type { RequestContext } from "@/lib/core/http/types";
 import { json } from "@/lib/core/http/responses";
 import { requireSession } from "@/lib/core/http/route-helpers";
@@ -114,23 +114,4 @@ export async function lookupItem(ctx: RequestContext): Promise<Response> {
     itemType: s(r.item_type),
   }));
   return json({ results, more, pagination: { more } });
-}
-
-/** 運費規則（品項運費 select2；shipping 模組未登錄時的暫代實作） */
-export async function lookupFlatRateShipping(ctx: RequestContext): Promise<Response> {
-  const session = requireSession(ctx);
-  const p = await select2Params(ctx);
-  const t = session.tenantId;
-  if (p.initialValue) {
-    if (!p.ids.length) return json([]);
-    const rows = await selectIn<Row>("flat_rate_shippings", "id, title", "id", p.ids, t);
-    return select2Initial(rows.map((r) => ({ id: Number(r.id), text: s(r.title) })));
-  }
-  let q = db().from("flat_rate_shippings").select("id, title").eq("tenant_id", t);
-  const term = likeTerm(p.term);
-  if (term) q = q.ilike("title", `%${term}%`);
-  const from = (p.page - 1) * PAGE;
-  const { data, error } = await q.order("seq").order("id").range(from, from + PAGE);
-  if (error) throw new Error(`[lookup flatRateShipping] ${error.message}`);
-  return select2Response(((data ?? []) as Row[]).map((r) => ({ id: Number(r.id), text: s(r.title) })), PAGE);
 }

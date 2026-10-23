@@ -3,7 +3,7 @@
 //   GET|POST /backend/GroupBuy/exportPaidOrderItems  groupBuyId、separateItem   匯出商品報表 → 已付款訂單商品
 //   GET|POST /backend/GroupBuy/exportERPItems        groupBuyId                 匯出商品報表 → ERP 商品資料
 //   （匯出商品報表 → 上月出貨商品統計 /backend/Item/exportItemSalesReport 由 analytics 模組處理：它是原站端點參數的超集）
-//   GET      /backend/ShippingCSV/exportShippingCSV?groupBuyId=1,2      工具列「匯出貨運清單」彈窗（導向出貨模組的匯出出貨紀錄頁）
+//   （工具列「匯出貨運清單」彈窗 /backend/ShippingCSV/exportShippingCSV 由 shipping 模組提供）
 // 下載回應走 download()（Set-Cookie fileDownload=true，jquery.fileDownload 判斷成功用）。
 import ExcelJS from "exceljs";
 import { getServiceClient } from "@/lib/supabase/server";
@@ -184,14 +184,4 @@ export const exportRoutes: RouteDef[] = [
   any("/backend/SalesReturnRecord/exportDaily", exportDaily),
   any("/backend/GroupBuy/exportPaidOrderItems", exportPaidOrderItems),
   any("/backend/GroupBuy/exportERPItems", exportERPItems),
-  fragment("/backend/ShippingCSV/exportShippingCSV", {
-    template: "groupbuy/modal-shippingcsv-export.html",
-    method: "GET",
-    data: async (ctx) => {
-      const ids = await ownGroupBuyIds(ctx.session, parseIdList(ctx.query.get("groupBuyId")));
-      if (ids.length === 0) throw badRequest("請先選擇團購");
-      const { data } = await getServiceClient().from("group_buys").select("id, title, short_url").eq("tenant_id", ctx.session.tenantId).in("id", ids);
-      return { groupBuys: ((data ?? []) as { id: number; title: string; short_url: string }[]).map((g) => ({ groupBuyId: g.id, title: g.title, shortUrl: g.short_url })) };
-    },
-  }),
 ];

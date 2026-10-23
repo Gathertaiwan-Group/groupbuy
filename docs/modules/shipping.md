@@ -126,8 +126,8 @@ Migration：4000（出貨紀錄分類、統計檢視、月份紀錄重算函式�
 
 ## 給 core／其他模組
 
-- 匯出貨運清單 /backend/ShippingCSV/exportShippingCSV 以 priority 50 取代 groupbuy 的導向用彈窗（groupbuy 那支可移除）。
-- /ajax/Lookup/flatRateShipping 與 items 的 priority 900 版本重疊（本模組勝出）。
+- 匯出貨運清單 /backend/ShippingCSV/exportShippingCSV 由本模組提供（groupbuy 原本的導向用彈窗已於清理輪移除）。
+- /ajax/Lookup/flatRateShipping 由本模組提供（items 的 priority 900 暫代版已於清理輪移除）。
 - /ajax/Sms/getBalance 由本模組提供（回未串接）。
 - 核心欄位型別表不含新建檢視，shipping_records_list_v 的日期在模組內格式化；建議型別表能涵蓋 migration 新增的檢視。
 - Editor shim 沒有 editor.ajax() 存取器（本模組改用 editor.s.ajax）。
