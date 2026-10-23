@@ -1,0 +1,241 @@
+<form name="SplitSalesOrderForm" method="post" action="{{baseUrl}}/ajax/SplitSalesOrder/split.do" class="form-horizontal" id="SplitSalesOrderForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><div class="modal-header">
+		<h5>團購 &raquo; 拆單</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="form-group row">
+		<label class="col-lg-4">拆單方式</label>
+		<div class="col-lg-8 h-100">
+<input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderByBACKORDER" value="BACKORDER" checked="true">
+		<label class="form-check-label h-100" for="splitSalesOrderByBACKORDER">現貨/預購</label>
+<input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderBySHIPPING_TAG" value="SHIPPING_TAG" >
+		<label class="form-check-label h-100" for="splitSalesOrderBySHIPPING_TAG">倉儲標籤 (--)</label>
+<input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderByWEIGHT" value="WEIGHT" >
+		<label class="form-check-label h-100" for="splitSalesOrderByWEIGHT">材積</label>
+<input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderByTAX" value="TAX" >
+		<label class="form-check-label h-100" for="splitSalesOrderByTAX">應稅/免稅</label>
+</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4">訂單地址不共用</label>
+		<div class="col-lg-8">
+			<input type="checkbox" name="uniqueAddress" value="on" id="uniqueAddress" class=" form-check-input nocount"><label class="form-check-label" for="uniqueAddress">訂單地址不共用</label>
+			<div class="field-info">共用代表當修改其中一張訂單地址，另一張訂單會自動更新地址</div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4">訂單金額保留於原訂單金額不拆開</label>
+		<div class="col-lg-8">
+			<input type="checkbox" name="grandTotalInPrimaryOrder" value="on" id="grandTotalInPrimaryOrder" class=" form-check-input nocount"><label class="form-check-label" for="grandTotalInPrimaryOrder">訂單金額保留於原訂單金額不拆開</label>
+			<div class="field-info">僅限用於貨到付款，可連同預購商品金額一並收取</div>
+		</div>
+	</div>
+	<div class="form-group row" id="giftRules-group">
+		<label class="col-lg-4">現貨/預購拆單：贈品規則</label>
+		<div class="col-lg-8">
+			<div>
+			<input type="checkbox" name="zeroAmountSalesOrder" value="on" id="zeroAmountSalesOrder" class=" form-check-input nocount"><label class="form-check-label" for="zeroAmountSalesOrder">允許拆單內只有贈品</label>
+			</div>
+			<div>
+			<input type="checkbox" name="giftWithBackOrder" value="on" id="giftWithBackOrder" class=" form-check-input nocount"><label class="form-check-label" for="giftWithBackOrder">若有其他預購商品，贈品隨同預購訂單</label>
+			</div>
+		</div>
+	</div>
+	<div class="form-group row" id="emptyTag-group">
+		<label class="col-lg-4">無標籤商品規則</label>
+		<div class="col-lg-8">
+			<div>
+			<input type="checkbox" name="emptyTagOneOrder" value="on" id="emptyTagOneOrder" class=" form-check-input nocount"><label class="form-check-label" for="emptyTagOneOrder">無標籤商品允許單獨拆單為一張訂單</label>
+			</div>
+		</div>
+	</div>
+	<div class="form-group row" id="shippingFeeBy-group">
+		<label class="col-lg-4">運費拆分依照</label>
+		<div class="col-lg-8">
+<input type="radio" class="form-check-input" name="shippingFeeBy" id="shippingFeeByORIGIN" value="ORIGIN" checked="true">
+		<label class="form-check-label" for="shippingFeeByORIGIN">維持在原訂單</label>
+<input type="radio" class="form-check-input" name="shippingFeeBy" id="shippingFeeByGBIS" value="GBIS" >
+		<label class="form-check-label" for="shippingFeeByGBIS">優先以品項運費分配</label>
+</div>
+	</div>
+<legend class="sticky-top white" style="z-index:1">
+	進階篩選條件<span class="help-block with-errors small float-right"></span>
+	</legend>
+	<div class="form-group row">
+		<label class="col-lg-4 control-label" for="itemTitle">指定單號</label>
+		<div class="col-lg-8">
+			<input type="text" name="uuids" maxlength="255" placeholder="可逗點多筆" value="" type="text" id="uuids" class="form-control"></div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4 control-label">現貨商品總金額範圍</label>
+		<div class="col-lg-8 form-inline">
+			<input type="text" name="normalPriceMin" maxlength="10" size="10" placeholder="最小金額" value="" type="text" id="normalPriceMin" class="form-control">
+			~ <input type="text" name="normalPriceMax" maxlength="10" size="10" placeholder="最大金額" value="" type="text" id="normalPriceMax" class="form-control"></div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4 control-label">預購商品總金額範圍</label>
+		<div class="col-lg-8 form-inline">
+			<input type="text" name="backOrderPriceMin" maxlength="10" size="10" placeholder="最小金額" value="" type="text" id="backOrderPriceMin" class="form-control">
+			~ <input type="text" name="backOrderPriceMax" maxlength="10" size="10" placeholder="最大金額" value="" type="text" id="backOrderPriceMax" class="form-control"></div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4 control-label">現貨商品數量範圍</label>
+		<div class="col-lg-8 form-inline">
+			<input type="text" name="normalTotalMin" maxlength="10" size="10" placeholder="最小數量" value="" type="text" id="normalTotalMin" class="form-control">
+			~ <input type="text" name="normalTotalMax" maxlength="10" size="10" placeholder="最大數量" value="" type="text" id="normalTotalMax" class="form-control"></div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4 control-label">預購商品數量範圍</label>
+		<div class="col-lg-8 form-inline">
+			<input type="text" name="backOrderTotalMin" maxlength="10" size="10" placeholder="最小數量" value="" type="text" id="backOrderTotalMin" class="form-control">
+			~ <input type="text" name="backOrderTotalMax" maxlength="10" size="10" placeholder="最大數量" value="" type="text" id="backOrderTotalMax" class="form-control"></div>
+	</div>
+	<div class="form-group row">
+		<label class="col-lg-4 control-label" for="itemTitle">商品出貨短名稱</label>
+		<div class="col-lg-8">
+			<input type="text" name="itemTitle" maxlength="255" placeholder="可輸入部分商品名稱，逗點區隔多個商品" value="" type="text" id="itemTitle" class="form-control"></div>
+	</div>
+	<div class="form-group row" id="keywordMatch">
+		<label class="col-lg-4 control-label" for="keywordMatch">商品比對方式:</label>
+		<div class="col-lg-8">
+		<select name="keywordMatch" id="keywordMatch" class="form-control"><option value="ALL">完全包含</option>
+<option value="OR">任一包含</option>
+<option value="ONLY">僅包含</option>
+<option value="EXCLUDE">不包含</option></select></div>
+	</div>
+	<div class="form-group row" id="flatRateShippingId-group">
+		<label class="col-lg-4 control-label" for="flatRateShippingId">僅分割此運費條件之訂單:</label>
+		<div class="col-lg-8">
+		<select name="flatRateShippingId" id="flatRateShippingId" class="form-control"><option value="">選擇</option>
+{{#each rules}}<option value="{{id}}">{{title}}</option>
+{{/each}}</select></div>
+	</div>
+</div> <!-- modal-body -->
+	<div id="preview"></div>
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+<div class="alert alert-info m-2 p-2">
+	<h4>進階使用說明</h4>
+	<p><mark>現貨商品總金額範圍</mark>有填任意值，會包含「現貨商品總金額」符合範圍的訂單</p>
+	<p><mark>預購商品總金額範圍</mark>有填任意值，會包含「預購商品總金額」符合範圍的訂單</p>
+	<p><mark>現貨商品總金額</mark>以及<mark>預購商品總金額範圍</mark>有填任意值，會包含「預購商品總金額」「預購商品總金額」同時符合範圍的訂單</p>
+	<p><mark>商品比對方式</mark></p>
+	<p><mark>完全包含</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單同時有前述三樣商品才會符合條件</p>
+	<p><mark>完全包含</mark>時，請盡量輸入完整商品名稱</p>
+	<p><mark>僅包含</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單剛好有這三樣商品且不包含其他商品才會符合條件</p>
+	<p><mark>任一包含</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單有買帽子,衣服,褲子任何一樣商品就會符合條件</p>
+	<p><mark>不包括</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單沒有包含前述任何一樣商品才會符合條件</p>
+	</div>
+</form><script>
+
+var createIndexes = function() {
+	var ajaxurl = GBF.baseUrl + '/ajax/ShippingCSV/createIndexes';
+	jQuery.get( ajaxurl,
+			{},
+			function( data ) {
+				console.log('done:%o', data);
+			}
+	);
+};
+
+var onSuccess = function(json) {
+	//createIndexes();
+	modalShowSuccess($('#myModal'), json.error);
+}
+
+initAjaxForm('SplitSalesOrderForm', onSuccess);
+
+var getCount = function() {
+	var ajaxurl = GBF.baseUrl + '/ajax/SplitSalesOrder/previewSalesOrderToSplit.do';
+	jQuery.post( ajaxurl,
+			{
+				'groupBuyId':$('input[name="groupBuyId"]').val(),
+				'normalPriceMin':$('input[name="normalPriceMin"]').val(),
+				'normalPriceMax':$('input[name="normalPriceMax"]').val(),
+				'backOrderPriceMin':$('input[name="backOrderPriceMin"]').val(),
+				'backOrderPriceMax':$('input[name="backOrderPriceMax"]').val(),
+				'normalTotalMin':$('input[name="normalTotalMin"]').val(),
+				'normalTotalMax':$('input[name="normalTotalMax"]').val(),
+				'backOrderTotalMin':$('input[name="backOrderTotalMin"]').val(),
+				'backOrderTotalMax':$('input[name="backOrderTotalMax"]').val(),
+				'itemTitle':$('input[name="itemTitle"]').val(),
+				'keywordMatch':$('select[name="keywordMatch"]').val(),
+				'flatRateShippingId':$('select[name="flatRateShippingId"]').val(),
+			},
+			function( data ) {
+				$('.help-block').html('符合篩選條件數量:' + data.recordsTotal );
+				var html = '';
+				if (data.data !== null && data.data.length > 0) {
+					html += '<div class="container">';
+					html += '<div class="row">';
+					html += '<div class="col-sm-12"><h3>快速預覽部分訂單</h3></div>';
+
+					for (var i = 0; i < data.data.length; i++) {
+						html += '<div class="col-sm-3">';
+						var so = data.data[i];
+						html += so.uuid;
+						html += "</div>";
+						html += '<div class="col-sm-9"><p class="small">';
+						var items = '';
+						for (var j = 0; j < so.sortedOrderItems.length; j++ ) {
+							if (so.sortedOrderItems[j].backOrder) {
+								items += '<span class="badge badge-success">預</span>';
+							}
+							items += so.sortedOrderItems[j].shortName + 'x' + so.sortedOrderItems[j].total + ', ';
+						}
+						if ($('input[name="itemTitle"]').val().length > 0) {
+							var x = $('input[name="itemTitle"]').val().split(',');
+							for (var y = 0; y < x.length; y++) {
+								var word = x[y].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+								if (word.length == 0) continue;
+								items = items.replace(new RegExp(word, 'g'), '<mark><b>' + x[y] + '</b></mark>');
+							}
+						}
+						html += items + "</p></div>";
+					}
+					html += '</div>';
+					html += '</div>';
+				}
+				$('#preview').html(html);
+			}
+	);
+};
+$('#shippingFeeBy-group').hide();
+(function () {
+	var onSplitOrderBy = function() {
+		console.log('onSplitOrderBy')
+		var v = $('input[name=splitOrderBy]:checked').val();
+		if (v == 'SHIPPING_TAG') {
+			$('#shippingFeeBy-group').show()
+			$('#emptyTag-group').show();
+		} else {
+			$('#shippingFeeBy-group').hide();
+			$('#emptyTag-group').hide();
+			$('input[name=shippingFeeBy][value=ORIGIN]').prop('checked', true)
+		}
+
+		if (v == 'BACKORDER') {
+			$('#giftRules-group').show()
+		} else {
+			$('#giftRules-group').hide();
+			$('input[name=zeroAmountSalesOrder]').prop('checked', false);
+			$('input[name=giftWithBackOrder]').prop('checked', false);
+		}
+	}
+	$('.form-control, .form-check-input').on('change', function() {
+		if ($(this).attr("name") == 'splitOrderBy') {
+			onSplitOrderBy();
+			return;
+		}
+		if (!$(this).hasClass("nocount")) {
+			getCount();
+		}
+	});
+}());
+</script>

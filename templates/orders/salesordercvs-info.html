@@ -1,0 +1,408 @@
+<div class="modal-header">
+	<h5>超商取貨</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+
+
+    <div class="container mt-2">
+
+        <!-- Loading State -->
+        <div id="loadingState" class="text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">載入超商資訊中...</p>
+        </div>
+
+        <!-- No Store Selected State -->
+        <div id="noStoreState" class="not-found-container" style="display: none;">
+            <div class="alert alert-warning mb-0">
+                <h5><i class="bi bi-info-circle-fill"></i> 尚未選擇超商</h5>
+                <p class="mb-0">此訂單目前尚未設定超商取貨資訊。</p>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="not-found-container" style="display: none;">
+            <div class="alert alert-danger mb-0">
+                <h5><i class="bi bi-exclamation-triangle-fill"></i> 發生錯誤</h5>
+                <p id="errorMessage" class="mb-0">無法取得超商資訊，請稍後再試或聯絡系統管理員。</p>
+            </div>
+        </div>
+
+        <!-- Success State -->
+        <div id="cvsInfoContainer" class="cvs-info-container" style="display: none;">
+            <div class="cvs-info-header">
+                <div class="d-flex align-items-center">
+                    <p id="storeName" class="mb-0 me-2"></p>
+                    <span id="storeTypeLabel" class="store-type-label"></span>
+                </div>
+            </div>
+            <div class="row small">
+                <div class="col-md-12">
+                    <p><strong>門市代號：</strong><span id="storeCode"></span></p>
+                </div>
+                <div class="col-md-12">
+                    <p><strong>門市類型：</strong><span id="storeType"></span></p>
+                </div>
+                <div class="col-12">
+                    <p><strong>門市地址：</strong><span id="storeAddress"></span></p>
+                </div>
+                <div class="col-12">
+	         		<div class="logistics-section">
+		                <div class="d-flex justify-content-between align-items-center mb-2">
+		                	<div>
+			                    <p class="mb-0"><strong>物流交易編號：</strong><span id="logisticsID"></span></p>
+			                    <p class="mb-0"><strong>物流配送編號：</strong><span id="shipmentNo"></span></p>
+		                    </div>
+		                    <div>
+		                    	<div id="cancelLogisticsButtonArea" style="display: none;">
+			                        <button id="cancelLogisticsButton" class="btn btn-sm btn-danger me-2" >
+			                            <i class="fas fa-ban"></i> 取消超商取貨條
+			                        </button>
+		                        	<br><span class="small grey-text">冷凍超取條一但產生，全家將會來收貨</span>
+		                        </div>
+		                        <div id="updateLogisticsButtonArea">
+			                        <button id="updateLogisticsButton" class="btn btn-sm btn-success">
+			                            <i class="fas fa-sync-alt"></i> 更新/取得超商取貨條
+			                        </button>
+			                        <br><span class="small grey-text">當超取條逾期，或是尚未取得時可透過此操作更新取得</span>
+			                    </div>
+		                    </div>
+		                </div>
+	           		</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clear Store Section -->
+        <div id="clearStoreSection" class="bg-light p-4 rounded mb-4" style="display: none;">
+            <h5 class="mb-3">清除超商取貨設定</h5>
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                清除超商取貨設定後，將需要重新選擇超商。請確認是否需要執行此操作。
+            </div>
+            <form id="clearCvsForm" class="mt-3">
+                <div class="mb-3">
+                    <label for="staffNote" class="form-label">員工備註</label>
+                    <textarea id="staffNote" name="staffNote" class="form-control" rows="3"
+                            placeholder="請輸入清除超商的原因或其他備註"></textarea>
+                </div>
+                <div class="d-flex justify-content-end">
+                    <button type="button" id="cancelClearButton" class="btn btn-secondary me-2">取消</button>
+                    <button type="submit" id="clearStoreButton" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> 清除超商
+                    </button>
+                </div>
+            </form>
+        </div>
+
+		<div id="cvs-lookup-container" class="bg-light p-4 rounded mb-4" style="display: none;">
+		</div>
+
+        <!-- Select New Store Button (always visible) -->
+        <div class="d-flex justify-content-end mb-4">
+            <button id="clearStoreSectionButton" class="btn btn-outline-danger me-2">
+                <i class="fas fa-trash-alt"></i> 移除超商
+            </button>
+            <button id="selectNewStoreButton" class="btn btn-primary">
+                 <i class="fas fa-store"></i> 變更超商
+            </button>
+        </div>
+
+        <!-- New store selection will be added here later -->
+    </div>
+
+</div> <!-- modal-body -->
+
+<script type="text/javascript">
+
+$(document).ready(function() {
+    // Function to load convenience store information
+
+    var cvsInfo = {};
+
+    function loadCvsInfo(orderId) {
+        // Show loading state
+        $('#loadingState').show();
+        $('#cvsInfoContainer').hide();
+        $('#errorState').hide();
+        $('#noStoreState').hide();
+        $('#clearStoreSection').hide();
+
+        let url = GBF.baseUrl+'/ajax/SalesOrderCvs/getInfo';
+        // Make AJAX request to get CVS info
+        $.ajax({
+            url: url,
+            type: 'GET',
+            data: { salesOrderId: orderId },
+            dataType: 'json',
+            success: function(response) {
+                // Hide loading state
+                $('#loadingState').hide();
+
+                cvsInfo = response.data;
+                if (response.data && response.data.CVSStoreID) {
+                    // Display CVS information
+                    displayCvsInfo(response.data);
+                    $('#cvsInfoContainer').show();
+                    // Show clear button only if store exists
+                    $('#clearStoreSectionButton').show();
+                } else {
+                    // Show no store selected state
+                    $('#noStoreState').show();
+                    // Hide clear button when no store exists
+                    $('#clearStoreSectionButton').hide();
+                }
+            },
+            error: function(xhr, status, error) {
+                // Hide loading state and show error state
+                $('#loadingState').hide();
+                $('#errorMessage').text('發生錯誤，請稍後再試');
+                $('#errorState').show();
+                console.error('Error fetching CVS info:', error);
+                // Hide clear button on error
+                $('#clearStoreSectionButton').hide();
+            }
+        });
+    }
+
+    // Function to display CVS information
+    function displayCvsInfo(data) {
+        // Set store type & logo
+        $('#storeType').text(getStoreTypeName(data.LogisticsSubType));
+        $('#storeTypeLabel').text(getStoreTypeName(data.LogisticsSubType))
+            .removeClass()
+            .addClass('store-type-label store-type-' + data.LogisticsSubType);
+
+        // Set other store info
+        $('#storeName').text(data.CVSStoreName || 'Unknown');
+        $('#storeCode').text(data.CVSStoreID || 'N/A');
+        $('#storeAddress').text(data.CVSAddress || 'N/A');
+        $('#logisticsID').text(data.AllPayLogisticsID || '尚未取號');
+        $('#shipmentNo').text(data.ShipmentNo || '尚未取號');
+
+      	if (data.AllPayLogisticsID) {
+            $('#cancelLogisticsButtonArea').show();
+        } else {
+            $('#cancelLogisticsButtonArea').hide();
+        }
+    }
+
+    // Helper function to get store type display name
+    function getStoreTypeName(storeType) {
+        const storeTypes = {
+            'UNIMART': '統一超商',
+            'FAMI': '全家便利商店',
+            'HILIFE': '萊爾富',
+            'OKMARTC': 'OK超商',
+        };
+        return storeTypes[storeType] || storeType;
+    }
+
+    // Event handlers for buttons
+    $('#selectNewStoreButton').click(function() {
+    	$('#noStoreState').hide();
+    	$('#cvsInfoContainer').hide();
+		loadCvsLookup(orderId);
+    });
+
+	// Cancel Logistics Button
+	$('#cancelLogisticsButton').click(function() {
+
+        // Disable button and show loading state
+        $(this).prop('disabled', true);
+        $(this).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 處理中...');
+
+        let url = GBF.baseUrl+'/ajax/SalesOrderCvs/cancelCvsPaymentNo';
+        // Make API call
+        $.ajax({
+            url: url,
+            type: 'POST',
+            data: { salesOrderId: orderId },
+            dataType: 'json',
+            success: function(response) {
+                // Re-enable button
+                $('#cancelLogisticsButton').prop('disabled', false);
+                $('#cancelLogisticsButton').html('<i class="fas fa-ban"></i> 取消超商取貨條');
+                if (response.code === 200) {
+                    console.log('取消超商取貨條成功');
+                    // Reload CVS info
+                    loadCvsInfo(orderId);
+                } else {
+                    alert('取消失敗: ' + (response.error || '未知錯誤'));
+                }
+            },
+            error: function(xhr, status, error) {
+            	showErrorMessage('Error canceling logistics:', xhr);
+                // Re-enable button
+                $('#cancelLogisticsButton').prop('disabled', false);
+                $('#cancelLogisticsButton').html('<i class="fas fa-ban"></i> 取消超商取貨條');
+            }
+        });
+	});
+
+	// Update/Get Logistics Button
+	$('#updateLogisticsButton').click(function() {
+
+	    // Disable button and show loading state
+	    $(this).prop('disabled', true);
+	    $(this).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 處理中...');
+
+        let url = GBF.baseUrl+'/ajax/SalesOrderCvs/acquireCvsNumber';
+
+	    // Make API call
+	    $.ajax({
+	        url: url,
+	        type: 'POST',
+	        data: { salesOrderId: orderId },
+	        dataType: 'json',
+	        success: function(response) {
+               // Re-enable button
+               $('#updateLogisticsButton').prop('disabled', false);
+               $('#updateLogisticsButton').html('<i class="fas fa-sync-alt"></i> 更新/取得超商取貨條');
+	            if (response.code === 200) {
+	                alert('更新/取得超商取貨條成功');
+	                // Reload CVS info
+	                loadCvsInfo(orderId);
+	            } else {
+	                alert('更新失敗: ' + (response.error || '未知錯誤'));
+	            }
+	        },
+	        error: function(xhr, status, error) {
+	        	showErrorMessage('Error updating logistics:', xhr);
+	            // Re-enable button
+	            $('#updateLogisticsButton').prop('disabled', false);
+	            $('#updateLogisticsButton').html('<i class="fas fa-sync-alt"></i> 更新/取得超商取貨條');
+	        }
+	    });
+	});
+
+	// Cancel Logistics Button
+	$('#clearStoreSectionButton').click(function() {
+
+        // Disable button and show loading state
+        $(this).prop('disabled', true);
+        $(this).html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 處理中...');
+
+        let url = GBF.baseUrl+'/ajax/SalesOrderCvs/clearCvs';
+        // Make API call
+        $.ajax({
+            url: url,
+            type: 'POST',
+            data: { salesOrderId: orderId },
+            dataType: 'json',
+            success: function(response) {
+                // Re-enable button
+                $('#clearStoreSectionButton').prop('disabled', false);
+                $('#clearStoreSectionButton').html('<i class="fas fa-ban"></i> 清除超商');
+                if (response.code === 200) {
+                    console.log('清除超商成功');
+                    // Reload CVS info
+                    loadCvsInfo(orderId);
+                } else {
+                    alert('取消失敗: ' + (response.error || '未知錯誤'));
+                }
+            },
+            error: function(xhr, status, error) {
+            	showErrorMessage('Error canceling logistics:', xhr);
+                // Re-enable button
+                $('#clearStoreSectionButton').prop('disabled', false);
+                $('#clearStoreSectionButton').html('<i class="fas fa-ban"></i> 清除超商');
+            }
+        });
+	});
+
+    // Clear Store Form Submission
+    $('#clearCvsForm').submit(function(e) {
+        e.preventDefault();
+
+        const orderId = '12345'; // Sample order ID - same as used for fetching
+        const staffNote = $('#staffNote').val();
+
+        // Confirm before proceeding
+        if (!confirm('確定要清除超商取貨設定嗎？')) {
+            return;
+        }
+
+        // Disable the form buttons during request
+        $('#clearStoreButton, #cancelClearButton').prop('disabled', true);
+
+        // Show a loading indicator
+        $('#clearStoreButton').html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 處理中...');
+
+        // Make AJAX request to clear CVS info
+        $.ajax({
+            url: 'https://mydomain.com/cleanCvs',
+            type: 'POST',  // Using POST for data modification
+            data: {
+                id: orderId,
+                staffNote: staffNote
+            },
+            dataType: 'json',
+            success: function(response) {
+                // Re-enable buttons
+                $('#clearStoreButton, #cancelClearButton').prop('disabled', false);
+                $('#clearStoreButton').html('<i class="bi bi-trash"></i> 清除超商');
+
+                if (response.code === 200) {
+                    // Show success notification
+                    alert('超商取貨設定已成功清除');
+
+                    // Hide the clear section
+                    $('#clearStoreSection').hide();
+
+                    // Reload the CVS info to reflect changes
+                    loadCvsInfo(orderId);
+                } else {
+                    // Show error
+                    alert('清除失敗: ' + (response.error || '未知錯誤'));
+                }
+            },
+            error: function(xhr, status, error) {
+                // Re-enable buttons
+                $('#clearStoreButton, #cancelClearButton').prop('disabled', false);
+                $('#clearStoreButton').html('<i class="bi bi-trash"></i> 清除超商');
+
+                // Show error
+                alert('發生錯誤，請稍後再試: ' + error);
+                console.error('Error clearing CVS info:', error);
+            }
+        });
+    });
+
+    function showErrorMessage(title, xhr) {
+    	var msg = '';
+       	if (xhr.responseJSON && xhr.responseJSON.error) {
+       		msg = xhr.responseJSON.error;
+       	} else {
+       		msg = '發生錯誤，請稍後再試: ' + error;
+       	}
+
+        alert(msg);
+        console.error(title, msg);
+    }
+
+	function loadCvsLookup(orderId) {
+		$('#cvs-lookup-container').toggle();
+        let url = GBF.baseUrl+'/ajax/SalesOrderCvs/updateCvsStore?salesOrderId=' + orderId;
+		var cvsType = cvsInfo.defaultCvsType;
+		this.cvsLookup = new CvsLookup({
+		    selectorId: 'cvs-lookup-container',
+			storeSelectEndpoint: url,
+			supportedCvsTypes:[cvsType],
+			availableMethods: ['store-name'],
+			preselect:false,
+		    uuid:''
+		});
+
+		this.cvsLookup.onStoreSelectEndpoint((store) => {
+			$('#cvs-lookup-container').toggle();
+		 	loadCvsInfo(orderId);
+		});
+	}
+
+   	const orderId = '{{salesOrderId}}'
+    console.log('orderId %o', orderId);
+    loadCvsInfo(orderId);
+});</script>

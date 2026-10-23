@@ -1,0 +1,18 @@
+{{#each orders}}
+<div class="print" data-uuid="{{uuid}}"><div class="subpage">
+<svg class="barcode" jsbarcode-value="{{uuid}}"></svg>
+<fieldset>
+	<legend>超商付款取貨 - {{uuid}}<span class="dateCreated">{{dateCreatedString}}</span></legend>
+	<p class="notice-c2c">{{../c2cNotice}}</p>
+	<table class="table table-condensed">
+		<tr><th width="120px">取件門市</th><td>{{#if cvsStoreName}}{{cvsStoreName}}（{{cvsStoreId}}）{{else}}尚未選擇門市{{/if}}</td></tr>
+		<tr><th>門市地址</th><td>{{cvsAddress}}</td></tr>
+		<tr><th>取件人</th><td>{{shippingFirstname}} / {{shippingTelephone}}</td></tr>
+		<tr><th>代收金額</th><td><b>{{collect}}</b></td></tr>
+		<tr><th>商品</th><td>{{#each items}}{{#unless child}}{{title}}x{{total}} {{/unless}}{{/each}}</td></tr>
+		{{#if note}}<tr><th>備註</th><td>{{note}}</td></tr>{{/if}}
+	</table>
+</fieldset>
+<div class="footer">第<span class="pageNumber"></span>頁 / 共<span class="pageTotal"></span>頁</div>
+</div></div>
+{{/each}}

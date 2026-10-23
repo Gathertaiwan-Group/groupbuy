@@ -1,0 +1,51 @@
+{{#each orders}}
+<div class="print" data-uuid="{{uuid}}"><div class="subpage">
+<svg class="barcode" jsbarcode-value="{{uuid}}"></svg>
+<fieldset>
+	<legend>訂單 - {{uuid}}<span class="dateCreated">{{dateCreatedString}}</span></legend>
+	<table class="table table-condensed">
+		{{#unless ../settings.hideBillingInfo}}
+		{{#if ../settings.maskBillingInfo}}
+		<tr class="tr-billingInfo-mask"><th width="120px">訂購人</th><td>{{customerFirstnameMask}} / {{customerTelephoneMask}}</td></tr>
+		{{else}}
+		<tr class="tr-billingInfo"><th width="120px">訂購人</th><td>{{customerFirstname}} / {{customerTelephone}}{{#if customerEmail}} / {{customerEmail}}{{/if}}</td></tr>
+		{{/if}}
+		{{/unless}}
+		{{#if ../settings.maskShippingInfo}}
+		<tr class="tr-shippingInfo-mask"><th>收件人</th><td>{{shippingFirstnameMask}} / {{shippingTelephoneMask}}<br>{{shippingAddressMask}}</td></tr>
+		{{else}}
+		<tr class="tr-shippingInfo"><th>收件人</th><td>{{shippingFirstname}} / {{shippingTelephone}}<br>{{shippingAddress}}</td></tr>
+		{{/if}}
+		<tr><th>配送方式</th><td>{{shippingType}}{{#if shippingTag}}（{{shippingTag}}）{{/if}}{{#if deliverTime}} 收件時間：{{deliverTime}}{{/if}}{{#if shippingReceiptNumber}} 查貨號碼：{{shippingReceiptNumber}}{{/if}}</td></tr>
+		<tr><th>付款方式</th><td>{{paymentMethod}}{{#if unpaid}} <b>（未付款）</b>{{/if}}</td></tr>
+		{{#if receiptVatId}}<tr><th>發票</th><td>{{receiptTitle}} {{receiptVatId}}</td></tr>{{/if}}
+		{{#if note}}<tr><th>備註</th><td>{{note}}</td></tr>{{/if}}
+	</table>
+</fieldset>
+<fieldset>
+	<legend>訂單商品 - {{uuid}}</legend>
+	<table class="table table-striped">
+		<tr>
+			<th>名稱</th>
+			<th width="100px">訂購數量</th>
+			{{#unless ../settings.hidePrice}}<th width="100px" class="th-price">小計</th>{{/unless}}
+		</tr>
+		{{#each items}}
+		<tr class="{{#if child}}tr-item-small{{else}}tr-item-normal{{/if}}">
+			<td><span class="seq">{{seq}}</span>. {{#if child}}└ {{/if}}{{title}}{{#if spec}} ({{spec}}){{/if}}{{#if backOrder}} [預購]{{/if}}{{#if gift}} [贈品]{{/if}}{{#if ../../settings.showUid}}{{#if uid}} <span class="uid">{{uid}}</span>{{/if}}{{/if}}{{#if note}}<br><span class="small">{{note}}</span>{{/if}}</td>
+			<td>{{total}}</td>
+			{{#unless ../../settings.hidePrice}}<td class="td-price">{{#unless child}}{{amount}}{{/unless}}</td>{{/unless}}
+		</tr>
+		{{/each}}
+		{{#unless ../settings.hidePrice}}
+		<tr><td></td><td>商品小計</td><td class="td-price">{{subtotal}}</td></tr>
+		{{#if discount}}<tr><td></td><td>折扣</td><td class="td-price">-{{discount}}</td></tr>{{/if}}
+		<tr><td></td><td>運費</td><td class="td-price">{{shippingAmount}}</td></tr>
+		{{#if codFee}}<tr><td></td><td>貨到付款手續費</td><td class="td-price">{{codFee}}</td></tr>{{/if}}
+		<tr><td></td><td><b>結帳金額</b></td><td class="td-price"><b>{{grandTotal}}</b></td></tr>
+		{{/unless}}
+	</table>
+</fieldset>
+<div class="footer">第<span class="pageNumber"></span>頁 / 共<span class="pageTotal"></span>頁</div>
+</div></div>
+{{/each}}

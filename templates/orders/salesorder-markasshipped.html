@@ -1,0 +1,88 @@
+<style>
+.btn-input-check {min-width:72px !important;}
+.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;}
+.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
+/*.modal-body {min-height: 400px;}*/
+span.input-group-text.md-addon {min-width: 152px;}
+</style>
+<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/markAsShipped.do" class="form-horizontal" id="SalesOrderForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><input type="hidden" name="uuid" value="{{uuid}}" id="uuid"><div class="modal-header">
+		<h5 style="overflow:hidden">設為已出貨&raquo;</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="mb-2">
+	<p>預設為發送出貨信<br>
+	設為自取預設不發送出貨信，可再點擊「出貨信」強制發送</p>
+	</div>
+{{!-- 推導：原站需選取訂單才會輸出每筆訂單列（無資料時擷取不到）；依本片段 script 的 name$=pickup]、[status]、[shippingReceiptNumber] 與 .btn-input-check／.input-error 樣式推導 --}}
+{{#each orders}}
+<div class="form-group row mb-2">
+		<div class="col-12">
+			<input type="hidden" name="salesOrders[{{@index}}][salesOrderId]" value="{{salesOrderId}}">
+			<div class="input-group py-0">
+				<div class="input-group-prepend">
+					<span class="input-group-text md-addon">{{uuid}} {{customerFirstname}}</span>
+				</div>
+				<input type="text" name="salesOrders[{{@index}}][shippingReceiptNumber]" maxlength="255" value="{{shippingReceiptNumber}}" placeholder="查貨號碼" class=" form-control">
+				<div class="input-group-append btn-group-toggle" data-toggle="buttons">
+					<label class="btn btn-default btn-input-check px-2 m-0{{#if sendEmail}} active{{/if}}"><input type="checkbox" name="salesOrders[{{@index}}][status]" value="1" autocomplete="off"{{#if sendEmail}} checked{{/if}}> 出貨信</label>
+					<label class="btn btn-default btn-input-check px-2 m-0{{#if pickup}} active{{/if}}"><input type="checkbox" name="salesOrders[{{@index}}][pickup]" value="1" autocomplete="off"{{#if pickup}} checked{{/if}}> 自取</label>
+				</div>
+			</div>
+			{{#if warning}}<input type="text" class="form-control form-control-sm input-error" readonly value="{{warning}}">{{/if}}
+		</div>
+	</div>
+{{/each}}
+<div class="form-group row mt-4">
+		<div class="col-12">
+			<div class="input-group py-0">
+				<div class="input-group-prepend">
+					<span class="input-group-text md-addon">已出貨日期</span>
+				</div>
+				<input type="text" name="dateShippedString" maxlength="20" value="" type="text" id="dateShippedString" class=" form-control" required></div>
+		</div>
+	</div>
+<div style="height:240px"></div>
+	</div> <!-- modal-body -->
+
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+</form><script type="text/javascript">
+$(function () {
+	$('#dateShippedString').datetimepicker({format:"YYYY-MM-DD", defaultDate:new Date()});
+
+	$('input:checkbox[name$=pickup\\]]').on('change', function(e) {
+		var checked = $(this).prop('checked');
+		var name = $(this).prop('name');
+		var prefix = name.split('][')[0] + ']';
+console.log('s')
+		if (checked) {
+			if ($('input:checkbox[name='+$.escapeSelector(prefix+'[status]')+']').prop('checked')) {
+				$('input:checkbox[name='+$.escapeSelector(prefix+'[status]')+']').click();
+			}
+			$('input[name='+$.escapeSelector(prefix+'[shippingReceiptNumber]')+']').val('自取');
+		} else {
+			var srn = $('input[name='+$.escapeSelector(prefix+'[shippingReceiptNumber]')+']').val();
+			if (srn == '自取') {
+				$('input[name='+$.escapeSelector(prefix+'[shippingReceiptNumber]')+']').val('');
+			}
+		}
+	});
+});
+</script>
+<script>
+var success = function(json) {
+	table.ajax.reload( null, false);
+	msg = '成功';
+	modalShowSuccess($('#myModal'), msg);
+	$('#submitButton').prop('disabled',true);
+}
+
+initAjaxForm('SalesOrderForm', success);
+</script>

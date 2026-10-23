@@ -1,0 +1,325 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+
+<head>
+    <base href="/backend/SalesOrder/print.jsp"><link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ==" crossorigin="anonymous">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <title>{{title}}</title>
+	<style>
+		body {
+			font-family:"微軟正黑體","Helvetica Neue",Helvetica,Arial,sans-serif;
+			font-size:12pt;
+		}
+		.footer {
+			position:absolute;
+			bottom:0px;
+			left:0px;
+			text-align:center;
+			width:100%;
+		}
+		.tr-item-normal{}
+		.tr-item-small{font-size:10pt;}
+		.tr-item-tiny{font-size:8pt;}
+		.tr-billingInfo-mask, .tr-shippingInfo-mask{}
+		span.uid {display: inline-block;white-space: nowrap;overflow: hidden;text-overflow: ellipsis; max-width: 400px;}
+		.img-logo {height:44px;position: absolute;top: 4px;right: 44px;}
+		.d-none {display:none !important;}
+		.td-price,.th-price {text-align:right}
+		.ul-itemPack{margin-top:1rem;font-size:10px;}
+		.dateCreated {margin-left:20px;font-size:8pt;line-height:12pt;}
+		svg.barcode {
+			position: absolute;
+			left: 20px;
+			top: 0;
+		}
+
+		@page {
+			margin: 0mm;
+			size:210mm 297mm;
+			padding:0mm;
+		}
+		.print{
+			border: 1px #000000 dashed;
+			page-break-after:always;
+			width:210mm;
+			min-height:277mm;
+			margin:10mm auto;
+		}
+		.subpage {
+			border: 1px #000000 solid;
+			width: 190mm;
+			height: 276mm;
+			margin:10mm;
+			padding:5mm;
+			position:relative;
+		}
+
+		legend {
+			font-size:16pt;
+			border-bottom: 1px solid #000000;
+		}
+		@media print{
+			.print{
+				margin:0;
+				border:initial;
+				padding: 10mm 0mm 0mm 0mm;
+			}
+			.subpage {
+			margin:0mm 10mm;
+			}
+			.toolbar, .toolbar-inline {visibility: hidden;}
+			.table-striped>tbody>tr:nth-of-type(odd){background-color: transparent}
+			form {display:none;}
+		}
+		.toolbar-inline {position: fixed;right:8px;top:20px;}
+		.toolbar {position: fixed;right:8px;bottom:56px;}
+		.label-piece {display:inline-block;width:62mm;height:29mm;border:1px dashed #999;margin:2mm;padding:2mm;vertical-align:top;overflow:hidden;font-size:10pt;position:relative;}
+		.label-piece .label-uuid {font-size:8pt;}
+		.label-barcode {display:inline-block;width:92mm;border:1px dashed #999;margin:2mm;padding:3mm;vertical-align:top;font-size:10pt;}
+		.label-barcode svg {position:static;}
+		.notice-c2c {color:#c5221f;font-size:10pt;}
+	</style>
+
+</head>
+<body>
+
+{{!-- 推導：原站列印頁需有訂單才會輸出內容（無資料時只有「沒有資料可列印」）；版面依本頁 CSS（.print/.subpage/legend/.tr-*-mask/.td-price/svg.barcode/.img-logo）與 buildPage() 的表格欄位推導 --}}
+{{#if orders.length}}
+{{#if isOrder}}{{> orders/partials/print-order.html}}{{/if}}
+{{#if isQuotation}}{{> orders/partials/print-quotation.html}}{{/if}}
+{{#if isC2C}}{{> orders/partials/print-c2c.html}}{{/if}}
+{{#if isPiece}}{{#each orders}}{{#each pieces}}<div class="label-piece"><div class="label-uuid">{{../uuid}} {{../shippingFirstname}}</div><div><b>{{title}}</b>{{#if spec}} ({{spec}}){{/if}}</div><div>{{pieceNo}} / {{total}}{{#if backOrder}} 預購{{/if}}</div><svg class="barcode" jsbarcode-value="{{../uuid}}"></svg></div>{{/each}}{{/each}}{{/if}}
+{{#if isBarcode}}{{#each orders}}<div class="label-barcode"><svg class="barcode" jsbarcode-value="{{uuid}}" jsbarcode-height="40" jsbarcode-displayvalue="true"></svg><div>{{uuid}} {{shippingFirstname}}</div><div class="small">{{groupBuyTitle}}</div></div>{{/each}}{{/if}}
+{{else}}
+沒有資料可列印
+{{/if}}
+<form name='SettingFormInner'>
+<div class="toolbar-inline">
+<div class="input-group" >
+<input type="text" name="adjustSeq" id="adjustSeq" size="16" placeholder="起始排序數字">
+</div>
+<button type="button" class="btn btn-default" onClick="updateInner();">更新</button>
+</div>
+</form>
+<form name='SettingForm'>
+<div class="toolbar">
+{{#if isOrder}}{{!-- 推導：列印設定（load()/update() 讀寫 salesOrderPrintSettings；套用於伺服器輸出） --}}<div class="panel panel-default small" style="padding:6px 10px;margin-bottom:6px;background:#fff">
+<label class="checkbox-inline"><input type="checkbox" name="hideBillingInfo" id="hideBillingInfo"> 隱藏訂購人</label>
+<label class="checkbox-inline"><input type="checkbox" name="maskBillingInfo" id="maskBillingInfo"> 遮蔽訂購人</label>
+<label class="checkbox-inline"><input type="checkbox" name="maskShippingInfo" id="maskShippingInfo"> 遮蔽收件人</label>
+<label class="checkbox-inline"><input type="checkbox" name="hidePrice" id="hidePrice"> 隱藏價格</label>
+<label class="checkbox-inline"><input type="checkbox" name="showUid" id="showUid"> 商品代碼</label>
+<label class="checkbox-inline"><input type="checkbox" name="showUpc" id="showUpc"> UPC</label>
+<label class="checkbox-inline"><input type="checkbox" name="showLogo" id="showLogo"> LOGO</label>
+<button type="button" class="btn btn-default btn-xs" onclick="update();">儲存設定</button>
+</div>{{/if}}
+<button type="button" class="btn btn-default" onclick="window.print();">列印</button>
+</div>
+</form>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
+<script>
+/*
+$('#hideBillingInfo').on('change', function() {
+	if ($(this).prop('checked')) {
+		$('[class$=billingInfo]').hide()
+	} else {
+		$('[class$=billingInfo]').show()
+	}
+})
+$('#maskBillingInfo').on('change', function() {
+	if ($(this).prop('checked')) {
+		$('[class$=billingInfo]').hide()
+		$('[class$=billingInfo-mask]').show()
+	} else {
+		$('[class$=billingInfo]').show()
+		$('[class$=billingInfo-mask]').hide()
+	}
+})
+$('#maskShippingInfo').on('change', function() {
+	if ($(this).prop('checked')) {
+		$('[class$=shippingInfo]').hide()
+		$('[class$=shippingInfo-mask]').show()
+	} else {
+		$('[class$=shippingInfo]').show()
+		$('[class$=shippingInfo-mask]').hide()
+	}
+})
+$('#hidePrice').on('change', function() {
+	if ($(this).prop('checked')) {
+		$('[class$=price]').hide()
+	} else {
+		$('[class$=price]').show()
+	}
+	formatPages();
+})
+$('#showLogo').on('change', function() {
+	if ($(this).prop('checked')) {
+		$('img.img-logo').removeClass('d-none')
+		//$('#colorPrint').prop('checked', true).change();
+	} else {
+		$('img.img-logo').addClass('d-none')
+	}
+})
+
+$('#colorPrint').on('change', function() {
+	var colorPrint = $(this).prop('checked');
+	var style = document.styleSheets[0];
+	if (colorPrint) {
+		style.rules[39].cssRules[0].style.setProperty('color','')
+	} else {
+		style.rules[39].cssRules[0].style.setProperty('color','rgb(0,0,0)')
+	}
+})
+$('#showReferralStaff').on('change', function() {
+	if ($(this).prop('checked')) {
+		$('tr.tr-referralStaff').removeClass('d-none')
+	} else {
+		$('tr.tr-referralStaff').addClass('d-none')
+	}
+})
+*/
+
+$(document).ready(function() {
+	load();
+	formatPages();
+	//quick hack to remove bootstrap @media print color:black
+	//	$('body').css('-webkit-print-color-adjust','exact');
+	//	var style = document.styleSheets[0];
+	//	style.deleteRule(39);
+
+});
+
+var formatPages = function() {
+
+	var pages = $('.print');
+	pages.each(function(idx, page) {
+		formatPage($(page));
+	});
+
+	JsBarcode(".barcode").options({
+        format: "CODE128",
+        height: 20,
+        margin: 2,
+        displayValue: false
+    }).init();
+}
+
+var formatPage = function($page, $rootParent) {
+	if (!$page) {
+		console.log('done return;');
+		return;
+	}
+
+	var uuid = $page.data('uuid');
+	var pageBottom = $page[0].getBoundingClientRect().bottom;
+	var trItems = [];
+	$page.find('table tr').each(function (idx, item) {
+		if (item.getBoundingClientRect().bottom + 60 < pageBottom) return;
+		trItems.push(item);
+		$(item).remove();
+	});
+
+	var $newPage = buildPage($page, trItems);
+	formatPage($newPage, $page);
+
+	if (!$rootParent) {
+		var len = $('div[data-uuid="'+uuid+'"]').length;
+		var pageNumber = 1;
+		$('div[data-uuid="'+uuid+'"]').each(function(idx,obj){
+			$(obj).find('.pageNumber').text(pageNumber++);
+			$(obj).find('.pageTotal').text(len);
+		});
+	}
+}
+
+var buildPage = function($page, items) {
+	if (!items.length) return;
+	var itemHtml = '';
+	items.forEach(function(item,idx){
+		itemHtml += item.outerHTML;
+	});
+
+	var uuid = $page.data('uuid');
+	var html = '<div class="print" data-uuid="'+uuid+'"><div class="subpage"><fieldset>'
+			+ '<legend>訂單商品 - '+ uuid + '</legend>'
+			+ '<table class="table table-striped">'
+			+ '<tr>'
+			+ '<th>名稱</th>'
+			+ '<th width="100px">訂購數量</th>'
+
+			+ '<th width="100px" class="th-price">小計</th>'
+
+			+ '</tr>'
+			+ itemHtml+'</table>'
+			+ '</fieldset>'
+			+ '<div class="footer">第<span class="pageNumber"></span>頁 / 共<span class="pageTotal"></span>頁</div>'
+			+ '</div></div>';
+	var $newPage = $(html);
+	$newPage.insertAfter($page);
+	return $newPage;
+}
+
+var updateInner = function() {
+	var s = parseInt($('input[name=adjustSeq]').val());
+	$('.seq').each(function(i,o){$(o).text(s+i)});
+}
+
+var update = function() {
+	var url = '{{baseUrl}}/ajax/SystemPreference/salesOrderPrintSettings'
+	var d = {};
+	$('Form[name=SettingForm]').find(':input').each((i,o)=> {
+		var name = $(o).attr('name');
+		var type = $(o).prop('type');
+		if (type == 'checkbox') {
+			d[name] = $(o).prop('checked');
+		} else if (type == 'select-one') {
+			d[name] = $(o).val();
+		}
+	})
+	var data = {
+		'data' : {
+			'0':d
+		}
+	}
+	$.ajax( {
+		url: url,
+		type: 'POST',
+		dataType: 'json',
+		data: data,
+		success: function ( json ) {
+			window.location.reload()
+		}
+	});
+}
+
+var load = function() {
+	var url = '{{baseUrl}}/ajax/SystemPreference/salesOrderPrintSettings'
+		$.ajax( {
+			url: url,
+			type: 'GET',
+			dataType: 'json',
+			success: function ( json ) {
+				var data = json.data;
+				if (!data) return;
+				$('Form[name=SettingForm]').find(':input').each((i,o)=> {
+					var name = $(o).attr('name');
+					var type = $(o).prop('type');
+					var v = data[name];
+					if (type == 'checkbox') {
+						$(o).prop('checked', v);
+					} else {
+						$(o).val(v);
+					}
+				})
+				if (data.showUpc) $('.upc').show();
+				else $('.upc').hide();
+				if (data.showUid) $('.uid').show();
+				else $('.uid').hide();
+			}
+		});
+}
+
+</script>
+</body>
+</html>

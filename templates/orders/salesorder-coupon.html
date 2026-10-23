@@ -1,0 +1,143 @@
+<div class="modal-header">
+		<h5>優惠卷<span id="rr_uuid"></span>&raquo;</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+
+	<div class="card">
+	<div class="card-header">
+	訂單內優惠卷
+	</div>
+	<div class="card-body">
+	<div id="coupon_container">
+	<span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>
+	</div>
+	</div>
+	</div>
+
+	<div class="card mt-4">
+	<div class="card-header">
+	新增優惠卷
+	</div>
+	<div class="card-body">
+	<div id="select_gbis_container"></div>
+	<div id="select_item_container"></div>
+	</div>
+	<div class="card-footer">
+	<div class="input-group">
+		<input type="text" name="code" class="form-control" id="code" size="20" maxlength="20">
+		<div class="input-group-append">
+		<a href="javascript: void(0)" id="btnAddItem" class="btn btn-primary rounded-right m-0 px-3 py-2 z-depth-0" onclick="btnRedeem()">使用優惠卷</a>
+		</div>
+	</div>
+	</div>
+
+	</div> <!-- modal-body -->
+
+<script>
+
+var addCouponsToForm = function(item, i) {
+	var coupon = item.coupon;
+	var defClass = '';
+	var namePrefix = 'coupons\\['+i+'\\]\\.';
+	var discount = item.discount;
+	if (discount == 0) {
+		discount = coupon.discount;
+	}
+	var html = '<div class="row border my-2 ' +defClass+ '">'
+			+ '<input type="hidden" name="coupons['+i+'].orderItemId" value="'+item.groupBuyFlatRateShippingId+'">'
+			+ '<div class="col-10 small">'+coupon.title+'</div>'
+			+ '<div class="col-2 small"><button class="btn btn-danger" onclick="removeCoupon('+item.groupBuyFlatRateShippingId+')"><i class="fa fa-remove"></i> 移除</button></div>'
+			+ '<div class="col-6 small" style="">優惠碼 '+coupon.code+'</div>'
+			+ '<div class="col-6 small" style="">折價 '+discount+'</div>'
+
+			+ '</div>'
+			;
+
+	$('#coupon_container').append(html);
+	$('select[name='+namePrefix+'status]').val(item.status);
+	$('input[name='+namePrefix+'total]').change(function(e) {
+		updateOrderItem(namePrefix);
+	});
+	$('input[name='+namePrefix+'price]').change(function(e) {
+		updateOrderItem(namePrefix);
+	});
+	$('input[name='+namePrefix+'discount]').change(function(e) {
+		updateOrderItem(namePrefix);
+	});
+	$('select[name='+namePrefix+'status]').change(function(e) {
+		updateOrderItem(namePrefix);
+	});
+
+}
+
+var removeCoupon = function(groupBuyFlatRateShippingId) {
+	jQuery.post(
+			'{{baseUrl}}/ajax/SalesOrderCoupon/delete.do',
+			{
+				'groupBuyFlatRateShippingId':groupBuyFlatRateShippingId
+			},
+			function(data) {
+				fullReload();
+				table.ajax.reload( null, false );
+			}
+			).fail(function(data) {
+				json = data.responseJSON;
+				modalShowDanger($('#myModal'), json.error);
+			});
+}
+
+var btnRedeem = function() {
+	var $btn = $('#btnRedeem');
+	btnStartLoading($btn);
+
+	jQuery.post(
+			'{{baseUrl}}/ajax/SalesOrderCoupon/redeem.do',
+			{
+				'salesOrderId':{{salesOrderId}},
+				'code':$('#code').val(),
+			},
+			function(data) {
+				fullReload();
+				$('#modal-message').hide();
+				btnStopLoading($btn);
+				table.ajax.reload( null, false );
+			}
+			).fail(function(data) {
+				json = data.responseJSON;
+				modalShowDanger($('#myModal'), json.error);
+				btnStopLoading($btn);
+			});
+}
+
+var success = function(json) {
+	table.ajax.reload( null, false );
+	modalShowSuccess($('#myModal'), json.error);
+}
+
+var fullReload = function() {
+	jQuery.get(
+			'{{baseUrl}}/ajax/SalesOrderCoupon/list.do',
+			{
+				'salesOrderId':{{salesOrderId}}
+			},
+			function(data) {
+				coupons = data.data;
+				$('#coupon_container').html('');
+				coupons.forEach(function(c,i) {
+					addCouponsToForm(c,i);
+				});
+			}
+			).fail(function(data) {
+				json = data.responseJSON;
+				modalShowDanger($('#myModal'), json.error);
+			});
+}
+
+
+$(document).ready(function() {
+	$('#modal-message').hide();
+	fullReload();
+});
+</script>

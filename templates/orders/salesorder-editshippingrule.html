@@ -1,0 +1,70 @@
+{{!-- 推導：原站「更改配送方式」彈窗需有訂單才開得到（未擷取，回傳 ???errors???），依原站後台彈窗（取消訂單/設為已出貨）版型推導：
+     選擇團購綁定的運費規則、修改收件人資訊、可勾選重新計算運費；送出 POST {{baseUrl}}/ajax/SalesOrder/updateShippingRule.do --}}
+<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/updateShippingRule.do" class="form-horizontal" id="ShippingRuleForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><input type="hidden" name="uuid" value="{{uuid}}" id="uuid">
+	<div class="modal-header">
+		<h5 style="overflow:hidden">更改配送方式 {{uuid}}&raquo;</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="card">
+		<div class="card-header">配送方式</div>
+		<div class="card-body">
+		{{#each rules}}
+			<div class="form-check py-1">
+				<input type="radio" name="flatRateShippingId" value="{{id}}" id="flatRateShippingId{{id}}" class="form-check-input"{{#if selected}} checked{{/if}} required>
+				<label for="flatRateShippingId{{id}}" class="form-check-label">{{title}} <span class="badge badge-default ml-1">{{typeLabel}}</span> <span class="small grey-text ml-1">基本運費 ${{fee}}</span></label>
+			</div>
+		{{else}}
+			<p class="text-danger">此團購尚未綁定運費規則</p>
+		{{/each}}
+		</div>
+	</div>
+	<div class="card mt-4">
+		<div class="card-header">收件人資訊</div>
+		<div class="card-body">
+			<div class="form-group row">
+				<label class="col-sm-3 control-label" for="shippingFirstname">收件人</label>
+				<div class="col-sm-9"><input type="text" name="shippingFirstname" id="shippingFirstname" maxlength="100" value="{{order.shippingFirstname}}" class=" form-control"></div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-3 control-label" for="shippingTelephone">電話</label>
+				<div class="col-sm-9"><input type="text" name="shippingTelephone" id="shippingTelephone" maxlength="30" value="{{order.shippingTelephone}}" class=" form-control"></div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-3 control-label" for="shippingPostcode">郵遞區號</label>
+				<div class="col-sm-3"><input type="text" name="shippingPostcode" id="shippingPostcode" maxlength="10" value="{{order.shippingPostcode}}" class=" form-control"></div>
+				<label class="col-sm-2 control-label" for="shippingCity">城市</label>
+				<div class="col-sm-4"><input type="text" name="shippingCity" id="shippingCity" maxlength="50" value="{{order.shippingCity}}" class=" form-control"></div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-3 control-label" for="shippingDistrict">州/區</label>
+				<div class="col-sm-9"><input type="text" name="shippingDistrict" id="shippingDistrict" maxlength="50" value="{{order.shippingDistrict}}" class=" form-control"></div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-3 control-label" for="shippingStreet">地址</label>
+				<div class="col-sm-9"><input type="text" name="shippingStreet" id="shippingStreet" maxlength="255" value="{{order.shippingStreet}}" class=" form-control"></div>
+			</div>
+		</div>
+		<div class="card-footer">
+			<input type="checkbox" name="recalculate" value="1" id="recalculate" class="form-check-input" checked>
+			<label for="recalculate" class="pl-4">重新計算總額跟運費<br><span class="small">目前運費 ${{order.shippingAmount}}</span></label>
+		</div>
+	</div>
+</div> <!-- modal-body -->
+	
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>  
+</form><script>
+var success = function(json) {
+	table.ajax.reload( null, false);
+	modalShowSuccess($('#myModal'), json.error);
+}
+
+initAjaxForm('ShippingRuleForm', success);
+</script>

@@ -1,0 +1,60 @@
+<!--#head-->
+	<meta name="robots" content="noindex">
+	<meta name="googlebot" content="noindex">
+	<style>
+	</style>
+<!--#body--><div class="container-fluid ">
+	<div class="container">
+
+		<form name="SalesOrderForm" method="GET" action="/backend/SalesOrder/pickup.do" class="form-horizontal" id="salesOrderForm"><div class="card">
+				<div class="card-header">取貨</div>
+				<div class="card-body px-5">
+					<div class="md-form mt-0">
+							<label for="uuid">訂單編號</label>
+							<input type="text" name="uuid" maxlength="255" value="{{uuid}}" type="text" id="uuid" class="mb-0 form-control" required></div>
+				</div><!-- card-body -->
+				<div class="card-footer">
+					<div class="d-flex justify-content-center">
+						<input name="submitButton" type="submit" class="btn btn-primary px-3" value="送出" />
+					</div>
+				</div>
+			</div> <!-- card -->
+		</form>{{#if order}}
+		{{!-- 推導：原站查到訂單後的畫面需有訂單才看得到（未擷取）。顯示訂單明細＋確認取貨（現場付款可一併收款）。 --}}
+		<style>
+		.card-detail-salesOrder {max-width:100% !important;border-radius:6px !important;border:1px solid #cbd5e1 !important;box-shadow:0 4px 14px rgba(0,0,0,0.06) !important;overflow:hidden;white-space:normal !important;}
+		.card-detail-salesOrder .card-header {background:#475569;color:#fff !important;padding:8px 16px !important;font-size:0.95rem !important;font-weight:700 !important;}
+		.card-detail-salesOrder .span-label {color:#334155 !important;font-size:0.9rem !important;display:inline-block;}
+		</style>
+		<div class="mt-4">
+		{{> orders/partials/order-detail.html}}
+		</div>
+		<form name="PickupForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/pickup.do" class="form-horizontal" id="PickupForm"><input type="hidden" name="salesOrderId" value="{{order.salesOrderId}}">
+			<div class="card">
+				<div class="card-body">
+					<div class="modal-message"></div>
+					{{#if canPickup}}
+					{{#if needPay}}<input type="checkbox" name="paid" value="1" id="pickupPaid" class="form-check-input" {{#if (eq order.paymentMethod 8)}}checked{{/if}}><label for="pickupPaid" class="pl-4 mr-2">現場收款 ${{order.grandTotal}}（設為已付款）</label>{{/if}}
+					{{else}}
+					<p class="text-danger mb-0">此訂單目前階段／狀態為「{{order.stateLabel}}／{{order.statusLabel}}」，無法再次取貨。</p>
+					{{/if}}
+				</div>
+				<div class="card-footer">
+					<div class="d-flex justify-content-center">
+						<button type="button" class="btn btn-default" onclick="openFormL('/backend/SalesOrder/show', 'salesOrderId=' + {{jsattr order.salesOrderId}})">訂單明細</button>
+						{{#if canPickup}}<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary px-3" value="確認取貨" />{{/if}}
+					</div>
+				</div>
+			</div>
+		</form>
+		<script>
+		$(function() {
+			if (typeof initAjaxForm === 'function') initAjaxForm('PickupForm', function(json) {
+				modalShowSuccess($('#PickupForm'), json.error);
+				$('#PickupForm #submitButton').prop('disabled', true);
+				setTimeout(function() { window.location.reload(); }, 1200);
+			});
+		});
+		</script>{{/if}}</div>
+<!-- container -->
+</div>

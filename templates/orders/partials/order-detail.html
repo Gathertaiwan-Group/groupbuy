@@ -1,0 +1,95 @@
+{{!-- 推導：訂單明細（原站需有訂單才看得到，未擷取）。依所有訂單頁列展開卡片（.card-detail-salesOrder、span-label 兩欄列、grey lighten-4 斑馬列）
+     的版型呈現：訂購人、收件人/取件、商品、付款、物流、發票、優惠、狀態歷程。 --}}
+<div class="card card-detail-salesOrder mb-3">
+	<div class="card-header d-flex align-items-center justify-content-between">
+		<div class="text-truncate mr-2">{{o.groupbuyTitle}} ({{o.groupBuyId}})</div>
+		<div class="flex-shrink-0">
+			<span class="badge badge-default">{{o.stateLabel}}</span>
+			<span class="badge {{#if o.mismatch}}badge-danger{{else}}badge-default{{/if}} ml-1">{{o.statusLabel}}</span>
+			{{#if o.containBackOrders}}<span class="badge badge-success ml-1">預購</span>{{/if}}
+			{{#if o.paymentDued}}<span class="badge badge-danger ml-1">繳款期限逾期</span>{{/if}}
+		</div>
+	</div>
+	<div class="card-body p-0">
+		<div class="row py-2 grey lighten-4 m-0 border-bottom">
+			<div class="col-4 col-lg-2"><span class="span-label">訂單編號</span></div><div class="col-8 col-lg-4">{{o.uuid}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">訂單日期</span></div><div class="col-8 col-lg-4">{{o.dateCreatedString}}</div>
+		</div>
+		<div class="row py-2 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>訂購人</b></div>
+			<div class="col-4 col-lg-2"><span class="span-label">顧客姓名</span></div><div class="col-8 col-lg-4">{{o.customerFirstname}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">顧客電話</span></div><div class="col-8 col-lg-4">{{o.customerTelephone}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">顧客Email</span></div><div class="col-8 col-lg-4">{{o.customerEmail}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">生日</span></div><div class="col-8 col-lg-4">{{o.salesOrderBillingAddress.birthdayString}}</div>
+		</div>
+		<div class="row py-2 grey lighten-4 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>{{#if o.isPickup}}取件人資訊{{else}}收件人資訊{{/if}}</b></div>
+			<div class="col-4 col-lg-2"><span class="span-label">{{#if o.isPickup}}取件人{{else}}收件人{{/if}}</span></div><div class="col-8 col-lg-4">{{o.salesOrderShippingAddress.firstname}} / {{o.salesOrderShippingAddress.telephone}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">配送方式</span></div><div class="col-8 col-lg-4">{{o.shippingTypeLabel}}{{#if o.ruleTitle}}（{{o.ruleTitle}}）{{/if}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">{{#if o.isCvs}}取件門市{{else}}地址{{/if}}</span></div><div class="col-8 col-lg-10">{{o.shippingAddress}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">收件時間</span></div><div class="col-8 col-lg-4">{{o.deliverTimeLabel}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">期望配達日</span></div><div class="col-8 col-lg-4">{{o.dateExpectedShippingString}}</div>
+		</div>
+		<div class="row py-2 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>訂單商品</b></div>
+			<div class="col-12">
+				<table class="table table-sm table-striped small mb-0 bg-white" style="border:1px solid #cbd5e1;">
+					<thead><tr><th>商品</th><th>商品代碼</th><th class="text-right">單價</th><th class="text-right">數量</th><th class="text-right">折扣</th><th class="text-right">小計</th><th>出貨狀態</th></tr></thead>
+					<tbody>
+					{{#each o.sortedOrderItems}}<tr>
+						<td>{{#if bundleChild}}└ {{/if}}{{#if gift}}<span class="badge badge-danger mr-1">贈品</span>{{/if}}{{title}}{{#if specificationsLabel}} ({{specificationsLabel}}){{/if}}{{#if backOrder}} <span class="badge badge-success ml-1">預購</span>{{/if}}{{#if note}}<br><span class="text-muted">[{{note}}]</span>{{/if}}</td>
+						<td>{{uid}}</td><td class="text-right">{{price}}</td><td class="text-right">{{total}}</td><td class="text-right">{{discount}}</td><td class="text-right">{{amount}}</td><td>{{stateLabel}}</td>
+					</tr>{{else}}<tr><td colspan="7" class="text-center text-muted">-</td></tr>{{/each}}
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<div class="row py-2 grey lighten-4 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>付款</b></div>
+			<div class="col-4 col-lg-2"><span class="span-label">付款方式</span></div><div class="col-8 col-lg-4">{{o.paymentMethodLabel}}{{#if o.installmentLabel}}（{{o.installmentLabel}}）{{/if}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">結帳金額</span></div><div class="col-8 col-lg-4">${{o.grandTotal}}（運費 ${{o.shippingAmount}}{{#if o.codFee}}、貨到付款手續費 ${{o.codFee}}{{/if}}{{#if o.discountAmount}}、折扣 -${{o.discountAmount}}{{/if}}）</div>
+			<div class="col-4 col-lg-2"><span class="span-label">已付金額</span></div><div class="col-8 col-lg-4">{{#if o.totalPaid}}${{o.totalPaid}}{{else}}<span class="badge badge-sm badge-danger z-depth-0">未付款</span>{{/if}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">付款日期</span></div><div class="col-8 col-lg-4">{{o.datePaidString}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">繳款期限</span></div><div class="col-8 col-lg-4">{{o.datePaymentDueString}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">帳號 / 卡號</span></div><div class="col-8 col-lg-4">{{o.salesOrderBillingAddress.bankName}} {{o.salesOrderBillingAddress.bankAccount}} {{o.virtualBankAccount}} {{o.creditCardNumber}}</div>
+		</div>
+		<div class="row py-2 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>物流</b></div>
+			<div class="col-4 col-lg-2"><span class="span-label">貨運標籤</span></div><div class="col-8 col-lg-4">{{o.shippingTag}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">出貨貨運</span></div><div class="col-8 col-lg-4">{{o.shippingProviderLabel}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">查貨號碼</span></div><div class="col-8 col-lg-4">{{o.shippingReceiptNumber}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">已出貨日期</span></div><div class="col-8 col-lg-4">{{o.dateShippedString}}</div>
+		</div>
+		<div class="row py-2 grey lighten-4 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>發票</b></div>
+			<div class="col-4 col-lg-2"><span class="span-label">發票類型</span></div><div class="col-8 col-lg-4">{{o.receiptTypeLabel}}{{#if o.salesOrderBillingAddress.receiptPaper}}（紙本）{{/if}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">發票號碼</span></div><div class="col-8 col-lg-4">{{o.invoiceNumber}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">發票抬頭 / 統編</span></div><div class="col-8 col-lg-4">{{o.salesOrderBillingAddress.receiptTitle}} {{o.salesOrderBillingAddress.receiptVatId}}</div>
+			<div class="col-4 col-lg-2"><span class="span-label">載具</span></div><div class="col-8 col-lg-4">{{o.carrierTypeLabel}} {{o.salesOrderBillingAddress.receiptCarrierNum}}</div>
+		</div>
+		<div class="row py-2 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>優惠</b></div>
+			<div class="col-12">
+				{{#each o.salesOrderCoupons}}<span class="badge badge-info mr-1">優惠卷 {{coupon}} -${{discount}}</span>{{/each}}
+				{{#each o.salesRules}}<span class="badge badge-warning mr-1">{{title}}{{#if discount}} -${{discount}}{{/if}}{{#if points}} +{{points}}點{{/if}}</span>{{/each}}
+				{{#each o.pointTransactions}}<span class="badge {{#if (eq reason "USE_POINT")}}badge-danger{{else}}badge-info{{/if}} mr-1">{{#if (eq reason "USE_POINT")}}-點{{else}}+點{{/if}}{{points}}</span>{{/each}}
+				{{#unless o.hasPromotion}}<span class="text-muted">-</span>{{/unless}}
+			</div>
+		</div>
+		<div class="row py-2 grey lighten-4 m-0 border-bottom">
+			<div class="col-12 col-lg-2"><span class="span-label">備註</span></div><div class="col-12 col-lg-10 text-wrap">{{o.note}}</div>
+			<div class="col-12 col-lg-2"><span class="span-label">員工備註</span></div><div class="col-12 col-lg-10 text-wrap"><span class="text-danger font-weight-bold">{{o.staffNote}}</span></div>
+		</div>
+		<div class="row py-2 m-0 border-bottom">
+			<div class="col-12 pt-1"><b>狀態歷程</b></div>
+			<div class="col-12">
+				<table class="table table-sm small mb-0 bg-white" style="border:1px solid #cbd5e1;">
+					<thead><tr><th>時間</th><th>操作者</th><th>階段</th><th>狀態</th><th>說明</th></tr></thead>
+					<tbody>
+					{{#each o.historyRows}}<tr><td class="text-nowrap">{{time}}</td><td class="text-nowrap">{{actor}}</td><td class="text-nowrap">{{state}}</td><td class="text-nowrap">{{status}}</td><td class="text-wrap">{{note}}</td></tr>{{else}}<tr><td colspan="5" class="text-center text-muted">-</td></tr>{{/each}}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+</div>

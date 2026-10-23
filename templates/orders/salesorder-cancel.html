@@ -1,0 +1,33 @@
+<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/cancelOrder.do" class="form-horizontal" id="SalesOrderForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}">
+	<div class="modal-header">
+		<h5 style="overflow:hidden">取消訂單&raquo;</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+
+	<div class="form-group row">
+		<label class="col-12 control-label" for="reason">員工備註:</label>
+		<div class="col-12">
+		<input type="text" name="staffNote" maxlength="100" placeholder="員工備註" value="" type="text" id="staffNote" class=" form-control"></div>
+	</div>
+</div> <!-- modal-body -->
+
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+</form><script>
+var success = function(json) {
+	table.ajax.reload( null, false);
+	msg = '';
+	var successCount = json.data.length;
+	msg = '<p>成功:' + successCount + '</p>' + msg;
+	modalShowSuccess($('#myModal'), msg);
+}
+
+initAjaxForm('SalesOrderForm', success);
+</script>

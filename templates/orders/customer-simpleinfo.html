@@ -1,0 +1,62 @@
+{{!-- 推導：原站 /ajax/Customer/displaySimpleInfo 需帶 customerId（無資料時 400，未擷取）。依原站後台彈窗版型（modal-header/modal-body 卡片）推導：顧客基本資料、FB、點數、近期訂單。 --}}
+<div class="modal-header">
+	<h5>顧客資訊&raquo;</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="card">
+		<div class="card-header d-flex align-items-center">
+			{{#if facebook.picture_url}}<img class="mr-2 d-inline dt-img" src="{{facebook.picture_url}}">{{/if}}
+			<span>{{customer.firstname}}</span>
+			{{#if customer.activated}}<span class="badge badge-success ml-2">已開通</span>{{else}}<span class="badge badge-default ml-2">未開通</span>{{/if}}
+		</div>
+		<div class="card-body p-0">
+			<div class="row py-2 grey lighten-4 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">電子信箱(Email)</span></div><div class="col-8">{{customer.email}}</div>
+			</div>
+			<div class="row py-2 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">電話</span></div><div class="col-8">{{customer.telephone}}</div>
+			</div>
+			<div class="row py-2 grey lighten-4 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">生日</span></div><div class="col-8">{{customer.birthday}}</div>
+			</div>
+			<div class="row py-2 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">會員點數</span></div><div class="col-8">{{customer.points}}</div>
+			</div>
+			{{#if customer.loyaltyCardNumber}}<div class="row py-2 grey lighten-4 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">會員卡號</span></div><div class="col-8">{{customer.loyaltyCardNumber}}</div>
+			</div>{{/if}}
+			{{#if facebook.name}}<div class="row py-2 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">臉書暱稱</span></div><div class="col-8">{{facebook.name}}</div>
+			</div>{{/if}}
+			<div class="row py-2 grey lighten-4 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">註冊日期</span></div><div class="col-8">{{customer.dateCreatedString}}</div>
+			</div>
+			<div class="row py-2 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">最後登入</span></div><div class="col-8">{{customer.lastLoginString}}</div>
+			</div>
+			{{#if customer.tags}}<div class="row py-2 grey lighten-4 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">標籤</span></div><div class="col-8">{{customer.tags}}</div>
+			</div>{{/if}}
+			{{#if customer.note}}<div class="row py-2 m-0 border-bottom">
+				<div class="col-4"><span class="span-label">備註</span></div><div class="col-8 text-wrap">{{customer.note}}</div>
+			</div>{{/if}}
+		</div>
+	</div>
+	<div class="card mt-4">
+		<div class="card-header">近期訂單（{{orderCount}} 筆，有效訂單金額 ${{orderTotal}}）</div>
+		<div class="card-body p-0">
+			<table class="table table-sm table-striped small mb-0">
+				<thead><tr><th>訂單編號</th><th>團購</th><th>階段</th><th class="text-right">結帳金額</th><th class="text-right">已付金額</th><th>訂單日期</th></tr></thead>
+				<tbody>
+				{{#each orders}}<tr><td>{{uuid}}</td><td>{{groupBuyTitle}}</td><td>{{state}}</td><td class="text-right">{{grandTotal}}</td><td class="text-right">{{totalPaid}}</td><td>{{dateCreatedString}}</td></tr>
+				{{else}}<tr><td colspan="6" class="text-center grey-text">尚無訂單</td></tr>{{/each}}
+				</tbody>
+			</table>
+		</div>
+	</div>
+</div> <!-- modal-body -->
+<div class="modal-footer">
+	<button class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>

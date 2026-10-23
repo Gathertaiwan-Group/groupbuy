@@ -1,0 +1,36 @@
+{{#each orders}}
+<div class="print" data-uuid="{{uuid}}"><div class="subpage">
+<fieldset>
+	<legend>報價單 - {{uuid}}<span class="dateCreated">報價日期 {{../today}}</span></legend>
+	<table class="table table-condensed">
+		<tr><th width="120px">報價單位</th><td>{{../company.name}}{{#if ../company.vatId}}（統編 {{../company.vatId}}）{{/if}}</td></tr>
+		{{#if ../company.telephone}}<tr><th>聯絡電話</th><td>{{../company.telephone}}{{#if ../company.email}} / {{../company.email}}{{/if}}</td></tr>{{/if}}
+		{{#if ../company.address}}<tr><th>地址</th><td>{{../company.address}}</td></tr>{{/if}}
+		<tr><th>客戶</th><td>{{#if receiptTitle}}{{receiptTitle}}{{else}}{{customerFirstname}}{{/if}}{{#if receiptVatId}}（統編 {{receiptVatId}}）{{/if}}</td></tr>
+		<tr><th>聯絡人</th><td>{{customerFirstname}} / {{customerTelephone}}{{#if customerEmail}} / {{customerEmail}}{{/if}}</td></tr>
+		<tr><th>訂單日期</th><td>{{dateCreatedString}}（{{groupBuyTitle}}）</td></tr>
+	</table>
+</fieldset>
+<fieldset>
+	<legend>報價明細 - {{uuid}}</legend>
+	<table class="table table-striped">
+		<tr>
+			<th>名稱</th>
+			<th width="100px">數量</th>
+			<th width="100px" class="th-price">單價</th>
+			<th width="100px" class="th-price">小計</th>
+		</tr>
+		{{#each items}}{{#unless child}}
+		<tr class="tr-item-normal"><td><span class="seq">{{seq}}</span>. {{title}}{{#if spec}} ({{spec}}){{/if}}</td><td>{{total}}</td><td class="td-price">{{price}}</td><td class="td-price">{{amount}}</td></tr>
+		{{/unless}}{{/each}}
+		<tr><td colspan="3" class="text-right">商品小計</td><td class="td-price">{{subtotal}}</td></tr>
+		{{#if discount}}<tr><td colspan="3" class="text-right">折扣</td><td class="td-price">-{{discount}}</td></tr>{{/if}}
+		<tr><td colspan="3" class="text-right">運費</td><td class="td-price">{{shippingAmount}}</td></tr>
+		<tr><td colspan="3" class="text-right">未稅金額</td><td class="td-price">{{untaxed}}</td></tr>
+		<tr><td colspan="3" class="text-right">營業稅（5%）</td><td class="td-price">{{tax}}</td></tr>
+		<tr><td colspan="3" class="text-right"><b>總計（含稅）</b></td><td class="td-price"><b>{{grandTotal}}</b></td></tr>
+	</table>
+</fieldset>
+<div class="footer">第<span class="pageNumber"></span>頁 / 共<span class="pageTotal"></span>頁</div>
+</div></div>
+{{/each}}

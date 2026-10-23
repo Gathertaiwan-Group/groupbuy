@@ -1,0 +1,18 @@
+{{!-- 推導：訂單明細彈窗（原站需有訂單才開得到，未擷取）。以 openFormL('/backend/SalesOrder/show','salesOrderId=…') 開啟。 --}}
+<style>
+.card-detail-salesOrder {max-width:100% !important;border-radius:6px !important;border:1px solid #cbd5e1 !important;box-shadow:0 4px 14px rgba(0,0,0,0.06) !important;overflow:hidden;white-space:normal !important;}
+.card-detail-salesOrder .card-header {background:#475569;color:#fff !important;padding:8px 16px !important;font-size:0.95rem !important;font-weight:700 !important;}
+.card-detail-salesOrder .span-label {color:#334155 !important;font-size:0.9rem !important;display:inline-block;}
+</style>
+<div class="modal-header">
+	<h5>訂單明細 {{o.uuid}}&raquo;</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	{{> orders/partials/order-detail.html}}
+</div>
+<div class="modal-footer">
+	<a target="_blank" class="btn btn-default" href="/backend/SalesOrder/printOrder.do?salesOrderId={{o.salesOrderId}}&"><i class="fa fa-print mr-1"></i>列印</a>
+	<button class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>
