@@ -207,6 +207,7 @@ get("/:shortUrl", async (ctx) => {
 | `/guest_ep/GroupBuy/privacy.do` | `/GroupBuy/privacy` |
 
 - `.do` 與 `;jsessionid=…` 自動去掉；大小寫敏感；`:name` 取單段、結尾 `*` 取剩餘（`ctx.params["*"]`）。
+- 第一段是參數的路由（`/:shortUrl…`）與全萬用 `/*` **不會**比對保留字開頭的網址（`backend`、`ajax`、`public`、`scripts`、`images`、`upload`、`js`、`css`、`fonts`、`compat`、`_next`、`api`、`rp`、`pups`），所以前台 fallback 不會吃掉後台網址。
 - 認證預設：`/backend/*`、`/ajax/*` → 需後台登入；`/ajax/web/*` 與其他 → public（前台）。可用 `auth: 'admin' | 'public' | 'optional'` 覆寫（`optional`：有登入就帶 session，例如前台 `?preview=true`）。
 - 網址帶的租戶前綴必須等於登入者租戶，否則 403；**資料一律以 `ctx.session.tenantId` 過濾**，不要信任網址或參數中的租戶。
 - 同一路徑＋方法重複登錄會在 log 報 `[router] 重複路由`，請改名或協調。
@@ -238,7 +239,7 @@ post("/ajax/SalesOrder/markAsPaid", async (ctx) => {
 | 一般動作成功 | `actionOk('訊息')` | `{code:200, error:'訊息', message:'訊息'}`（原站成功訊息也放 error） |
 | 錯誤 | `throw badRequest('…')`／`forbidden()`／`notFound()`／`new HttpError(status,msg)` | HTTP 4xx `{code, error, message}`（JSON） |
 | 未登入（AJAX） | dispatch 自動 | 401 `{code:401,…}`（keepalive 依此顯示「系統偵測到已登出」） |
-| select2 查詢 | 自寫 | `{results:[{id,text}], pagination:{more}}`；另支援 `initialValue=true&value=<JSON>` → `[{id,text}]`（Editor 編輯既有值時查標籤）。範例：`lib/modules/core/lookup.ts`、`lookupGroupBuyTag` |
+| select2 查詢 | `select2Params(ctx)`、`select2Response(rows)`、`select2Initial(rows)`（`lib/core/select2.ts`） | `{results:[{id,text}], pagination:{more}}`；另支援 `initialValue=true&value=<JSON>` → `[{id,text}]`（Editor 編輯既有值時查標籤）。範例：`lib/modules/core/lookup.ts`、`groupbuy-tag.ts` 的 `lookupGroupBuyTag` |
 | HTML 片段 | `fragment()`／`html()` | `text/html` |
 | 檔案下載（jquery.fileDownload） | `download(body, filename, type)` | 自動 `Set-Cookie: fileDownload=true; Path=/`；失敗回 HTML 訊息、不要設 cookie |
 | 未串接外部服務 | `notIntegrated('發送簡訊')` | 回應中帶 `{notIntegrated:true, message:'【未串接】…'}` 並寫 log；介面照原站，資料照寫 DB |

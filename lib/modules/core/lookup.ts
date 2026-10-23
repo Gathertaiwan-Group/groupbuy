@@ -9,13 +9,8 @@ import { sanitizeLike } from "@/lib/core/datatables/query";
 
 const PAGE_SIZE = 30;
 
-export async function select2Params(ctx: RequestContext) {
-  const term = ((await ctx.param("q")) ?? (await ctx.param("term")) ?? "").trim();
-  const page = Math.max(1, Number((await ctx.param("page")) ?? 1) || 1);
-  const initialValue = (await ctx.param("initialValue")) === "true";
-  const value = (await ctx.param("value")) ?? "";
-  return { term, page, initialValue, value };
-}
+export { select2Params } from "@/lib/core/select2";
+import { select2Params } from "@/lib/core/select2";
 
 /** GET /ajax/Lookup/groupBuy?rc=true&featureTags=&months=4&q= ：本租戶團購（依建立時間新→舊） */
 export async function lookupGroupBuy(ctx: RequestContext): Promise<Response> {

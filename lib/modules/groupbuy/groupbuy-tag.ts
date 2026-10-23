@@ -21,7 +21,7 @@ import { json } from "@/lib/core/http/responses";
 import { crudRoutes, type EntityCtx, type ListSpec, type WriteSpec } from "@/lib/core/entity/crud";
 import { enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { sanitizeLike } from "@/lib/core/datatables/query";
-import { select2Params } from "@/lib/modules/core/lookup";
+import { select2Params } from "@/lib/core/select2";
 
 const CATEGORY_ENUM = "GroupBuyTag.category";
 
@@ -124,8 +124,7 @@ async function lookupGroupBuyTag(ctx: RequestContext): Promise<Response> {
   const p = await select2Params(ctx);
   const db = getServiceClient();
   if (p.initialValue) {
-    const ids = p.value.split(",").map(Number).filter((n) => Number.isSafeInteger(n) && n > 0);
-    const { data } = await db.from("group_buy_tags").select("id, tag").eq("tenant_id", session.tenantId).in("id", ids.length ? ids : [0]);
+    const { data } = await db.from("group_buy_tags").select("id, tag").eq("tenant_id", session.tenantId).in("id", p.ids.length ? p.ids : [0]);
     const rows = (data ?? []) as { id: number; tag: string }[];
     return json(rows.map((r) => ({ id: r.id, text: r.tag })));
   }

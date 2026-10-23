@@ -83,6 +83,8 @@ export async function createSession(opts: {
     ip: clientIp(opts.req),
   });
   if (error) throw new Error(`建立 session 失敗：${error.message}`);
+  // 順手清掉此管理員已過期的 session（避免累積）
+  await db.from("admin_sessions").delete().eq("admin_user_id", opts.adminUserId).lt("expires_at", new Date().toISOString());
   return { token, cookie: buildSessionCookie(token, opts.persistent, isSecureRequest(opts.req)) };
 }
 

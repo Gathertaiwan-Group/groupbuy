@@ -110,9 +110,13 @@ function compile(route: RegisteredRoute): CompiledRoute {
 
 function matchSegments(c: CompiledRoute, segs: string[]): Record<string, string> | null {
   if (c.wildcard ? segs.length < c.segments.length : segs.length !== c.segments.length) return null;
+  // 全萬用路由（'/*'，前台 404 fallback 用）不接保留字開頭的網址（後台未知網址由 core 回後台樣式 404／登入頁）
+  if (c.wildcard && c.segments.length === 0 && segs.length > 0 && RESERVED_FIRST_SEGMENTS.has(segs[0])) return null;
   const params: Record<string, string> = {};
   for (let i = 0; i < c.segments.length; i++) {
     const pat = c.segments[i];
+    // 第一段是參數（如前台 /:shortUrl）時，不可吃掉保留字（/backend、/ajax…），避免把後台網址當成短網址
+    if (i === 0 && pat.startsWith(":") && RESERVED_FIRST_SEGMENTS.has(segs[0])) return null;
     if (pat.startsWith(":")) params[pat.slice(1)] = segs[i];
     else if (pat !== segs[i]) return null;
   }
