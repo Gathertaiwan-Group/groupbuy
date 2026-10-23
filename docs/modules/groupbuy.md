@@ -16,9 +16,13 @@
 | modal-groupbuy-clone | `/backend/GroupBuy/clone.do?groupBuyId=` | 完成（實際複製） | 93.7% ／ 100% |
 | modal-groupbuy-displaysms | `/{租戶}/ajax/GroupBuy/displaySMS.do?groupBuyId=` | 完成（簡訊未串接，寫 sms_messages） | 79.6% ／ 100% |
 | modal-influencer-displayconfirm | `/ajax/Influencer/displayConfirm?groupBuyId=` | 完成（KOL 平台未串接，寫 influencers） | 80.0% ／ 100% |
+| facebookauthgroupbuy-list | `/backend/FacebookAuthGroupBuy/list` | 完成 | 86.7% ／ 100% |
+| upload-uploadvideo | `/backend/Upload/uploadVideo` | 完成（Storage 直傳） | 71.1% ／ 100% |
+| groupbuypreference-list | `/backend/GroupBuyPreference/list?groupBuyId=` | 完成 | 95.9% ／ 100% |
+| homeview-list | `/backend/HomeView/list?groupBuyId=` | 完成 | 98.4% ／ 100% |
 | （推導）業績報表 | `/rp/{uuid}`、`/rp/{uuid}{報表密碼}`、`/rp/{uuid}x` | 完成（推導頁） | 原站未擷取 |
 
-其餘頁面（facebookauthgroupbuy-list、upload-uploadvideo、groupbuypreference-list、homeview-list）見第 5 節。
+原始相似度較低的小頁（彈窗、上傳影片、報表授權）差異全部落在原站擷取缺段處（缺段內的 modal-header、card 標題等已依原站補回）。
 
 ## 2. 團購列表與 Editor
 
@@ -52,17 +56,43 @@
 8. 業績報表 `/rp/`：原站未擷取，依 `GBAPI.showReportUrl` 的網址格式做密碼保護的唯讀報表（摘要、商品銷售統計、訂單明細；「團購報表隱藏部分個資」時遮罩姓名電話）；`/rp/{uuid}x` 需臉書授權＝未串接說明頁。
 9. 匯出報表欄位：原站格式未擷取，依名稱推導。「匯出貨運清單」工具列彈窗導向出貨模組的 `/backend/ShippingRecord/export?groupBuyId=`。
 
-## 5. 子任務頁面
+## 5. 報表授權、上傳影片、進階設定、官網 HomeView
 
-（報表授權、上傳影片、進階設定、官網 HomeView 的狀態與推導項目附於下方各節。）
+### 5.1 報表授權（`facebook-auth.ts`、`facebookauthgroupbuy-list.html`）
+- 列表 serverSide：「只顯示等待授權名單」（showStatusPending）、DataTableFilter（groupBuyId／facebookAuthId）、表尾狀態下拉、狀態排序；列上按鈕（允許／拒絕／標註為KOL/團主）以 Editor remove 送 `/ajax/FacebookAuthGroupBuy/action`（batchAction），回 Editor 格式。save／update 保留（原站按鈕已註解），facebookAuthId 不可經 Editor 寫入。
+- 側欄徽章 `facebookAuthGroupBuy`＝本租戶 PENDING 筆數（`index.ts` badges）。
+- 推導：標註為KOL＝該列 role=KOL。未串接：臉書申請者通知、`/ajax/FacebookAuthGroupBuy/auth`（/rp/ 臉書登入申請）。
+
+### 5.2 上傳影片（`upload-video.ts`、`upload-uploadvideo.html`、`public/modules/groupbuy/upload/video-direct-upload.js`）
+- Supabase Storage 簽名直傳（避開 Vercel 4.5MB 上限）：`/ajax/Upload/signVideoUpload` → 瀏覽器 PUT → `/ajax/Upload/saveVideoUpload`（寫 uploads，category=VIDEO），回原站格式 `{upload:{id}}`。
+- bucket `groupbuy-videos`（公開；4MB 同原站頁面文字；mp4/m4v/mov/webm，Storage 端亦強制）；影片網址 `/upload/videos/<id>`（gb/ 開頭轉 Storage，其餘轉回原站 CDN）。
+- 缺口：簽名後未完成寫紀錄的檔案不會自動清除；前台把商品說明中的影片網址轉成播放元素待 storefront。
+
+### 5.3 進階設定（`preference.ts`、`groupbuypreference-list.html`、`public/modules/groupbuy/preference/activity-popup.js`）
+- 列表＝原站固定鍵目錄（62 鍵，`PREFERENCE_CATALOG`，取自原站執行期）＋本團設定值；未設定列 id 為 10000000+序號；值可來自 `system_preferences`（前端標示來自系統設定）。
+- 一般欄位行內（text/select/upload）與彈窗（textarea/CKEditor5＋標籤插入）走 update；重置所有設定走 removeAll；15 種專用編輯器 GET 讀／POST 存（只送變更欄位並合併到 `group_buy_preference_settings`）。
+- 團購標籤：`/ajax/GroupBuyTag/get`、`/ajax/GroupBuyTagGroupBuy/get`、標籤精靈片段 `/backend/GroupBuyTag/wizard`；`/ajax/Lookup/country`（119 國）。
+- `resolveGroupBuyPreferences(tenantId, groupBuyId, names?)`：生效值依序取本團 → 綁定標籤 → 系統設定（供前台／訂單用）。
+- 彈出活動：原站 `editActivitySettings` 在共用 `dataTable.api.min.js`；`activity-popup.js` 只在不存在時補上（團購列表頁也引用）。
+- 推導：系統設定合併、隱藏層級鍵只在已設定時列出、欄位驗證規則；頁面相容修補 `.DTE_Field.block` 整列樣式。
+- 缺口：「自定義格式化備註設定」「前台-期望配送時間設定」兩個原站獨立頁（customNoteSettings／deliveryTimeSettings）未做；`system_preferences` 未 seed（原站值存於 scratchpad `gb/pref/system-values-guest_ep.txt`）。
+
+### 5.4 官網 HomeView（`homeview.ts`、`homeview-list.html`）
+- 端點：HomeView list/save/update/delete/updateSEO/clone/cloneFromV1；HomeViewCache cloneFooterV1/refresh/refreshCustomWeb/queryReleaseFooter；`/ajax/GroupBuy/refreshHome`；select2 `/ajax/Lookup/homeViewFooter`、`homeViewWebMenu`。
+- 推導：唯一類別（「網頁 首頁」「FOOTER 預設」每團各一，新存者生效、舊的改草稿）；複製加「(複製)」並複製區塊與項目；舊版複製按鈕只在官網型、尚無頁面、有舊版內容時出現。
+- 暫存 HTML（`div.home-view`、`footer.page-footer`）存 `home_views.html／date_cached`；團購列表「更新Footer暫存」＝`queryReleaseFooter` → `refresh.do`（伺服器端產生，取代原站 WebEditor＋`HomeViewCache/query/save`）。
+- 缺口：`/backend/HomeViewSection/list`、`/backend/WebEditor/footerV2`、前台讀取暫存待各自頁面／storefront。
 
 ## 6. 已知缺口
 
 - 列展開卡片的官網型按鈕連到的 `/backend/WebMenu/list`、`/backend/News/list`、`/backend/Lookbook/list`、`/backend/Post/list`、臉書型 `/backend/FbGroup/show` 不在本次分工頁面內（原站未擷取），連結照原站。
 - `/ajax/GroupBuy/exportMonthlyReport`、`exportItemSalesReport`（彈窗）、`/backend/GroupBuy/erpSalesReport` 屬 analytics；`/backend/ShippingCSV/importShippingCSV`、`/backend/SplitSalesOrder/split` 屬 shipping／orders。
 - 短網址唯一性只在 group_buys 內保證；marketing 的 `/s/<code>` 短網址為另一命名空間。
+- `system_preferences` 尚無資料，進階設定頁無「來自系統設定」的值（需 datamodel／core seed）。
 
 ## 7. 給 core 的問題
 
 - `scripts/dev/shot.mjs` 不會刪除自己建立的 Chrome profile（`shotprof-*`），磁碟吃緊時會累積；建議結束時清除。
 - `dtQuery` 的 `or` 篩選與全域搜尋並用時依賴 PostgREST 允許重複 `or` 參數（已實測可用）；排序未附加 id 作為次序，同值列跨頁順序可能不穩定。
+- `public/compat/editor-shim.css` 缺 `.DTE_Field.block` 整列樣式（進階設定頁先自補）。
+- Editor shim 的 select2 initialValue 以 `JSON.stringify` 送值，字串值會帶引號（未實證；`lookupGroupBuy` 以 Number 解析可能得 NaN）。
