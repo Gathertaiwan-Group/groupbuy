@@ -1,0 +1,275 @@
+<style>
+#import_gbis_table_wrapper .dt-buttons.btn-group {top:0px;}
+#import_gbis_table_wrapper .buttons-remove span::before {content: '';}
+select#month {flex: none;}
+</style>
+<script type="text/javascript">
+var import_gbis_editor;
+var import_gbis_table;
+
+var import_gbis_table_name = '#import_gbis_table';
+var i18n = DataTableConfig.i18n;
+i18n.remove = {
+	button: "複製",
+	title:"複製",
+	submit: "複製",
+	confirm: {
+		_: "確定要複製這%d個商品?",
+		1: "確定要複製這1個商品?",
+	}
+ },
+import_gbis_editor = new $.fn.dataTable.Editor( {
+	idSrc:'itemId',
+	ajax: {
+		remove: {
+			type: 'POST',
+			url:'{{baseUrl}}/ajax/Item/cloneItems.do?itemId=_id_',
+			data:function(data) {
+				data.groupBuyItemSetId=$('#groupBuyItemSetId').val();
+				return data;
+			}
+		},
+	},
+	table: import_gbis_table_name,
+	fields: [
+		{
+			label: '名稱:',
+			name:'item.title'
+		},
+	],
+	i18n:i18n,
+} );
+
+import_gbis_table = $(import_gbis_table_name).DataTable( {
+	"serverSide": true,
+	"searching": false,
+	"pageLength":100,
+	processing:true,
+	searchDelay: 1000,
+	dom: 'Bfrtip',
+	ajax: {
+		url:'{{baseUrl}}/ajax/Item/uniqueList.do',
+		type: "POST",
+		data: function ( d ) {
+			d.expand = $('#expand').prop("checked");
+			d.main = $('#main').prop("checked");
+			d.sSearch = $('#sSearch').val();
+			d.month = $('#month').val();
+			d.groupBuyId = $('#groupBuyId').val();
+			d.groupBuyItemSetId = $('#fromGroupBuyItemSetId').val();
+		return d;
+		}
+	},
+	language:DataTableConfig.i18n,
+	columns: [
+		{
+			data: null,
+			defaultContent: '',
+			className: 'select-checkbox',
+			orderable: false
+		},
+		{ data: 'title',
+			render: function ( data, type, row ) {
+				var html = data;
+				var tag = '';
+				if (row.shareStockParent) {
+					tag = '<span class="ml-1 badge badge-warning badge-sm">共用庫存(主要)</span>';
+				} else if (row.shareStock) {
+					tag = '<span class="ml-1 badge badge-info badge-sm">共用庫存</span>';
+				}
+				html = data + '<span class="ml-1 text-success">$' + row.price +'</span>' +tag+ '<p class="small text-muted">'+row.itemSetTitle + '</p>';
+				if (row.groupBuyTitle != null) {
+					html += '<p class="small text-muted">'+row.groupBuyTitle + '</p>';
+				}
+				return html;
+			} },
+	],
+	select: {
+		style: 'multi' //'os'
+	},
+	buttons: [
+		'selectAll',
+		'selectNone',
+		{ extend: 'remove' , editor: import_gbis_editor },
+		{
+			extend: "selected",
+			className:'btn-shareStock',
+			text: '複製(共用庫存)',
+			action: function (e, dt, node, config){
+				main = $('#main').prop("checked");
+				if (!main) {
+						alert('要打勾「主表單品項」後才能共用主表單商品庫存');
+						return;
+					}
+				if (!confirm('確定操作?')) return;
+				var ajaxData = dt.rows( {selected: true}).data().toArray();
+				var dd = '';//'itemId=';
+				dt.rows( {selected: true}).data().each(function(obj,index) {
+					if (index == 0) {
+						dd += obj.itemId;
+					} else {
+					dd += "," + obj.itemId;
+					}
+				});
+				var data = {
+					itemId:dd,
+					groupBuyItemSetId:$('#groupBuyItemSetId').val()
+				};
+				$.ajax({
+					type: 'POST',
+					url:'{{baseUrl}}/ajax/Item/cloneItems.do?shareStock=true',
+						data: data,
+						async: false,
+						success: function (response) {
+							$('#myModal').modal('hide');
+							table.clear();
+							table.ajax.reload();
+				}})
+			}
+		},
+	]
+} );
+import_gbis_editor
+	.on( 'postRemove', function () {
+		// After create or edit, a number of other rows might have been effected -
+		// so we need to reload the table, keeping the paging in the current position
+		$('#myModal').modal('hide');
+		table.ajax.reload( null, false );
+	} )
+import_gbis_table
+.on ('preXhr', function(e, settings) {
+$('#btn-search').html('<i class="fa-light fa-spinner glyphicon-refresh-animate"></i>');
+})
+.on ('xhr', function(e, settings) {
+$('#btn-search').html('<i class="fa-light fa-search"></i>');
+})
+
+
+$(document).ready(function() {
+	var fetchGroupBuyItemSet = function(groupBuyId) {
+		jQuery.get(
+				'{{baseUrl}}/ajax/GroupBuyItemSet/list.do',
+				{
+					'groupBuyId':groupBuyId,
+					'iDisplayLength':500,
+					'iSortCol_0':'0',
+					'mDataProp_0':'t.seqString',
+					'sSortDir_0':'asc'
+				},
+				function(data) {
+					dataArray = data.data;
+					var html = '';
+					dataArray.forEach(function(c,i) {
+						html += '<option value="'+c.groupBuyItemSetId+'">'+c.seq + '.' + c.itemSet.title+'</option>';
+					});
+					$('#groupBuyItemSetId').html(html);
+				}
+				).fail(function(data) {
+					json = data.responseJSON;
+					modalShowDanger($('#myModal'), json.error);
+				});
+	}
+
+	var filter = '<div class="ml-2 mt-2">'
+	+ '<input type="checkbox" id="main" class="filters form-check-input" value="1"><label for="main" class="form-check-label mr-2">主表單品項</label>'
+	+ '</div>'
+	+ '<div class="input-group mt-2" id="groupBuyItemSetId-group">'
+	+ '<div class="input-group-prepend btn btn-default">目的地品項</div>'
+	+ '<select id="groupBuyItemSetId" class="form-control w-auto"></select>'
+	+ '</div>'
+	+ '<div class="input-group mt-2" id="groupBuyId-group">'
+	+ '<div class="input-group-prepend btn btn-default">篩選團購</div>'
+	+ '<select id="groupBuyId" class="form-control w-auto"></select>'
+	+ '<select id="month" class="form-control filters w-auto"><option value="1">近1個月內品項</option><option value="3">近3個月內品項</option><option value="6">近半年內品項</option><option value="12">近1年內品項</option><option value="0">當天新品項</option><option value="-1" disabled>全部商品</option></select>'
+	+ '</div>'
+	+ '<div class="input-group mt-2" id="fromGroupBuyItemSetId-group">'
+	+ '<div class="input-group-prepend btn btn-default">篩選品項</div>'
+	+ '<select id="fromGroupBuyItemSetId" class="form-control w-auto"></select>'
+	+ '</div>'
+	+ '<div class="input-group mt-2"><input type="text" id="sSearch" placeholder="輸入商品名稱" size=20 class="form-control filters w-auto"><div class="input-group-addon btn btn-default" id="btn-search"><i class="fa-light fa-search"></i></div></div>'
+	+ '</div>'
+	$('#import_gbis_table_wrapper').find(".dt-buttons").append(filter);
+
+	var gbisid = '{{groupBuyItemSetId}}';
+	if (!gbisid.length) {
+		fetchGroupBuyItemSet({{groupBuyId}});
+	} else {
+		$('#groupBuyItemSetId').html('<option value="' + gbisid + '"> </option>');
+		$('#groupBuyItemSetId-group').hide();
+	}
+
+	var enableAllItems = function(enable) {
+		if (!enable) {
+			$('#month option[value=-1]').prop('disabled',true);
+			$('#month option[value=1]').prop('selected', true);
+		} else {
+			$('#month option[value=-1]').prop('disabled',false);
+			//$('#month option[value=-1]').prop('selected', true);
+		}
+	}
+
+	$('.filters').on('change', function() {
+		if (this.type == 'text') return;
+		if ($(this).attr('id') == 'main') {
+			var checked = $(this).is(':checked');
+			enableAllItems(checked);
+			if (checked) {
+				$('#groupBuyId').data('featureTags', '2');
+			} else {
+				$('#groupBuyId').data('featureTags', '');
+			}
+		}
+		import_gbis_table.clear().ajax.reload();
+		import_gbis_table.columns.adjust();
+	});
+	$('#btn-search').on('click', function() {
+		if ($('#btn-search i').hasClass('glyphicon-refresh')) return;
+		import_gbis_table.clear().ajax.reload();
+		import_gbis_table.columns.adjust();
+	});
+
+	$('#groupBuyId').select2ForGroupBuy();
+	$('#fromGroupBuyItemSetId').select2ForGroupBuyItemSet(function() {
+		return $('#groupBuyId').val();
+	});
+	$('#groupBuyId').on('change.select2', function() {
+		var enable = $('#groupBuyId').val() != null;
+		enableAllItems(enable);
+		$('#fromGroupBuyItemSetId').val(null).trigger('change');
+	//	import_gbis_table.clear().ajax.reload();
+	//	import_gbis_table.columns.adjust();
+	});
+	$('#fromGroupBuyItemSetId').on('change.select2', function() {
+		import_gbis_table.clear().ajax.reload();
+		import_gbis_table.columns.adjust();
+	});
+})
+</script>
+
+	<div class="modal-header">
+		 <h5 class="modal-title">團購 &raquo; 複製商品</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="form-group">
+
+			<table id="import_gbis_table" class="table table-striped display"
+				cellspacing="0" width="100%">
+				<thead>
+					<tr>
+						<th width="60px">選擇</th>
+						<th>名稱</th>
+					</tr>
+				</thead>
+				<tfoot>
+					<tr>
+						<th></th>
+						<th>名稱</th>
+					</tr>
+				</tfoot>
+			</table>
+
+		</div>
+	</div> <!-- modal-body -->
+

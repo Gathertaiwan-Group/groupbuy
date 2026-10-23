@@ -1,0 +1,176 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+
+			$(document).ready(function () {
+
+				var tableName = '#rpTable';
+
+				// We use Editor only for Delete (Remove) in this scenario, 
+                // Create and Edit will be handled by custom pages.
+                editor = new $.fn.dataTable.Editor({
+                    ajax: {
+                        remove: {
+                            type: 'POST',
+                            url: '/ajax/ItemBundleV2/delete.do?itemBundleId=_id_'
+                        }
+                    },
+                    table: tableName,
+                    idSrc: 'itemBundleId',
+                    fields: [
+                        // Fields are required for inline editing or editor modal, 
+                        // but we are using custom pages for main editing.
+                    ],
+                    formOptions: DataTableConfig.formOptions,
+                    i18n: DataTableConfig.i18n,
+                });
+
+                var table = $(tableName).DataTable({
+                    dom: 'lBrtip',
+                    serverSide: true,
+                    processing: true,
+                    scrollX: true,
+                    "lengthMenu": [10, 25, 50, 100, 250],
+                    ajax: {
+                        url: '/ajax/ItemBundleV2/list?groupBuyId={{groupBuyId}}',
+                        type: "POST",
+                    },
+                    language: DataTableConfig.i18n,
+                    columns: [
+                        DataTableConfig.data_select_checkbox,
+                        {
+                    		data: 'title',
+							orderable: false,
+							render: function (data, type, row) {
+								return '<div style="min-width: 100px;max-width:320px;text-wrap: auto;display: block;">' + data + '</div>';
+                            }
+                        },
+                        {
+                            data: null,
+       					orderable: false,
+							render: function (data, type, row) {
+								var invoice = '列出子商品明細: ' + (row.invoiceShowDetail ? '是' : '否');
+								var breakdown = '列出子商品明細: ' + (row.showBreakdown ? '是' : '否');
+
+								var getDisplayModeStr = function (val) {
+									if (val === 'ROOT') return '僅顯示主商品';
+									if (val === 'CHILD') return '<span class="text-secondary">僅顯示子商品</span>';
+									if (val === 'BOTH') return '<span class="text-primary">主商品與子商品皆顯示</span>';
+									return val || '<span class="text-danger">N/A</span>';
+								};
+								var getPriceAllocationStr = function (val) {
+									if (val === 'ROOT') return '<span class="text-secondary">價格歸屬主商品</span>';
+									if (val === 'DISTRIBUTED') return '<span class="text-secondary">價格分配至子商品</span>';
+									return val || '<span class="text-danger">N/A</span>';
+								};
+
+								var html = '<div style="font-size: 0.9em; text-wrap: nowrap">';
+								html += '<strong>電子發票</strong><br><span class="text-muted ml-2 small">- ' + invoice + '</span><br>';
+								html += '<strong>顧客訂單明細</strong><br><span class="text-muted ml-2 small">- ' + breakdown + '</span><br>';
+								html += '<strong>ERP 報表</strong><br>';
+								html += '<span class="text-muted ml-2 small">- 顯示方式: ' + getDisplayModeStr(row.erpDisplayMode) + '</span><br>';
+								html += '<span class="text-muted ml-2 small">- 價格分配: ' + getPriceAllocationStr(row.erpPriceAllocation) + '</span><br>';
+								html += '<strong>出貨報表</strong><br>';
+								html += '<span class="text-muted ml-2 small">- 顯示方式: ' + getDisplayModeStr(row.pickingDisplayMode) + '</span><br>';
+								html += '<span class="text-muted ml-2 small">- 價格分配: ' + getPriceAllocationStr(row.pickingPriceAllocation) + '</span>';
+								html += '</div>';
+								  return html;
+                            }
+                        },
+                        {
+                            data: null,
+                            orderable: false,
+                			render: function (data, type, row) {
+								if (!row.bundleConfig || !row.bundleConfig.optionGroups) return '';
+								var html = '<ul class="pl-3 mb-0" style="font-size: 0.8em;">';
+								row.bundleConfig.optionGroups.forEach(function (group) {
+									html += '<li><strong>' + (group.groupTitle || '未命名群組') + '</strong><ul class="pl-3">';
+									if (group.candidates) {
+										group.candidates.forEach(function (candidate) {
+											html += '<li>' + (candidate.name || '未命名項目') + '</li>';
+										});
+									}
+									html += '</ul></li>';
+								});
+								html += '</ul>';
+								return html;
+							  }
+                        }
+                    ],
+                    keys: DataTableConfig.keysInlineTab,
+                    "order": [[1, "desc"]],
+                    select: DataTableConfig.selectOptionsOS,
+                    buttons: [
+                        {
+                            text: '新增組合商品',
+                            className: 'btn-primary',
+                            action: function (e, dt, node, config) {
+                                // Redirect to Create Page
+                                window.location.href = '/backend/ItemBundleV2/create?groupBuyId={{groupBuyId}}';
+                            }
+                        },
+                        {
+                            extend: 'edit',
+                            editor: editor,
+                            text: '編輯',
+							action: function (e, dt, node, config) {
+								var rows = dt.rows({ selected: true }).indexes();
+								if (rows.length === 0) return;
+								var data = dt.row(rows[0]).data();
+								// Redirect to Edit Page
+								window.location.href = '/backend/ItemBundleV2/edit.do?itemId=' + data.itemId + '&groupBuyId={{groupBuyId}}';
+							}
+						},
+						//{ extend: 'remove', editor: editor, className: 'btn-danger' },
+                    ],
+                    initComplete: function () {
+                        //DataTableConfig.initFooterSearch(this, [1, 2, 3], [10, 20, 10]);
+                    },
+                    drawCallback: function (settings) {
+                        $(".dataTables_scrollBody").floatingScroll();
+                    }
+                });
+
+                DataTableHelper.initEditorOnCallback(table, editor);
+                // DataTableHelper.inlineModePlugin(table); // Disable inline for now as we use full page
+            }); // end ready
+        </script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/GroupBuy/show.do?groupBuyId={{groupBuyId}}">{{groupBuy.title}}</a></li>
+		<li class="breadcrumb-item"><a href="/backend/GroupBuyItemSet/show.do?groupBuyId={{groupBuyId}}">商品明細</a></li>
+		<li class="breadcrumb-item active" aria-current="page">組合商品管理</li>
+	</ol>
+</nav>
+
+<div class="card mt-4">
+<div class="card-header">組合商品管理</div>
+<div class="card-body">
+	<div class="blue-grey lighten-5 small p-2">
+	<p>在此管理您的組合商品 (Bundle Products)。</p>
+	<p>點擊「新增」按鈕進入組合商品編輯器。</p>
+	</div>
+</div>
+<div class="card-body">
+	<table id="rpTable" class="table table-striped display" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>組合的商品名稱</th>
+				<th>進階顯示設定</th>
+				<th>組合內容</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>組合的商品名稱</th>
+				<th>進階顯示設定</th>
+				<th>組合內容</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

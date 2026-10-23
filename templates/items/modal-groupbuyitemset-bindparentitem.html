@@ -1,0 +1,141 @@
+<style>
+#import_gbis_table_wrapper .dt-buttons.btn-group {top:0px;}
+</style>
+<script type="text/javascript">
+var import_gbis_editor;
+var import_gbis_table;
+
+var import_gbis_table_name = '#import_gbis_table';
+var i18n = DataTableConfig.i18n;
+i18n.remove = {
+	button: "綁定主庫存",
+	title:  "綁定主庫存",
+	submit: "綁定主庫存",
+	confirm: {
+		_: "確定要綁定這幾%d個品項?",
+		1: "確定要綁定這1個品項?",
+	}
+};
+import_gbis_editor = new $.fn.dataTable.Editor( {
+	idSrc:'groupBuyItemSetId',
+	ajax: {
+		remove: {
+			type: 'POST',
+			url:  '{{baseUrl}}/ajax/GroupBuyItemSet/bindParentItem.do?itemSetId={{itemSetId}}&groupBuyItemSetId=_id_'
+		},
+	},
+	table: import_gbis_table_name,
+	fields: [
+		DataTableConfig.field_input('品項名稱', 'itemSet.title'),
+	],
+	i18n:i18n,
+} );
+
+import_gbis_table = $(import_gbis_table_name).DataTable( {
+	serverSide: true,
+	searching: false,
+	processing:true,
+	searchDelay: 1000,
+	lengthMenu: [10, 25, 50, 100],
+	dom: 'lBrtip',
+	ajax: {
+		url:'{{baseUrl}}/ajax/GroupBuyItemSet/uniqueList.do',
+		type: "POST",
+		data: function ( d ) {
+			d.expand = 1;
+			d.main = 1;
+			d.groupBuyId = $('#groupBuyId').val();
+			d.groupBuyTitle = $('#groupBuyTitle').val();
+			d.month = 120;
+			d.excludeGroupBuyItemSetId = {{groupBuyItemSetId}};
+			d.sSearch = $('#sSearch').val();
+			return d;
+		}
+	},
+	language:DataTableConfig.i18n,
+	columns: [
+		DataTableConfig.data_select_checkbox,
+		{
+			data: 'itemSet.title',
+			render: function ( data, type, row ) {
+				return data+'<p class="small text-muted">'+row.groupBuyTitle + '</p>';
+			}
+		},
+	],
+	select: 'single',
+	buttons: [
+		{ extend: 'remove' , editor: import_gbis_editor },
+	]
+} );
+import_gbis_editor
+	.on( 'postRemove', function (e, json, ids ) {
+		modalShowSuccess($('#myModal'),'成功綁定' + json.data +'個商品');
+	});
+import_gbis_table
+	.on ('preXhr', function(e, settings) {
+		$('#btn-search').html('<i class="fa-light fa-spinner glyphicon glyphicon-refresh glyphicon-refresh-animate"></i>');
+	})
+	.on ('xhr', function(e, settings) {
+		$('#btn-search').html('<i class="fa-light fa-search glyphicon glyphicon-search"></i>');
+	});
+
+$(document).ready(function() {
+
+	var extraSection = '<div class="input-group mt-2">'
+		+ '<div class="input-group-prepend btn btn-default">篩選團購</div>'
+		+ '<select id="groupBuyId" class="form-control w-auto"></select>'
+		+ '<div class="d-inline-flex"><input type="text" id="sSearch" placeholder="輸入品項名稱" size=20 class="form-control filters w-auto"><div class="input-group-addon btn btn-default" id="btn-search"><i class="fa-light fa-search"></i></div></div>'
+		+ '</div>'
+		+ '</div>';
+$('#import_gbis_table_wrapper').find(".dt-buttons").append(extraSection);
+$('#groupBuyId').select2ForGroupBuy();
+$('input:checkbox.filters').on('change', function() {
+	import_gbis_table.clear().ajax.reload();
+	import_gbis_table.columns.adjust();
+});
+$('select.filters').on('change', function() {
+	import_gbis_table.clear().ajax.reload();
+	import_gbis_table.columns.adjust();
+});
+
+$('#btn-search').on('click', function() {
+	if ($('#btn-search i').hasClass('fa-refresh')) return;
+	import_gbis_table.clear().ajax.reload();
+	import_gbis_table.columns.adjust();
+});
+
+$('#btn-copyTitle').on('click', function() {
+	$('#sSearch').val({{json title}});
+	$('#btn-search').click();
+});
+/*
+$('input:text.filters')
+.keyup(delayInput(function (e) {
+	import_gbis_table.clear().ajax.reload();
+}, 500));
+*/
+
+})
+</script>
+
+<div class="modal-header">
+	<h5 class="modal-title">{{title}}<button id="btn-copyTitle" class="btn btn-sm btn-default p-1">複製標題</button> &raquo; 綁定主庫存</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	<table id="import_gbis_table" class="table table-striped display" width="100%">
+		<thead>
+			<tr>
+				<th width="60px">選擇</th>
+				<th>品項名稱</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>品項名稱</th>
+			</tr>
+		</tfoot>
+	</table>
+</div> <!-- modal-body -->

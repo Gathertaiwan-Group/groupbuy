@@ -1,0 +1,27 @@
+<form name="ItemTemplateForm" method="post" action="/ajax/ItemTemplate/importItemCSV.do" class="form-horizontal" enctype="multipart/form-data" id="ItemTemplateForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><div class="modal-header">
+		 <h5 class="modal-title">團購 &raquo; 匯入商品XLS</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="form-group row">
+		<label class="control-label col-sm-4" for="imageFile">XLS檔案</label>
+		<div class="controls col-sm-8">
+			<input type="file" name="imageFile" value="" id="imageFile"></div>
+	</div>
+	</div> <!-- modal-body -->
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="上傳" />	 
+	</div>  
+</form><script>
+var onSuccess = function(json) {
+	$('#submitButton').attr('disabled', true);
+	modalShowSuccess($('#myModal'), json.error);
+}
+initAjaxForm('ItemTemplateForm', onSuccess);
+</script>
+{{> items/partials/xlsx-reader.html}}

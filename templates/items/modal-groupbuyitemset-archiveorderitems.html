@@ -1,0 +1,75 @@
+{{!-- 推導：原站「盤點」彈窗（/backend/GroupBuyItemSet/archiveOrderItems）未擷取；依相鄰彈窗（匯入商品庫存）的版型與回應格式補完。 --}}
+<form name="ArchiveOrderItemsForm" method="post" action="/ajax/GroupBuyItemSet/archiveOrderItems.do" class="form-horizontal" id="ArchiveOrderItemsForm"><input type="hidden" name="groupBuyItemSetId" value="{{groupBuyItemSetId}}" id="groupBuyItemSetId"><div class="modal-header">
+		 <h5 class="modal-title">{{title}} &raquo; 盤點</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="mb-2">
+	<small>
+	盤點出貨超過14天該品項的商品。盤點後原始庫存將會被扣除，盤點後的訂單商品不再列入庫存計算內。
+	<br>系統庫存公式為：原始庫存=銷售數量+可售庫存
+	</small>
+	<br><small>盤點數量多的時候，可能會花一些時間等待</small>
+	</div>
+	<table class="table table-striped small">
+		<thead>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>原始現貨庫存</th>
+				<th>可售現貨數量</th>
+				<th>可盤點數量</th>
+			</tr>
+		</thead>
+		<tbody>
+		{{#each items}}
+			<tr>
+				<td>{{title}}</td>
+				<td>{{uid}}</td>
+				<td>{{stock}}</td>
+				<td>{{stockAvailable}}</td>
+				<td>{{archivable}}</td>
+			</tr>
+		{{else}}
+			<tr><td colspan="5" class="text-center">沒有可盤點的商品</td></tr>
+		{{/each}}
+		</tbody>
+	</table>
+	</div> <!-- modal-body -->
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="盤點" />
+	</div>
+</form><script>
+var archiveOrderItemSuccess = function(data) {
+	body = '沒有庫存需要更新';
+	var dataArr = [];
+	dataArr = data.data;
+	if (dataArr.length > 0) {
+		body = '';
+	}
+	for (i = 0; i < dataArr.length; i++) {
+		log = dataArr[i];
+		body += '<div class="row small">'
+			+ '<div class="col-6">' + log.title + '</div>'
+			+ '<div class="col-3">' + log.fieldString + '</div>'
+			+ '<div class="col-3">' + log.oriValue + '->' + log.newValue + '</div>'
+			+ '</div>'
+			;
+	}
+
+	$('#myModal').modal('hide');
+	messagebox('盤點', body, '關閉');
+	if (typeof table !== 'undefined' && table.ajax) table.ajax.reload(null, false);
+}
+
+var onSuccess = function(json) {
+	$('#submitButton').attr('disabled', true);
+	archiveOrderItemSuccess( json );
+}
+initAjaxForm('ArchiveOrderItemsForm', onSuccess);
+</script>

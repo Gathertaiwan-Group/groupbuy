@@ -1,0 +1,43 @@
+{{!-- 推導：原站由伺服器解析 XLS；本系統以原站同版開源 SheetJS（cdnjs xlsx 0.18.5）在瀏覽器解析 .xls/.xlsx/.csv，
+     解析結果放在隱藏欄 rowsJson 隨表單一起送出（伺服器端仍保留 .xlsx/.csv 解析作為備援）。 --}}
+<script>
+(function() {
+	var $file = $('#myModalContent').find('input[type=file][name=imageFile]').last();
+	if (!$file.length) return;
+	var $form = $file.closest('form');
+	var $hidden = $form.find('input[name=rowsJson]');
+	if (!$hidden.length) $hidden = $('<input type="hidden" name="rowsJson" value="">').appendTo($form);
+	var ensureXlsx = function(cb) {
+		if (window.XLSX) return cb();
+		var s = document.createElement('script');
+		s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+		s.onload = cb;
+		s.onerror = function() { cb(); };
+		document.head.appendChild(s);
+	};
+	$file.on('change', function() {
+		$hidden.val('');
+		var f = this.files && this.files[0];
+		if (!f) return;
+		var $btn = $form.find('[type=submit]');
+		$btn.prop('disabled', true);
+		ensureXlsx(function() {
+			if (!window.XLSX) { $btn.prop('disabled', false); return; }
+			var reader = new FileReader();
+			reader.onload = function(e) {
+				try {
+					var wb = XLSX.read(new Uint8Array(e.target.result), {type: 'array', raw: false});
+					var ws = wb.Sheets[wb.SheetNames[0]];
+					var rows = XLSX.utils.sheet_to_json(ws, {header: 1, defval: '', raw: false, blankrows: true});
+					$hidden.val(JSON.stringify(rows));
+				} catch (err) {
+					$hidden.val('');
+				}
+				$btn.prop('disabled', false);
+			};
+			reader.onerror = function() { $btn.prop('disabled', false); };
+			reader.readAsArrayBuffer(f);
+		});
+	});
+})();
+</script>
