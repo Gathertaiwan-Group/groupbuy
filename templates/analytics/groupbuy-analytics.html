@@ -1,10 +1,9 @@
 <!--#head-->
 <style>
-.chart-legends ul {list-style:none;padding-left:0;font-size:0.8rem;}
-.chart-legends li span {display:inline-block;width:12px;height:12px;margin-right:4px;vertical-align:middle;}
+{{!-- CLEANROOM:groupbuy-analytics#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 </style>
 <!--#body--><div class="container-fluid ">
-	<h5 class="mt-5">{{groupBuy.title}}</h5>
+	{{!-- CLEANROOM:groupbuy-analytics#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 <div class="row">
 <div class="col-12">
 <div class="card">
@@ -51,53 +50,9 @@
 <!-- col begin -->
 <div class="col-md-6">
 <span class="badge badge-default">每日訂單數</span>
-<div class="chart-container" style="position: relative; height:320px; width:100%">
-<canvas id="dailyChart" style="width:100%;height:100%"></canvas>
+{{!-- CLEANROOM:groupbuy-analytics#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 </div>
-</div>
-<!-- col end -->
-<!-- col begin -->
-<div class="col-md-6">
-<span class="badge badge-default">均價訂單數</span>
-<div class="chart-container" style="position: relative; height:320px; width:100%">
-<canvas id="distributionChart" style="width:100%;height:100%"></canvas>
-</div>
-</div>
-<!-- col end -->
-<!-- col begin -->
-<div class="col-md-6">
-<span class="badge badge-default">銷售商品分類</span>
-<div class="chart-container" style="position: relative; height:320px; width:100%">
-<canvas id="cateTagPortionChart" style="width:100%;height:100%"></canvas>
-</div>
-<div class="chart-legends"></div>
-</div>
-<!-- col end -->
-<!-- col begin -->
-<div class="col-md-6">
-<span class="badge badge-default">銷售品項</span>
-<div class="chart-container" style="position: relative; height:320px; width:100%">
-<canvas id="itemSetPortionChart" style="width:100%;height:100%"></canvas>
-</div>
-<div class="chart-legends"></div>
-</div>
-<!-- col end -->
-<!-- col begin -->
-<div class="col-md-6">
-<span class="badge badge-default">地區分佈訂單數</span>
-<div class="chart-container" style="position: relative; height:320px; width:100%">
-<canvas id="areaSalesOrderCountPortionChart" style="width:100%;height:100%"></canvas>
-</div>
-</div>
-<!-- col end -->
-<!-- col begin -->
-<div class="col-md-6">
-<span class="badge badge-default">地區分佈客單價</span>
-<div class="chart-container" style="position: relative; height:320px; width:100%">
-<canvas id="areaSalesOrderAmountPortionChart" style="width:100%;height:100%"></canvas>
-</div>
-</div>
-<!-- col end -->
+{{!-- CLEANROOM:groupbuy-analytics#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 </div>
 
 <script>
@@ -124,31 +79,9 @@ var borderColors = [
 	'rgba(153, 102, 255, 1)',
 	'rgba(255, 159, 64, 1)',
 	'rgba(205, 99, 132, 1)',
-	'rgba(54, 162, 185, 1)',
-	'rgba(255, 156, 86, 1)',
-	'rgba(75, 142, 192, 1)',
-	'rgba(153, 102, 205, 1)',
-	'rgba(205, 159, 64, 1)',
-	];
-
-var genData = function(label, labels, data, backgroundColor, borderColor) {
-	var tempData = {
-				labels : labels,
-				datasets : [{
-						label: label,
-						backgroundColor: backgroundColor,
-					borderColor: borderColor,
-					borderWidth: 1,
-					data : data
-				}]
-			};
-	return tempData;
-}
-var _charts = {};
+	{{!-- CLEANROOM:groupbuy-analytics#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 var _createChart = function(chartId, type, data, showLegend) {
-	if (_charts[chartId]) {
-		_charts[chartId].destroy();
-	}
+	{{!-- CLEANROOM:groupbuy-analytics#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	var myChart = new Chart(
 			$(chartId),
 			{
@@ -165,48 +98,11 @@ var _createChart = function(chartId, type, data, showLegend) {
 					},
 				}
 			});
-	_charts[chartId] = myChart;
+	{{!-- CLEANROOM:groupbuy-analytics#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	window.addEventListener('resize', function () {
 		myChart.resize()
 	})
-	$(chartId).parent().parent().find('.chart-legends').html(showLegend ? '' : myChart.generateLegend());
-}
-
-var createChart = function(chartId, type, label, analysticsData, unit, colorIndex, showLegend) {
-	var labels = [];
-	var data = [];
-	for(var dc in analysticsData) {
-		labels.push(analysticsData[dc].label + unit);
-		data.push(analysticsData[dc].data);
-	}
-	var b1, b2;
-	if (colorIndex >= 0) {
-		b1 = backgroundColors[colorIndex];
-		b2 = borderColors[colorIndex];
-	} else {
-		b1 = [];
-		b2 = [];
-		for (var idx = 0; idx < data.length; idx++) {
-			b1.push(backgroundColors[idx % backgroundColors.length]);
-			b2.push(borderColors[idx % borderColors.length]);
-		}
-	}
-	data = genData(label, labels, data, b1, b2);
-	_createChart(chartId, type, data, showLegend);
-}
-
-$(document).ready(function() {
-
-	var query = {
-		groupBuyId: {{json groupBuyId}},
-	};
-	var reload = function() {
-		var $btn = $('#btn-search');
-		btnStartLoading($btn);
-		query.dateCreatedBegin = $('#dateCreatedBegin').val();
-		query.dateCreatedEnd = $('#dateCreatedEnd').val();
-		var jsonData = $.ajax({
-				url: '{{baseUrl}}/ajax/GroupBuy/analytics.do?all=1',
+	{{!-- CLEANROOM:groupbuy-analytics#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				dataType: 'json',
 				data:query
 			})
@@ -215,43 +111,7 @@ $(document).ready(function() {
 				createChart('#distributionChart', 'bar', "訂單數", json.data.distributions, '元', 4, true);
 				createChart('#cateTagPortionChart', 'doughnut', "金額", json.data.cateTagPortions, '', -1, false);
 				createChart('#itemSetPortionChart', 'doughnut', "金額", json.data.itemSetPortions, '', -1, false);
-				createChart('#areaSalesOrderCountPortionChart', 'bar', "訂單數", json.data.areaSalesOrderCountPortions, '', -1, true);
-				createChart('#areaSalesOrderAmountPortionChart', 'bar', "金額", json.data.areaSalesOrderAmountPortions, '', -1, true);
-			});
-		$.ajax({
-				url: '{{baseUrl}}/ajax/GroupBuy/getDailyReport.do',
-				dataType: 'json',
-				data:query
-			})
-			.done(function (json) {
-				if (json.data) {
-					var html = '';
-					for (var k in json.data) {
-						var d = json.data[k];
-						html += '<tr><td><div class="row">'
-							 + '<div class="col-3">' + d.date + '</div>'
-							 + '<div class="col-3">' + d.count + '</div>'
-							 + '<div class="col-3">' + d.grandTotal + '</div>'
-							 + '<div class="col-3">' + d.totalPaid + '</div>'
-							 + '</div></td></tr>'
-							 ;
-					}
-					$('#dailyReport tbody').html(html);
-				}
-				btnStopLoading($btn);
-			})
-			.fail(function() {
-				btnStopLoading($btn);
-			});
-	}
-
-	var d = new Date();
-	var end = moment(d).format('YYYY-MM-DD');
-	d.setDate(d.getDate() - 7);
-	var begin = moment(d).format('YYYY-MM-DD');
-	initDatetimePicker('#dateCreatedBegin', 'YYYY-MM-DD', 'days', function(date, obj) {
-		var maxDate = moment(date).add('1', 'years').format('YYYY-MM-DD');
-		$('#dateCreatedEnd').data("DateTimePicker").minDate(date);
+				{{!-- CLEANROOM:groupbuy-analytics#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		$('#dateCreatedEnd').data("DateTimePicker").maxDate(maxDate);
 		//$('#dateCreatedEnd').data("DateTimePicker").defaultDate(begin);
 		//$('#dateCreatedEnd').show();
@@ -259,15 +119,8 @@ $(document).ready(function() {
 	initDatetimePicker('#dateCreatedEnd', 'YYYY-MM-DD', 'days');
 	$('#dateCreatedBegin').data("DateTimePicker").defaultDate(begin);
 	$('#dateCreatedEnd').data("DateTimePicker").defaultDate(end);
-	$('#btn-search').click(function() {
-		reload();
-	});
-
-	reload();
-});
-</script>
+	{{!-- CLEANROOM:groupbuy-analytics#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 
 </div>
 <!--#foot-->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.bundle.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.min.js"></script>
+{{!-- CLEANROOM:groupbuy-analytics#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}

@@ -1,21 +1,12 @@
-{{!-- 推導頁：原站「通路聯絡資訊」(/backend/erp/DistributionChannelContact/list.do) 未擷取，依銷售通路列表的版型與 Editor 慣例補完 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
-<script type="text/javascript" class="init">
-
-	$(document).ready(function() {
-
-		var distributionChannelId = {{json distributionChannelId}};
-		var tableName = '#distributionChannelContactTable';
-		var editor = new $.fn.dataTable.Editor( {
-			ajax: {
-				create: {
+{{!-- CLEANROOM:distributionchannelcontact-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/erp/DistributionChannelContact/save.do?distributionChannelId=' + distributionChannelId
+					{{!-- CLEANROOM:distributionchannelcontact-list#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				},
 				edit: {
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/erp/DistributionChannelContact/update.do?distributionChannelContactId=_id_'
+					{{!-- CLEANROOM:distributionchannelcontact-list#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				},
 				remove: {
 					type: 'POST',
@@ -34,28 +25,10 @@
 					DataTableConfig.field_input('地址','address'),
 					DataTableConfig.field_textarea('備註', 'note','', 10),
 			],
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
-		} );
-
-		var table = $(tableName).DataTable( {
-			dom: 'lBrtip',
-			serverSide:true,
-			processing:true,
-			scrollX:true,
-			"lengthMenu": [10, 25, 50, 100, 250],
-			ajax: {
-				url:'{{baseUrl}}/ajax/erp/DistributionChannelContact/list.do',
-				type: "POST",
-				data: function ( d ) {
-					d.distributionChannelId = distributionChannelId;
-					return d;
-				}
-			},
-			language:DataTableConfig.i18n,
+			{{!-- CLEANROOM:distributionchannelcontact-list#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			columns:[
 				DataTableConfig.data_select_checkbox,
-				DataTableConfig.data_select('contactType'),
+				{{!-- CLEANROOM:distributionchannelcontact-list#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				DataTableConfig.data_input('name'),
 				DataTableConfig.data_input('title'),
 				DataTableConfig.data_input('telephone'),
@@ -75,29 +48,17 @@
 			initComplete: function () {
 				DataTableConfig.initFooterSearch(this, [],[]);
 			},
-			drawCallback: function (settings) {
+			{{!-- CLEANROOM:distributionchannelcontact-list#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				$(".dataTables_scrollBody").floatingScroll();
 			}
 		} );
 
 		DataTableHelper.initEditorOnCallback(table,editor);
-		DataTableHelper.inlineModePlugin(table);
-		DataTableHelper.injectInline(table,editor);
-
-	} ); // end ready
-</script>
-<!--#body--><div class="container-fluid ">
-	<nav aria-label="breadcrumb">
-	<ol class="breadcrumb">
-		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
-		<li class="breadcrumb-item"><a href="/backend/erp/DistributionChannel/list">銷售通路</a></li>
-		<li class="breadcrumb-item active" aria-current="page">聯絡資訊 - {{channelName}}</li>
+		{{!-- CLEANROOM:distributionchannelcontact-list#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	</ol>
 </nav>
 <div class="card mt-4">
-<div class="card-header">聯絡資訊 - {{channelName}}</div>
-<div class="card-body">
-	<table id="distributionChannelContactTable" class="table table-striped display nowrap" width="100%">
+{{!-- CLEANROOM:distributionchannelcontact-list#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannel-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		<thead>
 			<tr>
 				<th></th>

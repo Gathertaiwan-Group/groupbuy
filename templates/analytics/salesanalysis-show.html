@@ -1,39 +1,14 @@
 <!--#head-->
 {{> core/partials/dte-style.html}}
-<script type="text/javascript" class="init">
-
-$.extend( true, $.fn.dataTable.defaults, {
-	"searching": false,
-	"pageLength":500,
-} );
-$(document).ready(function() {
-	var tableName = '#rpTable';
-	var colMonth = 0;
-	var colGroupBuy = 1;
-	var colGroupBuyId = 2;
-	var colState = 5;
-	var table = $(tableName).DataTable( {
-		dom: 'Brtip',
-		scrollX:true,
-		serverSide:true,
-		processing:true,
-		ajax: {
-			url:'{{baseUrl}}/ajax/SalesAnalysis/queryOrderItemAnalysis',
+{{!-- CLEANROOM:salesanalysis-show#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			type: "POST",
 			data: function ( d ) {
-				d.uids = $('#uids').val();
-				d.dateBeginString = $('#dateBeginString').val();
-				d.dateEndString = $('#dateEndString').val();
-				d.extraSort = $('#extraSort').val();
+				{{!-- CLEANROOM:salesanalysis-show#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				return d;
 			}
 		},
 		language:DataTableConfig.i18n,
-		columns:[
-			DataTableConfig.data_input('month'),
-			DataTableConfig.data_input('groupBuyTitle'),
-			DataTableConfig.data_input('groupBuyId'),
-			DataTableConfig.data_input('title'),
+		{{!-- CLEANROOM:salesanalysis-show#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			DataTableConfig.data_input('uid'),
 			DataTableConfig.data_select('state'),
 			DataTableConfig.data_input('total'),
@@ -48,29 +23,13 @@ $(document).ready(function() {
 		//"order": [[ 1, "desc" ]],
 		select: false,
 		buttons: [
-			{ extend: 'excel' },
-		],
-		initComplete: function () {
-			//$(".dataTables_scrollBody").floatingScroll();
-		},
-		drawCallback: function (settings) {
-			$(".dataTables_scrollBody").floatingScroll();
-		}
-	} );
-	table.column(colMonth).visible(false);
+			{{!-- CLEANROOM:salesanalysis-show#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	table.column(colGroupBuy).visible(false);
 	table.column(colGroupBuyId).visible(false);
 	table.column(colState).visible(false);
 
 	$('#send-btn').click(function() {
-		var $this = $(this);
-		btnStartLoading($this);
-		table.ajax.reload(function() {
-			btnStopLoading($this);
-
-			table.column(colMonth).visible(false);
-			table.column(colGroupBuy).visible(false);
-			table.column(colGroupBuyId).visible(false);
+		{{!-- CLEANROOM:salesanalysis-show#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			table.column(colState).visible(false);
 
 			switch ($('#extraSort').val()) {
@@ -85,23 +44,13 @@ $(document).ready(function() {
 				table.column(colState).visible(true);
 				break;
 			}
-		}); // reload the datatable when the send button is clicked
+		{{!-- CLEANROOM:salesanalysis-show#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	});
 
-	$('#uids').on('input', function() {
-		var lines = $(this).val().split('\n');
-		if (lines.length > 300) {
-			$(this).val(lines.slice(0, 300).join('\n'));
+	{{!-- CLEANROOM:salesanalysis-show#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		}
 	});
-	initDatetimePicker('#dateBeginString', 'YYYY-MM-DD', 'months');
-	initDatetimePicker('#dateEndString', 'YYYY-MM-DD', 'months');
-} ); // end ready
-</script>
-<!--#body--><div class="container-fluid ">
-	<div class="card mt-4">
-<div class="card-header">商品銷售</div>
-<div class="card-body">
+	{{!-- CLEANROOM:salesanalysis-show#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-show.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 <div class="blue-grey lighten-5 small p-2">
 <p>使用商品代碼查詢商品銷售</p>
 <p>一次至多同時查詢300個商品</p>

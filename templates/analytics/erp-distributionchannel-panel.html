@@ -1,30 +1,7 @@
 <!--#head-->
 {{> core/partials/dte-style.html}}
 {{> analytics/partials/erp-dc-transaction-js.html}}
-<script type="text/javascript" class="init">
-
-	$(document).ready(function() {
-
-		//var dcgbEditor = createDistributionChannelGroupBuyEditor(null,'#distributionChannelGroupBuyTable');
-		//createDistributionChannelGroupBuyTable(null,'#distributionChannelGroupBuyTable',dcgbEditor);
-
-		var distributionChannelGroupBuyId = null;
-		var distributionChannelTransactionId = null;
-		var tableName = '#distributionChannelGroupBuyTransactionTable';
-		var dcgbtEditor = createDistributionChannelGroupBuyTransactionEditor(distributionChannelGroupBuyId, null, tableName);
-		createDistributionChannelGroupBuyTransactionTable(distributionChannelGroupBuyId,distributionChannelTransactionId,tableName,dcgbtEditor);
-
-		var distributionChannelId = null;
-		tableName = '#distributionChannelTransactionTable';
-		var dctEditor = createDistributionChannelTransactionEditor(distributionChannelId,tableName);
-		createDistributionChannelTransactionTable(distributionChannelId,null,tableName,dctEditor);
-
-	} ); // end ready
-</script>
-<!--#body--><div class="container-fluid ">
-	<nav aria-label="breadcrumb">
-	<ol class="breadcrumb">
-		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+{{!-- CLEANROOM:erp-distributionchannel-panel#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		<li class="breadcrumb-item active" aria-current="page">銷售通路</li>
 	</ol>
 </nav>

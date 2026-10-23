@@ -1,22 +1,7 @@
-{{!-- 推導頁：原站「通路商結算」(/backend/erp/DistributionChannelTransaction/list.do) 未擷取，沿用銷售通路面板「待審查月結」的表格與編輯器 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
 {{> analytics/partials/erp-dc-transaction-js.html}}
-<script type="text/javascript" class="init">
-
-	$(document).ready(function() {
-		var distributionChannelId = {{json distributionChannelId}};
-		var tableName = '#distributionChannelTransactionTable';
-		var dctEditor = createDistributionChannelTransactionEditor(distributionChannelId,tableName);
-		createDistributionChannelTransactionTable(distributionChannelId,null,tableName,dctEditor);
-	} ); // end ready
-</script>
-<!--#body--><div class="container-fluid ">
-	<nav aria-label="breadcrumb">
-	<ol class="breadcrumb">
-		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
-		<li class="breadcrumb-item"><a href="/backend/erp/DistributionChannel/list">銷售通路</a></li>
-		<li class="breadcrumb-item active" aria-current="page">通路商結算 - {{channelName}}</li>
+{{!-- CLEANROOM:distributionchanneltransaction-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	</ol>
 </nav>
 <div class="card mt-4">

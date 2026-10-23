@@ -49,9 +49,11 @@
 
 **與其他模組的一致性**：`is_valid_order_state` 同時供 datamodel 的 `refresh_group_buy_statistics`（團購列表的 groupBuyStatistics）使用，5000 已重算所有團購統計，故團購列表營收＝每日銷售合計＝圖表合計。
 
-## 3. 端點與 JSON 鍵（照原站實測）
+## 3. 端點與 JSON 鍵
 
-| 端點 | 回傳（data 列的鍵，順序同原站） |
+> CLEANROOM：本節鍵名需逐一以 SPEC（spec/html）、合法 JS 資產（public/ 下原站自家 JS）或合法觀測重新佐證；無法佐證者標「推導」或移除。
+
+| 端點 | 回傳（data 列的鍵） |
 |---|---|
 | `POST /ajax/GroupBuyDailyStatistics/list` | groupBuyDailyStatisticsId, title, amountSales, amountSalesPaid, countSales, countSalesPaid, groupBuyId, shortUrl, amountSalesUnpaid, countSalesUnpaid, dateStatisticsString, dateCreatedString, dateModifiedString。參數 fromday/today 必填（原站無日期回 0 筆）；無 groupBuyId 時依團購合併、日期＝區間最早一天（同原站）；separateByDate 逐日；keywords/allMatch 關鍵字標籤 |
 | `GET /ajax/GroupBuyDailyStatistics/getRealtimeStatistics` | groupBuyId, shortUrl, title, amount*/count* 六欄, roasDataItem{convertedCost, roas, result…}；ROAS＝區間總金額÷廣告金額 |
@@ -70,10 +72,10 @@
 
 ## 4. 匯出（伺服器端 xlsx，`lib/modules/analytics/xlsx.ts` 自寫 SpreadsheetML＋zip，無第三方套件）
 
-| 匯出 | 檔名 | 工作表 | 欄位（照原站實測） |
+| 匯出 | 檔名 | 工作表 | 欄位（照原站實際下載的檔案） |
 |---|---|---|---|
-| 團購月報表 | `{租戶代碼去符號}{起MMDD}{迄MMDD}.xlsx`（例 guestep01011231.xlsx） | `YYYY-MM月報表`（第一列團購的開始/結束月份） | 團購ID、團購名稱、開始時間、結束時間、標籤、訂單數量、未出貨數量、銷售金額、已收匯款金額、已收匯款金額(扣除運費)、分潤金額、分潤（％）；最後一列為 F/H/I/J 合計。無符合團購時回純文字「團購不存在」（同原站） |
-| 銷售商品總表 | `匯出銷售商品總表_{團購ID或null}_{匯出依照}_{起}_{迄}.xlsx` | `ALL` | 商品名稱、商品編號、商品單價、已付款/未付款/加總 ×[現]/[預]/[現＋預]、原始/剩餘 現貨/預購庫存、共用主庫存 4 欄、國際條碼、商品原價 |
+| 團購月報表 | CLEANROOM 待推導 | `YYYY-MM月報表`（第一列團購的開始/結束月份） | 團購ID、團購名稱、開始時間、結束時間、標籤、訂單數量、未出貨數量、銷售金額、已收匯款金額、已收匯款金額(扣除運費)、分潤金額、分潤（％）；最後一列為 F/H/I/J 合計。無符合團購時回純文字「團購不存在」（同原站） |
+| 銷售商品總表 | CLEANROOM 待推導 | `ALL` | 商品名稱、商品編號、商品單價、已付款/未付款/加總 ×[現]/[預]/[現＋預]、原始/剩餘 現貨/預購庫存、共用主庫存 4 欄、國際條碼、商品原價 |
 | 銷售商品總表（ERP 格式） | 同上 | `ERP` | 單據日期、品號、品名、數量、單價、金額、備註（推導）；數量／金額＝已付款 |
 
 `/backend/Item/exportItemSalesReport` 在原站是同一支端點，兩個入口：本模組的「匯出銷售商品總表」彈窗（dateStart/dateEnd/exportBy/backOrder/shipped/toErpFormat/多個 groupBuyId），以及團購列表「匯出商品報表 → 匯出上月出貨報表」（原站 `groupBuyExportModal.min.js` 只送 `groupBuyId, toErpFormat=true, shipped=true, exportBy=SHIPPED`，不帶日期）。本處理接受兩種參數：未帶日期且 `exportBy=SHIPPED` 時預設上個月（台灣時間）。groupbuy 模組也登錄了同路徑（其「上月出貨商品統計」推導格式），本模組以 `priority: 90`（GET/POST）先比對，兩個入口都由此處理。
@@ -103,7 +105,7 @@
 
 ## 8. 驗證紀錄
 
-- DOM 骨架：`node lib/modules/analytics/tools/dom-compare.mjs --base http://localhost:3115 --jar <jar>`（對 spec，含缺段時另列 recall）；另以原站即時頁面（m4 armand 唯讀 fetch）在瀏覽器內計算骨架比對：12 頁 100%、兩個匯出彈窗修正標題後一致。
+- DOM 骨架：`node lib/modules/analytics/tools/dom-compare.mjs --base http://localhost:3115 --jar <jar>`（對 spec，含缺段時另列 recall）。
 - headless 實測（`scripts/dev/shot.mjs --steps`）：14 頁＋彈窗皆無 JS 例外。
 - 銷售通路 CRUD／動作 26 項（建立 `[測試-analytics]` 資料，測完刪除）；本機與正式站各跑一次。
 - 正式站（2026-10-23）：16 個網址登入後皆 200；未登入時頁面回登入頁（200），兩個彈窗片段（AJAX）回 401 JSON「系統偵測到已登出」。他租戶前綴 `/groupbuyforms/ajax/…` → 403；他租戶團購的分析頁 404「找不到團購」、每日資料 0 筆；不存在的通路 404。

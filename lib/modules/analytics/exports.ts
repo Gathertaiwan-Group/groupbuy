@@ -1,9 +1,10 @@
-// 匯出團購月報表、匯出銷售商品總表（伺服器產生 .xlsx 下載；工作表/欄位/檔名照原站實測）。
+// 匯出團購月報表、匯出銷售商品總表（伺服器產生 .xlsx 下載；工作表名稱與欄位照原站實際下載的檔案）。
+// CLEANROOM: 下載檔名需依 SPEC／runtime 重新推導（原檔名資訊來源不合規，已移除）。
 //   GET  /ajax/GroupBuy/exportMonthlyReport          彈窗（所有團購列表的「匯出團購月報表」）
 //   POST /ajax/GroupBuy/countMonthlyReport           彈窗內「符合結果:N」
-//   POST /backend/GroupBuy/exportMonthlyReport       下載 {租戶}{起MMDD}{迄MMDD}.xlsx，工作表「YYYY-MM月報表」
+//   POST /backend/GroupBuy/exportMonthlyReport       下載 .xlsx（檔名：CLEANROOM 待推導），工作表「YYYY-MM月報表」
 //   GET  /ajax/GroupBuy/exportItemSalesReport        彈窗（匯出銷售商品總表）
-//   GET|POST /backend/Item/exportItemSalesReport     下載 匯出銷售商品總表_{團購}_{匯出依照}_{起}_{迄}.xlsx，工作表「ALL」（ERP 格式「ERP」）
+//   GET|POST /backend/Item/exportItemSalesReport     下載 .xlsx（檔名：CLEANROOM 待推導），工作表「ALL」（ERP 格式「ERP」）
 //     原站同一端點也供團購列表「匯出商品報表 → 匯出上月出貨報表」（groupBuyExportModal：groupBuyId、toErpFormat、shipped、
 //     exportBy=SHIPPED，不帶日期）→ 未帶日期且依出貨日期時預設上個月（台灣時間）。groupbuy 模組也登錄了同路徑，
 //     此處以 priority 90 優先比對，兩種呼叫都由本處理（參數為其超集）。
@@ -181,8 +182,9 @@ export async function buildMonthlyReport(
   const first = String(f.purpose === "start" ? gbs[0].date_start : gbs[0].date_end);
   const sheet = `${taipeiDateTime(first).slice(0, 7)}月報表`;
   const buffer = buildXlsx([{ name: sheet, rows: [header, ...body], widths: [10, 40, 18, 18, 16, 10, 10, 12, 14, 20, 10, 10] }]);
-  const code = tenantCode.replace(/[^A-Za-z0-9]/g, "");
-  const filename = `${code}${f.from.slice(5, 7)}${f.from.slice(8, 10)}${f.to.slice(5, 7)}${f.to.slice(8, 10)}.xlsx`;
+  void tenantCode;
+  // CLEANROOM: 月報表下載檔名待依 SPEC／runtime 推導
+  const filename = "CLEANROOM_TODO.xlsx";
   return { filename, sheet, buffer, rows: gbs };
 }
 
@@ -285,8 +287,8 @@ export async function buildItemSalesReport(tenantId: number, p: ItemReportInput)
   const aggs = [...by.values()].sort((x, y) => x.uid.localeCompare(y.uid) || x.title.localeCompare(y.title, "zh-Hant"));
 
   const exportByLabel = EXPORT_BY[p.exportBy] ?? EXPORT_BY.UUID;
-  const gbName = p.groupBuyIds.length ? p.groupBuyIds.join(",") : "null";
-  const filename = `匯出銷售商品總表_${gbName}_${exportByLabel}_${p.from}_${p.to}.xlsx`;
+  // CLEANROOM: 銷售商品總表下載檔名待依 SPEC／runtime 推導
+  const filename = "CLEANROOM_TODO.xlsx";
 
   if (p.toErpFormat) {
     const rows: CellInput[][] = [ERP_HEADER.map((v) => ({ v, s: "header" as const }))];

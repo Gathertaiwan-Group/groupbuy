@@ -1,49 +1,14 @@
 <!--#head-->
-<style>
-tr td:first-child {max-width:240px;}
-</style>
-{{> core/partials/dte-style.html}}
-<script type="text/javascript" class="init">
-
-	function initDateInput(hasTarget) {
-		var f = hasTarget ? 7 : 1;
-		var today = new Date();
-		var fromday = new Date(today);
-		var minDate = new Date(today);
-		minDate.setMonth(today.getMonth() - 3);
-		fromday.setDate(today.getDate() - f);
-
-		var formattedDate = today.toISOString().slice(0, 10);
-		var formattedfromDate = fromday.toISOString().slice(0, 10);
-		var formattedMinDate = minDate.toISOString().slice(0, 10);
-		$("input[name=day]").val(formattedDate).attr('max', formattedDate);
-		$("input[name=fromday]").val(formattedfromDate).attr('max', formattedDate);
-		$("input[name=today]").val(formattedDate).attr('max', formattedDate);
-		$("input[name=day]").attr('data-min', formattedMinDate);
+{{!-- CLEANROOM:itemdailystatistics-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	}
 
-	var itemDailyStatisticsTable;
-	$(document).ready(function() {
-		var uid = {{json uid}};
-		var sortSetting = [[ 0, "desc" ]];
-	//	if (uid.length) {
-			$('.input-group-day-period').removeClass('d-none');
-	//	} else {
-	//		sortSetting = [[ 3, "desc" ]];
-	//		$('.input-group-day').removeClass('d-none');
-	//	}
-		initDateInput(uid.length > 0);
-		var tableName = '#itemDailyStatisticsTable';
-		var editor;
-		editor = new $.fn.dataTable.Editor( {
-			ajax: {
-				create: {
+	{{!-- CLEANROOM:itemdailystatistics-list#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ItemDailyStatistics/save.do?'
+					{{!-- CLEANROOM:itemdailystatistics-list#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				},
 				edit: {
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ItemDailyStatistics/update.do?itemDailyStatisticsId=_id_'
+					{{!-- CLEANROOM:itemdailystatistics-list#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				},
 				remove: {
 					type: 'POST',
@@ -57,41 +22,15 @@ tr td:first-child {max-width:240px;}
 					DataTableConfig.field_input('???ItemDailyStatistics.amountSales???','amountSales'),
 					DataTableConfig.field_input('???ItemDailyStatistics.countSales???','countSales'),
 					DataTableConfig.field_input('???ItemDailyStatistics.groupBuyAccountId???','groupBuyAccountId'),
-					DataTableConfig.field_input('???ItemDailyStatistics.uid???','uid'),
+					{{!-- CLEANROOM:itemdailystatistics-list#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			],
-			//template: '#custom_rp_form',
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
-		} );
-
-		var table = $(tableName).DataTable( {
-			dom: 'lBrtip',
-			serverSide:true,
-			processing:true,
-			scrollX:true,
-			"lengthMenu": [10, 25, 50, 100, 250],
-			ajax: {
-				{{!-- 原站寫死 '/x/ajax/ItemDailyStatistics/list.do'；本系統的網址租戶前綴必須與登入租戶相同，改用 baseUrl --}}
-				url:'{{baseUrl}}/ajax/ItemDailyStatistics/list.do',
-				type: "POST",
-				data: function ( d ) {
-					d.uid = uid;
-					d.day = $('input[name=day]').val();
-					d.fromday = $('input[name=fromday]').val();
-					d.today = $('input[name=today]').val();
-					var hasUid = uid.length > 0 || (d.sSearch_2 && d.sSearch_2.length > 0);
-					d.separateByDate = $('#separateByDate').is(':checked') && hasUid;
-					return d;
-				}
-			},
-			language:DataTableConfig.i18n,
+			{{!-- CLEANROOM:itemdailystatistics-list#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			columns:[
 				DataTableConfig.data_input('dateStatisticsString'),
 				{
                     data:'title',
                     render: function ( data, type, row ) {
-                    	var btn = '<i class="fa-light fa-calendar mr-1"></i>';
-                    	return btn + data;
+                    	{{!-- CLEANROOM:itemdailystatistics-list#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
                     }
 				},
 				DataTableConfig.data_input('uid'),
@@ -110,78 +49,30 @@ tr td:first-child {max-width:240px;}
 			initComplete: function () {
 				DataTableConfig.initFooterSearch(this, [2],[16]);
 			},
-			drawCallback: function (settings) {
+			{{!-- CLEANROOM:itemdailystatistics-list#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				$(".dataTables_scrollBody").floatingScroll();
 				var aj = settings.oAjaxData || {};
 				var hasUid = uid.length > 0 || (aj.sSearch_2 && aj.sSearch_2.length > 0);
 				this.api().column(0).visible(hasUid);
 				if (hasUid) {
-					$('.input-group-separate-by-date').removeClass('d-none');
-				} else {
-					$('.input-group-separate-by-date').addClass('d-none');
+					{{!-- CLEANROOM:itemdailystatistics-list#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				}
-			},
-			footerCallback: function (row, data, start, end, display) {
-				let api = this.api();
-				let amountColumn = 3;
-				let countColumn = 4;
-				// Remove the formatting to get integer data for summation
-				let intVal = function (i) {
-				    return typeof i === 'string'
-					? i.replace(/[$,]/g, '') * 1
-					: typeof i === 'number'
-					? i
-					: 0;
-				};
-				let amountTotal = api
-				    .column(amountColumn)
-				    .data()
-				    .reduce((a, b) => intVal(a) + intVal(b), 0);
-				let countTotal = api
-				    .column(countColumn)
-				    .data()
-				    .reduce((a, b) => intVal(a) + intVal(b), 0);
-
-				// Update footer
-				api.column(amountColumn).footer().innerHTML =
-				    '總金額 ( ' + amountTotal + ' )';
-				api.column(countColumn).footer().innerHTML =
-				    '總單數 ( ' + countTotal + ' )';
-			}
+			{{!-- CLEANROOM:itemdailystatistics-list#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		} );
 
 		//DataTableHelper.initEditorOnCallback(table,editor);
 		//DataTableHelper.inlineModePlugin(table);
 		//DataTableHelper.injectInline(table,editor);
-		itemDailyStatisticsTable = table;
-		$('.input-group-day').change((e)=>{
-			table.clear().ajax.reload();
-		})
-		$("#btn-day-period").click(function() {
-			table.clear().ajax.reload();
+		{{!-- CLEANROOM:itemdailystatistics-list#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		});
 
-		$('.input-group-separate-by-date').change((e)=>{
-			table.clear().ajax.reload();
-		})
-
-		$('tbody').on('click', 'i.fa-calendar', function(e){
-			e.stopPropagation();
-			var data = table.row($(this).closest('tr')).data();
-			var url = '/backend/ItemDailyStatistics/list?uid=' + encodeURIComponent(data.uid);
-			window.open(url, '_blank');
+		{{!-- CLEANROOM:itemdailystatistics-list#12 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		});
 
-		if (!uid.length) {
-			table.column(0).visible(false);
+		{{!-- CLEANROOM:itemdailystatistics-list#13 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		}
 
-	} ); // end ready
-</script>
-<!--#body--><div class="container-fluid ">
-	<div class="card mt-4">
-<div class="card-header">每日銷售</div>
-<div class="card-body">
+	{{!-- CLEANROOM:itemdailystatistics-list#14 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	<div class="input-group py-2 input-group-day d-none">
 		<input type="date" class="form-control filter col-lg-3" name="day">
 	</div>
@@ -192,9 +83,7 @@ tr td:first-child {max-width:240px;}
 			<button type="button" class="btn btn-link border-0 m-0" id="btn-day-period"><i class="fa-light fa-search"></i></button>
 		</div>
 	</div>
-	<div class="input-group py-2 input-group-separate-by-date d-none">
-		<div class="custom-control custom-checkbox">
-			<input type="checkbox" class="custom-control-input filter" id="separateByDate" name="separateByDate">
+	{{!-- CLEANROOM:itemdailystatistics-list#15 此處原為 spec 缺段區內容，已移除；請依 spec/html/itemdailystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			<label class="custom-control-label" for="separateByDate">分開顯示每日數據</label>
 		</div>
 	</div>

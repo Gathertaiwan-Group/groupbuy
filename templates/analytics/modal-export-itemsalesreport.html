@@ -1,35 +1,10 @@
-<form name="ItemForm" method="post" action="/backend/Item/exportItemSalesReport.do" class="form-horizontal" id="ItemSalesReportForm"><div class="modal-header">
-	<h3>團購 &raquo; 匯出銷售商品總表</h3>
-	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-</div>
-<div class="modal-body">
-	<div class="modal-message"></div>
-	<p>匯出期間內依據商品代號分類的商品報表</p>
-	<p>最多匯出跨越兩個月資料</p>
-	<div class="form-group row">
+{{!-- CLEANROOM:modal-export-itemsalesreport#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		<label class="col-sm-4 control-label" for="dateStart">開始時間</label>
 		<div class="col-sm-8">
-			<input type="text" id="dateStart" name="dateStart" class="required  form-control" required>
-			<script type="text/javascript">
-			$(function () {
-				$('#dateStart').datetimepicker({format:"YYYY-MM-DD"});
-			});
-			</script>
-		</div>
-	</div>
-	<div class="form-group row">
-		<label class="col-sm-4 control-label" for="dateEnd">結束時間</label>
+			{{!-- CLEANROOM:modal-export-itemsalesreport#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		<div class="col-sm-8">
 			<input type="text" id="dateEnd" name="dateEnd" class="required  form-control" required>
-			<script type="text/javascript">
-			$(function () {
-				$('#dateEnd').datetimepicker({format:"YYYY-MM-DD"});
-			});
-			</script>
-		</div>
-	</div>
-	<div class="form-group row" id="row-groupBuyId">
-		<label class="col-sm-4 control-label" for="state">選擇表單</label>
+			{{!-- CLEANROOM:modal-export-itemsalesreport#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		<div class="col-sm-8">
 		<select id="groupBuyId" class="form-control" name="groupBuyId"></select>
 		</div>
@@ -83,24 +58,4 @@
 </div>
 <div class="modal-footer">
 	<button class="btn btn-default" data-dismiss="modal">關閉</button>
-	<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
-</div>
-</form><script>
-var form = 'ItemSalesReportForm';
-$('#'+form).validate();
-$('#'+form).submit(function(){
-	if ($('#'+form).valid()) {
-		var $btn = $('#'+form).find('input[type=submit]');
-		$btn.val('送出中...')
-		{{!-- 推導：一般表單 POST 下載檔案後頁面不換頁，數秒後還原按鈕 --}}
-		setTimeout(function() { $btn.val('送出'); }, 3000);
-		return true;
-	} else {
-		return false;
-	}
-});
-$('#groupBuyId').select2ForGroupBuy({
-	width:'100%',
-	multiple:true
-});
-</script>
+	{{!-- CLEANROOM:modal-export-itemsalesreport#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}

@@ -1,18 +1,15 @@
-<script>
+{{!-- CLEANROOM:p-erp-dc-transaction-js#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 var createDistributionChannelGroupBuyTransactionEditor = function(distributionChannelGroupBuyId, distributionChannelId, tableName) {
 
 	var conf = {
 		ajax: {
-			create: {
-				type: 'POST',
+			{{!-- CLEANROOM:p-erp-dc-transaction-js#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/save.do?distributionChannelGroupBuyId='+distributionChannelGroupBuyId
 			},
 			edit: {
 				type: 'POST',
 				url:  GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/update.do?distributionChannelGroupBuyTransactionId=_id_'
-			},
-			remove: {
-				type: 'POST',
+			{{!-- CLEANROOM:p-erp-dc-transaction-js#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/delete.do?distributionChannelGroupBuyTransactionId=_id_'
 			}
 		},
@@ -38,33 +35,22 @@ var createDistributionChannelGroupBuyTransactionEditor = function(distributionCh
 		i18n:DataTableConfig.i18n,
 	}
 
-	if (typeof tableName != 'undefined') {
-		conf.table = tableName;
-	}
-
-	var editor = new $.fn.dataTable.Editor(conf)
-	.on( 'open', function (e,mode,action) {
-		var isCreate = (action == 'create');
+	{{!-- CLEANROOM:p-erp-dc-transaction-js#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		DataTableHelper.showHideAllColumns(editor, true);
 		if (isCreate) {
 			editor.enable('distributionChannelTransactionId');
 			//editor.hide('state', false);
 			//editor.hide('status', false);
-		} else {
-			editor.disable('distributionChannelTransactionId');
-			editor.hide('newDCT', false);
+		{{!-- CLEANROOM:p-erp-dc-transaction-js#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		}
-	})
-	.dependent('getStatistics', function(val, data, callback) {
-		if (val == 1) {
-			if (data.row && data.row.distributionChannelGroupBuyId) {
+	{{!-- CLEANROOM:p-erp-dc-transaction-js#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				loadStatistics(data.row.distributionChannelGroupBuyId, callback);
 			} else {
 				loadStatistics(distributionChannelGroupBuyId, callback);
 			}
-		} else {
+		{{!-- CLEANROOM:p-erp-dc-transaction-js#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			return {};
-		}
+		{{!-- CLEANROOM:p-erp-dc-transaction-js#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	})
 	.dependent('newDCT', function(val, data, callback) {
 		if (val == 1) {
@@ -73,81 +59,14 @@ var createDistributionChannelGroupBuyTransactionEditor = function(distributionCh
 				values:{
 					'distributionChannelTransactionId':''
 				}
-			}
-		} else {
+			{{!-- CLEANROOM:p-erp-dc-transaction-js#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			return {
-				show:['distributionChannelTransactionId']
-			};
-		}
-	})
-	/*
-	.dependent('updateFee', function(val, data, callback) {
-		var revenue = editor.field('revenue').val();
-		var taxRate = editor.field('taxRate').val();
-		var taxFee = Math.round(revenue * taxRate / 100);
-		return {
-			values: {
-				'taxFee':taxFee,
-				'amount':revenue+taxFee
-			}
-		}
-	})
-	*/
-
-	var loadStatistics = function(distributionChannelGroupBuyId, callback) {
+				{{!-- CLEANROOM:p-erp-dc-transaction-js#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		btnStartLoading($('.DTE_Form_Buttons button'));
 		jQuery.get(
 			GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/getStatistics',
 			{
-				'distributionChannelGroupBuyId':distributionChannelGroupBuyId
-			},
-			function(data) {
-				$('#DTE_Field_category').val(data.category);
-				btnStopLoading($('.DTE_Form_Buttons button'));
-				var json = {
-						values: {
-							'gmv':data.groupBuyStatistics.paidTotalWithoutShipping,
-							'orderTotal':data.groupBuyStatistics.paidOrders,
-							'amount':data.groupBuyStatistics.bloggerShareTotal
-						}
-				}
-
-				callback(json);
-			}
-			).fail(function(data) {
-				var json = data.responseJSON;
-				$('.DTE_Form_Error').html(json ? json.error : '');
-				btnStopLoading($('.DTE_Form_Buttons button'));
-			});
-	}
-	return editor;
-}
-
-</script><script>
-var actionButtonStatus = function(id, action,label, status, className) {
-	return '<button class="pull-right btn '
-	+className+' text-nowrap my-0" data-action="'+action
-	+'" data-status="'+status
-	+'" data-id="'+id
-	+'">'+label+'</button>';
-}
-var distributionChannelGroupBuyTransactionTable;
-var createDistributionChannelGroupBuyTransactionTable = function(distributionChannelGroupBuyId, distributionChannelTransactionId, tableName, editor) {
-	var tableName = tableName || '#distributionChannelGroupBuyTransactionTable';
-	var buttons = [
-		{ extend: 'edit',   editor: editor },
-		{ extend: 'refresh'},
-		{ extend: 'remove', editor: editor, className:'btn-danger' },
-	];
-	if (distributionChannelGroupBuyId) {
-		buttons.unshift({ extend: 'create', editor: editor });
-	}
-	var table = $(tableName).DataTable( {
-		dom: 'lBrtip',
-		serverSide:true,
-		processing:true,
-		scrollX:true,
-		"lengthMenu": [10, 25, 50, 100, 250],
+				{{!-- CLEANROOM:p-erp-dc-transaction-js#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		ajax: {
 			url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/list.do',
 			type: "POST",
@@ -162,24 +81,7 @@ var createDistributionChannelGroupBuyTransactionTable = function(distributionCha
 			DataTableConfig.data_input('dateTransactionString'),
 			DataTableConfig.data_input('groupBuyTitle'),
 			{ data: 'status',
-				render: function ( data, type, row, meta ) {
-					var extra = '';
-					var id = row.distributionChannelGroupBuyTransactionId;
-					switch (data) {
-					case 'SETTLING':
-					case 'DECLINED':
-						extra += actionButtonStatus(id, 'updateStatus', '要求查核', 'REVIEWING', 'btn-default');
-						break;
-					case 'REVIEWING':
-						extra += actionButtonStatus(id, 'updateStatus', '駁回', 'DECLINED', 'btn-warning');
-						extra += actionButtonStatus(id, 'updateStatus', '核可', 'REVIEWED', 'btn-success');
-						break;
-					}
-
-					data = renderOption(meta, data, 'status') + extra;
-					return data;
-				}
-			},
+				{{!-- CLEANROOM:p-erp-dc-transaction-js#12 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			DataTableConfig.data_input('gmv'),
 			DataTableConfig.data_input('orderTotal'),
 			//DataTableConfig.data_input('revenue'),
@@ -197,27 +99,7 @@ var createDistributionChannelGroupBuyTransactionTable = function(distributionCha
 		}
 	} );
 
-	//DataTableHelper.initEditorOnCallback(table,editor);
-	//DataTableHelper.inlineModePlugin(table);
-	//DataTableHelper.injectInline(table,editor);
-	distributionChannelGroupBuyTransactionTable = table;
-
-	$(tableName +' tbody').on('click', 'button[data-action]', function (e) {
-		e.stopPropagation();
-		var $this = $(this);
-		var id = $this.data('id');
-		var action = $this.data('action');
-		switch (action) {
-		case 'updateStatus':
-			var status = $(this).data('status');
-			updateStatus(id, status, $this);
-			break;
-		}
-	});
-
-	var updateStatus = function(id, status, $btn) {
-		btnStartLoading($btn);
-		$.ajax({
+	{{!-- CLEANROOM:p-erp-dc-transaction-js#13 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/updateStatus',
 			type: 'POST',
 			data: {
@@ -234,19 +116,9 @@ var createDistributionChannelGroupBuyTransactionTable = function(distributionCha
 			},
 			error: function (xhr, ajaxOptions, thrownError) {
 				if (xhr.responseJSON) {
-					messagebox('',xhr.responseJSON.error, GBFi18n.act_close)
-				} else {
-					alert(xhr.status + " "+ thrownError);
+					{{!-- CLEANROOM:p-erp-dc-transaction-js#14 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				}
-				btnStopLoading($btn);
-			}
-		});
-	}
-	return table;
-}
-</script><script>
-var createDistributionChannelTransactionEditor = function(
-		distributionChannelId,
+				{{!-- CLEANROOM:p-erp-dc-transaction-js#15 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		tableName) {
 	var conf = {
 		ajax: {
@@ -275,26 +147,7 @@ var createDistributionChannelTransactionEditor = function(
 		//template: '#custom_rp_form',
 		formOptions:DataTableConfig.formOptions,
 		i18n:DataTableConfig.i18n,
-	}
-
-	if (typeof tableName != 'undefined') {
-		conf.table = tableName;
-	}
-
-	var editor = new $.fn.dataTable.Editor(conf)
-	.on( 'open', function (e,mode,action) {
-		var isCreate = (action == 'create');
-		DataTableHelper.showHideAllColumns(editor, true);
-		if (isCreate) {
-			editor.field('status').val('SETTLING');
-		}
-	});
-	return editor;
-}
-</script><script>
-var distributionChannelTransactionTable;
-var createDistributionChannelTransactionTable = function(
-		distributionChannelId,
+	{{!-- CLEANROOM:p-erp-dc-transaction-js#16 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		distributionChannelTransactionId,
 		tableName,
 		editor) {
@@ -317,28 +170,7 @@ var createDistributionChannelTransactionTable = function(
 		columns:[
 			DataTableConfig.data_details,
 			DataTableConfig.data_select_checkbox,
-			DataTableConfig.data_input('dateTransactionString'),
-			DataTableConfig.data_input('title'),
-			{ data: 'status',
-				render: function ( data, type, row, meta ) {
-					var extra = '';
-					var id = row.distributionChannelTransactionId;
-					switch (data) {
-					case 'SETTLING':
-					case 'DECLINED':
-						extra += actionButtonStatus(id, 'updateStatus', '要求查核', 'REVIEWING', 'btn-default');
-						break;
-					case 'REVIEWING':
-						extra += actionButtonStatus(id, 'updateStatus', '駁回', 'DECLINED', 'btn-warning');
-						extra += actionButtonStatus(id, 'updateStatus', '核可', 'REVIEWED', 'btn-success');
-						break;
-					}
-					data = renderOption(meta, data, 'status') + extra;
-					return data;
-				}
-			},
-			DataTableConfig.data_input('taxRate'),
-			DataTableConfig.data_input('taxFee'),
+			{{!-- CLEANROOM:p-erp-dc-transaction-js#17 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 			DataTableConfig.data_input('amount'),
 		],
 		keys: DataTableConfig.keysInlineTab,
@@ -348,47 +180,13 @@ var createDistributionChannelTransactionTable = function(
 			{ extend: 'create', editor: editor },
 			{ extend: 'edit',   editor: editor },
 			{ extend: 'remove', editor: editor, className:'btn-danger' },
-		],
+		{{!-- CLEANROOM:p-erp-dc-transaction-js#18 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		initComplete: function () {
-			DataTableConfig.initFooterSearch(this, [],[]);
-		},
-		drawCallback: function (settings) {
-			$(".dataTables_scrollBody").floatingScroll();
+			{{!-- CLEANROOM:p-erp-dc-transaction-js#19 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		}
-	} );
-
-	//DataTableHelper.initEditorOnCallback(table,editor);
-	distributionChannelTransactionTable = table;
-
-	// 展開：此結算單據包含的各團結算紀錄
-	var format = function(d) {
-		var id = d.distributionChannelTransactionId;
-		var tn = 'dctgbt_' + id;
-		setTimeout(function() {
-			var ed = createDistributionChannelGroupBuyTransactionEditor(null, d.distributionChannelId, '#' + tn);
-			createDistributionChannelGroupBuyTransactionTable(null, id, '#' + tn, ed);
-		}, 0);
-		return '<div class="child-row p-2"><table id="' + tn + '" class="table table-striped display nowrap" width="100%">'
-			+ '<thead><tr><th></th><th>結算日期</th><th>團購</th><th>狀態</th><th>營業額</th><th>訂單數量</th><th>結算金額</th></tr></thead>'
-			+ '</table></div>';
-	};
-	injectDetailsControl(tableName, table, format);
-
-	$(tableName +' tbody').on('click', 'button[data-action]', function (e) {
-		e.stopPropagation();
-		var $this = $(this);
-		var id = $this.data('id');
-		var action = $this.data('action');
+	{{!-- CLEANROOM:p-erp-dc-transaction-js#20 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		switch (action) {
-		case 'updateStatus':
-			var status = $(this).data('status');
-			updateStatus(id, status, $this);
-			break;
-		}
-	});
-
-	var updateStatus = function(id, status, $btn) {
-		btnStartLoading($btn);
+		{{!-- CLEANROOM:p-erp-dc-transaction-js#21 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		$.ajax({
 			url: GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/updateStatus',
 			type: 'POST',
@@ -397,11 +195,9 @@ var createDistributionChannelTransactionTable = function(
 				'status':status
 			},
 			dataType: 'json',
-			success: function(json) {
+			{{!-- CLEANROOM:p-erp-dc-transaction-js#22 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				distributionChannelTransactionTable.ajax.reload( null, false );
-				if (typeof distributionChannelGroupBuyTransactionTable !== 'undefined' && distributionChannelGroupBuyTransactionTable) {
-					distributionChannelGroupBuyTransactionTable.ajax.reload( null, false );
-				}
+				{{!-- CLEANROOM:p-erp-dc-transaction-js#23 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 				btnStopLoading($btn);
 			},
 			error: function (xhr, ajaxOptions, thrownError) {
@@ -414,6 +210,6 @@ var createDistributionChannelTransactionTable = function(
 			}
 		});
 	}
-	return table;
+	{{!-- CLEANROOM:p-erp-dc-transaction-js#24 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 }
-</script>
+{{!-- CLEANROOM:p-erp-dc-transaction-js#25 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
