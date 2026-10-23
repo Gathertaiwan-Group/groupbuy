@@ -156,10 +156,32 @@ async function importSalesOrders(ctx: RequestContext): Promise<Response> {
   const setIds = ((gbis ?? []) as { id: number; item_set_id: number }[]).map((g) => g.item_set_id);
   const gbisBySet = new Map(((gbis ?? []) as { id: number; item_set_id: number }[]).map((g) => [g.item_set_id, g.id]));
   const { data: itemRows } = setIds.length
-    ? await client.from("items").select("id,item_set_id,uid,title,price,stock_available,shipping_tag").eq("tenant_id", session.tenantId).in("item_set_id", setIds)
+    ? await client
+        .from("items")
+        .select("id,item_set_id,uid,title,price,stock_available,stock_back_order_available,share_stock,parent_item_id,shipping_tag")
+        .eq("tenant_id", session.tenantId)
+        .in("item_set_id", setIds)
     : { data: [] };
   const items = (itemRows ?? []) as Row[];
   const byUid = new Map(items.filter((i) => i.uid).map((i) => [String(i.uid).trim(), i]));
+  // 庫存分配（同 storefront：可售現貨先用，不足的數量為預購）；共用庫存以主商品計
+  const ownerOf = (it: Row) => (it.share_stock && it.parent_item_id ? Number(it.parent_item_id) : Number(it.id));
+  const stockLeft = new Map<number, { inStock: number; back: number }>();
+  for (const it of items) if (!it.share_stock || !it.parent_item_id) stockLeft.set(Number(it.id), { inStock: Number(it.stock_available) || 0, back: Number(it.stock_back_order_available) || 0 });
+  const parentIds = [...new Set(items.filter((i) => i.share_stock && i.parent_item_id).map((i) => Number(i.parent_item_id)))].filter((id) => !stockLeft.has(id));
+  if (parentIds.length) {
+    const { data: ps } = await client.from("items").select("id,stock_available,stock_back_order_available").eq("tenant_id", session.tenantId).in("id", parentIds);
+    for (const p of (ps ?? []) as Row[]) stockLeft.set(Number(p.id), { inStock: Number(p.stock_available) || 0, back: Number(p.stock_back_order_available) || 0 });
+  }
+  const allocate = (it: Row, qty: number) => {
+    const left = stockLeft.get(ownerOf(it)) ?? { inStock: 0, back: 0 };
+    const inQ = Math.min(qty, Math.max(0, left.inStock));
+    const boQ = qty - inQ;
+    left.inStock -= inQ;
+    left.back -= boQ;
+    stockLeft.set(ownerOf(it), left);
+    return { inQ, boQ, backShort: boQ > 0 && left.back < 0 };
+  };
 
   // 解析每一列
   const lines: ParsedLine[] = stash.rows.map((r, i) => {
@@ -220,7 +242,24 @@ async function importSalesOrders(ctx: RequestContext): Promise<Response> {
     const subtotal = orderLines.reduce((s, l) => s + l.price * l.qty, 0);
     const grandTotal = subtotal + shippingAmount;
     let uuid = "";
-    let log = errors.length ? errors.join("；") : preview ? "預覽：可匯入" : "";
+    // 每列商品拆成現貨／預購兩部分
+    const parts: { line: (typeof orderLines)[number]; qty: number; backOrder: boolean }[] = [];
+    const notes: string[] = [];
+    if (!errors.length) {
+      for (const l of orderLines) {
+        if (!l.item) {
+          parts.push({ line: l, qty: l.qty, backOrder: false });
+          continue;
+        }
+        const a = allocate(l.item, l.qty);
+        if (a.inQ > 0) parts.push({ line: l, qty: a.inQ, backOrder: false });
+        if (a.boQ > 0) {
+          parts.push({ line: l, qty: a.boQ, backOrder: true });
+          notes.push(`${l.title} 預購 ${a.boQ} 件${a.backShort ? "（預購可售不足）" : ""}`);
+        }
+      }
+    }
+    let log = errors.length ? errors.join("；") : preview ? `預覽：可匯入${notes.length ? `（${notes.join("、")}）` : ""}` : "";
     if (!errors.length && !preview) {
       const { data: so, error } = await client
         .from("sales_orders")
@@ -267,8 +306,8 @@ async function importSalesOrders(ctx: RequestContext): Promise<Response> {
       } else {
         const o = so as { id: number; uuid: string };
         uuid = o.uuid;
-        await client.from("order_items").insert(
-          orderLines.map((l, n) => ({
+        const { error: itemErr } = await client.from("order_items").insert(
+          parts.map(({ line: l, qty, backOrder }, n) => ({
             tenant_id: session.tenantId,
             sales_order_id: o.id,
             group_buy_id: groupBuyId,
@@ -279,19 +318,24 @@ async function importSalesOrders(ctx: RequestContext): Promise<Response> {
             title: l.title,
             uid: l.uid || null,
             price: l.price,
-            total: l.qty,
-            amount: Math.round(l.price * l.qty),
+            total: qty,
+            amount: Math.round(l.price * qty),
             discount: 0,
-            back_order: false,
+            back_order: backOrder,
             gift: false,
             bundle_root: false,
             bundle_child: false,
             shipping_tag: String(l.item?.shipping_tag ?? ""),
+            state: "UNSHIPPING",
           })),
         );
-        await adjustItemStock(session, orderLines.filter((l) => l.item).map((l) => ({ itemId: Number(l.item!.id), qty: -l.qty, backOrder: false })));
+        if (itemErr) throw new Error(`[orders import] 寫入訂單商品失敗：${itemErr.message}`);
+        await adjustItemStock(
+          session,
+          parts.filter((x) => x.line.item).map((x) => ({ itemId: Number(x.line.item!.id), qty: -x.qty, backOrder: x.backOrder })),
+        );
         await client.from("sales_order_histories").update({ actor: "ADMIN", admin_user_id: session.adminUserId, note: "匯入外部訂單" }).eq("tenant_id", session.tenantId).eq("sales_order_id", o.id);
-        log = "匯入成功";
+        log = `匯入成功${notes.length ? `（${notes.join("、")}）` : ""}`;
         createdOrders++;
       }
     }
@@ -334,7 +378,7 @@ async function importSalesOrders(ctx: RequestContext): Promise<Response> {
   else await client.from("order_module_settings").insert({ tenant_id: session.tenantId, group_buy_id: groupBuyId, name: "importSalesOrderPreference", settings: pref });
   if (!preview) {
     await client.from("order_module_settings").delete().eq("tenant_id", session.tenantId).eq("name", `importUpload:${fileId}`);
-    const created = resultRows.filter((r) => r.log === "匯入成功").map((r) => String(r.uuid));
+    const created = resultRows.filter((r) => String(r.log).startsWith("匯入成功")).map((r) => String(r.uuid));
     if (created.length) {
       const { data: ids } = await client.from("sales_orders").select("id").eq("tenant_id", session.tenantId).in("uuid", [...new Set(created)]);
       for (const r of (ids ?? []) as { id: number }[]) await addOrderHistory(session, r.id, `匯入外部訂單（${(gb as Row).title}）`);

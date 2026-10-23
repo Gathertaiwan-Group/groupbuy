@@ -1,0 +1,93 @@
+# orders 模組（訂單）
+
+擁有者：orders agent（lead＋子 agent：returns、resv-helpdesk、b2s）。
+程式：`lib/modules/orders/**`、模板：`templates/orders/**`、migration：`supabase/migrations/30xx_orders_*.sql`（3000–3099）。
+對外服務（Email、簡訊、金流、物流、電子發票）**一律未串接**：介面照原站，動作只寫 DB 紀錄（`email_messages`／`sms_messages`／訂單歷程），回應帶【未串接】。
+
+## 頁面與狀態
+
+| 代號 | 網址 | 狀態 | DOM 骨架覆蓋率 | 說明 |
+|---|---|---|---|---|
+| salesorder-list | `/backend/SalesOrder/list` | 完成 | 96.5% | 所有訂單：額外搜尋條件、表尾欄位搜尋、排序／分頁、欄位顯示切換、列展開明細卡、Editor 新增／編輯／刪除／複製、全部批次操作、匯出／列印、匯入外部訂單 |
+| salesorder-list-by-groupbuy | `/backend/SalesOrder/list?groupBuyId=` | 完成 | 96.5% | 同上（團購側欄選單、團購固定） |
+| modal-splitsalesorder | `/backend/SplitSalesOrder/split` | 完成 | — | 分割訂單彈窗＋快速預覽（缺段到原站讀回補齊） |
+| salesorder-pickup | `/backend/SalesOrder/pickup` | 完成（查到訂單後的畫面為推導） | 100% | 輸入訂單編號 → 訂單明細＋確認取貨 |
+| preordertostock-list | `/backend/PreorderToStock/list?groupBuyId=` | 完成 | 97.5% | 見下方「預購轉現貨」 |
+| salesorderreturn-list | `/backend/SalesOrderReturn/list` | 見子 agent 段 | | 退換貨訂單＋加退換商品精靈 |
+| salesorderreservation-list | `/backend/SalesOrderReservation/list` | 見子 agent 段 | | 保留單 |
+| helpdesk-conversation-list | `/backend/helpdesk/Conversation/list` | 見子 agent 段 | | 客服對話 |
+
+DOM 骨架自查：`node lib/modules/orders/tools/dom-compare.mjs --spec spec/html/<代號>.html --url "<本站網址>" --jar <cookie jar> --diff 40`（主內容區 token 化後 LCS 比對；輸出相似度與「原站骨架覆蓋率」）。
+所有訂單頁剩餘差異：原站擷取在 `付款逾期`、`現貨/預購` 兩處的缺段截斷了標籤（本站為完整元素）、主內容開頭原站缺段（本站補回 `card`/`card-header`/`顯示/隱藏欄位`）。
+
+## 主要端點（所有訂單頁）
+
+| 端點 | 方法 | 說明 |
+|---|---|---|
+| `/ajax/SalesOrder/list` | GET/POST | DataTables serverSide；回應另含 `b2sTotal`；`options` 鍵同原站（shippingTag…status＋flatRateShippingId） |
+| `/ajax/SalesOrder/get` | GET | `{code, data: 訂單}`（salesOrderId 或 uuid） |
+| `/ajax/SalesOrder/save｜update｜delete` | POST | Editor；各端點只收自己的 action；刪除＝階段改「已刪除」並釋放庫存；樂觀鎖 `dateModified` |
+| `/ajax/GroupBuy/jsonOptions` | GET | 團購下拉 `[{value,label}]` |
+| `/backend/SalesOrder/displayCancelOrder` → `/ajax/SalesOrder/cancelOrder`、`undoCancelOrder` | GET → POST | 取消（釋放庫存、員工備註）／還原（重新扣庫存，不足則不還原） |
+| `/ajax/SalesOrder/markAsPaid`、`extendPaymentDue` | POST | 設為已付款（寄已付款信紀錄）／展延繳款日期（寄展延信紀錄） |
+| `/ajax/SalesOrder/join` | POST | 合併訂單 |
+| `/backend/SalesOrder/displayMoveOrderItems` → `/ajax/SalesOrder/moveOrderItems` | GET → POST | 拆單（搬移商品到既有／新訂單） |
+| `/backend/SplitSalesOrder/split` → `/ajax/SplitSalesOrder/split`、`previewSalesOrderToSplit` | GET → POST | 分割訂單（批次） |
+| `/backend/SalesOrder/markAsShipped` → `/ajax/SalesOrder/markAsShipped` | GET → POST | 設為已出貨（逐筆查貨號碼／出貨信／自取） |
+| `/ajax/ShippingRecord/markAsPrepareShipping`、`/ajax/ShippingRecord/lookup` | POST / GET | 設為準備出貨中（可併入既有／新出貨紀錄） |
+| `/ajax/SalesOrder/updateShippingTag` | POST | 依商品重算貨運標籤（未勾選＝目前篩選結果全部） |
+| `/ajax/SalesOrder/markAsCVSDateDued`、`acquireCvsShippingNumber`、`renewCVSPickup` | POST | 超取：設為未取貨／綠界取號（未串接）／更新小白單（未串接） |
+| `/ajax/SalesOrderCvs/displayInfo`、`getInfo`、`clearCvs`、`updateCvsStore`、`acquireCvsNumber`、`cancelCvsPaymentNo` | GET/POST | 超商取貨資訊彈窗（取號／取消為未串接） |
+| `/ajax/SalesOrder/emailTemplate`、`sendEmail` | GET / POST | 寄信 Editor（只寫 email_messages） |
+| `/backend/SalesOrder/displayCoupon`、`/ajax/SalesOrderCoupon/list｜delete｜redeem` | GET/POST | 訂單優惠卷 |
+| `/ajax/SalesOrder/bindCustomer` | POST | 綁定顧客（Email → 電話比對會員） |
+| `/backend/SalesOrder/editShippingRule` → `/ajax/SalesOrder/updateShippingRule` | GET → POST | 更改配送方式（推導彈窗） |
+| `/ajax/Customer/displaySimpleInfo` | GET | 顧客資訊（推導彈窗） |
+| `/ajax/SalesOrder/reauthPeriod` | GET | 定期定額重新授權（原站以 GET 呼叫 → 不寫資料，回【未串接】） |
+| `/backend/SalesOrderExport/batchAction`、`/backend/SalesOrder/batchAction` | GET/POST | 匯出（EXPORT_CSV／EXPORT_ORDER_ITEM／EXPORT_EINVOICE_CSV／EXPORT_ERP～ERP6，下載帶 fileDownload cookie）；列印（PRINT_ORDER／PRINT_ORDER_PIECE／PRINT_C2C_ORDER_INFO／PRINT_ORDER_BARCODE） |
+| `/backend/SalesOrder/printOrder｜printOrderQuotation｜printC2COrderInfo` | GET | 列印單筆 |
+| `/ajax/SystemPreference/salesOrderPrintSettings` | GET/POST | 列印設定（POST 才寫入） |
+| `/ajax/SalesOrder/getImportSalesOrderPreference`、`uploadSalesOrders`、`importSalesOrders` | GET/POST | 匯入外部訂單（xlsx/csv；預覽→實際匯入） |
+| `/backend/SalesOrder/pickup`、`/ajax/SalesOrder/pickup` | GET / POST | 自取訂單 |
+| `/backend/SalesOrder/show` | GET | 訂單明細彈窗（推導） |
+
+DB 函式（migration）：
+- 3000 `orders_admin_update(...)`：管理員批次更新訂單（觸發器把歷程記成 ADMIN＋操作者，可附備註）；`orders_adjust_item_stock(...)`：調整可售現貨／預購可售（共用庫存調主商品）；`order_module_settings`（匯入欄位對應、列印設定、匯入暫存）。
+- 3001 `orders_search(p_tenant_id, p)`：所有訂單列表全部篩選／排序（id 為 tie-breaker）／分頁一次在 DB 完成。
+- 3002：`orders_admin_update` 有備註但沒有狀態變動時也寫一筆歷程。
+- 3020（returns）、3040（預購轉現貨）見子 agent 段。
+
+## 推導（原站未擷取或無資料，依原站風格與相鄰頁補完）
+
+**列表篩選語意**（原站後端不可見，依欄位名稱與說明推導）：
+- 未處理訂單＝階段新訂單/處理中、未付款、狀態為訂單成功通知（含寄送中/失敗）；未出貨＝階段新訂單/處理中、無出貨日期、非「不需配送」、狀態不是已出貨/準備出貨中/撿貨中。
+- 重複訂單＝同團購、同電話、建立時間相差 15 天內的其他有效訂單；金額不符＝狀態「付款金額不符」；付款逾期＝未付款且繳款期限已過；付款期限剩餘天數 N＝未付款且 N 天內到期。
+- 建立日期：1/3/6 個月、自訂區間；「完整符合」搜尋訂單號碼/姓名/電話/Email、批量訂單號、指定顧客/訂單時不限建立日期。表尾訂單號碼/電話由左至右比對、`?` 開頭比對末幾碼。
+- 可預購轉現貨（列表篩選＋`b2sTotal`）：新訂單/處理中訂單內有「預購、未出貨」商品，且該商品（共用庫存取主商品）保留現貨或可售現貨 ≥ 數量（`b2s.ts`，與 3040 扣庫存規則一致）。
+
+**金額慣例與重算**（`pricing.ts`）：計價一律呼叫 storefront 的 `priceCart()`（只讀依賴，與前台結帳同一套運費／優惠計算）。`order_items.amount = price×total − discount`；`discount_amount`＝優惠條件＋優惠卷；`shipping_amount`＝運費＋貨到付款手續費；`grand_total`＝Σ(非贈品 price×total) − discount_amount ＋ shipping_amount ＋ 稅（團購 tax_rate%）＋ extra_fee。「重新計算總額跟運費」只重算運費、「重新計算優惠」重新套用優惠條件與優惠卷並重新分攤到商品；兩者都不勾時（優惠卷增刪、搬移商品）折扣以差額調整。
+
+**批次操作行為**：
+- 取消：只對未取消/未合併/未拆單訂單；未出貨商品數量補回可售現貨/預購可售；員工備註附加。還原：重新扣庫存（任一商品不足則該單不還原並列出原因）、階段改處理中、重算運費。
+- 設為已付款：只對「處理中」；已付金額＝結帳金額（已有付款則沿用）、狀態「付款成功通知」、寫已付款通知信紀錄。展延繳款日期：未付款訂單，期限＝今天＋團購付款期限天數（台灣時間 23:59）、寫展延通知信紀錄。
+- 合併訂單：同狀態＋同電話＋同 Email 的「處理中」訂單為一組，最早建立者為主單；商品移入主單（同商品同價同預購者合併數量）、優惠卷/優惠條件紀錄移入、金額相加（運費只留主單）、備註串接；其他訂單階段「已合併」並記錄關聯 COMBINE。
+- 拆單（搬移商品）：可搬到既有訂單或新訂單（複製訂購/收件/付款資料、關聯 SPLIT）；勾「退貨申請中」時新訂單為退換貨中/退貨申請中（原站說明：收到貨品檢核後取消新訂單釋放庫存），折扣隨商品移動。
+- 分割訂單（批次）：依現貨/預購、倉儲(貨運)標籤、材積（item_settings.weight）、應稅/免稅（item_settings.taxType）分組；原訂單保留為「已拆單」紀錄，每組建立新訂單（關聯 SPLIT，同示範資料 900044→900056/900057）；折扣依小計比例、運費「維持在原訂單」放第一張／「優先以品項運費分配」依比例、已付金額依結帳金額比例；「訂單金額保留於原訂單金額不拆開」→ 金額與已付全留第一張。贈品規則、無標籤商品規則照彈窗選項。
+- 設為準備出貨中：只限處理中且非準備出貨中；訂單商品改出貨中；可新增出貨紀錄或併入既有出貨紀錄（`shipping_records`/`shipping_record_orders`）。設為已出貨：每筆可填查貨號碼、勾出貨信（寫紀錄）、自取（查貨號碼預設「自取」）；狀態「出貨通知」或「已出貨」、商品改已出貨。
+- 更新貨運標籤：訂單貨運標籤＝所有商品貨運標籤以 `#` 串接。設為未取貨：準備出貨中 → 商品逾期未領。
+- 進階操作（Editor action）：寄信/簡訊類只寫紀錄＋歷程，完成後 action 回到「無」。Email 樣板內容（13 種）依樣板名稱與訂單欄位推導。
+- 優惠卷兌換：檢查存在/啟用/適用團購/限定會員/使用次數/同單重複/門檻，DOLLAR＝折抵金額、PERCENTAGE＝折 discount%；使用次數 +1。移除時 −1。
+- 綁定顧客：依訂購人 Email（不分大小寫），找不到再依電話比對同租戶會員。
+
+**推導畫面**：更改配送方式彈窗、顧客資訊彈窗、訂單明細彈窗／自取查詢結果（同列展開明細卡風格＋狀態歷程）、設為已出貨彈窗的逐筆列、列印頁內容（訂單／報價單／超付取單／商品標籤／barcode，含列印設定：隱藏/遮蔽訂購人、遮蔽收件人、隱藏價格、商品代碼…）、匯出檔欄位（CSV、ERP 報表 1–6、訂單商品數量、電子發票 CSV）、匯入外部訂單規則（同「來源平台訂單號碼」合併為一張、商品以商品貨號對應本團購商品代碼、付款方式/國家可用「值#代碼」對應）。
+
+## 已知缺口
+
+- 訂單列「加入黑名單」呼叫 `/backend/Blacklist/add`：黑名單屬 marketing（blacklist-list），目前尚無模組實作 → 404。
+- 原站 POS／TPL 功能（`posEnabled`/`tplEnabled` 為 false）未實作：`/ajax/pos/Invoice/print`、`/ajax/Tpl/createShipment`。
+- Email／簡訊／金流（虛擬帳號重新產生、信用卡重新授權）／物流（綠界取號、小白單、超商取貨條）／電子發票：未串接，只寫紀錄。
+- 匯入外部訂單不支援舊版 `.xls`（提示另存 .xlsx/.csv）。
+
+## 給 core 的問題
+
+（見最終回報；目前無阻擋性問題。）

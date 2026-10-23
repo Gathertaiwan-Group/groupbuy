@@ -466,7 +466,8 @@ async function moveOrderItems(ctx: RequestContext): Promise<Response> {
       tenant_id: session.tenantId,
       parent_sales_order_id: fromId,
       sales_order_id: target.id,
-      relation: status ? "RETURN" : "SPLIT",
+      // 原站說明：新訂單設為「退貨中／退貨申請中」，待收到貨品檢核完整後再取消新訂單釋放庫存 → 仍是拆單關聯（SPLIT）
+      relation: "SPLIT",
       staff_note: status ? "拆單：退貨申請中" : null,
     });
   }
@@ -474,25 +475,29 @@ async function moveOrderItems(ctx: RequestContext): Promise<Response> {
   const { data: maxSeq } = await client.from("order_items").select("seq").eq("tenant_id", session.tenantId).eq("sales_order_id", toId).order("seq", { ascending: false }).limit(1);
   let seq = num((maxSeq?.[0] as { seq?: number } | undefined)?.seq);
   const movedNames: string[] = [];
+  let movedDisc = 0;
   for (const p of picks) {
     const it = items.find((i) => Number(i.id) === p.orderItemId)!;
     seq += 1;
     if (p.total >= num(it.total)) {
       await client.from("order_items").update({ sales_order_id: toId, seq }).eq("tenant_id", session.tenantId).eq("id", it.id);
+      movedDisc += Math.round(num(it.discount));
     } else {
-      const unitDisc = num(it.discount) / Math.max(1, num(it.total));
       const keep = num(it.total) - p.total;
+      const movedD = Math.round((num(it.discount) * p.total) / Math.max(1, num(it.total)));
+      const keepD = Math.round(num(it.discount)) - movedD;
       await client
         .from("order_items")
-        .update({ total: keep, discount: Math.round(unitDisc * keep), amount: Math.round(num(it.price) * keep - unitDisc * keep) })
+        .update({ total: keep, discount: keepD, amount: Math.round(num(it.price) * keep - keepD) })
         .eq("tenant_id", session.tenantId)
         .eq("id", it.id);
       const copy: Row = { ...it };
       delete copy.id;
       delete copy.created_at;
       delete copy.updated_at;
-      Object.assign(copy, { sales_order_id: toId, seq, total: p.total, discount: Math.round(unitDisc * p.total), amount: Math.round(num(it.price) * p.total - unitDisc * p.total), parent_order_item_id: null });
+      Object.assign(copy, { sales_order_id: toId, seq, total: p.total, discount: movedD, amount: Math.round(num(it.price) * p.total - movedD), parent_order_item_id: null });
       await client.from("order_items").insert(copy);
+      movedDisc += movedD;
     }
     movedNames.push(`${it.title}×${p.total}`);
   }
@@ -500,8 +505,8 @@ async function moveOrderItems(ctx: RequestContext): Promise<Response> {
     await addOrderHistory(session, toId, "訂單地址不共用");
   }
   await addOrderHistory(session, fromId, `拆單：${movedNames.join("、")} → ${target.uuid}`);
-  await recalcOrderAmounts(session, fromId, { shipping: false, salesRules: false });
-  await recalcOrderAmounts(session, toId, { shipping: false, salesRules: false });
+  await recalcOrderAmounts(session, fromId, { shipping: false, salesRules: false, discountDelta: -movedDisc });
+  await recalcOrderAmounts(session, toId, { shipping: false, salesRules: false, discountDelta: movedDisc });
   void created;
   return json({ code: 200, error: `已拆單至訂單 ${target.uuid}`, message: `已拆單至訂單 ${target.uuid}`, data: [toId] });
 }
@@ -536,7 +541,7 @@ async function couponList(ctx: RequestContext): Promise<Response> {
 async function couponDelete(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const id = Number(await strParam(ctx, "groupBuyFlatRateShippingId")) || Number(await strParam(ctx, "salesOrderCouponId"));
-  const { data } = await db().from("sales_order_coupons").select("id,sales_order_id,coupon,coupon_code_id").eq("tenant_id", session.tenantId).eq("id", id).maybeSingle();
+  const { data } = await db().from("sales_order_coupons").select("id,sales_order_id,coupon,coupon_code_id,discount").eq("tenant_id", session.tenantId).eq("id", id).maybeSingle();
   if (!data) throw notFound("找不到優惠卷");
   const c = data as Row;
   await db().from("sales_order_coupons").delete().eq("tenant_id", session.tenantId).eq("id", id);
@@ -545,7 +550,7 @@ async function couponDelete(ctx: RequestContext): Promise<Response> {
     if (cc) await db().from("coupon_codes").update({ used_count: Math.max(0, num((cc as Row).used_count) - 1) }).eq("tenant_id", session.tenantId).eq("id", c.coupon_code_id);
   }
   await addOrderHistory(session, Number(c.sales_order_id), `移除優惠卷 ${c.coupon ?? ""}`);
-  await recalcOrderAmounts(session, Number(c.sales_order_id), { shipping: false, salesRules: false });
+  await recalcOrderAmounts(session, Number(c.sales_order_id), { shipping: false, salesRules: false, discountDelta: -num(c.discount) });
   return actionOk("已移除優惠卷");
 }
 
@@ -588,7 +593,7 @@ async function couponRedeem(ctx: RequestContext): Promise<Response> {
   });
   await client.from("coupon_codes").update({ used_count: num(cc.used_count) + 1, date_used: nowIso() }).eq("tenant_id", session.tenantId).eq("id", cc.id);
   await addOrderHistory(session, id, `使用優惠卷 ${code}（折抵 $${discount}）`);
-  await recalcOrderAmounts(session, id, { shipping: false, salesRules: false });
+  await recalcOrderAmounts(session, id, { shipping: false, salesRules: false, discountDelta: discount });
   return actionOk(`已套用優惠碼 ${code}`);
 }
 

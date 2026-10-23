@@ -1,6 +1,7 @@
 // 「可預購轉現貨」（b2s）判定（擁有者：orders lead；訂單列表篩選、b2sTotal 徽章、預購轉現貨頁共用同一口徑）。
 // 定義：訂單階段 NEW/PROCESSING，且有「預購（back_order=true）、未出貨（state=UNSHIPPING）」的訂單商品，
-//       而該商品（共用庫存時取主商品）目前可售現貨 stock_available ≥ 該訂單商品數量。
+//       而該商品（共用庫存時取主商品）的保留現貨 stock_cache 或可售現貨 stock_available ≥ 該訂單商品數量
+//       （與 migration 3040 orders_preorder_convert 的扣庫存規則一致：保留現貨夠先扣保留現貨，否則扣可售現貨）。
 import type { AdminSession } from "@/lib/core/http/types";
 import { db } from "./common";
 
@@ -44,16 +45,16 @@ export async function countB2sOrders(session: AdminSession, groupBuyId?: number 
   return (await b2sEligibleOrderIds(session, groupBuyId)).length;
 }
 
-/** 商品目前可售現貨（共用庫存時取主商品的 stock_available） */
+/** 商品目前可用來轉換的現貨數量＝max(保留現貨 stock_cache, 可售現貨 stock_available)（共用庫存時取主商品） */
 export async function availableStock(session: AdminSession, itemIds: number[]): Promise<Map<number, number>> {
   const client = db();
   const out = new Map<number, number>();
   if (!itemIds.length) return out;
-  const items: { id: number; stock_available: number; share_stock: boolean; parent_item_id: number | null }[] = [];
+  const items: { id: number; stock_available: number; stock_cache: number | null; share_stock: boolean; parent_item_id: number | null }[] = [];
   for (let i = 0; i < itemIds.length; i += 500) {
     const { data, error } = await client
       .from("items")
-      .select("id,stock_available,share_stock,parent_item_id")
+      .select("id,stock_available,stock_cache,share_stock,parent_item_id")
       .eq("tenant_id", session.tenantId)
       .in("id", itemIds.slice(i, i + 500));
     if (error) throw new Error(`[orders b2s] ${error.message}`);
@@ -62,11 +63,16 @@ export async function availableStock(session: AdminSession, itemIds: number[]): 
   const parentIds = [...new Set(items.filter((i) => i.share_stock && i.parent_item_id).map((i) => i.parent_item_id as number))];
   const parentStock = new Map<number, number>();
   if (parentIds.length) {
-    const { data } = await client.from("items").select("id,stock_available").eq("tenant_id", session.tenantId).in("id", parentIds);
-    for (const p of (data ?? []) as { id: number; stock_available: number }[]) parentStock.set(p.id, Number(p.stock_available) || 0);
+    const { data } = await client.from("items").select("id,stock_available,stock_cache").eq("tenant_id", session.tenantId).in("id", parentIds);
+    for (const p of (data ?? []) as { id: number; stock_available: number; stock_cache: number | null }[]) {
+      parentStock.set(p.id, Math.max(Number(p.stock_cache) || 0, Number(p.stock_available) || 0));
+    }
   }
   for (const i of items) {
-    out.set(i.id, i.share_stock && i.parent_item_id ? parentStock.get(i.parent_item_id) ?? 0 : Number(i.stock_available) || 0);
+    out.set(
+      i.id,
+      i.share_stock && i.parent_item_id ? parentStock.get(i.parent_item_id) ?? 0 : Math.max(Number(i.stock_cache) || 0, Number(i.stock_available) || 0),
+    );
   }
   return out;
 }
