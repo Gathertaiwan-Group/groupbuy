@@ -1,77 +1,41 @@
-{{!-- 複製組合（/ajax/SalesRule/displayCopyPackage?salesRuleId=）：原站片段已實讀（form action 改為本站 {{baseUrl}}） --}}
-<form name="ItemBundleForm" method="post" action="{{baseUrl}}/ajax/ItemBundle/copyPackage.do" class="form-horizontal" id="SalesRuleForm"><input type="hidden" name="salesRuleId" value="{{salesRuleId}}" id="salesRuleId"><div class="modal-header">
-	<h5 style="overflow:hidden">複製組合 &raquo;</h5>
+{{!-- 複製組合（/ajax/SalesRule/displayCopyPackage?salesRuleId=）（無塵室重寫）
+     原站沒有此片段的擷取檔。依 public/scripts/salesRule.js 的 salesRuleManager（GET getPackage → buildForm 填入 #form-container、
+     失敗時 modalShowDanger($(formId))）、ias_v5 的 initAjaxForm（jquery.form 送出、code==200 走成功回呼）、
+     同站彈窗（modal-groupbuycoupon-generate.html：form + modal-header/body/footer）與 lib/modules/marketing/sales-rule-binding.ts（端點契約）推導。
+     推導：整個片段的標題、說明文字、按鈕文字與送出後結果清單的呈現。 --}}
+<form name="CopyPackageForm" method="post" action="{{baseUrl}}/ajax/ItemBundle/copyPackage.do" class="form-horizontal" id="CopyPackageForm"><input type="hidden" name="salesRuleId" value="{{salesRuleId}}"><div class="modal-header">
+	<h5 style="overflow:hidden">複製組合</h5>
 	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 </div>
 <div class="modal-body">
 	<div class="modal-message"></div>
-
-	<div class="card">
-		<div class="card-body">
-			<div class="blue-grey lighten-5 small p-2">
-			<p>複製組合將會新增一個新的主商品及複製相關子商品</p>
-			<p>未勾選之商品將不會被複製</p>
-			<p>若有多種組合需上架，建議先產生一組最大集合組合，再由此組合篩選所需之子商品至新組合</p>
-			<p>複製完後，仍須進到商品頁編輯主商品金額，及相關商品庫存</p>
-			</div>
-		</div>
-
-		<div id="form-container" class="card-body "></div>
+	<div class="blue-grey lighten-5 small p-2 mb-3">
+		<p>將此組合包的主商品與勾選的子商品各複製一份，並建立一筆新的組合包優惠條件。</p>
 	</div>
-</div>
-<div class="progress">
-	<div class="progress-bar" role="progressbar"></div>
+	<div id="form-container"></div>
+	<div id="copyPackageResult" class="small mt-3"></div>
 </div>
 <div class="modal-footer">
-	<button class="btn btn-default" data-dismiss="modal">關閉</button>
-	<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+	<button type="submit" class="btn btn-primary">複製</button>
 </div>
-</form><script>
-$(document).ready(function() {
-	$('#SalesRuleForm').escapeExitOnKeyEnter();
-	salesRuleManager
-		.init({{salesRuleId}})
-		.prepare();
-
-	$('#card-invoice-item-select-checkall').click(function(e) {
-		var checked = $(this).prop('checked');
-		$('input:checkbox[name=itemSelId]').prop('checked', checked)
+</form>
+<script src="/scripts/salesRule.js"></script>
+<script>
+(function () {
+	var formId = 'CopyPackageForm';
+	var manager = salesRuleManager.init({{json salesRuleId}});
+	manager.formId = '#' + formId;
+	manager.prepare();
+	initAjaxForm(formId, function (res) {
+		var list = (res && res.data) || [];
+		var $ul = $('<ul class="list-unstyled mb-0"></ul>');
+		$.each(list, function (i, r) {
+			$ul.append($('<li>').text((r.uuid || '') + '：' + (r.result || '')));
+		});
+		$('#copyPackageResult').empty().append($ul);
+		modalShowSuccess($('#' + formId).closest('.modal-content'), '已複製組合');
+		if (typeof salesRuleTable !== 'undefined' && salesRuleTable) salesRuleTable.ajax.reload(null, false);
 	});
-	$('#myModal').data('bs.modal')._config.backdrop = 'static';
-});
-
-var success = function(json) {
-	{{!-- 原站此片段在「團購品項」頁使用全域 table；單頁版沒有 table，改為有才重整，並重整優惠條件表 --}}
-	if (typeof table !== 'undefined' && table) table.ajax.reload( null, false);
-	if (typeof salesRuleTable !== 'undefined' && salesRuleTable) salesRuleTable.ajax.reload( null, false);
-	var msg = '';
-	var err = '';
-	var successCount = 0;
-	for (i in json.data) {
-		ret = json.data[i];
-		if (ret.uuid == null) continue;
-		if (!ret.result || ret.result == 'OK') {
-			successCount++;
-		} else {
-			err += '<p>' + ret.uuid + ":" + ret.result + '</p>';
-		}
-	}
-
-	if (err.length) {
-		msg += err;
-		modalShowAlert($('#myModal'), msg, 'alert-warning');
-	} else {
-		successCount = 1;
-		msg = '<p>成功:' + successCount + '</p>';
-		modalShowSuccess($('#myModal'), msg);
-	}
-
-	$('#submitButton').hide();
-	if (typeof table !== 'undefined' && table) table.clear().ajax.reload(null, false);
-}
-
-initAjaxForm('SalesRuleForm', success);
-$('.badge-reason').on('click', function(e) {
-	$('#reason').val($(this).html());
-} );
+})();
 </script>

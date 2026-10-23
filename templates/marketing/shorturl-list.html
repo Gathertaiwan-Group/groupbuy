@@ -1,33 +1,32 @@
-{{!-- 短網址 /backend/ShortUrl/list：原站 spec/html/shorturl-list.html。
-     原站列表/新增走外部短網址服務 uuo.io（帳號密碼放在頁面 hidden 欄位）——本系統不串外部服務：
-     改打本站 {{baseUrl}}/ajax/ShortUrl/*（資料存 groupbuy.short_urls，短網址由本站 /s/<code> 轉址），hidden 帳密欄位留空。 --}}
+{{!-- 短網址 /backend/ShortUrl/list（無塵室重寫）
+     來源：spec/html/shorturl-list.html 已擷取段落（表格欄位、#ShortUrlForm 表單、結果區塊、送出時清空/顯示結果的步驟）、
+     spec/runtime/shorturl-list.records.txt（列表 POST、serverSide、無工具列按鈕、Editor 無欄位）、
+     ias_v5.min.js（btnStartLoading/btnStopLoading）、gbs_api.min.js（copyClipboard）、lib/modules/marketing/shorturl.ts（端點契約）。
+     本系統不串外部短網址服務：列表與新增改打本站 /ajax/ShortUrl/*，短網址為本站 /s/<code>；hidden 欄位保留但 password 為空（不輸出外部服務密碼）。
+     推導：送出流程（newurl 回 {domain, code} → 'https://' + domain + '/' + code）、錯誤訊息顯示方式、openUrlInNewTab（原站資產中沒有定義）、
+     Editor ajax 只留 create（原站缺段，且頁面無工具列按鈕與欄位）。 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
 <script type="text/javascript" class="init">
+	function openUrlInNewTab(btn, selector) {
+		var url = $(selector).val();
+		if (url) window.open(url, '_blank', 'noopener');
+	}
 
 	$(document).ready(function() {
 
 		var tableName = '#rpTable';
-		editor = new $.fn.dataTable.Editor( {
+		var editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShortUrl/save'
-				},
-				edit: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShortUrl/update'
-				},
-				remove: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShortUrl/delete'
+					url:  '{{baseUrl}}/ajax/ShortUrl/newurl.do'
 				}
 			},
 			table: tableName,
-			idSrc: 'code',
+			idSrc: 'shortUrlId',
 			fields: [
 			],
-			//template: '#custom_rp_form',
 			formOptions:DataTableConfig.formOptions,
 			i18n:DataTableConfig.i18n,
 		} );
@@ -37,13 +36,10 @@
 			serverSide:true,
 			processing:true,
 			scrollX:true,
-			"lengthMenu": [10, 25, 50, 100, 250],
 			ajax: {
-				url:'{{baseUrl}}/ajax/ShortUrl/list',
+				url: '{{baseUrl}}/ajax/ShortUrl/list.do',
 				type: "POST",
-				data: function (d) {
-					d.account = '';
-					d.password = '';
+				data: function ( d ) {
 					return d;
 				},
 				error: function (xhr, error, code) {
@@ -70,68 +66,50 @@
 			}
 		} );
 
-		$('#ShortUrlForm').validate();
-		$submitBtn = $('#ShortUrlForm button[type=submit]');
-		$submitBtn.on('click', function(event) {
-			event.preventDefault();
-			createShortUrl();
-			return false;
+		$('#ShortUrlForm').on('submit', function (e) {
+			e.preventDefault();
+			newUrl($(this).find('.btn-submit'));
 		});
 
-		var createAccount = function() {
-			return jQuery.post(
-				'{{baseUrl}}/ajax/ShortUrl/createAccount',
-				{
-					account:$('#ShortUrlForm input[name=account]').val(),
-					email:'guest@erawppa.com',
-					password:$('#ShortUrlForm input[name=password]').val(),
-				}
-			)
-			.fail(jqHXR => {
-				var json = jqHXR.responseJSON;
-				btnStopLoading($submitBtn);
-				$('#shortUrl-result-error').html(json.error);
-			});
-		};
-
-		var createShortUrl = function() {
+		function newUrl($submitBtn) {
+			var url = $.trim($('#ShortUrlForm input[name=url]').val());
 			$('#shortUrl').val('');
 			$('#shortUrl-result-error').html('');
 			$('#shortUrl-result-body').addClass('d-none');
+			if (!url) {
+				$('#shortUrl-result-error').text('請輸入網址');
+				return;
+			}
 			btnStartLoading($submitBtn);
 			return jQuery.post(
-				'{{baseUrl}}/ajax/ShortUrl/newurl',
+				'{{baseUrl}}/ajax/ShortUrl/newurl.do',
 				{
-					account:$('#ShortUrlForm input[name=account]').val(),
-					password:$('#ShortUrlForm input[name=password]').val(),
-					url:$('#ShortUrlForm input[name=url]').val(),
-					domain:$('#ShortUrlForm input[name=domain]:checked').val(),
+					url: url,
+					domain: $('#ShortUrlForm input[name=domain]:checked').val()
 				}
-			)
-			.fail(jqHXR => {
-				var json = jqHXR.responseJSON;
-				if (json.code == 404) {
-					createAccount()
-					.then(() => $submitBtn.click());
-				} else {
-					btnStopLoading($submitBtn);
-					$('#shortUrl-result-error').html(json.error);
-				}
-			})
-			.then(json => {
+			).done(function (res) {
 				btnStopLoading($submitBtn);
-				var url = 'https://' + json.domain + '/' + json.code;
-				$('#shortUrl').val(url);
+				if (!res || !res.code) {
+					$('#shortUrl-result-error').text((res && res.error) || '新增失敗');
+					return;
+				}
+				$('#shortUrl').val('https://' + res.domain + '/' + res.code);
 				$('#shortUrl-result-body').removeClass('d-none');
 				$('#ShortUrlForm input[name=url]').val('');
 				table.ajax.reload(null, false);
+			}).fail(function (xhr) {
+				btnStopLoading($submitBtn);
+				var json = xhr.responseJSON || {};
+				$('#shortUrl-result-error').text(json.error || '新增失敗');
 			});
-		};
+		}
+
+		DataTableHelper.initEditorOnCallback(table,editor);
 	} ); // end ready
 </script>
 <!--#body--><div class="container-fluid ">
-<form action="{{baseUrl}}/ajax/ShortUrl/newurl" method="POST" id="ShortUrlForm">
-<input type="hidden" name="account" value="">
+<form method="post" class="form-horizontal" id="ShortUrlForm">
+<input type="hidden" name="account" value="{{tenantCode}}">
 <input type="hidden" name="password" value="">
 <div class="card mt-4">
 	<div class="card-header card-header bg-info white-text">新增短網址</div>
@@ -148,13 +126,13 @@
 		</div>
 		<div class="input-group py-0">
 			<div class="btn-group-toggle" data-toggle="buttons">
-				<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2 active">
+<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2 active">
 					<input type="radio" name="domain" value="attt.at" class="required" required checked>attt.at</label>
-				<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2">
+<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2">
 					<input type="radio" name="domain" value="ii.cafe" class="required" required >ii.cafe</label>
-				<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2">
+<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2">
 					<input type="radio" name="domain" value="uuo.io" class="required" required >uuo.io</label>
-			</div>
+</div>
 		</div>
 	</div>
 	<div class="card-footer">

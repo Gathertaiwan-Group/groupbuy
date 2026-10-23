@@ -1,16 +1,16 @@
-{{!-- 優惠卷樣板 /backend/CouponTemplate/list：原站 spec/html/coupontemplate-list.html；缺段已依原站頁面原始碼補齊 --}}
+{{!-- 優惠卷樣板 /backend/CouponTemplate/list（無塵室重寫）
+     來源：spec/html/coupontemplate-list.html 已擷取段落、spec/runtime/coupontemplate-list.records.txt（#example、GET 列表、每頁 20 筆、client-side）、
+     dataTable.config.min.js（field_*、duplicate 按鈕）、templates/groupbuy/groupbuytag-list.html（同站 defaults 寫法）。
+     推導：缺段內的 initEdit 之後的原站處理不可見，只保留可見的事件掛勾；文字欄位改用 render.text() 跳脫。 --}}
 <!--#head-->
 <script type="text/javascript" class="init">
-
-var editor; // use a global for the submit and return data rendering in the examples
 	$.extend( true, $.fn.dataTable.defaults, {
 		"searching": true,
 		"pageLength":20,
 	} );
 	$(document).ready(function() {
-
 		var tableName = '#example';
-		editor = new $.fn.dataTable.Editor( {
+		var editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
 					type: 'POST',
@@ -34,11 +34,9 @@ var editor; // use a global for the submit and return data rendering in the exam
 					DataTableConfig.field_input('折扣(金額/折數)','discount', '0'),
 					DataTableConfig.field_input('最小單位(金額/件數)','minimum', '0'),
 					DataTableConfig.field_input('相同折扣碼可被重複使用結帳次數(-1代表無限制)','availableQuota','1'),
-					//DataTableConfig.field_input('優先順序','priority','1'),
 					DataTableConfig.field_checkbox_bool('會員限定','couponSettings.customerOnly'),
 					DataTableConfig.field_input('獲取數量','couponSettings.redeemNumber','1','','當會員使用該折扣碼時，可獲得該折扣碼的數量，最少(預設)為1。若數量為3則該會員能使用同一個折扣碼3次。'),
 					DataTableConfig.field_input('折抵金額上限','couponSettings.maxDiscount','','',''),
-					//DataTableConfig.field_checkbox_bool('可合併計算','combinable'),
 			],
 			i18n:DataTableConfig.i18n,
 			formOptions:DataTableConfig.formOptions,
@@ -46,20 +44,19 @@ var editor; // use a global for the submit and return data rendering in the exam
 
 		var table = $(tableName).DataTable( {
 			dom: 'Bfrtip',
-			scrollX:true,
 			ajax: '{{baseUrl}}/ajax/CouponTemplate/list.do',
 			language:DataTableConfig.i18n,
 			columns:[
 				DataTableConfig.data_select_checkbox,
-				{ data: 'title' },
+				{ data: 'title', render: $.fn.dataTable.render.text() },
 					{
 					data: 'category',
 					render: function ( data, type, row ) {
-						return row.categoryString;
+						return $.fn.dataTable.render.text().display(row.categoryString);
 					}
 				},
-				{ data: 'discount' },
-				{ data: 'minimum' },
+				{ data: 'discount', render: $.fn.dataTable.render.text() },
+				{ data: 'minimum', render: $.fn.dataTable.render.text() },
 			],
 			keys: DataTableConfig.keysInlineTab,
 			"order": [[ 1, "asc" ]],
@@ -83,23 +80,7 @@ var editor; // use a global for the submit and return data rendering in the exam
 			//	editor.field( 'seq' ).enable();
 			} )
 			.on( 'initEdit', function () {
-				// Disable for edit (re-ordering is performed by click and drag)
-			//	editor.field( 'seq' ).disable();
-			} )
-			.on( 'open', function (e,mode,action) {
-				$('#DTE_Field_category').change(function() {
-					v = $(this).val();
-					editor.show();
-					if (v == 'SALES_RULE') {
-						editor.hide('dollarOrPercentage');
-						editor.hide('discount');
-						editor.hide('minimum');
-					}
-				});
-			})
-			.on( 'close', function (e,mode,action) {
-				$('#DTE_Field_category').unbind('change');
-			});
+			} );
 		DataTableHelper.initEditorOnCallback(table,editor);
 		DataTableHelper.inlineModePlugin(table);
 		DataTableHelper.injectInline(table,editor);

@@ -1,12 +1,14 @@
-{{!-- 黑名單 /backend/Blacklist/list：原站 spec/html/blacklist-list.html；缺段已依原站頁面原始碼補齊 --}}
+{{!-- 黑名單 /backend/Blacklist/list（無塵室重寫）
+     來源：spec/html/blacklist-list.html 已擷取段落、spec/runtime/blacklist-list.records.txt（Log 欄位、每頁筆數）、
+     dataTable.config.min.js（field_*／data_input／initFooterSearch）。
+     推導：表格 dom 'lBrtip'（同原站「團購關鍵字標籤」列表的 lengthMenu＋表尾搜尋寫法；缺段內原值不可見）。 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
 <script type="text/javascript" class="init">
-
 	$(document).ready(function() {
 
 		var tableName = '#rpTable';
-		editor = new $.fn.dataTable.Editor( {
+		var editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
 					type: 'POST',
@@ -31,7 +33,6 @@
 					DataTableConfig.field_textarea('備註', 'note','', 10),
 					DataTableConfig.field_textarea('Log', 'log','', 10),
 			],
-			//template: '#custom_rp_form',
 			formOptions:DataTableConfig.formOptions,
 			i18n:DataTableConfig.i18n,
 		} );
@@ -82,10 +83,10 @@
 <div class="card-header">黑名單</div>
 <div class="card-body">
 	<div class="blue-grey lighten-5 small p-2">
-		<p>＊下單時會檢查訂單電話號碼是否在黑名單內（若訂單未填電話號碼，則使用Email判斷）</p>
-		<p>＊若在黑名單內，下單後會顯示「銀行系統維護中，請稍後再試」</p>
-		<p>一但被系統偵測為黑名單，在瀏覽器未關閉前使用其他電話號碼下單也會被判定為黑名單</p>
-		<p>既有訂單，可透過「加入黑名單」功能將訂單加入黑名單</p>
+	<p>＊下單時會檢查訂單電話號碼是否在黑名單內（若訂單未填電話號碼，則使用Email判斷）</p>
+	<p>＊若在黑名單內，下單後會顯示「銀行系統維護中，請稍後再試」</p>
+	<p>一但被系統偵測為黑名單，在瀏覽器未關閉前使用其他電話號碼下單也會被判定為黑名單</p>
+	<p>既有訂單，可透過「加入黑名單」功能將訂單加入黑名單</p>
 	</div>
 </div>
 <div class="card-body">

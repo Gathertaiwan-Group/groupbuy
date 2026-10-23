@@ -1,334 +1,303 @@
-{{!-- 團購關鍵字標籤 /backend/GroupBuySysTagRef/list：原站 spec/html/groupbuysystagref-list.html；缺段已依原站頁面原始碼補齊 --}}
+{{!-- 團購關鍵字標籤 /backend/GroupBuySysTagRef/list（無塵室重寫）
+     來源：spec/html/groupbuysystagref-list.html 已擷取段落（Editor/表格設定、批次標注按鈕、關聯清單與解除關聯的 ajax、
+     showBatchTaggingModal 的重設步驟、確認新增的 confirm 與回應處理、兩個彈窗的可見結構、tagify 4.35.4 的 cdnjs 引用）、
+     spec/runtime/groupbuysystagref-list.records.txt、SPEC「團購關鍵字標籤」、lib/modules/marketing/sys-tag-ref.ts（端點契約）。
+     推導：卡片標頭文字（取側欄／SPEC 頁名）、說明第一行開頭、關聯數量欄的連結內容、關聯清單表頭（團購編號／團購名稱）、
+     關聯清單列的組法與「解除關聯」按鈕、批次彈窗標題、預覽區（#batchPreviewArea／#batchPreviewList）的內容與文字、
+     預覽按鈕呼叫 previewBatchTagging、Tagify 初始化參數、刪除後的提示文字、Editor 欄位標籤沿用原站顯示的 ???GroupBuySysTag.tag???。 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.css" rel="stylesheet" type="text/css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.js"></script>
 <script type="text/javascript" class="init">
-
-	$(document).ready(function () {
-		var tableName = '#rpTable';
-		{{!-- 原站把標籤／團購名稱直接串進 HTML；含 < " 等字元時會破版，這裡先跳脫（顯示結果相同） --}}
-		var escHtml = function (s) { return $('<div>').text(s == null ? '' : String(s)).html().replace(/"/g, '&quot;'); };
-
-		// 建立 DataTables Editor 實例
-		var editor = new $.fn.dataTable.Editor({
-			ajax: {
-				create: {
-					type: 'POST',
-					url: '{{baseUrl}}/ajax/GroupBuySysTagRef/save.do'
-				},
-				edit: {
-					type: 'POST',
-					url: '{{baseUrl}}/ajax/GroupBuySysTagRef/update.do?groupBuySysTagRefId=_id_'
-				},
-				remove: {
-					type: 'POST',
-					url: '{{baseUrl}}/ajax/GroupBuySysTagRef/delete.do?groupBuySysTagRefId=_id_'
-				}
-			},
-			table: tableName,
-			idSrc: 'groupBuySysTagRefId',
-			fields: [
-				DataTableConfig.field_input('???GroupBuySysTag.tag???', 'tag')
-			],
-			formOptions: DataTableConfig.formOptions,
-			i18n: DataTableConfig.i18n,
-		});
-
-		// 初始化 DataTables
-		var table = $(tableName).DataTable({
-			dom: 'lBrtip',
-			serverSide: true,
-			processing: true,
-			scrollX: true,
-			"lengthMenu": [10, 25, 50, 100, 250],
-			ajax: {
-				url: '{{baseUrl}}/ajax/GroupBuySysTagRef/list.do',
-				type: "POST",
-			},
-			language: DataTableConfig.i18n,
-			columns: [
-				DataTableConfig.data_select_checkbox,
-				DataTableConfig.data_input('tag'),
-				{
-					data: "groupBuyCount",
-					render: function (data, type, row, meta) {
-						if (type === 'display') {
-							return '<a href="javascript:void(0)" class="view-associated-gbs text-primary" data-tag="' + escHtml(row.tag) + '"><i class="fa fa-link mr-1"></i>' + data + ' 筆表單</a>';
-						}
-						return data;
-					}
-				},
-			],
-			keys: DataTableConfig.keysInlineTab,
-			"order": [[1, "asc"]],
-			select: DataTableConfig.selectOptionsOS,
-			buttons: [
-				{ extend: 'create', editor: editor },
-				{ extend: 'edit', editor: editor },
-				{ extend: 'remove', editor: editor, className: 'btn-danger' },
-				{
-					text: '批次標注標籤',
-					className: 'btn-info batch-tagging-btn',
-					action: function (e, dt, node, config) {
-						showBatchTaggingModal();
-					}
-				}
-			],
-			initComplete: function () {
-				DataTableConfig.initFooterSearch(this, [1], [16]);
-			},
-			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
-			}
-		});
-
-		// 點擊關聯按鈕事件
-		$(tableName).on('click', '.view-associated-gbs', function (e) {
-			e.preventDefault();
-			var tag = $(this).data('tag');
-			$('#modalTagName').text(tag);
-
-			// 呼叫 API 取得關聯的團購列表
-			$.ajax({
-				url: '{{baseUrl}}/ajax/GroupBuySysTagRef/getAssociatedGroupBuys.do',
-				type: 'POST',
-				data: { tag: tag },
-				success: function (res) {
-					var tbody = $('#associatedGroupBuysList');
-					tbody.empty();
-					if (res && res.data && res.data.length > 0) {
-						res.data.forEach(function (item) {
-							var tr = $('<tr>');
-							tr.append($('<td>').text(item.title));
-							var removeBtn = $('<button>').addClass('btn btn-sm btn-outline-danger remove-tag-assoc')
-								.attr('data-tag', tag)
-								.attr('data-gbid', item.gbId)
-								.text('解除關聯');
-							tr.append($('<td class="text-center">').append(removeBtn));
-							tbody.append(tr);
-						});
-					} else {
-						tbody.append('<tr><td colspan="2" class="text-center text-muted">無關聯團購</td></tr>');
-					}
-					$('#associatedGroupBuysModal').modal('show');
-				},
-				error: function () {
-					alert('無法讀取關聯清單，請稍後再試。');
-				}
-			});
-		});
-
-		// 點擊解除關聯事件
-		$('#associatedGroupBuysList').on('click', '.remove-tag-assoc', function () {
-			var btn = $(this);
-			var tag = btn.data('tag');
-			var gbId = btn.data('gbid');
-			if (confirm('確定要解除此標籤與該團購之關聯嗎？')) {
-				$.ajax({
-					url: '{{baseUrl}}/ajax/GroupBuySysTagRef/removeTag.do',
-					type: 'POST',
-					data: { tag: tag, groupBuyId: gbId },
-					success: function (res) {
-						if (res.code === 200) {
-							btn.closest('tr').remove();
-							table.ajax.reload(null, false); // Reload Table in background
-						} else {
-							alert('解除失敗：' + (res.message || '未知錯誤'));
+			$(document).ready(function () {
+				var tableName = '#rpTable';
+				var esc = function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); };
+				var editor = new $.fn.dataTable.Editor({
+					ajax: {
+						create: {
+							type: 'POST',
+							url: '{{baseUrl}}/ajax/GroupBuySysTagRef/save.do'
+						},
+						edit: {
+							type: 'POST',
+							url: '{{baseUrl}}/ajax/GroupBuySysTagRef/update.do?groupBuySysTagRefId=_id_'
+						},
+						remove: {
+							type: 'POST',
+							url: '{{baseUrl}}/ajax/GroupBuySysTagRef/delete.do?groupBuySysTagRefId=_id_'
 						}
 					},
-					error: function () {
-						alert('系統錯誤，無法解除關聯。');
-					}
+					table: tableName,
+					idSrc: 'groupBuySysTagRefId',
+					fields: [
+						DataTableConfig.field_input('???GroupBuySysTag.tag???', 'tag'),
+					],
+					formOptions: DataTableConfig.formOptions,
+					i18n: DataTableConfig.i18n,
 				});
-			}
-		});
 
-		var batchTagify;
-		var batchKeywordTagify;
-
-		function initBatchTagify() {
-			var input = document.getElementById('batchTagName');
-			if (input && typeof Tagify !== 'undefined') {
-				batchTagify = new Tagify(input, {
-					dropdown: {
-						enabled: 0,
-						closeOnSelect: false
-					}
-				});
-			}
-
-			var keywordInput = document.getElementById('batchKeyword');
-			if (keywordInput && typeof Tagify !== 'undefined') {
-				batchKeywordTagify = new Tagify(keywordInput, {
-					dropdown: {
-						enabled: 0,
-						closeOnSelect: false
-					}
-				});
-			}
-		}
-
-		initBatchTagify();
-
-		function showBatchTaggingModal() {
-			if (batchTagify) {
-				batchTagify.removeAllTags();
-
-				var selectedRows = table.rows({ selected: true }).data();
-				var tagsToAdd = [];
-				if (selectedRows && selectedRows.length > 0) {
-					for (var i = 0; i < selectedRows.length; i++) {
-						if (selectedRows[i].tag) {
-							tagsToAdd.push(selectedRows[i].tag);
-						}
-					}
-				}
-
-				if (tagsToAdd.length > 0) {
-					batchTagify.addTags(tagsToAdd);
-				}
-			} else {
-				$('#batchTagName').val('');
-			}
-
-			if (batchKeywordTagify) {
-				batchKeywordTagify.removeAllTags();
-			} else {
-				$('#batchKeyword').val('');
-			}
-			$('#batchPreviewArea').hide();
-			$('#batchPreviewList').empty();
-			$('#btnConfirmBatchAdd').prop('disabled', true);
-			$('#batchTaggingModal').modal('show');
-		}
-
-		$('#btnPreviewBatch').on('click', function () {
-			var keywordsJson = $('#batchKeyword').val();
-			var keywordsToSend = [];
-			if (keywordsJson) {
-				try {
-					var parsedKeywords = JSON.parse(keywordsJson);
-					keywordsToSend = parsedKeywords.map(function(t) { return t.value; });
-				} catch (e) {
-					keywordsToSend = keywordsJson.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-				}
-			}
-
-			if (keywordsToSend.length === 0) {
-				alert('請輸入關鍵字');
-				return;
-			}
-
-			$.ajax({
-				url: '{{baseUrl}}/ajax/GroupBuySysTagRef/previewBatchTagging.do',
-				type: 'POST',
-				data: { keyword: keywordsToSend.join(',') },
-				success: function (res) {
-					if (res && res.data) {
-						var totalCount = res.data.totalCount;
-						var list = res.data.recentGroupBuys;
-
-						$('#batchPreviewCount').text(totalCount);
-						var $ul = $('#batchPreviewList');
-						$ul.empty();
-						batchGroupBuyIds = [];
-
-						if (list && list.length > 0) {
-							list.forEach(function (item) {
-								$ul.append('<li class="list-group-item">' + escHtml(item.title) + '</li>');
-								batchGroupBuyIds.push(item.groupBuyId);
-							});
-							if (totalCount > list.length) {
-								$ul.append('<li class="list-group-item text-muted">...（僅列出前 ' + list.length + ' 筆）</li>');
+				var table = $(tableName).DataTable({
+					dom: 'lBrtip',
+					serverSide: true,
+					processing: true,
+					scrollX: true,
+					"lengthMenu": [10, 25, 50, 100, 250],
+					ajax: {
+						url: '{{baseUrl}}/ajax/GroupBuySysTagRef/list.do',
+						type: "POST",
+					},
+					language: DataTableConfig.i18n,
+					columns: [
+						DataTableConfig.data_select_checkbox,
+						DataTableConfig.data_input('tag'),
+						{
+							data: "groupBuyCount",
+							render: function (data, type, row, meta) {
+								if (type === 'display') {
+									return '<a href="javascript:void(0)" class="view-associated-gbs text-primary" data-tag="' + esc(row.tag) + '">' + esc(data == null ? 0 : data) + '</a>';
+								}
+								return data;
 							}
-							$('#btnConfirmBatchAdd').prop('disabled', false);
-						} else {
-							$ul.append('<li class="list-group-item text-danger">找不到任何符合關鍵字的近期團購表單</li>');
-							$('#btnConfirmBatchAdd').prop('disabled', true);
+						},
+					],
+					keys: DataTableConfig.keysInlineTab,
+					"order": [[1, "asc"]],
+					select: DataTableConfig.selectOptionsOS,
+					buttons: [
+						{ extend: 'create', editor: editor },
+						{ extend: 'edit', editor: editor },
+						{ extend: 'remove', editor: editor, className: 'btn-danger' },
+						{
+							text: '批次標注標籤',
+							className: 'btn-info batch-tagging-btn',
+							action: function (e, dt, node, config) {
+								showBatchTaggingModal();
+							}
 						}
-						$('#batchPreviewArea').show();
-					}
-				},
-				error: function () {
-					alert('預覽失敗，請稍後再試。');
-				}
-			});
-		});
-
-		$('#btnConfirmBatchAdd').on('click', function () {
-			var tagsJson = $('#batchTagName').val();
-			var keywordsJson = $('#batchKeyword').val();
-
-			var tagsToSend = [];
-			if (tagsJson) {
-				try {
-					var parsedTags = JSON.parse(tagsJson);
-					tagsToSend = parsedTags.map(function(t) { return t.value; });
-				} catch (e) {
-					tagsToSend = tagsJson.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-				}
-			}
-
-			var keywordsToSend = [];
-			if (keywordsJson) {
-				try {
-					var parsedKeywords = JSON.parse(keywordsJson);
-					keywordsToSend = parsedKeywords.map(function(t) { return t.value; });
-				} catch (e) {
-					keywordsToSend = keywordsJson.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
-				}
-			}
-
-			if (tagsToSend.length === 0) {
-				alert('請輸入標籤名稱');
-				return;
-			}
-			if (keywordsToSend.length === 0) {
-				alert('請輸入關鍵字');
-				return;
-			}
-
-			if (confirm('確定要將標籤對「' + tagsToSend.join(',') + '」批次加入搜尋結果中的所有近期團購表單嗎？')) {
-				$.ajax({
-					url: '{{baseUrl}}/ajax/GroupBuySysTagRef/addBatchTagging.do',
-					type: 'POST',
-					data: {
-						tag: tagsToSend.join(','),
-						keyword: keywordsToSend.join(',')
+					],
+					initComplete: function () {
+						DataTableConfig.initFooterSearch(this, [1], [16]);
 					},
-					success: function (res) {
-						if (res.data !== undefined) {
-							if (res.data > 0) {
-								alert('已成功新增 ' + (res.data) + ' 筆標籤關聯');
-								$('#batchTaggingModal').modal('hide');
-								table.ajax.reload();
+					drawCallback: function (settings) {
+						$(".dataTables_scrollBody").floatingScroll();
+					}
+				});
+
+				// 點擊關聯數量：讀取關聯的團購列表
+				$(tableName).on('click', '.view-associated-gbs', function (e) {
+					e.preventDefault();
+					e.stopPropagation();
+					var tag = $(this).attr('data-tag');
+					$.ajax({
+						url: '{{baseUrl}}/ajax/GroupBuySysTagRef/getAssociatedGroupBuys.do',
+						type: 'POST',
+						data: { tag: tag },
+						success: function (res) {
+							var tbody = $('#associatedGroupBuysList');
+							tbody.empty();
+							$('#modalTagName').text(tag);
+							var list = (res && res.data) || [];
+							if (list.length > 0) {
+								$.each(list, function (i, gb) {
+									var tr = $('<tr>');
+									tr.append($('<td>').text(gb.gbId));
+									tr.append($('<td>').append($('<a target="_blank">').attr('href', '/backend/GroupBuy/show.do?groupBuyId=' + encodeURIComponent(gb.gbId)).text(gb.title)));
+									tr.append($('<td class="text-center">').append(
+										$('<button type="button" class="btn btn-sm btn-outline-danger btn-remove-tag-ref m-0">解除關聯</button>').attr('data-tag', tag).attr('data-gbid', gb.gbId)
+									));
+									tbody.append(tr);
+								});
 							} else {
-								alert('新增失敗：0筆新增，沒有符合的結果');
+								tbody.append('<tr><td colspan="3" class="text-center text-muted">無關聯團購</td></tr>');
 							}
-						} else {
-							alert('新增失敗：' + (res.error || '未知錯誤'));
+							$('#associatedGroupBuysModal').modal('show');
+						},
+						error: function () {
+							alert('無法讀取關聯清單，請稍後再試。');
 						}
-					},
-					error: function () {
-						alert('系統錯誤，無法執行批次新增。');
+					});
+				});
+
+				// 點擊解除關聯
+				$('#associatedGroupBuysList').on('click', '.btn-remove-tag-ref', function () {
+					var $btn = $(this);
+					var tag = $btn.attr('data-tag');
+					var gbId = $btn.attr('data-gbid');
+					if (confirm('確定要解除此標籤與該團購之關聯嗎？')) {
+						$.ajax({
+							url: '{{baseUrl}}/ajax/GroupBuySysTagRef/removeTag.do',
+							type: 'POST',
+							data: { tag: tag, groupBuyId: gbId },
+							success: function (res) {
+								if (res && res.code == 200) {
+									$btn.closest('tr').remove();
+									if ($('#associatedGroupBuysList tr').length == 0) {
+										$('#associatedGroupBuysList').append('<tr><td colspan="3" class="text-center text-muted">無關聯團購</td></tr>');
+									}
+									table.ajax.reload(null, false);
+								} else {
+									alert((res && (res.message || res.error)) || '系統錯誤，無法解除關聯。');
+								}
+							},
+							error: function () {
+								alert('系統錯誤，無法解除關聯。');
+							}
+						});
 					}
 				});
-			}
-		});
 
-		DataTableHelper.initEditorOnCallback(table, editor);
-		// 啟用 inline edit 機制 (如有需要)
-		DataTableHelper.inlineModePlugin(table);
-		DataTableHelper.injectInline(table, editor);
-		DataTableHelper.initEditConfirmation(editor);
+				var batchTagify;
+				var batchKeywordTagify;
 
-	}); // end ready
+				function initBatchTagify() {
+					if (typeof Tagify === 'undefined') return;
+					var tagInput = document.getElementById('batchTagName');
+					var keywordInput = document.getElementById('batchKeyword');
+					batchTagify = new Tagify(tagInput, {
+						dropdown: {
+							enabled: 0,
+							closeOnSelect: false
+						}
+					});
+					batchKeywordTagify = new Tagify(keywordInput, {
+							dropdown: {
+								enabled: 0,
+								closeOnSelect: false
+							}
+						});
+					var reset = function () {
+						$('#batchPreviewArea').hide();
+						$('#batchPreviewList').empty();
+						$('#btnConfirmBatchAdd').prop('disabled', true);
+					};
+					batchTagify.on('change', reset);
+					batchKeywordTagify.on('change', reset);
+				}
+
+				initBatchTagify();
+
+				function tagValues(tagify, $input) {
+					if (tagify) return tagify.value.map(function (t) { return $.trim(t.value); }).filter(function (t) { return t.length > 0; });
+					return $.trim($input.val()).split(/[,，]/).map(function (t) { return $.trim(t); }).filter(function (t) { return t.length > 0; });
+				}
+
+				function showBatchTaggingModal() {
+					if (batchTagify) {
+						batchTagify.removeAllTags();
+						var tagsToAdd = [];
+						var selectedRows = table.rows({ selected: true }).data().toArray();
+						if (selectedRows.length > 0) {
+							for (var i = 0; i < selectedRows.length; i++) {
+								if (selectedRows[i].tag) {
+									tagsToAdd.push(selectedRows[i].tag);
+								}
+							}
+						}
+
+						if (tagsToAdd.length > 0) {
+							batchTagify.addTags(tagsToAdd);
+						}
+					} else {
+						$('#batchTagName').val('');
+					}
+
+					if (batchKeywordTagify) {
+						batchKeywordTagify.removeAllTags();
+					} else {
+						$('#batchKeyword').val('');
+					}
+					$('#batchPreviewArea').hide();
+					$('#batchPreviewList').empty();
+					$('#btnConfirmBatchAdd').prop('disabled', true);
+					$('#batchTaggingModal').modal('show');
+				}
+
+				$('#btnPreviewBatch').on('click', function () {
+					var keywordsToSend = tagValues(batchKeywordTagify, $('#batchKeyword'));
+					if (keywordsToSend.length == 0) {
+						alert('請輸入關鍵字');
+						return;
+					}
+					var $btn = $(this);
+					$btn.prop('disabled', true);
+					$.ajax({
+						url: '{{baseUrl}}/ajax/GroupBuySysTagRef/previewBatchTagging.do',
+						type: 'POST',
+						data: { keyword: keywordsToSend.join(',') },
+						success: function (res) {
+							$btn.prop('disabled', false);
+							var d = (res && res.data) || {};
+							var list = d.recentGroupBuys || [];
+							var ul = $('#batchPreviewList').empty();
+							$('#batchPreviewCount').text(d.totalCount || 0);
+							$.each(list, function (i, gb) {
+								ul.append($('<li class="list-group-item py-1 px-2 small">').text(gb.groupBuyId + '　' + gb.title));
+							});
+							if (!list.length) ul.append('<li class="list-group-item py-1 px-2 small text-muted">沒有符合的結果</li>');
+							$('#batchPreviewArea').show();
+							$('#btnConfirmBatchAdd').prop('disabled', !(d.totalCount > 0));
+						},
+						error: function (xhr) {
+							$btn.prop('disabled', false);
+							var json = xhr.responseJSON || {};
+							alert(json.error || '系統錯誤，無法預覽。');
+						}
+					});
+				});
+
+				$('#btnConfirmBatchAdd').on('click', function () {
+					var tagsToSend = tagValues(batchTagify, $('#batchTagName'));
+					var keywordsToSend = tagValues(batchKeywordTagify, $('#batchKeyword'));
+					if (tagsToSend.length == 0) {
+						alert('請輸入標籤名稱');
+						return;
+					}
+					if (keywordsToSend.length == 0) {
+						alert('請輸入關鍵字');
+						return;
+					}
+					if (confirm('確定要將標籤對「' + tagsToSend.join(',') + '」批次加入搜尋結果中的所有近期團購表單嗎？')) {
+						$.ajax({
+							url: '{{baseUrl}}/ajax/GroupBuySysTagRef/addBatchTagging.do',
+							type: 'POST',
+							data: {
+								tag: tagsToSend.join(','),
+								keyword: keywordsToSend.join(',')
+							},
+							success: function (res) {
+								if (res.data !== undefined) {
+									if (res.data > 0) {
+										alert('已成功新增 ' + (res.data) + ' 筆標籤關聯');
+										$('#batchTaggingModal').modal('hide');
+										table.ajax.reload();
+									} else {
+										alert('新增失敗：0筆新增，沒有符合的結果');
+									}
+								} else {
+									alert('新增失敗：' + (res.error || '未知錯誤'));
+								}
+							},
+							error: function (xhr) {
+								var json = xhr.responseJSON || {};
+								alert(json.error ? '新增失敗：' + json.error : '系統錯誤，無法執行批次新增。');
+							}
+						});
+					}
+				});
+
+				DataTableHelper.initEditorOnCallback(table, editor);
+				// 啟用 inline edit 機制 (如有需要)
+				DataTableHelper.inlineModePlugin(table);
+				DataTableHelper.injectInline(table, editor);
+			});
 </script>
 <!--#body--><div class="container-fluid ">
 	<div class="card mt-4">
 		<div class="card-header">團購關鍵字標籤</div>
 		<div class="card-body">
 			<div class="blue-grey lighten-5 small p-2">
-				<p>＊此處可瀏覽與管理該團購帳號下曾經建立過的所有「系統標籤」</p>
+				<p>＊管理該團購帳號下曾經建立過的所有「系統標籤」</p>
 				<p>＊若某個標籤已不再被任何團購表單使用，將會由系統自動進行回收刪除</p>
 			</div>
 		</div>
@@ -363,9 +332,10 @@
 					</button>
 				</div>
 				<div class="modal-body">
-					<table class="table table-bordered table-sm">
+					<table class="table table-sm table-striped">
 						<thead>
 							<tr>
+								<th width="100px">團購編號</th>
 								<th>團購名稱</th>
 								<th width="100px" class="text-center">操作</th>
 							</tr>
@@ -402,12 +372,9 @@
 							</div>
 						</div>
 					</div>
-					<div id="batchPreviewArea" style="display:none;" class="mt-3">
-						<div class="alert alert-info">
-							找到 <span id="batchPreviewCount" class="font-weight-bold">0</span> 筆符合的團購表單，以下為部分預覽資訊
-						</div>
-						<ul id="batchPreviewList" class="list-group list-group-flush small" style="max-height: 200px; overflow-y: auto;">
-						</ul>
+					<div id="batchPreviewArea" style="display:none">
+						<p class="small mb-1">符合的團購：<span id="batchPreviewCount">0</span> 筆</p>
+						<ul id="batchPreviewList" class="list-group"></ul>
 					</div>
 				</div>
 				<div class="modal-footer">
@@ -418,6 +385,3 @@
 		</div>
 	</div>
 </div>
-<!--#foot-->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.css" rel="stylesheet" type="text/css" />
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.js"></script>

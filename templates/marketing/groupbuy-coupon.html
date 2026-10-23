@@ -1,34 +1,63 @@
-{{!-- 團購優惠卷（單一團購）/backend/GroupBuy/coupon?groupBuyId=：原站 spec/html/groupbuy-coupon.html；缺段已依原站頁面原始碼補齊 --}}
+{{!-- 團購優惠卷（單一團購）/backend/GroupBuy/coupon?groupBuyId=（無塵室重寫）
+     來源：spec/html/groupbuy-coupon.html 已擷取段落（頁面 style、Editor 欄位、列表 ajax/columns 開頭、工具列按鈕與 actionButton、
+     明細卡的優惠卷數量表與「產生優惠卷」彈窗連結、injectOpenEditor／injectXhrForJsonDefault、類別對應欄位標籤、
+     編輯時停用的欄位清單、綁定優惠條件時隱藏並歸零的欄位清單、樣板帶入的欄位清單、麵包屑與篩選）、
+     spec/runtime/groupbuy-coupon.records.txt、SPEC「團購優惠卷」與第 5 章列舉、dataTable.min.js（injectDetailsControl/injectOpenEditor）、
+     lib/modules/marketing/coupon.ts、coupon-template.ts（端點契約：/ajax/CouponTemplate/get 回列表信封）。
+     推導：列表 dom/serverSide 設定、第 5 欄（明細按鈕）、類別欄顯示 categoryString、明細卡第一個表頭與「查看優惠卷」連結、
+     useTemplate／couponTemplateId／category／customerOnly 的 dependent 規則（顯示/隱藏哪些欄位）、未列出類別的欄位標籤（沿用欄位預設標籤）、
+     「新增為樣板」說明的結尾、篩選下拉 change 重抓。 --}}
 <!--#head-->
+<style type="text/css">
+div.DTE_Field_Input {
+    width: 75%;
+}
+
+div.DTE_Field label{
+    text-align:left;
+}
+
+div.DTE_Field label.control-label{
+    text-align:left;
+}
+
+div.DTE_Field div{
+    width:100%;
+}
+.modal-dialog-quickMenu{height:100%;}
+.modal-dialog-quickMenu .modal-content {height:100%;}
+.modal-dialog-quickMenu .modal-body{position: absolute;top: 58px;bottom: 48px;overflow-y: auto;width:100%}
+.modal-dialog-quickMenu .modal-footer{position: absolute!important;width:100%;}
+
+@media (min-width: 576px) {
+	.modal .modal-fluid, .DTED .modal-dialog.modal-dialog-scrollable {width:90%;max-width:90%;}
+}
+@media (min-width: 992px) {
+	.modal-lg {max-width:calc(100vw - 100px);}
+}
+</style>
 {{> core/partials/dte-style.html}}
 <script type="text/javascript" class="init">
-	var table; // gbis table
-	var editor; // use a global for the submit and return data rendering in the examples
-	var salesRuleEditor;
-	var groupBuyCouponTable;
-	var salesRuleTable;
-	$.extend( true, $.fn.dataTable.defaults, {
-		"searching": false,
-		"pageLength":20,
-	} );
-
-	$(document).ready(function() {
-
-
+var groupBuyId = {{json groupBuyId}};
 var groupBuyCouponTableName = '#groupBuyCouponTable';
+var groupBuyCouponTable;
+var groupBuyCouponEditor;
+var couponEscHtml = function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); };
+
+$(document).ready(function() {
 groupBuyCouponEditor = new $.fn.dataTable.Editor( {
 	ajax: {
 		create: {
 			type: 'POST',
-			url: '{{baseUrl}}/ajax/GroupBuyCoupon/save.do?groupBuyId={{groupBuyId}}'
+			url: '{{baseUrl}}/ajax/GroupBuyCoupon/save.do?groupBuyId=' + groupBuyId
 		},
 		edit: {
 			type: 'POST',
-			url: '{{baseUrl}}/ajax/GroupBuyCoupon/update.do?groupBuyId={{groupBuyId}}&groupBuyCouponId=_id_'
+			url: '{{baseUrl}}/ajax/GroupBuyCoupon/update.do?groupBuyId=' + groupBuyId + '&groupBuyCouponId=_id_'
 		},
 		remove: {
 			type: 'POST',
-			url: '{{baseUrl}}/ajax/GroupBuyCoupon/delete.do?groupBuyId={{groupBuyId}}&groupBuyCouponId=_id_'
+			url: '{{baseUrl}}/ajax/GroupBuyCoupon/delete.do?groupBuyId=' + groupBuyId + '&groupBuyCouponId=_id_'
 		}
 	},
 	table: groupBuyCouponTableName,
@@ -59,20 +88,20 @@ groupBuyCouponEditor = new $.fn.dataTable.Editor( {
 		DataTableConfig.field_input('獲取數量','couponSettings.redeemNumber','1','','','當會員使用該折扣碼時，可獲得該折扣碼的數量，最少(預設)為1。若數量為3則該會員能使用同一個折扣碼3次。'),
 		DataTableConfig.field_input('相同折扣碼可被重複使用結帳次數(-1代表無限制)','availableQuota','-1','','輸入 -1 → 表示沒有限制，大家都可以一直用。輸入 2 → 表示這組折扣碼只能被用 2 次，之後就不能再用了。'),
 		DataTableConfig.field_checkbox_bool('可跨團使用','applyToAllGroupBuy',0,'該折扣碼可用於不同表單內。預設未勾取時，僅限定於該表單內使用'),
-		DataTableConfig.field_checkbox_bool('新增為樣板','createTemplate',0,'將此折扣碼設定保存至樣板方便日後新增同類型使用'),
+		DataTableConfig.field_checkbox_bool('新增為樣板','createTemplate',0,'將此折扣碼設定保存至樣板方便日後新增'),
 	],
 	formOptions:DataTableConfig.formOptions,
 	i18n:DataTableConfig.i18n,
 } );
 
 groupBuyCouponTable = $(groupBuyCouponTableName).DataTable( {
-	dom: 'lBfrtip',
-	serverSide:true,
-	processing:true,
+	dom: 'lBrtip',
+	serverSide: true,
+	processing: true,
 	scrollX: true,
 	lengthMenu: [10, 25, 50],
 	ajax: {
-		url:'{{baseUrl}}/ajax/GroupBuyCoupon/list.do?groupBuyId={{groupBuyId}}',
+		url:'{{baseUrl}}/ajax/GroupBuyCoupon/list.do?groupBuyId=' + groupBuyId,
 		type: "POST",
 		data: function ( d ) {
 			d.status = $('#groupBuyCouponStatus').val();
@@ -85,39 +114,16 @@ groupBuyCouponTable = $(groupBuyCouponTableName).DataTable( {
 		DataTableConfig.data_select_checkbox,
 		DataTableConfig.data_edit_control,
 		DataTableConfig.data_input('dateCreatedString'),
-		{ data: 'title',
+		DataTableConfig.data_input('title'),
+		{
+			data: 'category',
 			render: function ( data, type, row ) {
-				var html = '<br>';
-				var extra = '';
-				html += '<span class="badge badge-default m-1">優惠卷總數量'+row.couponTotal+'</span>';
-				html += '<span class="badge badge-default m-1">已使用優惠卷數量'+row.couponUsedTotal+'</span>';
-				html += '<span class="badge badge-default m-1">剩餘優惠卷數量'+row.couponAvailableTotal+'</span>';
-				if (row.availableQuota == -1) {
-					extra += '<span class="badge badge-info m-1">無限使用</span>';
-				}
-				if (row.status == 'DISABLED')
-					extra += '<span class="badge badge-danger">停用中</span>';
-				if (extra.length) {
-					extra = '<br>' + extra;
-				}
-				html += extra;
-				return data + html;
+				return $.fn.dataTable.render.text().display(row.categoryString || data);
 			}
 		},
-		{ data: 'category',
-			render: function ( data, type, row ) {
-				return renderOption(groupBuyCouponTable, row.category, 'category');
-			}
-		},
-		{ data: 'null',
-			render: function ( data, type, row ) {
-				var html = '';
-
-				html += '<button class="btn btn-default text-nowrap" data-action="generate">產生優惠卷</button>'
-
-				html += '<button class="btn btn-default text-nowrap" data-action="view">查看優惠卷</button>'
-				return html;
-			}
+		{
+			data: null,
+			defaultContent: '<button class="btn btn-row-details"><i class="fa-solid fa-chevron-right"></i></button>'
 		},
 	],
 	"order": [[ 2, "desc" ]],
@@ -125,19 +131,19 @@ groupBuyCouponTable = $(groupBuyCouponTableName).DataTable( {
 	keys: DataTableConfig.keysInlineTab,
 	buttons: [
 
-		{ extend: 'create', editor: groupBuyCouponEditor },
-		{ extend: 'edit',	editor: groupBuyCouponEditor },
-		{ extend: 'remove',	editor: groupBuyCouponEditor, className:'btn-danger' },
-		DataTableConfig.actionButton({
-				text:'啟用',
-				confirm:'啟用',
-				url:'{{baseUrl}}/ajax/GroupBuyCoupon/setActive',
-			}),
-		DataTableConfig.actionButton({
-			text:'停用',
-			confirm:'停用',
-			url:'{{baseUrl}}/ajax/GroupBuyCoupon/setDisabled',
-		}),
+	{ extend: 'create', editor: groupBuyCouponEditor },
+	{ extend: 'edit',	editor: groupBuyCouponEditor },
+	{ extend: 'remove',	editor: groupBuyCouponEditor, className:'btn-danger' },
+	DataTableConfig.actionButton({
+		text:'啟用',
+		confirm:'啟用',
+		url:'{{baseUrl}}/ajax/GroupBuyCoupon/setActive',
+	}),
+	DataTableConfig.actionButton({
+		text:'停用',
+		confirm:'停用',
+		url:'{{baseUrl}}/ajax/GroupBuyCoupon/setDisabled',
+	}),
 
 	],
 	initComplete: function () {
@@ -146,26 +152,22 @@ groupBuyCouponTable = $(groupBuyCouponTableName).DataTable( {
 } );
 
 function format ( d ) {
-	var id = d.groupBuyCouponId;
-	return ''
-		+ '<div class="card card-detail">'
-		+ '<div class="card-body">'
-		+ '<table class="table table-striped">'
-		+ '<tr class="">'
-		+ '<td>優惠卷總數量</td><td>已使用優惠卷數量</td><td>剩餘優惠卷數量</td>'
-		+ '</tr>'
-		+ '<tr><td>'+d.couponTotal+'</td>'+ '<td>'+d.couponUsedTotal+'</td>'+ '<td>'+d.couponAvailableTotal+'</td></tr>'
-		+ '</table>'
-		+ '</div>'
-		+ '<div class="card-footer"><div class="btn-toolbar btn-group">'
+	var id = encodeURIComponent(d.groupBuyCouponId);
+	return '<div class="card">'
+	+ '<div class="card-body">'
+	+ '<table class="table table-sm">'
+	+ '<tr><td>優惠卷總數量</td><td>已使用優惠卷數量</td><td>剩餘優惠卷數量</td>'
+	+ '</tr>'
+	+ '<tr><td>'+couponEscHtml(d.couponTotal)+'</td>'+ '<td>'+couponEscHtml(d.couponUsedTotal)+'</td>'+ '<td>'+couponEscHtml(d.couponAvailableTotal)+'</td></tr>'
+	+ '</table>'
+	+ '</div>'
+	+ '<div class="card-footer"><div class="btn-toolbar btn-group">'
 
-		+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF(\'/backend/GroupBuyCoupon/generateCoupon.do\', \'groupBuyCouponId='+id+'\')">產生優惠卷</a>'
-
-		+ '<a class="btn btn-default" href="/backend/Coupon/list.do?groupBuyCouponId='+id+'">查看優惠卷</a>'
-		+ '</div></div>'
-		+ '</div>'
-		;
-};
+	+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF(\'/backend/GroupBuyCoupon/generate.do\', \'groupBuyCouponId=' + id + '\')">產生優惠卷</a>'
+	+ '<a class="btn btn-default" href="/backend/Coupon/list.do?groupBuyCouponId=' + id + '">查看優惠卷</a>'
+	+ '</div></div>'
+	+ '</div>';
+}
 
 DataTableHelper.initEditorOnCallback(groupBuyCouponTable,groupBuyCouponEditor);
 //DataTableHelper.injectInline(groupBuyCouponTable, groupBuyCouponEditor);
@@ -176,18 +178,12 @@ DataTableHelper.injectXhrForJsonDefault(groupBuyCouponTable, {
 });
 
 injectDetailsControl(groupBuyCouponTableName, groupBuyCouponTable, format);
-var couponMeta = {
-	MINIMUM_PRICE_MEET:{
-		minimum:{
-			label:'訂單滿(金)額'
-		}
-	},
-	MINIMUM_PIECE_MEET:{
-		minimum:{
-			label:'訂單滿件數'
-		}
-	},
 
+$('#groupBuyCouponStatus.filters').on('change', function() {
+	groupBuyCouponTable.clear().ajax.reload();
+});
+
+var couponLabels = {
 	DISCOUNT_FOR_EVERY_MINIMUM_PURCHASE:{
 		minimum:{
 			label:'訂單每滿(金)額'
@@ -225,13 +221,48 @@ var couponMeta = {
 		}
 	},
 }
-groupBuyCouponEditor
-	.on( 'open', function (e,mode,action) {
-		var isCreate = (action == 'create');
 
-		if (isCreate) {
-			DataTableHelper.showHideAllColumns(groupBuyCouponEditor, false);
-			groupBuyCouponEditor.show('useTemplate');
+// 會隨類別顯示/隱藏的欄位
+var categoryFields = ['dollarOrPercentage','discount','minimum','applyToAllGroupBuy','salesRuleId','couponSettings.maxDiscount'];
+var detailFields = ['category','title','minimum','dollarOrPercentage','discount','couponSettings.maxDiscount','combinable','salesRuleId',
+	'couponSettings.customerOnly','couponSettings.royaltyProgramId[]','couponSettings.redeemNumber','availableQuota','applyToAllGroupBuy','createTemplate'];
+
+function usingTemplate() {
+	return groupBuyCouponEditor.mode() == 'create' && String(groupBuyCouponEditor.field('useTemplate').val()) == '1';
+}
+
+function loadCouponTemplate(couponTemplateId, callback) {
+	$.ajax({
+		type: 'GET',
+		url: '{{baseUrl}}/ajax/CouponTemplate/get.do',
+		data: { couponTemplateId: couponTemplateId },
+		success: function (res) {
+			var data = res && res.data;
+			if (!data) { callback({}); return; }
+			var settings = data.couponSettings || {};
+			groupBuyCouponEditor.set({
+				'category':data.category,
+				'title':data.title,
+				'dollarOrPercentage':data.dollarOrPercentage,
+				'discount':data.discount,
+				'minimum':data.minimum,
+				'availableQuota':data.availableQuota,
+				'combinable':data.combinable ? 1 : 0,
+				'couponSettings.customerOnly':settings.customerOnly ? 1 : 0,
+				'couponSettings.redeemNumber':settings.redeemNumber,
+				'couponSettings.royaltyProgramId[]':settings.royaltyProgramId || [],
+				'couponSettings.maxDiscount':settings.maxDiscount,
+			});
+			callback({ show: detailFields.filter(function (f) { return f != 'createTemplate'; }), hide: ['createTemplate'] });
+		},
+		error: function () {
+			callback({});
+		}
+	});
+}
+
+groupBuyCouponEditor
+	.on( 'initCreate', function () {
 			groupBuyCouponEditor.enable('category');
 			groupBuyCouponEditor.enable('dollarOrPercentage');
 			groupBuyCouponEditor.enable('discount');
@@ -239,166 +270,83 @@ groupBuyCouponEditor
 			groupBuyCouponEditor.enable('availableQuota');
 			groupBuyCouponEditor.enable('combinable');
 			groupBuyCouponEditor.enable('salesRuleId');
-			//groupBuyCouponEditor.enable('couponSettings.customerOnly');
-			//groupBuyCouponEditor.enable('couponSettings.redeemNumber');
 			groupBuyCouponEditor.enable('couponSettings.maxDiscount');
-		} else {
-			DataTableHelper.showHideAllColumns(groupBuyCouponEditor, true);
-			groupBuyCouponEditor.hide('useTemplate', true);
-			groupBuyCouponEditor.hide('couponTemplateId', true);
-			groupBuyCouponEditor.disable('category');
-			//var d = groupBuyCouponTable.rows( { selected: true } ).data()[0];
-			//if (d && d.couponTotal > 0) {
+	} )
+	.on( 'initEdit', function () {
 				groupBuyCouponEditor.disable('dollarOrPercentage');
 				groupBuyCouponEditor.disable('discount');
 				groupBuyCouponEditor.disable('minimum');
 				groupBuyCouponEditor.disable('availableQuota');
 				groupBuyCouponEditor.disable('combinable');
-				//groupBuyCouponEditor.disable('salesRuleId');
-				//groupBuyCouponEditor.disable('couponSettings.customerOnly');
-				//groupBuyCouponEditor.disable('couponSettings.redeemNumber');
 				groupBuyCouponEditor.disable('couponSettings.maxDiscount');
-			//}
-		}
-	})
+	} )
 	.dependent('useTemplate', function(val, data, callback) {
-		if (data.row) return {};
-		var show = hide = [];
-		if (val == '1') {
-			hide = ['category', 'createTemplate'];
-			show = ['couponTemplateId'];
-		} else {
-			//show = Object.keys(data.values);
-			hide = ['useTemplate', 'couponTemplateId'];
-			//show = show.filter(function(el) {return hide.indexOf(el) < 0});
-			show = ['category'];
-		}
-
-		return {
-			show:show,
-			hide:hide,
-		}
-	})
-	.dependent('couponTemplateId', function(val, data, callback) {
-		if (val == '' && data.values.useTemplate) {
-			var hide = [
-				'title',
-				'category',
-				//'priority',
-				'availableQuota',
-				'dollarOrPercentage',
-				'discount',
-				'minimum',
-				'applyToAllGroupBuy',
-				'salesRuleId',
-			];
-			return {
-				hide:hide
-			};
-		} else if (data.row) {
+		if (data.row) {
 			// update
 			return {
-				hide:['couponTemplateId'],
+				hide:['useTemplate','couponTemplateId','createTemplate'],
 			};
-		} else if (val) {
-			loadCouponTemplate(val, callback);
-		} else {
-			return {};
 		}
+		if (String(val) == '1') {
+			var tpl = groupBuyCouponEditor.field('couponTemplateId').val();
+			if (tpl) {
+				loadCouponTemplate(tpl, callback);
+				return;
+			}
+			return {
+				show:['couponTemplateId'],
+				hide:detailFields,
+			};
+		}
+		groupBuyCouponEditor.field('couponTemplateId').val('');
+		return {
+			hide:['couponTemplateId'],
+			show:detailFields,
+		};
+	})
+	.dependent('couponTemplateId', function(val, data, callback) {
+		if (data.row || !usingTemplate()) return {};
+		if (val) {
+			loadCouponTemplate(val, callback);
+			return;
+		}
+		return { hide: detailFields };
 	})
 	.dependent('category', function(val, data, callback) {
-		if (!data.values.couponTemplateId
-				&& data.values.useTemplate == '1'
-				&& !data.row
-				) {
-			return {};
+		if (usingTemplate() && !data.values.couponTemplateId) return {};
+		var show = [];
+		var hide = [];
+		var editor = groupBuyCouponEditor;
+		if (val == 'SALES_RULE') {
+			show.push('salesRuleId');
+			hide.push('dollarOrPercentage','discount','minimum','applyToAllGroupBuy','couponSettings.maxDiscount');
+			if (!data.row) {
+				editor.set('dollarOrPercentage','DOLLAR');
+				editor.set('discount','0');
+				editor.set('minimum','0');
+			}
+		} else if (val == 'FREE_SHIPPING_X') {
+			hide.push('dollarOrPercentage','discount','minimum','applyToAllGroupBuy','salesRuleId','couponSettings.maxDiscount');
+			if (!data.row) {
+				editor.set('discount','0');
+				editor.set('minimum','0');
+			}
+		} else if (val == 'FREE_SHIPPING') {
+			show.push('minimum','applyToAllGroupBuy');
+			hide.push('dollarOrPercentage','discount','salesRuleId','couponSettings.maxDiscount');
+		} else if (val == 'POINT') {
+			show.push('discount','applyToAllGroupBuy');
+			hide.push('dollarOrPercentage','minimum','salesRuleId','couponSettings.maxDiscount');
+		} else if (val == 'POINT_RANDOM') {
+			show.push('discount','minimum','applyToAllGroupBuy');
+			hide.push('dollarOrPercentage','salesRuleId','couponSettings.maxDiscount');
+		} else {
+			show.push('dollarOrPercentage','discount','minimum','applyToAllGroupBuy','couponSettings.maxDiscount');
+			hide.push('salesRuleId');
 		}
-		{{!-- 選項更新（每次列表重整）時 Editor 會對下拉觸發 change，此時可能沒有選中的類型；原站在下方 couponMeta[val] 會丟例外而中止，這裡直接略過（結果相同） --}}
-		if (!couponMeta[val]) {
-			return {};
-		}
-		var show = [
-			'title',
-			'category',
-			//'priority',
-			'availableQuota',
-			'dollarOrPercentage',
-			'discount',
-			'minimum',
-			'applyToAllGroupBuy',
-			'salesRuleId',
-			'couponSettings.customerOnly',
-			'couponSettings.maxDiscount',
-		];
-
-		var hide = [
-			'dollarOrPercentage',
-			'discount',
-			'minimum',
-			'applyToAllGroupBuy',
-			'salesRuleId',
-		];
-
-		switch (val) {
-		case 'SALES_RULE':
-			hide = hide.filter(function(el) {return el != 'salesRuleId'});
-			break;
-		case 'FREE_SHIPPING':
-			hide = hide.filter(function(el) {return el != 'applyToAllGroupBuy' && el != 'minimum'});
-			break;
-		case 'FREE_SHIPPING_X':
-			hide = hide.filter(function(el) {return el != 'applyToAllGroupBuy'});
-			break;
-		case 'POINT':
-			hide = [
-				'dollarOrPercentage',
-				'minimum',
-				'applyToAllGroupBuy',
-				'salesRuleId',
-				'couponSettings.maxDiscount',
-			];
-			break;
-		case 'POINT_RANDOM':
-			hide = [
-				'dollarOrPercentage',
-				'applyToAllGroupBuy',
-				'salesRuleId',
-				'couponSettings.maxDiscount',
-			];
-			break;
-		default:
-			hide = ['salesRuleId'];
-			break;
-		};
-
-		show = show.filter(function(el) {return hide.indexOf(el) < 0});
-
-		var descr = groupBuyCouponTable
-			.ajax
-			.json()
-			.options['category'].filter(o=>o.value == val);
-		if (descr.length) {
-			this.field('category').fieldInfo(descr[0].descr)
-		}
-
-		if (!this.label) {
-			this.label = {
-				discount : this.field('discount').label(),
-				minimum : this.field('minimum').label()
-			};
-		}
-
-		var lbDiscount = this.label.discount;
-		var lbMinimum = this.label.minimum;
-
-		if (couponMeta[val].discount) {
-			lbDiscount = couponMeta[val].discount.label;
-		}
-
-		if (couponMeta[val].minimum) {
-			lbMinimum = couponMeta[val].minimum.label;
-		}
-
+		var lbs = couponLabels[val] || {};
+		var lbMinimum = lbs.minimum && lbs.minimum.label ? lbs.minimum.label : '最小單位(金額/件數)';
+		var lbDiscount = lbs.discount && lbs.discount.label ? lbs.discount.label : '折扣(金額/折數)';
 		this.field('discount').label(lbDiscount);
 		this.field('minimum').label(lbMinimum);
 
@@ -408,147 +356,15 @@ groupBuyCouponEditor
 		};
 	})
 	.dependent('couponSettings.customerOnly', function(val, data, callback) {
-		//if (data.row) return {};
-		var show = hide = [];
-		if (val == '1') {
-			show = ['couponSettings.customerOnly','couponSettings.redeemNumber', 'couponSettings.royaltyProgramId[]'];
-		} else {
-			hide = ['couponSettings.redeemNumber', 'couponSettings.royaltyProgramId[]'];
-		}
-
-		return {
-			show:show,
-			hide:hide,
-		}
-	})
-	.on( 'preSubmit', function ( e, data, action ) {
-		if ( action == 'remove' ) return;
-		var fields = [
-			'title',
-		];
-		for (var i = 0; i < fields.length; i++) {
-			var field = this.field(fields[i]);
-			if (!field.val()) {
-				field.error('必填欄位');
-			}
-		}
-		if (this.inError()) return false;
-	})
-
-var showHideColumns = function() {
-	v = $('#DTE_Field_category').val();
-
-	if (v == 'SALES_RULE') {
-		DataTableHelper.showHideAllColumns(groupBuyCouponEditor, true);
-		groupBuyCouponEditor.hide('dollarOrPercentage');
-		groupBuyCouponEditor.hide('discount');
-		groupBuyCouponEditor.hide('minimum');
-		groupBuyCouponEditor.hide('applyToAllGroupBuy');
-		groupBuyCouponEditor.hide('couponSettings.maxDiscount');
-
-		groupBuyCouponEditor.set('dollarOrPercentage','0');
-		groupBuyCouponEditor.set('discount','0');
-		groupBuyCouponEditor.set('minimum','0');
-		groupBuyCouponEditor.set('applyToAllGroupBuy','');
-		groupBuyCouponEditor.set('couponSettings.maxDiscount','');
-	} else if (v == 'FREE_SHIPPING' || v == 'FREE_SHIPPING_X') {
-		DataTableHelper.showHideAllColumns(groupBuyCouponEditor, true);
-		groupBuyCouponEditor.hide('dollarOrPercentage');
-		groupBuyCouponEditor.hide('discount');
-		groupBuyCouponEditor.hide('minimum');
-		groupBuyCouponEditor.hide('applyToAllGroupBuy');
-		groupBuyCouponEditor.hide('salesRuleId');
-		groupBuyCouponEditor.hide('couponSettings.maxDiscount');
-
-		groupBuyCouponEditor.set('dollarOrPercentage','0');
-		groupBuyCouponEditor.set('discount','0');
-		groupBuyCouponEditor.set('minimum','0');
-		groupBuyCouponEditor.set('applyToAllGroupBuy','');
-		groupBuyCouponEditor.set('couponSettings.maxDiscount','');
-	} else {
-		groupBuyCouponEditor.show();
-		groupBuyCouponEditor.hide('salesRuleId', false);
-		groupBuyCouponEditor.set('salesRuleId','');
-	}
-	if (groupBuyCouponEditor.mode() == 'create') {
-
-	} else {
-		groupBuyCouponEditor.hide('couponTemplateId', false);
-	}
-}
-var loadCouponTemplate = function(couponTemplateId, callback) {
-	btnStartLoading($('.DTE_Form_Buttons button'));
-	jQuery.get(
-		'{{baseUrl}}/ajax/CouponTemplate/get.do',
-		{
-			'couponTemplateId':couponTemplateId
-		},
-		function(data) {
-			data = data.data;
-			// $('#DTE_Field_category').val(data.category);
-			// $('#DTE_Field_dollarOrPercentage').val(data.dollarOrPercentage);
-			// $('#DTE_Field_discount').val(data.discount);
-			// $('#DTE_Field_minimum').val(data.minimum);
-			// $('#DTE_Field_availableQuota').val(data.availableQuota);
-			//$('#DTE_Field_priority').val(data.priority);
-			btnStopLoading($('.DTE_Form_Buttons button'));
-			//showHideColumns();
-			if (!data.couponSettings) {
-				data.couponSettings = {};
-			}
-			var json = {
-				values:{
-					'title':data.title,
-					'category':data.category,
-					'dollarOrPercentage':data.dollarOrPercentage,
-					'discount':data.discount,
-					'minimum':data.minimum,
-					'availableQuota':data.availableQuota,
-					'couponSettings.customerOnly':data.couponSettings.customerOnly,
-					'couponSettings.redeemNumber':data.couponSettings.redeemNumber,
-					'couponSettings.royaltyProgramId[]':data.couponSettings.royaltyProgramId,
-					'couponSettings.maxDiscount':data.couponSettings.maxDiscount,
-				},
-			};
-			callback(json);
-		}
-	).fail(function(data) {
-		json = data.responseJSON;
-		$('.DTE_Form_Error').html(json.error);
-		btnStopLoading($('.DTE_Form_Buttons button'));
+		if (usingTemplate() && !data.values.couponTemplateId) return {};
+		var on = val == 1 || val == '1' || (val instanceof Array && val.length && val[0] == 1);
+		return on ? { show: ['couponSettings.royaltyProgramId[]','couponSettings.redeemNumber'] }
+			: { hide: ['couponSettings.royaltyProgramId[]','couponSettings.redeemNumber'] };
 	});
-}
-
-$(groupBuyCouponTableName +' tbody').on('click', 'button', function () {
-	var tr = $(this).closest('tr');
-	var row = groupBuyCouponTable.row( tr );
-	var id = row.data().groupBuyCouponId;
-	var action = $(this).attr('data-action');
-	if (action == null) return;
-
-	switch (action) {
-	case 'generate':
-		openFormF('/backend/GroupBuyCoupon/wizardGenCoupon.do', 'groupBuyCouponId='+id);
-		break;
-	case 'view':
-		window.open( '/backend/Coupon/list.do?groupBuyCouponId=' + id, '_blank');
-		break;
-	}
-});
-
-$('#groupBuy-coupon .filters').on('change', function() {
-	groupBuyCouponTable.clear().ajax.reload();
-});
-{{!-- 原站單頁版沒有 #groupBuy-coupon 容器，篩選器不會觸發重整；此處補上（推導：讓「額外搜尋條件」可用） --}}
-if ($('#groupBuy-coupon').length == 0) {
-	$('#groupBuyCouponStatus').on('change', function() {
-		groupBuyCouponTable.clear().ajax.reload();
-	});
-}
-	} ); // end ready
+} );
 </script>
 <!--#body--><div class="container-fluid ">
-	<nav aria-label="breadcrumb">
+<nav aria-label="breadcrumb">
 	<ol class="breadcrumb">
 		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
 		<li class="breadcrumb-item">{{groupBuy.title}}</li>

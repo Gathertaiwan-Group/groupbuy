@@ -1,13 +1,15 @@
-{{!-- 商品銷售標籤 /backend/GroupBuyItemCrmTag/list?groupBuyId=：原站 spec/html/groupbuyitemcrmtag-list.html；缺段已依原站頁面原始碼補齊 --}}
+{{!-- 商品銷售標籤 /backend/GroupBuyItemCrmTag/list?groupBuyId=（無塵室重寫）
+     來源：spec/html/groupbuyitemcrmtag-list.html 已擷取段落（Editor、欄位、按鈕事件的 disabled／showItems 分派）、
+     spec/runtime/groupbuyitemcrmtag-list.records.txt、dataTable.config.min.js、同站「商品系統標籤」頁（同結構）。
+     推導：列上按鈕文字「商品」與 class 尾段、showItems 導向的網址（/backend/ItemCrmTag/list，伺服器路由）、表格 dom 'lBrtip'；
+     標籤欄顯示改為先跳脫再加編輯圖示。 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
 <script type="text/javascript" class="init">
-
-	var groupBuyItemCrmTagTable;
+	var groupBuyId = {{json groupBuyId}};
 	$(document).ready(function() {
-		var groupBuyId = '{{groupBuyId}}';
 		var tableName = '#groupBuyItemCrmTagTable';
-		editor = new $.fn.dataTable.Editor( {
+		var editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
 					type: 'POST',
@@ -26,12 +28,19 @@
 			idSrc: 'groupBuyItemCrmTagId',
 			fields: [
 					DataTableConfig.field_input('標籤','tag'),
-					//DataTableConfig.field_input('???Item.weight???','weight'),
 			],
-			//template: '#custom_rp_form',
 			formOptions:DataTableConfig.formOptions,
 			i18n:DataTableConfig.i18n,
 		} );
+
+		// 可編輯欄（編輯圖示＋內容）：內容先跳脫
+		var dataInputEdit = function (name) {
+			var col = DataTableConfig.data_input(name, true);
+			col.render = function ( data, type, row ) {
+				return DataTableConfig.editIcon(type === 'display' ? $.fn.dataTable.render.text().display(data) : data, type, row);
+			};
+			return col;
+		};
 
 		var table = $(tableName).DataTable( {
 			dom: 'lBrtip',
@@ -46,17 +55,15 @@
 			language:DataTableConfig.i18n,
 			columns:[
 				DataTableConfig.data_select_checkbox,
-				DataTableConfig.data_input('tag', true),
-				//DataTableConfig.data_input('weight'),
+				dataInputEdit('tag'),
 				{
 					sortable:false,
 					render: function ( data, type, row ) {
 						var html = ''
-							+ '<button class="btn btn-default text-nowrap mt-0" data-action="showItems">商品</button>'
-							;
+							+ '<button class="btn btn-default text-nowrap mt-0" data-action="showItems">商品</button>';
 						return html;
 					}
-				}
+				},
 			],
 			keys: DataTableConfig.keysInlineTab,
 			"order": [[ 1, "asc" ]],
@@ -77,16 +84,13 @@
 		DataTableHelper.initEditorOnCallback(table,editor);
 		DataTableHelper.inlineModePlugin(table);
 		DataTableHelper.injectInline(table,editor);
-		groupBuyItemCrmTagTable = table;
 
-		$(tableName +' tbody').on('click', 'button', function (e) {
-			var td = $(this).closest('td');
-			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-			var data = row.data();
-			var action = $(this).attr('data-action');
-			if (action == null) return;
+		$(tableName + ' tbody').on('click', 'button[data-action]', function (e) {
+			e.stopPropagation();
 			var $btn = $(this);
+			if ($btn.hasClass('disabled')) return;
+			var data = table.row($btn.closest('tr')).data();
+			var action = $btn.attr('data-action');
 			$btn.addClass('disabled');
 			setTimeout(function () {
 				$btn.removeClass('disabled');
@@ -97,12 +101,11 @@
 				break;
 			}
 		});
-
-		var showItems = function(groupBuyItemCrmTagId) {
-			var href = '/backend/ItemCrmTag/list?groupBuyId='+groupBuyId+'&groupBuyItemCrmTagId=' + groupBuyItemCrmTagId;
-			window.open(href, '_blank');
-		}
 	} ); // end ready
+
+	function showItems(groupBuyItemCrmTagId) {
+		window.location = '/backend/ItemCrmTag/list?groupBuyId=' + encodeURIComponent(groupBuyId) + '&groupBuyItemCrmTagId=' + encodeURIComponent(groupBuyItemCrmTagId);
+	}
 </script>
 <!--#body--><div class="container-fluid ">
 	<div class="card mt-4">
