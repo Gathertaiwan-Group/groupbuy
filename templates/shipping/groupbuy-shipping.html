@@ -1,672 +1,362 @@
 <!--#head-->
 <style>
-tr.group,
-tr.group:hover {
-	background-color: rgba(0,0,0,.05) !important;
-}
-tr.group td {padding:6px}
-.btn.btn-flat{margin:0;padding:0 8px;font-size:1rem;border:0;}
-table#groupBuyItemSetFlatRateShippingTable tr[role=row] {background-color:initial;}
-table#groupBuyItemSetFlatRateShippingTable tr[role=row] td:first-child {padding-left: 40px;}
-table#groupBuyItemSetFlatRateShippingTable tr[role=row] td {font-weight:300}
-.btn[data-action*=add],.btn[data-action*=edit] {padding: 4px 6px 4px 6px;white-space: nowrap;margin: 0;}
-.btn[data-action=remove] {color:red;}
+tr.group, tr.group:hover { background-color: rgba(0,0,0,.05) !important; }
+tr.group td { padding: 6px; }
+.btn.btn-flat { margin: 0; padding: 0 8px; font-size: 1rem; border: 0; }
+#groupBuyItemSetFlatRateShippingTable tbody tr:not(.group) td { font-weight: 300; }
+#groupBuyItemSetFlatRateShippingTable tbody tr:not(.group) td:first-child { padding-left: 40px; }
+.btn[data-action^="add"], .btn[data-action^="edit"] { margin: 0; padding: 4px 6px; white-space: nowrap; }
+.btn[data-action="remove"] { color: red; }
 </style>
 {{> core/partials/dte-style.html}}{{> shipping/partials/flatrate-manager.html}}<script type="text/javascript" class="init">
+	// 團購運費規則（本站撰寫）：表單運費、品項運費、運費設定。端點與欄位依 SPEC／runtime 與本站 API。
+	var gbShipping = {
+		groupBuyId: {{json groupBuyId}},
+		ruleBadges: function (f) {
+			f = f || {};
+			var s = f.flatRateShippingSettings || {};
+			var b = function (text, cls) { return '<span class="badge ' + (cls || 'badge-default') + ' mr-1 mt-1">' + text + '</span>'; };
+			var out = '<i class="fa-light fa-shipping-fast mr-1"></i>' + $('<div>').text(f.title || '').html();
+			if (s.shippingTag) out += b('貨運標籤 ' + s.shippingTag, 'badge-info ml-1');
+			if (f.flatRateShippingTag) out += b('運費標籤 ' + f.flatRateShippingTag, 'badge-info ml-1');
+			out += '<br>' + b(f.categoryMessage || '') + '<br>';
+			if (f.x && f.y && f.z) out += b('滿足條件x ' + f.x) + b('基本運費 y ' + f.y) + b('滿足條件後基本運費 z ' + f.z) + '<br>';
+			if (f.islandFeeX && f.islandFeeY && f.islandFeeZ) out += b('外島滿足條件 x ' + f.islandFeeX) + b('外島費用 y ' + f.islandFeeY) + b('滿足條件後外島費用 z ' + f.islandFeeZ);
+			if (f.couponX) out += b('滿足條件x需搭配折扣碼', 'badge-info');
+			return out + b('運費類型 ' + (f.shippingTypeString || ''), 'badge-success');
+		},
+		lookup: function (extra) {
+			return {
+				delay: 350,
+				url: GBF.baseUrl + '/ajax/Lookup/flatRateShipping',
+				dataType: 'json',
+				data: function (params) { return $.extend({ q: params.term }, extra()); }
+			};
+		},
+		reloadAll: function () {
+			if (window.groupBuyFlatRateShippingTable) groupBuyFlatRateShippingTable.ajax.reload();
+			if (window.groupBuyItemSetFlatRateShippingTable) groupBuyItemSetFlatRateShippingTable.ajax.reload();
+		},
+		bindQuery: function () { return { bindMode: 1, bGroupBuyId: this.groupBuyId }; }
+	};
 
+	/* ── 表單運費 ── */
 	var groupBuyFlatRateShippingTable;
 	var groupBuyFlatRateShippingEditor;
-	$(document).ready(function() {
-		var groupBuyId = {{groupBuyId}};
-		var tableName = '#groupBuyFlatRateShippingTable';
-		var editor = new $.fn.dataTable.Editor( {
+	$(document).ready(function () {
+		var gb = gbShipping;
+		var sel = '#groupBuyFlatRateShippingTable';
+		var removeEditor = new $.fn.dataTable.Editor({
 			ajax: {
-				create: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyFlatRateShipping/save.do?' + 'groupBuyId=' + groupBuyId
-				},
-				remove: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyFlatRateShipping/delete.do?groupBuyFlatRateShippingId=_id_'
-				}
+				remove: { type: 'POST', url: '{{baseUrl}}/ajax/GroupBuyFlatRateShipping/delete.do?groupBuyFlatRateShippingId=_id_' }
 			},
-			table: tableName,
+			table: sel,
 			idSrc: 'groupBuyFlatRateShippingId',
+			fields: [],
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n
+		});
+		// 選取既有運費規則綁到此團購（可多選；可依 x／y／z／貨到付款／運費類型篩選）
+		var picker = new $.fn.dataTable.Editor({
+			ajax: {
+				create: { type: 'POST', url: '{{baseUrl}}/ajax/GroupBuyFlatRateShipping/save.do?groupBuyId=' + encodeURIComponent(gb.groupBuyId) }
+			},
+			table: sel,
+			idSrc: 'groupBuyFlatRateShippingId',
+			template: '#groupBuyFlatRateShippingPickerForm',
 			fields: [
-				//DataTableConfig.field_select2('團購運費規則:','flatRateShippingId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/flatRateShipping', false),
 				DataTableConfig.field_input('免運門檻(元或件)', 'x'),
 				DataTableConfig.field_input('基本運費', 'y'),
+				DataTableConfig.field_input('滿足條件後基本運費 z:', 'z'),
+				DataTableConfig.field_input('貨到付款:', 'payOnDeliveryFee'),
+				DataTableConfig.field_select('運費類型:', 'shippingType'),
 				{
-					label:'團購運費規則',
-					name:'flatRateShippingId_2',
-					type:'select2',
+					label: '團購運費規則',
+					name: 'flatRateShippingId_3',
+					type: 'select2',
 					opts: {
-						multiple:false,
-						inputClass:'input-large',
-						placeholder:'選擇(輸入關鍵字)',
-						dropdownAuthWidth:true,
-						language:GBF.language,
-						allowClear:true,
-						ajax:{
-							delay:350,
-							url:GBF.baseUrl + '/ajax/Lookup/flatRateShipping',
-							dataType:'json',
-							data:function(d) {
-								return {
-									q:d.term,
-									x:groupBuyFlatRateShippingEditor.field('x').val(),
-									y:groupBuyFlatRateShippingEditor.field('y').val()
-								}
+						multiple: true,
+						closeOnSelect: false,
+						placeholder: '選擇(輸入關鍵字)',
+						allowClear: true,
+						language: { noResults: function () { return $('<span>找不到符合的項目，請新增運費規則</span>'); } },
+						ajax: $.extend(gb.lookup(function () {
+							return {
+								x: picker.field('x').val(), y: picker.field('y').val(), z: picker.field('z').val(),
+								payOnDeliveryFee: picker.field('payOnDeliveryFee').val(), shippingType: picker.field('shippingType').val()
+							};
+						}), {
+							processResults: function (res) {
+								$('.btn-new-shipping').toggleClass('d-none', !!(res.results && res.results.length));
+								return res;
 							}
-						},
+						})
 					}
 				}
 			],
-			template:'#groupBuyFlatRateShippingForm',
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
-		} );
-
-		var table = $(tableName).DataTable( {
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n
+		});
+		picker.on('preSubmit', function (e, payload) {
+			$.each(payload.data, function (k, row) {
+				row.flatRateShippingId = row.flatRateShippingId_3;
+				delete row.flatRateShippingId_3;
+			});
+		});
+		var table = $(sel).DataTable({
 			dom: 'Bt',
-			//serverSide:true,
-			processing:true,
-			pageLength:50,
-			//"lengthMenu": [10, 25, 50, 100, 250],
-			ajax: {
-				url:'{{baseUrl}}/ajax/GroupBuyFlatRateShipping/list.do',
-				type: "POST",
-				data: {
-					groupBuyId:groupBuyId
+			processing: true,
+			pageLength: 50,
+			ajax: { url: '{{baseUrl}}/ajax/GroupBuyFlatRateShipping/list.do', type: 'POST', data: { groupBuyId: gb.groupBuyId } },
+			language: DataTableConfig.i18n,
+			columns: [
+				{ data: 'title', orderable: false, render: function (d, type, row) { return type === 'display' ? gb.ruleBadges(row.flatRateShippingForJson) : d; } },
+				{
+					data: null, 'class': 'inline-disabled', orderable: false,
+					render: function () {
+						return '<button class="btn btn-flat" data-action="remove" title="移除"><i class="fa-light fa-trash-can"></i></button>'
+							+ '<button class="btn btn-flat" data-action="edit" type="button" title="編輯運費規則"><i class="fa-light fa-pen-to-square"></i></button>';
+					}
 				}
-			},
-			language:DataTableConfig.i18n,
-			columns:[
-				{
-					data:'title',
-					orderable:false,
-					render: function ( data, type, row ) {
-						var f = row.flatRateShippingForJson;
-						var html = '<i class="fa-light fa-shipping-fast mr-1"></i>' + data;
-						if (f.flatRateShippingSettings.shippingTag) {
-							html += '<span class="badge badge-info ml-1 mt-1">貨運標籤 '+f.flatRateShippingSettings.shippingTag +'</span>';
-						}
-						if (f.flatRateShippingTag) {
-							html += '<span class="badge badge-info ml-1 mt-1">運費標籤 '+f.flatRateShippingTag +'</span>';
-						}
-						html += '<br>';
-						//html += '<span class="badge badge-default mr-1 mt-1">'+f.categoryString+'</span>';
-						html += '<span class="badge badge-default mr-1 mt-1">'+f.categoryMessage+'</span>';
-						html += '<br>';
-						// html += '<span class="badge badge-default mr-1 mt-1">滿足條件x '+f.x+'</span>';
-						// html += '<span class="badge badge-default mr-1 mt-1">基本運費 y '+f.y+'</span>';
-						// html += '<span class="badge badge-default mr-1 mt-1">滿足條件後基本運費 z '+f.z+'</span>';
-						// html += '<br>';
-						if (f.x !== 0 && f.y !== 0 && f.z !== 0) {
-							html += '<span class="badge badge-default mr-1 mt-1">滿足條件x '+f.x+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">基本運費 y '+f.y+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">滿足條件後基本運費 z '+f.z+'</span>';
-							html += '<br>';
-						}
-						if (f.islandFeeX !== 0 && f.islandFeeY !== 0 && f.islandFeeZ !== 0) {
-							html += '<span class="badge badge-default mr-1 mt-1">外島滿足條件 x '+f.islandFeeX+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">外島費用 y '+f.islandFeeY+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">滿足條件後外島費用 z '+f.islandFeeZ+'</span>';
-						}
-						if (f.couponX) {
-							html += '<span class="badge badge-info mr-1 mt-1">滿足條件x需搭配折扣碼</span>';
-						}
-						html += '<span class="badge badge-success mr-1 mt-1">運費類型 '+f.shippingTypeString+'</span>';
-						return html;
-					}
-				},
-				{
-					data:null,
-					class:'inline-disabled',
-					orderable:false,
-					render: function ( data, type, row ) {
-						var html = '';
-						html += '<button class="btn btn-flat" data-action="remove"><i class="fa-light fa-trash-can"></i></button>'
-						html += '<button class="btn btn-flat" data-action="edit" type="button" title="編輯運費規則"><i class="fa-light fa-pen-to-square"></i></button>'
-						return html;
-					}
-				},
 			],
 			keys: DataTableConfig.keysInlineTab,
-			"order": [[ 0, "asc" ]],
-			columnDefs: [
-				{ orderable: false, targets:[0,1] }
-			],
-			select: {
-				style: 'single'
-			},
+			order: [[0, 'asc']],
+			select: { style: 'single' },
 			buttons: [
-				//{ extend: 'create', editor: editor},
-				{ 
-					extend: 'create',
-					className: "btn-wizard-add",
-					text: '快速新增',
-					action: function ( e, dt, node, config ) {
-						openFormL(GBF.ctx + '/backend/FlatRateShipping/wizardBind.do');
-					}
-				}
+				{ text: '快速新增', className: 'btn-wizard-add', action: function () { openFormL(GBF.ctx + '/backend/FlatRateShipping/wizardBind.do'); } }
 			],
-			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
-			}
-		} );
-		
-		DataTableHelper.initEditorOnCallback(table,editor);
-		//DataTableHelper.inlineModePlugin(table);
-		//DataTableHelper.injectInline(table,editor);
-		
-		groupBuyFlatRateShippingTable = table;
-		groupBuyFlatRateShippingEditor = editor;
+			drawCallback: function () { $('.dataTables_scrollBody').floatingScroll(); }
+		});
+		DataTableHelper.initEditorOnCallback(table, removeEditor);
+		window.groupBuyFlatRateShippingTable = table;
+		window.groupBuyFlatRateShippingEditor = removeEditor;
+		gb.picker = picker;
 
 		flatRateShippingManager.buildDataTable('#hiddenFlatRateShippingTable');
-		flatRateShippingManager.editor
-		.on('postSubmit', function () {
-			groupBuyFlatRateShippingTable.ajax.reload();
-			groupBuyItemSetFlatRateShippingTable.ajax.reload();
-		} );
-		
-		flatRateShippingPickerManager.initEditor();
-		
-		$(tableName +' tbody').on('click', 'button', function () {
-			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-			var groupBuyFlatRateShippingId = row.data().groupBuyFlatRateShippingId;
-			var action = $(this).attr('data-action');
-			if (action == null) return;
-			
-			switch (action) {
-			case 'add':
-			case 'remove':
-				editor
-				.title('確定刪除')
-				.message('確定刪除')
-				.buttons({label:'確定操作?', className:'btn-danger', action: function () {this.submit();}})
-				.remove(row);
-				break;
-			case 'edit':
+		flatRateShippingManager.editor.on('postSubmit', function () { gb.reloadAll(); });
+
+		$(sel + ' tbody').on('click', 'button[data-action]', function () {
+			var row = table.row($(this).closest('tr'));
+			if ($(this).attr('data-action') === 'edit') {
 				flatRateShippingManager.showEditor(row.data().flatRateShippingId);
-				break;
+			} else {
+				removeEditor.title('確定刪除').message('確定移除此運費規則與團購的關聯？')
+					.buttons({ label: '確定刪除', className: 'btn-danger', action: function () { this.submit(); } })
+					.remove(row);
 			}
-			
-		} );
+		});
+	});
 
-		editor.on( 'preSubmit', function ( e, data, action ) {
-			$.each( data.data, function ( key, values ) {
-				data.data[ key ][ 'flatRateShippingId' ] = values['flatRateShippingId_2'];
-				data.data[ key ][ 'flatRateShippingId_2' ] = null;
-			} );
-		} );
-	}); // end ready
-
-	const flatRateShippingPickerManager = {
-		initEditor: function () {
-			const tableName = '#groupBuyFlatRateShippingTable';
-			const editor = new $.fn.dataTable.Editor({
-				ajax: {
-					create: {
-						type: 'POST',
-						url: GBF.baseUrl + '/ajax/GroupBuyFlatRateShipping/save.do',
-						data: function (d) {
-							d.groupBuyId = {{groupBuyId}};
-						}
-					},
-					remove: {
-						type: 'POST',
-						url:  '{{baseUrl}}/ajax/GroupBuyFlatRateShipping/delete.do?groupBuyFlatRateShippingId=_id_'
-					}
-				},
-				table: tableName,
-				template: '#groupBuyFlatRateShippingPickerForm',
-				fields: [
-					DataTableConfig.field_input('免運門檻(元或件)', 'x'),
-					DataTableConfig.field_input('基本運費', 'y'),
-					DataTableConfig.field_input('滿足條件後基本運費 z:', 'z'),
-					DataTableConfig.field_input('貨到付款:', 'payOnDeliveryFee'),
-					DataTableConfig.field_select('運費類型:', 'shippingType'),
-					{
-						label: '團購運費規則',
-						name: 'flatRateShippingId_3',
-						type: 'select2',
-						opts: {
-							multiple: true,
-							closeOnSelect: false,
-							inputClass: 'input-large',
-							placeholder: '選擇(輸入關鍵字)',
-							dropdownAuthWidth: true,
-							language: {
-								noResults: function () {
-									return $('<span>找不到符合的項目，請新增運費規則</span>');
-								}
-							},
-							allowClear: true,
-							ajax: {
-								delay: 350,
-								url: GBF.baseUrl + '/ajax/Lookup/flatRateShipping',
-								dataType: 'json',
-								data: function (d) {
-									return {
-										q: d.term,
-										x: editor.field('x').val(),
-										y: editor.field('y').val(),
-										z: editor.field('z').val(),
-										payOnDeliveryFee: editor.field('payOnDeliveryFee').val(),
-										shippingType: editor.field('shippingType').val()
-									};
-								},
-								processResults: function (data, param) {
-									if (!data.results || data.results.length === 0) {
-										$('.btn-new-shipping').removeClass('d-none');
-									} else {
-										$('.btn-new-shipping').addClass('d-none');
-									}
-									return data;
-								}
-							}
-						}
-					}
-				]
-			});
-			
-			editor.on( 'preSubmit', function ( e, data, action ) {
-				$.each( data.data, function ( key, values ) {
-					data.data[ key ][ 'flatRateShippingId' ] = values['flatRateShippingId_3'];
-					delete data.data[ key ][ 'flatRateShippingId_3' ];
-				} );
-			} );
-
-			this.editor = editor;
-		},
-		showCreateEditor: function () {
-			const _editor = this.editor;
-			_editor.create( {
-				title: '新增',
-				buttons: [
-					{
-						text: '新增運費規則',
-						className: 'btn-danger btn-new-shipping d-none',
-						action: function () {
-							_editor.close();
-							// Prepare for opening a new editor
-							const fields = {};
-							const x = _editor.field('x').val();
-							const y = _editor.field('y').val();
-							const z = _editor.field('z').val();
-							const payOnDeliveryFee = _editor.field('payOnDeliveryFee').val();
-							if (!!x && x.trim().length > 0) {
-								fields.x = x;
-							}
-							if (!!y && y.trim().length > 0) {
-								fields.y = y;
-							}
-							if (!!z && z.trim().length > 0) {
-								fields.z = z;
-							}
-							if (!!payOnDeliveryFee && payOnDeliveryFee.trim().length > 0) {
-								fields.payOnDeliveryFee = payOnDeliveryFee;
-							}
-							flatRateShippingManager.showCreateEditor( {
-								query: {
-									bindMode: 1,
-									bGroupBuyId: {{groupBuyId}}
-								},
-								fields: fields
-							} );
-						} // end action of 'add new shipping button'
-					},
-					{
-						text: '套用',
-						className: 'btn-primary',
-						action: function () {
-							_editor.submit();
-						}
-					}
-				] // end buttons
-			} );
-		}
-	}
-
+	// 精靈（/backend/FlatRateShipping/wizardBind）呼叫：選取既有規則／新增規則並綁定
 	function selectShippingAndBind() {
-		flatRateShippingPickerManager.showCreateEditor();
-	}
-
-	function createShippingAndBind() {
-		flatRateShippingManager.showCreateEditor({
-			query: {
-				bindMode: 1,
-				bGroupBuyId: {{groupBuyId}}
-			}
-		} );
-	}
-</script><script type="text/javascript" class="init">
-
-	var groupBuyItemSetFlatRateShippingTable;
-	var groupBuyItemSetFlatRateShippingEditor;
-	$(document).ready(function() {
-		var groupBuyId = {{groupBuyId}};
-		var tableName = '#groupBuyItemSetFlatRateShippingTable';
-		var editor = new $.fn.dataTable.Editor( {
-			ajax: {
-				create: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/save.do?' + 'groupBuyId=' + groupBuyId
-				},
-				edit: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/update.do?' + 'groupBuyId=' + groupBuyId
-				},
-				remove: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/delete.do?groupBuyItemSetFlatRateShippingId=_id_'
-				}
-			},
-			table: tableName,
-			idSrc: 'groupBuyItemSetFlatRateShippingId',
-			fields: [
-				//DataTableConfig.field_select2('團購運費規則:','flatRateShippingId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/flatRateShipping', false),
-				DataTableConfig.field_input('免運門檻(元或件)', 'x'),
-				DataTableConfig.field_input('基本運費', 'y'),
-				DataTableConfig.field_select('分類標籤', 'cateTag','','請選擇'),
-				{
-					label:'團購運費規則',
-					name:'flatRateShippingId',
-					type:'select2',
-					opts: {
-						multiple:false,
-						inputClass:'input-large',
-						placeholder:'選擇(輸入關鍵字)',
-						dropdownAuthWidth:true,
-						language:GBF.language,
-						allowClear:true,
-						ajax:{
-							delay:350,
-							url:GBF.baseUrl + '/ajax/Lookup/flatRateShipping',
-							dataType:'json',
-							data:function(d) {
-								d.q = d.term;
-								d.x = groupBuyItemSetFlatRateShippingEditor.field('x').val();
-								d.y = groupBuyItemSetFlatRateShippingEditor.field('y').val();
-								d.cateTag = groupBuyItemSetFlatRateShippingEditor.field('cateTag').val();
-								return d;
-							},
-							processResults: function (data, param) {
-								if (!data.results || data.results.length === 0) {
-									$('.btn-gbis-new-shipping').removeClass('d-none');
-								} else {
-									$('.btn-gbis-new-shipping').addClass('d-none');
-								}
-								return data;
-							}
-						},
-					}
-				},
-				{
-					label:'團購品項',
-					name:'groupBuyItemSetId',
-					type:'select2',
-					opts: {
-						multiple:true,
-						closeOnSelect:false,
-						inputClass:'input-large',
-						placeholder:'選擇(輸入關鍵字)',
-						dropdownAuthWidth:true,
-						language:GBF.language,
-						allowClear:true,
-						ajax:{
-							delay:350,
-							url:GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet',
-							dataType:'json',
-							data:function(d) {
-								d.q = d.term;
-								d.groupBuyId = groupBuyId;
-								d.cateTag = groupBuyItemSetFlatRateShippingEditor.field('cateTag').val()
-								return d;
-							}
-						},
-					}
-				},
-				//DataTableConfig.field_select2('團購品項:','groupBuyItemSetId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet?groupBuyId='+groupBuyId, true),
-			],
-			template:'#groupBuyItemSetFlatRateShippingForm',
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
-		} );
-
-		var groupColumn = 1;
-		var table = $(tableName).DataTable( {
-			dom: 'Bt',
-			//serverSide:true,
-			//processing:true,
-			//scrollX:true,
-			pageLength:50,
-			//"lengthMenu": [10, 25, 50, 100, 250],
-			ajax: {
-				url:'{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/list.do',
-				type: "POST",
-				data: {
-					groupBuyId:groupBuyId
-				}
-			},
-			language:DataTableConfig.i18n,
-			columns:[
-			//	DataTableConfig.data_input('itemSetTitle'),
-				{
-					data:'itemSetTitle',
-					orderable:false,
-					render: function ( data, type, row ) {
-						return data;
-					}
-				},
-				DataTableConfig.data_input('title', false, '', '', false),
-				{
-					data:null,
-					class:'inline-disabled',
-					orderable:false,
-					render: function ( data, type, row ) {
-						var html = '';
-						html += '<button class="btn btn-flat" data-action="remove"><i class="fa-light fa-trash-can"></i></button>'
-
-						return html;
-					}
-				},
-			],
-			columnDefs:{
-				targets:[0,1,2],
-				orderable:false,
-			},
-			keys: DataTableConfig.keysInlineTab,
-			"order": [[ 1, "asc" ]],
-			select: {
-				style: 'single'
-			},
+		var picker = gbShipping.picker;
+		picker.create({
+			title: '新增',
 			buttons: [
 				{
-					extend: 'create',
+					text: '新增運費規則',
+					className: 'btn-danger btn-new-shipping d-none',
+					action: function () {
+						var preset = {};
+						$.each(['x', 'y', 'z', 'payOnDeliveryFee'], function (i, k) {
+							var v = $.trim(picker.field(k).val() || '');
+							if (v) preset[k] = v;
+						});
+						picker.close();
+						flatRateShippingManager.showCreateEditor({ query: gbShipping.bindQuery(), fields: preset });
+					}
+				},
+				{ text: '套用', className: 'btn-primary', action: function () { picker.submit(); } }
+			]
+		});
+	}
+	function createShippingAndBind() {
+		flatRateShippingManager.showCreateEditor({ query: gbShipping.bindQuery() });
+	}
+
+	/* ── 品項運費 ── */
+	var groupBuyItemSetFlatRateShippingTable;
+	var groupBuyItemSetFlatRateShippingEditor;
+	$(document).ready(function () {
+		var gb = gbShipping;
+		var sel = '#groupBuyItemSetFlatRateShippingTable';
+		var q = '?groupBuyId=' + encodeURIComponent(gb.groupBuyId);
+		var editor = new $.fn.dataTable.Editor({
+			ajax: {
+				create: { type: 'POST', url: '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/save.do' + q },
+				edit: { type: 'POST', url: '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/update.do' + q },
+				remove: { type: 'POST', url: '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/delete.do?groupBuyItemSetFlatRateShippingId=_id_' }
+			},
+			table: sel,
+			idSrc: 'groupBuyItemSetFlatRateShippingId',
+			template: '#groupBuyItemSetFlatRateShippingForm',
+			fields: [
+				DataTableConfig.field_input('免運門檻(元或件)', 'x'),
+				DataTableConfig.field_input('基本運費', 'y'),
+				DataTableConfig.field_select('分類標籤', 'cateTag', '', '請選擇'),
+				{
+					label: '團購運費規則',
+					name: 'flatRateShippingId',
+					type: 'select2',
+					opts: {
+						multiple: false,
+						placeholder: '選擇(輸入關鍵字)',
+						allowClear: true,
+						language: GBF.language,
+						ajax: $.extend(gb.lookup(function () {
+							return { x: editor.field('x').val(), y: editor.field('y').val(), cateTag: editor.field('cateTag').val() };
+						}), {
+							processResults: function (res) {
+								$('.btn-gbis-new-shipping').toggleClass('d-none', !!(res.results && res.results.length));
+								return res;
+							}
+						})
+					}
+				},
+				{
+					label: '團購品項',
+					name: 'groupBuyItemSetId',
+					type: 'select2',
+					opts: {
+						multiple: true,
+						closeOnSelect: false,
+						placeholder: '選擇(輸入關鍵字)',
+						allowClear: true,
+						language: GBF.language,
+						ajax: {
+							delay: 350,
+							url: GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet',
+							dataType: 'json',
+							data: function (params) {
+								return { q: params.term, groupBuyId: gb.groupBuyId, cateTag: editor.field('cateTag').val() };
+							}
+						}
+					}
+				}
+			],
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n
+		});
+		var groupCol = 1;
+		var table = $(sel).DataTable({
+			dom: 'Bt',
+			pageLength: 50,
+			ajax: { url: '{{baseUrl}}/ajax/GroupBuyItemSetFlatRateShipping/list.do', type: 'POST', data: { groupBuyId: gb.groupBuyId } },
+			language: DataTableConfig.i18n,
+			columns: [
+				{ data: 'itemSetTitle', orderable: false },
+				DataTableConfig.data_input('title', false, '', '', false),
+				{
+					data: null, 'class': 'inline-disabled', orderable: false,
+					render: function () { return '<button class="btn btn-flat" data-action="remove" title="移除品項"><i class="fa-light fa-trash-can"></i></button>'; }
+				}
+			],
+			columnDefs: [{ targets: [0, 1, 2], orderable: false }],
+			keys: DataTableConfig.keysInlineTab,
+			order: [[groupCol, 'asc']],
+			select: { style: 'single' },
+			buttons: [
+				{
 					text: '新增',
-					className:'btn-primary',
-					action: function ( e, dt, node, config ) {
-						editor.create( {
+					className: 'btn-primary',
+					action: function () {
+						editor.create({
 							title: '新增',
 							buttons: [
 								{
 									text: '新增運費規則',
 									className: 'btn-danger btn-gbis-new-shipping d-none',
 									action: function () {
-										// Prepare for opening a new editor
-										const groupBuyItemSetIds = editor.field('groupBuyItemSetId').val();
-										if (!groupBuyItemSetIds || groupBuyItemSetIds.length === 0) {
+										var itemSets = editor.field('groupBuyItemSetId').val();
+										if (!itemSets || !itemSets.length) {
 											editor.field('groupBuyItemSetId').error('請先選擇品項才能新增運費規則');
 											return;
 										}
-										const fields = {};
-										const x = editor.field('x').val();
-										const y = editor.field('y').val();
-										if (!!x && x.trim().length > 0) {
-											fields.x = x;
-										}
-										if (!!y && y.trim().length > 0) {
-											fields.y = y;
-										}
-
+										var preset = {};
+										$.each(['x', 'y'], function (i, k) {
+											var v = $.trim(editor.field(k).val() || '');
+											if (v) preset[k] = v;
+										});
 										editor.close();
-
-										flatRateShippingManager.showCreateEditor( {
-											query: {
-												bindMode: 2,
-												groupBuyId: {{groupBuyId}},
-												'data[0][groupBuyItemSetId]': groupBuyItemSetIds
-											},
-											fields: fields
-										} );
+										flatRateShippingManager.showCreateEditor({
+											query: { bindMode: 2, groupBuyId: gb.groupBuyId, 'data[0][groupBuyItemSetId]': itemSets },
+											fields: preset
+										});
 									}
 								},
-								{
-									text: '新增',
-									className: 'btn-primary',
-									action: function () {
-										editor.submit();
-									}
-								}
-							] // end of buttons for create editor
-						} ); // end of create function call of editor
-					} // end of action of button
-				}
-				//{ extend: 'create', editor: editor }
-				//{ extend: 'edit', editor: editor },
-				//{ extend: 'remove', editor: editor, className:'btn-danger' },
-			],
-			xinitComplete: function () {
-				//DataTableConfig.initFooterSearch(this, [1,2,3,4,5],[0,0,0,0,0]);
-			},
-			drawCallback: function (settings) {
-				var api = this.api();
-				var rows = api.rows( {page:'current'} ).nodes();
-				var last=null;
-				var data = api.column(groupColumn, {page:'current'} ).data();
-				api.column(groupColumn, {page:'current'} ).data().each( function ( group, i ) {
-					if ( last !== group ) {
-						var flatRateShippingId = this.data()[i].flatRateShippingId;
-						
-						var f = this.data()[i].flatRateShippingForJson;
-						var html = '<i class="fa-light fa-shipping-fast mr-1"></i>' + f.title;
-						if (f.flatRateShippingSettings.shippingTag) {
-							html += '<span class="badge badge-info ml-1 mt-1">貨運標籤 '+f.flatRateShippingSettings.shippingTag +'</span>';
-						}
-						if (f.flatRateShippingTag) {
-							html += '<span class="badge badge-info ml-1 mt-1">運費標籤 '+f.flatRateShippingTag +'</span>';
-						}
-						html += '<br>';
-						// html += '<span class="badge badge-default mr-1 mt-1">'+f.categoryString+'</span>';
-						html += '<span class="badge badge-default mr-1 mt-1">'+f.categoryMessage+'</span>';
-						// html += '<span class="badge badge-default mr-1 mt-1">滿足條件x '+f.x+'</span>';
-						// html += '<span class="badge badge-default mr-1 mt-1">基本運費 y '+f.y+'</span>';
-						// html += '<span class="badge badge-default mr-1 mt-1">滿足條件後基本運費 z '+f.z+'</span>';
-						html += '<br>';
-						if (f.x !== 0 && f.y !== 0 && f.z !== 0) {
-							html += '<span class="badge badge-default mr-1 mt-1">滿足條件x '+f.x+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">基本運費 y '+f.y+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">滿足條件後基本運費 z '+f.z+'</span>';
-							html += '<br>';
-						}
-						if (f.islandFeeX !== 0 && f.islandFeeY !== 0 && f.islandFeeZ !== 0) {
-							html += '<span class="badge badge-default mr-1 mt-1">外島滿足條件 x '+f.islandFeeX+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">外島費用 y '+f.islandFeeY+'</span>';
-							html += '<span class="badge badge-default mr-1 mt-1">滿足條件後外島費用 z '+f.islandFeeZ+'</span>';
-						}
-						html += '<span class="badge badge-success mr-1 mt-1">運費類型 '+f.shippingTypeString+'</span>';
-						
-						$(rows).eq( i ).before(
-							'<tr class="group"><td>'+html+'</td>'+
-							'<td>'+
-							'<button class="btn btn-outline-dark btn-sm" data-action="add" data-flat-rate-shipping-id="'+flatRateShippingId+'">增加品項</button>'+
-							'<button class="btn btn-flat text-danger btn-gbisfrs" data-action="removeGBISFRS" type="button" title="刪除運費規則"><i class="fa-light fa-trash-can"></i></button>'+
-							'<button class="btn btn-flat btn-gbisfrs" data-action="edit"  data-flat-rate-shipping-id="'+flatRateShippingId+'" type="button" title="編輯運費規則"><i class="fa-light fa-pen-to-square"></i></button>'+
-							'</td>'+
-							'</tr>'
-						);
-						last = group;
+								{ text: '新增', className: 'btn-primary', action: function () { editor.submit(); } }
+							]
+						});
 					}
+				}
+			],
+			drawCallback: function () {
+				// 依運費規則分組：每組上方一列顯示規則與操作
+				var dtApi = this.api();
+				var nodes = dtApi.rows({ page: 'current' }).nodes();
+				var rows = dtApi.rows({ page: 'current' }).data();
+				var previous = null;
+				dtApi.column(groupCol, { page: 'current' }).data().each(function (name, i) {
+					if (name === previous) return;
+					previous = name;
+					var r = rows[i];
+					var id = r.flatRateShippingId;
+					$(nodes).eq(i).before('<tr class="group"><td>' + gb.ruleBadges(r.flatRateShippingForJson) + '</td><td>'
+						+ '<button class="btn btn-outline-dark btn-sm" data-action="add" data-flat-rate-shipping-id="' + id + '">增加品項</button>'
+						+ '<button class="btn btn-flat text-danger btn-gbisfrs" data-action="removeGBISFRS" type="button" title="刪除運費規則"><i class="fa-light fa-trash-can"></i></button>'
+						+ '<button class="btn btn-flat btn-gbisfrs" data-action="edit" data-flat-rate-shipping-id="' + id + '" type="button" title="編輯運費規則"><i class="fa-light fa-pen-to-square"></i></button>'
+						+ '</td></tr>');
 				});
-				$(".dataTables_scrollBody").floatingScroll();
+				$('.dataTables_scrollBody').floatingScroll();
 			}
-		} );
-		
-		DataTableHelper.initEditorOnCallback(table,editor);
-		//DataTableHelper.inlineModePlugin(table);
-		//DataTableHelper.injectInline(table,editor);
-		
-		editor.on('close', function(e) {
+		});
+		DataTableHelper.initEditorOnCallback(table, editor);
+		editor
+			.on('close', function () {
+				editor.field('flatRateShippingId').enable();
+				$('#groupBuyItemSetFlatRateShippingForm-filter').show();
+				editor.field('x').show();
+				editor.field('y').show();
+			})
+			.on('submitSuccess', function (e, json, data, action) {
+				if (action === 'create') table.ajax.reload();
+			});
+		window.groupBuyItemSetFlatRateShippingTable = table;
+		window.groupBuyItemSetFlatRateShippingEditor = editor;
 
-			editor.field( 'flatRateShippingId' ).enable();
-			$('#groupBuyItemSetFlatRateShippingForm-filter').show();
-			editor.field( 'x' ).show();
-			editor.field( 'y' ).show();
-		})
-		.on('submitSuccess', function(e, json, data, action) {
-			if ('create' === action) {
-				table.ajax.reload();
-			}
-		})
-		;
-		groupBuyItemSetFlatRateShippingTable = table;
-		groupBuyItemSetFlatRateShippingEditor = editor;
-		
-		$(tableName +' tbody').on('click', 'button', function () {
-			//var tr = $(this).closest('tr');
-			//var row = table.row( tr );
-			//var groupBuyItemSetFlatRateShippingId = row.data().groupBuyItemSetFlatRateShippingId;
-			var action = $(this).attr('data-action');
-			if (action == null) return;
-			
-			switch (action) {
+		$(sel + ' tbody').on('click', 'button[data-action]', function () {
+			var btn = $(this);
+			switch (btn.attr('data-action')) {
 			case 'add':
-				var flatRateShippingId = $(this).data('flatRateShippingId');
-				editor
-				.create({
-					title: '編輯',
-					buttons: '編輯'
-				})
-				.set('flatRateShippingId', flatRateShippingId);
-				editor.field( 'flatRateShippingId' ).disable();
+				editor.create({ title: '增加品項', buttons: '增加' }).set('flatRateShippingId', btn.data('flatRateShippingId'));
+				editor.field('flatRateShippingId').disable();
 				$('#groupBuyItemSetFlatRateShippingForm-filter').hide();
-				editor.field( 'x' ).hide();
-				editor.field( 'y' ).hide();
-				return;
+				editor.field('x').hide();
+				editor.field('y').hide();
+				break;
 			case 'remove':
-				var tr = $(this).closest('tr');
-				var row = table.row( tr );
-				editor
-				.title('確定刪除')
-				.message('確定刪除')
-				.buttons({label:'確定操作?', className:'btn-danger', action: function () {this.submit();}})
-				.remove(row);
+				editor.title('確定刪除').message('確定移除此品項的運費規則？')
+					.buttons({ label: '確定刪除', className: 'btn-danger', action: function () { this.submit(); } })
+					.remove(table.row(btn.closest('tr')));
 				break;
 			case 'edit':
-				const frsId = $(this).data('flatRateShippingId');
-				flatRateShippingManager.showEditor(frsId);
+				flatRateShippingManager.showEditor(btn.data('flatRateShippingId'));
 				break;
 			case 'removeGBISFRS':
-				const group = $(this).closest('tr');
-				const removeRows = [];
-				let _tr = group.next('tr');
-				while (_tr.length && !_tr.hasClass('group')) {
-					removeRows.push( table.row( _tr ).index() ); // data will be removed
-					_tr = _tr.next('tr');
+				var members = [];
+				var next = btn.closest('tr').next('tr');
+				while (next.length && !next.hasClass('group')) {
+					members.push(table.row(next).index());
+					next = next.next('tr');
 				}
-				editor
-				.title('刪除品項運費關聯')
-				.message('確定要刪除？刪除動作會解除以下' + removeRows.length + '個品項和此運費之間的關聯')
-				.buttons({label: '刪除', className: 'btn-danger', action: function () {this.submit();}})
-				.remove( removeRows );
-				;
+				editor.title('刪除品項運費關聯')
+					.message('確定要刪除？會解除以下 ' + members.length + ' 個品項和此運費之間的關聯')
+					.buttons({ label: '刪除', className: 'btn-danger', action: function () { this.submit(); } })
+					.remove(members);
 				break;
 			}
-		} );
-	} ); // end ready
+		});
+	});
 </script>
 <!--#body--><div class="container-fluid ">
 	<div class="row mt-4">
@@ -676,49 +366,29 @@ table#groupBuyItemSetFlatRateShippingTable tr[role=row] td {font-weight:300}
 				<button class="btn btn-primary js-open-freight-editor" type="button">點我編輯運費設定</button>
 
 <script>
-$(document).ready(function () {
-	let editor = new $.fn.dataTable.Editor( {
+$(function () {
+	// 運費設定（貨運標籤、不寄送外島／海外、期望配達日期、無有效運費規則敘述）
+	var freightEditor = new $.fn.dataTable.Editor({
 		ajax: '{{baseUrl}}/ajax/GroupBuy/updateFreight.do?groupBuyId={{groupBuyId}}',
 		fields: [
 			DataTableConfig.field_select('貨運標籤:', 'shippingTag'),
-			DataTableConfig.field_checkbox_bool('不寄送外島','islandDisabled',0),
-			DataTableConfig.field_checkbox_bool('不寄送海外','overseaDisabled',1),
-			DataTableConfig.field_datetime('指定期望配達日期(起):','dateExpectedShippingStart', 'YYYY-MM-DD', '可填寫指定日期，或是數字 (代表下單當天+N天開始)。註：週日固定不收'),
-			DataTableConfig.field_datetime('指定期望配達日期(迄):','dateExpectedShippingEnd'),
-			DataTableConfig.field_input_f('指定期望配達除外日:','dateExpectedShippingExceptDates', '多日期請用#號隔開，格式範例：2018-01-02#2018-01-10'),
-			DataTableConfig.field_textarea('無有效運費規則時敘述:','noFlatRateShipping'),
+			DataTableConfig.field_checkbox_bool('不寄送外島', 'islandDisabled', 0),
+			DataTableConfig.field_checkbox_bool('不寄送海外', 'overseaDisabled', 1),
+			DataTableConfig.field_datetime('指定期望配達日期(起):', 'dateExpectedShippingStart', 'YYYY-MM-DD', '可填寫指定日期，或是數字 (代表下單當天+N天開始)。註：週日固定不收'),
+			DataTableConfig.field_datetime('指定期望配達日期(迄):', 'dateExpectedShippingEnd'),
+			DataTableConfig.field_input_f('指定期望配達除外日:', 'dateExpectedShippingExceptDates', '多日期請用#號隔開，格式範例：2018-01-02#2018-01-10'),
+			DataTableConfig.field_textarea('無有效運費規則時敘述:', 'noFlatRateShipping')
 		],
-		formOptions:DataTableConfig.formOptions,
-		i18n:DataTableConfig.i18n,
-	})
-	.buttons([
-		{
-			label: '確認',
-			className: 'btn-primary',
-			tabIndex: 0,
-			action: function() {
-				this.submit();
-			}
-		}
-	]);
-
-	$('.js-open-freight-editor').click(function (event) {
-		$.ajax({
-			type: 'GET',
-			url: '{{baseUrl}}/ajax/GroupBuy/freight.do?groupBuyId={{groupBuyId}}',
-		})
-		.then(function (response) {
-			editor.field('shippingTag').update(response.options.shippingTag);
-			editor
-			.title('編輯運費設定')
-			.create()
-			.set(response.data);
-			
-			$('[data-toggle="popover"]').popover();
-			$('[data-toggle="popover"]').attr('data-toggle','');
-		})
-		.fail(function(xhr, status, error) {
-			console.error('Error load freight form:', error);
+		formOptions: DataTableConfig.formOptions,
+		i18n: DataTableConfig.i18n
+	}).buttons([{ label: '確認', className: 'btn-primary', action: function () { this.submit(); } }]);
+	$('.js-open-freight-editor').on('click', function () {
+		$.getJSON('{{baseUrl}}/ajax/GroupBuy/freight.do', { groupBuyId: {{json groupBuyId}} }).done(function (res) {
+			freightEditor.field('shippingTag').update((res.options || {}).shippingTag || []);
+			freightEditor.title('編輯運費設定').create().set(res.data || {});
+			$('[data-toggle="popover"]').popover().attr('data-toggle', '');
+		}).fail(function (xhr) {
+			messagebox('編輯運費設定', (xhr.responseJSON && xhr.responseJSON.error) || '讀取運費設定失敗', '關閉');
 		});
 	});
 });

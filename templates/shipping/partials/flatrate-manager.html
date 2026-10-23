@@ -1,4 +1,4 @@
-{{!-- 運費規則編輯器共用程式（原站 FlatRateShipping/list 與 GroupBuy/shipping 相同的 inline script）--}}
+{{!-- 運費規則編輯器共用程式（FlatRateShipping/list 與 GroupBuy/shipping 共用；本站撰寫，欄位依 runtime 紀錄）--}}
 <script type="text/javascript">        
 	var cityMap = {
 			'基隆市': 0,
@@ -26,11 +26,6 @@
 			'新竹縣': 22
 	};
 </script><script type="text/javascript">
-var ignoreSelectAllExtendedAreas = true;
-var ignoreSelectAllIslandAreas = true;
-var extendedAreas = [];
-var islandAreas = [209,210,211,212,880,881,882,883,884,885,890,891,892,893,894,896,929,951,952];
-
 const regions = [
 	{ label: "未指定", value: 'none' },
     { label: "東亞", value: 'eastAsia' },
@@ -61,1492 +56,411 @@ const regions = [
 	  africa: ['ZA', 'NG', 'EG', 'DZ', 'MA'],
 	  oceania: ['AU', 'NZ']
  	};
- 
-var isTWExisted = function() {
-	var countryList = $('#DTE_Field_flatRateShippingSettings-shippingCountry').val();
-	if (countryList == undefined)
-		return false;
-	
-	// workaround for older version
-	if (countryList.length == 0)
-		return true;
-		
-    for (var i = 0; i < countryList.length; i++) {
-        if (countryList[i] == 'TW')
-            return true;
-    }
-    return false;
-}
-
-var matchExtended = function(val) {
-	for (var i=0 ; i<extendedAreas.length ; i++) {
-		if (extendedAreas[i] == val)
-			return true;
-	}
-	return false;	
-}
-
-var matchExtendedFromSelect = function(val) {
-	var matched = false;
-	$('input[name^="DTE_Field_flatRateShippingSettings-extendedAreas\\[\\]_"]').each(function(){
-		if ($(this).prop('checked') == false)
-			return;
-		if ($(this).val() == val)
-			matched  = true;
-	});
-	
-	return matched;
-}
-
-var matchIsland = function(val) {
-	for (var i=0 ; i<islandAreas.length ; i++) {
-		if (islandAreas[i] == val)
-			return true;
-	}
-	return false;	
-}
-
-var shippingCountryFunc = function(countryList) {
-    var getAllCountries = function() {
-        var countries = [];
-        $('#DTE_Field_flatRateShippingSettings-shippingCountry').find('option').each(function() {
-            countries.push($(this).val());
-        });
-        return countries;
-    }
-
-    var updateShippingType = function(keepNormalOnly) {
-        $('#DTE_Field_flatRateShippingSettings-shippingType').find('option').each(function() {
-            if (keepNormalOnly) {
-                if ($(this).val() == 'NORMAL')
-                    $(this).prop('hidden', false);
-                else
-                    $(this).prop('hidden', true);
-            } else {
-                $(this).prop('hidden', false);
-            }
-        });
-
-        if (keepNormalOnly) {
-            $('#DTE_Field_shippingType').val('NORMAL').change();
-        }
-        
-        if (isTWExisted()) {
-        	$('#customForm5').prop('hidden', false);
-        	$('#customForm6').prop('hidden', false);
-        }
-        else {
-        	$('#customForm5').prop('hidden', true);
-        	$('#customForm6').prop('hidden', true);
-        }
-    }
-
-	var keepNormalOnly = false;
-    if (countryList != undefined && countryList.length > 0) {
-        countryList.forEach(function(item) {
-            if (item != 'TW')
-                keepNormalOnly = true;
-        });    	
-    }
-
-    updateShippingType(keepNormalOnly);
-}
-
-var shippingTypeFunc = function(type) {
-	if (type == 'EXCLUSIVE' || type == 'INCLUSIVE') {
-		$('.DTE_Field_Name_selectAllExtendedAreas').prop('hidden', false);
-		$('.DTE_Field_Name_selectAllIslandAreas').prop('hidden', false);
-		$('#flatRateShippingSettings-shippingAreas-cb').prop('hidden', false);
-		$('#flatRateShippingSettings-shippingAreas-cb').prev().prop('hidden', false);
-		return;
-	}
-	
-	$('.DTE_Field_Name_selectAllExtendedAreas').prop('hidden', true);
-	$('.DTE_Field_Name_selectAllIslandAreas').prop('hidden', true);
-	$('#flatRateShippingSettings-shippingAreas-cb').prop('hidden', true);
-	$('#flatRateShippingSettings-shippingAreas-cb').prev().prop('hidden', true);	
-}
-
-var initExtendAreas = function() {
-	if (extendedAreas.length == 0) {
-		$('#DTE_Field_extendedAreas\\[\\]').find('option').each(function(){
-			extendedAreas.push($(this).val());
-		});		
-	}
-	//console.log(extendedAreas);
-	$('#DTE_Field_extendedAreas\\[\\]').prop('disabled', true);
-	$('#DTE_Field_extendedAreas\\[\\]').val(extendedAreas).change();
-	
-	$('input[name^="DTE_Field_flatRateShippingSettings-extendedAreas\\[\\]_"]').each(function(){
-		if (matchExtended($(this).val())) {
-			$(this).prop('checked', true);
-			$(this).prop('disabled', true);
-		}
-	}).promise().done(function(){
-		updateParentLabel('DTE_Field_flatRateShippingSettings-extendedAreas');	
-	});
-}
-
-var initShipping = function(isCreate, editor) {
-	// init default extended areas
-	initExtendAreas();
-	
-	// remove
-	$('.DTE_Field_Name_extendedAreas\\[\\]').remove();
-	
-	if (isTWExisted()) {
-    	$('#customForm5').prop('hidden', false);
-    	$('#customForm6').prop('hidden', false);
-    	
-    }
-    else {
-    	$('#customForm5').prop('hidden', true);
-    	$('#customForm6').prop('hidden', true);
-    }
-	
-	if (isCreate || $('input[name="flatRateShippingSettings.shippingType"]:checked').val() == undefined) {
-		$('#DTE_Field_flatRateShippingSettings-shippingType_0').prop('checked', true)
-		shippingTypeFunc('NOT_USED');
-	}
-	
-	// init country areas
-	updateParentLabel('DTE_Field_flatRateShippingSettings-shippingAreas');
-	
-	ignoreSelectAllExtendedAreas = true;
-	ignoreSelectAllIslandAreas = true;
-
-	
- 	// for extend
-	var allChecked = true;
-	$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-		if (matchExtended($(this).val())) {
-			if (!$(this).prop('checked'))
-				allChecked = false;
-		}
-	}).promise().done(function(){
-		$('#DTE_Field_selectAllExtendedAreas_0').prop('checked', allChecked);	
-	});
-
-	// for island
- 	allChecked = true;
-	$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-		if (matchIsland($(this).val())) {
-			if (!$(this).prop('checked'))
-				allChecked = false;
-		}
-	}).promise().done(function(){
-		$('#DTE_Field_selectAllIslandAreas_0').prop('checked', allChecked);	
-	});
-	
-	if (!isCreate) {
-		editor.disable('shippingType');
-	} else {
-		editor.enable('shippingType');
-	}
-}
-
-var disableAllPostcode = function(prefix, data, checked) {
-	if (prefix != 'DTE_Field_flatRateShippingSettings-shippingAreas')
-		return;
-	
-	var nested = data.parent().next();
-	if (nested == undefined)
-		return;
-	
-	nested.find('input[name^="' + prefix + '\\[\\]_"]').each(function(){
-		$(this).prop('disabled', checked);			
-	});
-}
-
-var updateParentLabel = function(prefix) {
-	$('input[name^="' + prefix + '\\[\\]_"]').each(function(){
-		if ($(this).parent().attr('class') == 'node-with-childen') {
-			var nested = $(this).parent().next();
-			if (nested == undefined)
-				return;
-			
-			var hint = '';
-			var count = 0;
-			var totalCount = 0;
-			var num = 6;
-			nested.find('input[name^="' + prefix + '\\[\\]_"]').each(function(){
-				totalCount++;
-				if ($(this).prop('checked')) {
-					count++;
-					if (count < num) {
-						hint += $(this).val();
-						if (count < num - 1)
-							hint += ',';
-						else
-							hint += '...';
-					}
-				}
-			});
-
-			if (count == 0) {
-				hint = '';
-				$(this).prop('checked', false);
-				disableAllPostcode(prefix, $(this), false);
-			}
-			else if (totalCount == count) {
-				hint = 'All';
-				$(this).prop('checked', true);
-				disableAllPostcode(prefix, $(this), true);
-			}
-			else {
-				hint = '(' + count + ') ' + hint;
-				$(this).prop('checked', false);
-				disableAllPostcode(prefix, $(this), false);
-			}
-			
-			$(this).next().find('span').text(hint);
-		}
-	});
-}
-
-var detectAutoSelect = function(val, checked) {
-	//
-	// audo select all for extended
-	//
-	if (matchExtended(val) && checked == false) {
-		$('#DTE_Field_selectAllExtendedAreas_0').prop('checked', false);
-	}
-	else {
-		var allChecked = true;
-		$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-			if (matchExtended($(this).val())) {
-				if (!$(this).prop('checked'))
-					allChecked = false;
-			}
-		}).promise().done(function(){
-			$('#DTE_Field_selectAllExtendedAreas_0').prop('checked', allChecked);	
-		});
-	}
-	
-	//
-	// audo select all for island
-	//
-	if (matchIsland(val) && checked == false) {
-		$('#DTE_Field_selectAllIslandAreas_0').prop('checked', false);
-	}
-	else {
-		var allChecked = true;
-		$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-			if (matchIsland($(this).val())) {
-				if (!$(this).prop('checked'))
-					allChecked = false;
-			}
-		}).promise().done(function(){
-			$('#DTE_Field_selectAllIslandAreas_0').prop('checked', allChecked);	
-		});
-	}
-}
-
-var shippingAreaCount = function() {
-	var count = 0;
-	$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-		if ($(this).parent().attr('class') == 'node-with-childen') {
-			return;
-		}
-		if ($(this).prop('disabled')) {
-			return;
-		}
-		if ($(this).prop('checked')) {
-			count++;
-		}
-	})
-	return count;
-}
-
-var changeFunc = function(prefix, data) {	
-	//$('#' + prefix + '\\[\\]_0').prop('checked', false);
-	if (data.parent().attr('class') == 'node-with-childen') {
-		var children = data.parent().next();
-		children.find('.form-check-input').each(function(){
-			var checked = data.prop('checked');
-			var val = $(this).val();
-			if (prefix.indexOf('extendedAreas') > 0) {
-				extendedAreas.forEach(function(item){
-					if (val == item) {
-						checked = true;
-					}
-				});
-			}
-			
-			$(this).prop('checked', checked);
-		}).promise().done(function(){
-			detectAutoSelect(data.val(), data.prop('checked'));
-			updateParentLabel(prefix);	
-		});
-	}
-	else {
-		detectAutoSelect(data.val(), data.prop('checked'));
-		updateParentLabel(prefix);
-	}
-	
-	console.log(shippingAreaCount());
-	if (shippingAreaCount() > 60) {
-		if ((data.parent().attr('class') != 'node-with-childen') && data.prop('checked')) {
-			alert('單獨選取的鄉鎮市數目太多');
-			data.prop('checked', false);
-		}
-	}
-}
-
-var checkSubmitData = function(action, data) {
-	// strip submit data
-	Object.keys(data).forEach(function(groupBuyId){
-		var item = data[groupBuyId];
-		if (item.flatRateShippingSettings == undefined) {
-			return;
-		}
-
-		item.flatRateShippingSettings.shippingCountry = $('#DTE_Field_flatRateShippingSettings-shippingCountry').val();
-		if (item.flatRateShippingSettings.shippingCountry != undefined)
-			item.flatRateShippingSettings['shippingCountry-many-count'] = item.flatRateShippingSettings.shippingCountry.length;
-		
-		item.flatRateShippingSettings.shippingType = $('input[name="flatRateShippingSettings.shippingType"]:checked').val();
-			
-		// refill item.flatRateShippingSettings.shippingAreas
-		item.flatRateShippingSettings.shippingAreas = [];
-		var totalCount = 0;
-		var checkedCount = 0;
-		var city = undefined;
-		var areas = [];
-		var appendShippingAreas = function() {
-			//
-			// E.g. 金門(17: from cityMay_js.jsp) ＝[896,894,890,891,892,893]
-			// if checkedCount == totalCount(17)
-			//    shippingAreas.push(17)  --> for reducing transmission dasta
-			// else
-		    //    shippingAreas.push(all checked area)
-		    //
-			if (city != undefined) {
-				if (totalCount == checkedCount) {
-					// all postcode were selected.
-					if (cityMap[city] == undefined)
-						return;
-					item.flatRateShippingSettings.shippingAreas.push(cityMap[city]);
-				}	
-				else {
-					areas.forEach(function(postcode){
-						item.flatRateShippingSettings.shippingAreas.push(postcode);
-					});
-				}
-			}
-		}
-		$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-			if ($(this).parent().attr('class') == 'node-with-childen') {
-				appendShippingAreas();
-				city = $(this).next().text().replace('All','');
-				totalCount = 0;
-				checkedCount = 0;
-				areas = [];
-			}
-			else {
-				totalCount++;
-				if ($(this).prop('checked')) {
-					checkedCount++;
-					areas.push($(this).val());
-				}
-			}
-		})
-		appendShippingAreas();
-		
-		if (item.flatRateShippingSettings.extendedAreas) {
-			//
-			// default extendedAreas = [943,901,...]
-			// extendedAreas = [540,943,901,...]
-			// extendedAreas will remove all default extended area
-			//
-			
-			extendedAreas.forEach(function(code){
-				for (var i=0 ; i<item.flatRateShippingSettings.extendedAreas.length ; i++) {
-					if (item.flatRateShippingSettings.extendedAreas[i] == code) {
-						item.flatRateShippingSettings.extendedAreas.splice(i, 1);
-						break;
-					}
-				}
-			});
-			
-			item.flatRateShippingSettings['extendedAreas-many-count'] = item.flatRateShippingSettings.extendedAreas.length;
-		}
-	});	
-}
-
-var selectAllExtendedAreas = function(checked) {
-	if (ignoreSelectAllExtendedAreas) {
-		ignoreSelectAllExtendedAreas = false;
-		return;
-	}
-	$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-		if (matchExtendedFromSelect($(this).val())) {
-			$(this).prop('checked', checked);
-		}
-	}).promise().done(function(){
-		updateParentLabel('DTE_Field_flatRateShippingSettings-shippingAreas');	
-	});
-}
-
-var selectAllIslandAreas = function(checked) {
-	if (ignoreSelectAllIslandAreas) {
-		ignoreSelectAllIslandAreas = false;
-		return;
-	}
-	$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').each(function(){
-		if (matchIsland($(this).val())) {
-			$(this).prop('checked', checked);
-		}
-	}).promise().done(function(){
-		updateParentLabel('DTE_Field_flatRateShippingSettings-shippingAreas');	
-	});
-}
+/* 外島郵遞區號（公開資料：連江、澎湖、金門、琉球、綠島、蘭嶼）——「自動勾選預設外島選項」用 */
+var frsIslandPostcodes = ['209', '210', '211', '212', '880', '881', '882', '883', '884', '885', '890', '891', '892', '893', '894', '896', '929', '951', '952'];
 </script>{{> core/partials/dte-style.html}}<script>
-var twzipcode = {
-	'基隆市': { '仁愛區': '200', '信義區': '201', '中正區': '202', '中山區': '203', '安樂區': '204', '暖暖區': '205', '七堵區': '206' },
-	'台北市': { '中正區': '100', '大同區': '103', '中山區': '104', '松山區': '105', '大安區': '106', '萬華區': '108', '信義區': '110', '士林區': '111', '北投區': '112', '內湖區': '114', '南港區': '115', '文山區': '116' },
-	'新北市': {
-		'萬里區': '207', '金山區': '208', '板橋區': '220', '汐止區': '221', '深坑區': '222', '石碇區': '223',
-		'瑞芳區': '224', '平溪區': '226', '雙溪區': '227', '貢寮區': '228', '新店區': '231', '坪林區': '232',
-		'烏來區': '233', '永和區': '234', '中和區': '235', '土城區': '236', '三峽區': '237', '樹林區': '238',
-		'鶯歌區': '239', '三重區': '241', '新莊區': '242', '泰山區': '243', '林口區': '244', '蘆洲區': '247',
-		'五股區': '248', '八里區': '249', '淡水區': '251', '三芝區': '252', '石門區': '253'
-	},
-	'宜蘭縣': {
-		'宜蘭市': '260', '頭城鎮': '261', '礁溪鄉': '262', '壯圍鄉': '263', '員山鄉': '264', '羅東鎮': '265',
-		'三星鄉': '266', '大同鄉': '267', '五結鄉': '268', '冬山鄉': '269', '蘇澳鎮': '270', '南澳鄉': '272',
-		'釣魚台列嶼': '290'
-	},
-	'新竹市': { '東區': '300', '北區': '300', '香山區': '300' },
-	'新竹縣': {
-		'竹北市': '302', '湖口鄉': '303', '新豐鄉': '304', '新埔鎮': '305', '關西鎮': '306', '芎林鄉': '307',
-		'寶山鄉': '308', '竹東鎮': '310', '五峰鄉': '311', '橫山鄉': '312', '尖石鄉': '313', '北埔鄉': '314',
-		'峨嵋鄉': '315'
-	},
-	'桃園市': {
-		'中壢區': '320', '平鎮區': '324', '龍潭區': '325', '楊梅區': '326', '新屋區': '327', '觀音區': '328',
-		'桃園區': '330', '龜山區': '333', '八德區': '334', '大溪區': '335', '復興區': '336', '大園區': '337',
-		'蘆竹區': '338'
-	},
-	'苗栗縣': {
-		'竹南鎮': '350', '頭份市': '351', '三灣鄉': '352', '南庄鄉': '353', '獅潭鄉': '354', '後龍鎮': '356',
-		'通霄鎮': '357', '苑裡鎮': '358', '苗栗市': '360', '造橋鄉': '361', '頭屋鄉': '362', '公館鄉': '363',
-		'大湖鄉': '364', '泰安鄉': '365', '銅鑼鄉': '366', '三義鄉': '367', '西湖鄉': '368', '卓蘭鎮': '369'
-	},
-	'台中市': {
-		'中區': '400', '東區': '401', '南區': '402', '西區': '403', '北區': '404', '北屯區': '406', '西屯區': '407', '南屯區': '408',
-		'太平區': '411', '大里區': '412', '霧峰區': '413', '烏日區': '414', '豐原區': '420', '后里區': '421',
-		'石岡區': '422', '東勢區': '423', '和平區': '424', '新社區': '426', '潭子區': '427', '大雅區': '428',
-		'神岡區': '429', '大肚區': '432', '沙鹿區': '433', '龍井區': '434', '梧棲區': '435', '清水區': '436',
-		'大甲區': '437', '外埔區': '438', '大安區': '439'
-	},
-	'彰化縣': {
-		'彰化市': '500', '芬園鄉': '502', '花壇鄉': '503', '秀水鄉': '504', '鹿港鎮': '505', '福興鄉': '506',
-		'線西鄉': '507', '和美鎮': '508', '伸港鄉': '509', '員林市': '510', '社頭鄉': '511', '永靖鄉': '512',
-		'埔心鄉': '513', '溪湖鎮': '514', '大村鄉': '515', '埔鹽鄉': '516', '田中鎮': '520', '北斗鎮': '521',
-		'田尾鄉': '522', '埤頭鄉': '523', '溪州鄉': '524', '竹塘鄉': '525', '二林鎮': '526', '大城鄉': '527',
-		'芳苑鄉': '528', '二水鄉': '530'
-	},
-	'南投縣': {
-		'南投市': '540', '中寮鄉': '541', '草屯鎮': '542', '國姓鄉': '544', '埔里鎮': '545', '仁愛鄉': '546',
-		'名間鄉': '551', '集集鎮': '552', '水里鄉': '553', '魚池鄉': '555', '信義鄉': '556', '竹山鎮': '557',
-		'鹿谷鄉': '558'
-	},
-	'嘉義市': { '東區': '600', '西區': '600' },
-	'嘉義縣': {
-		'番路鄉': '602', '梅山鄉': '603', '竹崎鄉': '604', '阿里山': '605', '中埔鄉': '606', '大埔鄉': '607',
-		'水上鄉': '608', '鹿草鄉': '611', '太保市': '612', '朴子市': '613', '東石鄉': '614', '六腳鄉': '615',
-		'新港鄉': '616', '民雄鄉': '621', '大林鎮': '622', '溪口鄉': '623', '義竹鄉': '624', '布袋鎮': '625'
-	},
-	'雲林縣': {
-		'斗南鎮': '630', '大埤鄉': '631', '虎尾鎮': '632', '土庫鎮': '633', '褒忠鄉': '634', '東勢鄉': '635',
-		'臺西鄉': '636', '崙背鄉': '637', '麥寮鄉': '638', '斗六市': '640', '林內鄉': '643', '古坑鄉': '646',
-		'莿桐鄉': '647', '西螺鎮': '648', '二崙鄉': '649', '北港鎮': '651', '水林鄉': '652', '口湖鄉': '653',
-		'四湖鄉': '654', '元長鄉': '655'
-	},
-	'台南市': {
-		'中西區': '700', '東區': '701', '南區': '702', '北區': '704', '安平區': '708', '安南區': '709',
-		'永康區': '710', '歸仁區': '711', '新化區': '712', '左鎮區': '713', '玉井區': '714', '楠西區': '715',
-		'南化區': '716', '仁德區': '717', '關廟區': '718', '龍崎區': '719', '官田區': '720', '麻豆區': '721',
-		'佳里區': '722', '西港區': '723', '七股區': '724', '將軍區': '725', '學甲區': '726', '北門區': '727',
-		'新營區': '730', '後壁區': '731', '白河區': '732', '東山區': '733', '六甲區': '734', '下營區': '735',
-		'柳營區': '736', '鹽水區': '737', '善化區': '741', '大內區': '742', '山上區': '743', '新市區': '744',
-		'安定區': '745'
-	},
-	'高雄市': {
-		'新興區': '800', '前金區': '801', '苓雅區': '802', '鹽埕區': '803', '鼓山區': '804', '旗津區': '805',
-		'前鎮區': '806', '三民區': '807', '楠梓區': '811', '小港區': '812', '左營區': '813',
-		'仁武區': '814', '大社區': '815', '東沙群島': '817', '南沙群島': '819', '岡山區': '820', '路竹區': '821',
-		'阿蓮區': '822', '田寮區': '823',
-		'燕巢區': '824', '橋頭區': '825', '梓官區': '826', '彌陀區': '827', '永安區': '828', '湖內區': '829',
-		'鳳山區': '830', '大寮區': '831', '林園區': '832', '鳥松區': '833', '大樹區': '840', '旗山區': '842',
-		'美濃區': '843', '六龜區': '844', '內門區': '845', '杉林區': '846', '甲仙區': '847', '桃源區': '848',
-		'那瑪夏區': '849', '茂林區': '851', '茄萣區': '852'
-	},
-	'屏東縣': {
-		'屏東市': '900', '三地門鄉': '901', '霧臺鄉': '902', '瑪家鄉': '903', '九如鄉': '904', '里港鄉': '905',
-		'高樹鄉': '906', '鹽埔鄉': '907', '長治鄉': '908', '麟洛鄉': '909', '竹田鄉': '911', '內埔鄉': '912',
-		'萬丹鄉': '913', '潮州鎮': '920', '泰武鄉': '921', '來義鄉': '922', '萬巒鄉': '923', '崁頂鄉': '924',
-		'新埤鄉': '925', '南州鄉': '926', '林邊鄉': '927', '東港鎮': '928', '琉球鄉': '929', '佳冬鄉': '931',
-		'新園鄉': '932', '枋寮鄉': '940', '枋山鄉': '941', '春日鄉': '942', '獅子鄉': '943', '車城鄉': '944',
-		'牡丹鄉': '945', '恆春鎮': '946', '滿州鄉': '947'
-	},
-	'台東縣': {
-		'臺東市': '950', '綠島鄉': '951', '蘭嶼鄉': '952', '延平鄉': '953', '卑南鄉': '954', '鹿野鄉': '955',
-		'關山鎮': '956', '海端鄉': '957', '池上鄉': '958', '東河鄉': '959', '成功鎮': '961', '長濱鄉': '962',
-		'太麻里鄉': '963', '金峰鄉': '964', '大武鄉': '965', '達仁鄉': '966'
-	},
-	'花蓮縣': {
-		'花蓮市': '970', '新城鄉': '971', '秀林鄉': '972', '吉安鄉': '973', '壽豐鄉': '974', '鳳林鎮': '975',
-		'光復鄉': '976', '豐濱鄉': '977', '瑞穗鄉': '978', '萬榮鄉': '979', '玉里鎮': '981', '卓溪鄉': '982',
-		'富里鄉': '983'
-	},
-	'金門縣': { '金沙鎮': '890', '金湖鎮': '891', '金寧鄉': '892', '金城鎮': '893', '烈嶼鄉': '894', '烏坵鄉': '896' },
-	'連江縣': { '南竿鄉': '209', '北竿鄉': '210', '莒光鄉': '211', '東引鄉': '212' },
-	'澎湖縣': { '馬公市': '880', '西嶼鄉': '881', '望安鄉': '882', '七美鄉': '883', '白沙鄉': '884', '湖西鄉': '885' }
-};
-// ---
-
-(function ($, DataTable) {
-
-	if (!DataTable.ext.editorFields) {
-		DataTable.ext.editorFields = {};
-	}
-
-	var Editor = DataTable.Editor;
-	var _fieldTypes = DataTable.ext.editorFields;
-
-	_fieldTypes.checkbox_tree = {
-		_buildTree: function (root, data, tags) {
-			var node = _fieldTypes.checkbox_tree._searchTree(root, tags, 0);
-			node.data = data;
-			return root;
-		},
-		_searchTree: function (root, tags, depth) {
-
-			var targetNode = null;
-			if (depth < tags.length && root.nodes != null) {
-				for (var i = 0; i < root.nodes.length; i++) {
-					var node = root.nodes[i];
-					if (node.tag == tags[depth]) {
-						if (depth < tags.length - 1) {
-							targetNode = _fieldTypes.checkbox_tree._searchTree(node, tags, depth + 1);
-						} else {
-							targetNode = node;
-						}
-						break;
-					}
-				}
-			}
-			if (targetNode == null) {
-				targetNode = { tag: tags[depth] };
-				if (root.nodes == null) {
-					root.nodes = [];
-				}
-				root.nodes.push(targetNode);
-			}
-			return targetNode;
-		},
-		_optionHtml: function (conf, label, val, i, clazz) {
-			var safeId = Editor.safeId(conf.id) + '_' + i;
-			var disabled = (val == null || val.length == 0);
-			var disabledTag = disabled ? ' disabled' : '';
-			var tag = disabled ? '' : val;
-			var tagBadge = '<span class="badge badge-default ml-1" id="tag_' + safeId + '">' + tag + '</span>';
-			return ('<span class="' + clazz + '"><input id="' + safeId + '" name="' + safeId + '" type="checkbox" value="' + val + '" class="form-check-input" >' +
-				'<label for="' + safeId + '">' + label + tagBadge + '</label>' +
-				'</span>');
-		},
-		_optionHtmls: function (conf, root, currentNode) {
-			var html = '';
-			var isRoot = (currentNode == null);
-			if (isRoot) {
-				root.index = 0;
-				currentNode = root;
-				html += '<ul class="mb-1 pl-3 pb-2">';
-			}
-
-			for (var i = 0; currentNode.nodes != null && i < currentNode.nodes.length; i++) {
-				var node = currentNode.nodes[i];
-				var childrenCount = (node.nodes != null) ? node.nodes.length : 0;
-				html += '<li>';
-				if (childrenCount > 0) {
-					html += '<i class="fas fa-angle-right rotate mr-3"></i>';
-				}
-				var option = node.data;
-				var clazz = (childrenCount) ? 'node-with-childen' : 'node-no-children';
-				html += _fieldTypes.checkbox_tree._optionHtml(conf, option.label, option.value, root.index++, clazz);
-				if (childrenCount > 0) {
-					html += '<ul class="nested">';
-					html += _fieldTypes.checkbox_tree._optionHtmls(conf, root, node);
-					html += '</ul>';
-				}
-				html += '</li>';
-			}
-			if (isRoot) {
-				html += '</ul>';
-			}
-			return html;
-		},
-		_addOptions: function (conf, options) {
-			//var elOpts = conf._input[0].options;
-			//elOpts.length = 0;
-			if (options) {
-				var html = '<ul class="mb-1 pl-3 pb-2">';
-
-				var root = [];
-				for (var i = 0, ien = options.length; i < ien; i++) {
-					var option = options[i];
-					var tags = option.type.split(',');
-					root = _fieldTypes.checkbox_tree._buildTree(root, option, tags);
-				}
-
-				html = _fieldTypes.checkbox_tree._optionHtmls(conf, root, null);
-				conf._input.html(html);
-				conf._input.mdbTreeview();
-			}
-		},
+/* ───────── 縣市鄉鎮勾選欄位（本站撰寫的 Editor 自訂欄位 checkbox_tree） ─────────
+   選項格式 {label, value, type}：縣市節點 value 為空字串、type「01_縣市序」；鄉鎮 value 為郵遞區號、type「01_縣市序,02_鄉鎮序」。
+   值為郵遞區號陣列；舊資料若存整個縣市的序號（cityMap），設定時展開成該縣市全部鄉鎮。 */
+(function () {
+	var types = $.fn.dataTable.ext.editorFields;
+	var esc = function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); };
+	var refreshCities = function (conf) {
+		conf._input.find('li.frs-city').each(function () {
+			var $city = $(this);
+			var $leaves = $city.find('input.frs-leaf');
+			var picked = $leaves.filter(':checked');
+			$city.find('input.frs-city-box').prop('checked', $leaves.length > 0 && picked.length === $leaves.length)
+				.prop('indeterminate', picked.length > 0 && picked.length < $leaves.length);
+			var hint = picked.length === 0 ? '' : picked.length === $leaves.length ? '全部' : '(' + picked.length + ') ' + picked.map(function () { return this.value; }).get().slice(0, 5).join(',') + (picked.length > 5 ? '…' : '');
+			$city.find('.frs-city-hint').first().text(hint);
+		});
+	};
+	types.checkbox_tree = {
 		create: function (conf) {
-			var that = this;
-
-			conf._enabled = true;
-
-			// Create the elements to use for the input
-			conf._input = $('<div class="treeview"></div>');
-			_fieldTypes.checkbox_tree._addOptions(conf, conf.options || conf.ipOpts);
-			return conf._input;
+			conf._input = $('<div class="treeview frs-tree"></div>');
+			conf._input.on('change', 'input.frs-city-box', function () {
+				$(this).closest('li.frs-city').find('input.frs-leaf:not(:disabled)').prop('checked', this.checked);
+				refreshCities(conf);
+				conf._input.trigger('frs:change');
+			});
+			conf._input.on('change', 'input.frs-leaf', function () {
+				refreshCities(conf);
+				conf._input.trigger('frs:change');
+			});
+			conf._input.on('click', '.frs-toggle', function () {
+				$(this).closest('li.frs-city').children('ul').toggle();
+				$(this).toggleClass('fa-angle-right fa-angle-down');
+			});
+			if (conf.options) types.checkbox_tree.update(conf, conf.options);
+			return conf._input[0];
 		},
 		update: function (conf, options) {
-			conf.options = options;
-			_fieldTypes.checkbox_tree._addOptions(conf, options);
+			var current = types.checkbox_tree.get(conf);
+			var cities = [];
+			var byCity = {};
+			$.each(options || [], function (i, o) {
+				var key = String(o.type || '').split(',')[0];
+				if (o.value === '' || o.value === null || o.value === undefined) {
+					cities.push({ key: key, label: o.label });
+					byCity[key] = byCity[key] || [];
+				} else {
+					(byCity[key] = byCity[key] || []).push(o);
+				}
+			});
+			var base = $.fn.dataTable.Editor.safeId(conf.id);
+			var html = '<ul class="list-unstyled mb-1 pl-2">';
+			$.each(cities, function (ci, c) {
+				html += '<li class="frs-city" data-city="' + esc(c.label) + '">'
+					+ '<i class="fa fa-angle-right mr-2 frs-toggle" role="button"></i>'
+					+ '<input type="checkbox" class="form-check-input frs-city-box" id="' + base + '_c' + ci + '">'
+					+ '<label class="form-check-label" for="' + base + '_c' + ci + '">' + esc(c.label) + ' <span class="text-muted small frs-city-hint"></span></label>'
+					+ '<ul class="list-unstyled pl-4 mb-1" style="display:none">';
+				$.each(byCity[c.key] || [], function (li, o) {
+					var id = base + '_' + ci + '_' + li;
+					html += '<li class="d-inline-block mr-3"><input type="checkbox" class="form-check-input frs-leaf" name="' + base + '[]_' + ci + '_' + li + '" id="' + id + '" value="' + esc(o.value) + '">'
+						+ '<label class="form-check-label" for="' + id + '">' + esc(o.label) + '</label></li>';
+				});
+				html += '</ul></li>';
+			});
+			conf._input.html(html + '</ul>');
+			types.checkbox_tree.set(conf, current);
 		},
 		get: function (conf) {
-			return conf._input.find('input:checked').map(function () { return $(this).val(); }).get();
+			if (!conf._input) return [];
+			return conf._input.find('input.frs-leaf:checked').map(function () { return this.value; }).get();
 		},
 		set: function (conf, val) {
-			_fieldTypes.checkbox_tree._addOptions(conf, conf.options || conf.ipOpts);
-
-			// special case to shipping areas
-			if (conf.data == 'flatRateShippingSettings.shippingAreas[]' && val != '') {
-				val.forEach(function (code) {
-					var foundCity = undefined;
-					Object.keys(cityMap).forEach(function (city) {
-						if (cityMap[city] == code)
-							foundCity = city;
-					});
-
-					if (foundCity != undefined) {
-						Object.keys(twzipcode[foundCity]).forEach(function (district) {
-							val.push(parseInt(twzipcode[foundCity][district]));
-						});
-					}
-				});
-
-			}
-
-			if (val.length) {
-				var isSelected = function (opts, val) {
-					if (val == '')
-						return false;
-
-					for (var i = 0; i < opts.length; i++) {
-						if (parseInt(opts[i].value) == val)
-							return true;
-					}
-					return false;
+			var list = Array.isArray(val) ? val : (val === null || val === undefined || val === '' ? [] : String(val).split(','));
+			conf._input.find('input.frs-leaf').prop('checked', false);
+			$.each(list, function (i, v) {
+				v = String(v);
+				var cityName = null;
+				if (/^\d{1,2}$/.test(v)) {
+					$.each(cityMap, function (name, idx) { if (String(idx) === v) cityName = name; });
 				}
-				for (var i = 0; i < val.length; i++) {
-					if (isSelected(conf.options, val[i])) {
-						$(conf._input).find("input[value='" + val[i] + "']").prop('checked', true);
-					}
+				if (cityName) {
+					conf._input.find('li.frs-city').filter(function () { return $(this).attr('data-city') === cityName; }).find('input.frs-leaf').prop('checked', true);
+				} else {
+					conf._input.find('input.frs-leaf').filter(function () { return this.value === v; }).prop('checked', true);
 				}
-			}
+			});
+			refreshCities(conf);
 		},
-
-		enable: function (conf) {
-			conf._enabled = true;
-			$(conf._input).removeClass('disabled');
-		},
-
-		disable: function (conf) {
-			conf._enabled = false;
-			$(conf._input).addClass('disabled');
-		}
+		enable: function (conf) { conf._input.find('input').prop('disabled', false); },
+		disable: function (conf) { conf._input.find('input').prop('disabled', true); }
 	};
-})(jQuery, jQuery.fn.dataTable);
+	window.frsTreeCheck = function (fieldNode, postcodes, checked) {
+		var $tree = $(fieldNode).find('.frs-tree');
+		$tree.find('input.frs-leaf').filter(function () { return postcodes.indexOf(this.value) >= 0; }).prop('checked', checked);
+		$tree.find('input.frs-leaf').first().trigger('change');
+	};
+}());
 
-const flatRateShippingManager = {
-	buildDataTable: function (tableName) {
-		const shippingCountryChangeFunc = function () {
-			//shippingCountryFunc($(this).val());
+/* ───────── 運費規則管理（列表、編輯器、精靈用的新增／綁定） ───────── */
+var flatRateShippingManager = {
+	createUrl: '{{baseUrl}}/ajax/FlatRateShipping/save.do?groupBuyAccountId={{tenantCode}}',
+	bindCreateUrl: '{{baseUrl}}/ajax/FlatRateShipping/dSave.do?groupBuyAccountId={{tenantCode}}',
+	// 依付款方式語意：宅配不適用超商取貨付款與自取付款；超商只用超商付款取貨；自取不適用貨到付款與超商；其他不適用自取與貨到付款
+	paymentRules: {
+		NORMAL: ['PICKUP', 'CVS_PICKUP'],
+		CVS: ['PICKUP', 'PAY_ON_DELIVERY'],
+		PICKUP: ['CVS_PICKUP', 'PAY_ON_DELIVERY'],
+		INTL: ['PICKUP', 'PAY_ON_DELIVERY', 'CVS_PICKUP'],
+		HK_SF: ['PICKUP', 'PAY_ON_DELIVERY', 'CVS_PICKUP'],
+		NOD: ['PAY_ON_DELIVERY', 'CVS_PICKUP']
+	},
+	countryFields: ['quickCountry', 'flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded'],
+	fields: function () {
+		return [
+			DataTableConfig.field_select('運費類型', 'shippingType', null, null, '', '新增後無法修改'),
+			DataTableConfig.field_select('運費滿足條件', 'category'),
+			DataTableConfig.field_input('名稱', 'title'),
+			DataTableConfig.field_input('排序', 'seq', '', '', '有多種運費時，會以排序作為顯示順序'),
+			DataTableConfig.field_select('超商', 'flatRateShippingSettings.cvsType', '', '選擇'),
+			DataTableConfig.field_select2('自取門市設定', 'flatRateShippingSettings.tenantId', '', '選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/PickupStore/lookup', false),
+			{ label: '滿足條件x:', name: 'x', def: '0' },
+			{ label: '基本運費 y:', name: 'y', def: '0' },
+			{ label: '滿足條件後基本運費 z:', name: 'z', def: '0' },
+			{ label: '貨到付款:', name: 'payOnDeliveryFee', def: '0' },
+			DataTableConfig.field_input('外島滿足條件 x', 'islandFeeX'),
+			DataTableConfig.field_input('外島費用 y', 'islandFeeY'),
+			DataTableConfig.field_input('滿足條件後外島費用 z', 'islandFeeZ'),
+			DataTableConfig.field_select('偏遠方式費用方式', 'islandShippingRateType'),
+			{ label: '外島費用(舊選項僅用於舊版本):', name: 'islandFee', def: '0' },
+			{ label: '國外運費:', name: 'overseaFee', def: '0' },
+			{
+				label: '運費標籤:', name: 'flatRateShippingTag', type: 'textarea', attr: { rows: 6 },
+				fieldInfo: '格式：每行一組，越前面越優先。<br>訂單含標籤商品達指定件數：標籤名稱#基本運費#滿足條件後運費#E#件數（例：襪子#90#40#E#1）<br>'
+					+ '訂單含標籤商品達指定金額：標籤名稱#基本運費#滿足條件後運費#R#金額（例：襪子#90#40#R#500）'
+			},
+			DataTableConfig.field_input_f('限制性運費標籤', 'flatRateShippingSettings.restrictedShippingTag', '使用限制性運費標籤時，結帳只會出現相同限制性運費標籤的運費規則'),
+			DataTableConfig.field_checkbox_bool('品項運費規則計算以整張訂單計算:', 'subsetApplyFullAmount'),
+			DataTableConfig.field_checkbox('支援付款方式:', 'paymentMethods[]'),
+			DataTableConfig.field_checkbox('外島支援付款方式:', 'islandPaymentMethods[]'),
+			DataTableConfig.field_input('偏遠地區費用:', 'extendedAreaFee', '0'),
+			DataTableConfig.field_multiselect('偏遠地區:', 'extendedAreas[]'),
+			DataTableConfig.field_textarea('額外滿足條件(x#z):', 'flatRateShippingSettings.main.tieredPricesString', '', 6, '', '格式：滿足條件#運費（每行一組）<br>例：1999#200、2999#150、3999#0'),
+			DataTableConfig.field_textarea('外島額外滿足條件(x#z):', 'flatRateShippingSettings.island.tieredPricesString', '', 6, '', '格式：滿足條件#運費（每行一組）<br>例：1999#200、2999#150、3999#0'),
+			DataTableConfig.field_checkbox_bool('滿額免運成本需扣除分潤:', 'flatRateShippingSettings.freeShippingAsInternalShipping'),
+			DataTableConfig.field_select('貨運標籤:', 'flatRateShippingSettings.shippingTag', 'M'),
+			DataTableConfig.field_input('免運標題:', 'flatRateShippingSettings.freeShippingLabel', '免運'),
+			DataTableConfig.field_multiselect('配送國家/區域:', 'flatRateShippingSettings.shippingCountry', '', '選擇配送國家/區域', '', '配送國家/區域未指定時，代表所有國家/區域均配送'),
+			DataTableConfig.field_multiselect('（非）配送國家/區域:', 'flatRateShippingSettings.shippingCountryExcluded', '', '選擇（非）配送國家/區域', '', '配送及（非）配送國家/區域只需擇一設定'),
+			{ label: '', name: 'flatRateShippingSettings.shippingAreas[]', type: 'checkbox_tree' },
+			{ label: '', name: 'flatRateShippingSettings.extendedAreas[]', type: 'checkbox_tree' },
+			DataTableConfig.field_radio('運送設定:', 'flatRateShippingSettings.shippingType'),
+			DataTableConfig.field_checkbox_bool('自動勾選偏遠選項:', 'selectAllExtendedAreas'),
+			DataTableConfig.field_checkbox_bool('自動勾選預設外島選項:', 'selectAllIslandAreas'),
+			DataTableConfig.field_textarea('貨到付款額外滿足條件(x#z):', 'flatRateShippingSettings.payOnDeliveryFee.tieredPricesString', '', 6, '', '訂單滿多少金額#貨到付款費用，-1 代表不配送<br>例：999#60、2999#90、9999#-1'),
+			DataTableConfig.field_checkbox_bool('多商品運費不累加（僅收最高者）', 'flatRateShippingSettings.subsetApplyHighestAmount', 0, '訂單含多個品項運費時不累加，整筆只收各品項中最高的運費。'),
+			DataTableConfig.field_checkbox_bool('滿足優惠時運費不累加（僅收最低者）', 'flatRateShippingSettings.subsetApplyLowestAmount', 0, '達到優惠門檻時不累加各品項運費，整筆只收最低者。'),
+			DataTableConfig.field_checkbox_bool('滿足條件x需搭配折扣碼:', 'couponX', 0, '勾選後須使用相關折扣碼才會套用滿足條件 x，否則以基本運費 y 計算'),
+			DataTableConfig.field_textarea('運費說明', 'flatRateShippingSettings.descr', '', 3, '', '運費說明-限50字'),
+			DataTableConfig.field_input_f('商品重量上限:', 'flatRateShippingSettings.weightLimit', '商品重量超過上限時不能使用此運費；0 或空白代表不限制'),
+			DataTableConfig.field_input_f('商品金額上限:', 'flatRateShippingSettings.amountLimit', '商品總金額超過上限時不能使用此運費；0 或空白代表不限制'),
+			DataTableConfig.field_select('訂單現貨預購限制:', 'flatRateShippingSettings.orderStockType'),
+			{ type: 'radio', label: '快速設定', name: 'quickCountry', options: regions }
+		];
+	},
+	/* 依滿足條件顯示欄位標題與試算說明（本站撰寫，依「運費滿足條件」選項文字） */
+	categoryText: {
+		PRICE: { unit: '元', base: '總金額', per: false },
+		PRICE_TAG: { unit: '元', base: '總金額', per: false },
+		PIECE: { unit: '件', base: '總件數', per: false },
+		PIECE_TAG: { unit: '件', base: '總件數', per: false },
+		WEIGHT: { unit: '', base: '總重量', per: false },
+		PER_PIECE: { unit: '件', base: '總件數', per: true },
+		MIX: null,
+		STANDARD_FREE: null
+	},
+	explain: function (editor, island) {
+		var c = this.categoryText[editor.field('category').val()];
+		var names = island ? ['islandFeeX', 'islandFeeY', 'islandFeeZ'] : ['x', 'y', 'z'];
+		var num = function (n) { var v = parseFloat(editor.field(n).val()); return isNaN(v) ? 0 : v; };
+		var x = num(names[0]);
+		if (!c || x <= 0) return '';
+		var each = c.per ? '每件' : '';
+		return '試算：' + c.base + ' ' + x + c.unit + '（含）以內，' + each + '運費 ' + num(names[1]) + ' 元；超過 ' + x + c.unit + '，' + each + '運費 ' + num(names[2]) + ' 元';
+	},
+	labelsFor: function (category) {
+		var c = this.categoryText[category];
+		if (!c) {
+			return { x: '滿足條件x:', y: '基本運費 y:', z: '滿足條件後基本運費 z:', islandFeeX: '外島滿足條件 x', islandFeeY: '外島費用 y', islandFeeZ: '滿足條件後外島費用 z' };
+		}
+		var each = c.per ? '每件' : '';
+		return {
+			x: c.base + '門檻 x:', y: c.base + '在門檻以內' + each + '運費 y:', z: c.base + '超過門檻' + each + '運費 z:',
+			islandFeeX: '外島' + c.base + '門檻 x', islandFeeY: '外島' + c.base + '在門檻以內' + each + '費用 y', islandFeeZ: '外島' + c.base + '超過門檻' + each + '費用 z'
 		};
-		this.tableName = tableName;
-		this.editorCreateUrl = '{{baseUrl}}/ajax/FlatRateShipping/dSave.do?groupBuyAccountId={{tenantCode}}';
-
-		const editor = new $.fn.dataTable.Editor({
+	},
+	setupDependents: function (editor) {
+		var mgr = this;
+		var podShown = function (values) {
+			var has = function (list) { return $.inArray('PAY_ON_DELIVERY', list || []) >= 0; };
+			return has(values['paymentMethods[]']) || has(values['islandPaymentMethods[]']);
+		};
+		var podResult = function (values) {
+			var visible = [];
+			if (podShown(values)) {
+				visible.push('payOnDeliveryFee');
+				if (parseFloat(values.payOnDeliveryFee) > 0) visible.push('flatRateShippingSettings.payOnDeliveryFee.tieredPricesString');
+			}
+			var hidden = $.grep(['payOnDeliveryFee', 'flatRateShippingSettings.payOnDeliveryFee.tieredPricesString'], function (n) { return $.inArray(n, visible) < 0; });
+			return { show: visible, hide: hidden };
+		};
+		editor
+			.dependent('shippingType', function (val, data) {
+				var blocked = mgr.paymentRules[val] || [];
+				$.each(['paymentMethods[]', 'islandPaymentMethods[]'], function (i, name) {
+					var $boxes = $(editor.field(name).node()).find('input:checkbox');
+					$boxes.prop('disabled', false);
+					$boxes.filter(function () { return $.inArray(this.value, blocked) >= 0; }).prop('checked', false).prop('disabled', true);
+				});
+				var domestic = val === 'NORMAL' || val === 'CVS';
+				$('#customForm3, #customForm5, #customForm6').toggle(domestic);
+				$('button[jumpto=customForm3], button[jumpto=customForm5], button[jumpto=customForm6]').toggle(domestic);
+				var show = [], hide = [], values = {};
+				(val === 'CVS' ? show : hide).push('flatRateShippingSettings.cvsType');
+				(val === 'PICKUP' ? show : hide).push('flatRateShippingSettings.tenantId');
+				(val === 'NORMAL' ? show : hide).push('overseaFee');
+				$.each(mgr.countryFields, function (i, n) { ((val === 'INTL' || (val === 'HK_SF' && n !== 'quickCountry')) ? show : hide).push(n); });
+				if (val !== 'CVS') values['flatRateShippingSettings.cvsType'] = '';
+				if (val !== 'PICKUP') values['flatRateShippingSettings.tenantId'] = '';
+				if (val === 'HK_SF') values['flatRateShippingSettings.shippingCountry'] = ['HK'];
+				return { show: show, hide: hide, values: values };
+			})
+			.dependent('paymentMethods[]', function (val, data) { return podResult(data.values); })
+			.dependent('islandPaymentMethods[]', function (val, data) { return podResult(data.values); })
+			.dependent('payOnDeliveryFee', function (val, data) { return podResult(data.values); }, { event: 'change keyup' })
+			.dependent('category', function (val) {
+				var free = val === 'STANDARD_FREE';
+				return {
+					labels: mgr.labelsFor(val),
+					show: free ? [] : ['x', 'y', 'z'],
+					hide: free ? ['x', 'y', 'z'] : [],
+					messages: { z: mgr.explain(editor, false), islandFeeZ: mgr.explain(editor, true) }
+				};
+			})
+			.dependent(['x', 'y', 'z'], function () { return { messages: { z: mgr.explain(editor, false) } }; }, { event: 'change keyup' })
+			.dependent(['islandFeeX', 'islandFeeY', 'islandFeeZ'], function () { return { messages: { islandFeeZ: mgr.explain(editor, true) } }; }, { event: 'change keyup' })
+			.dependent('quickCountry', function (val) {
+				if (val === 'removeAll') return { values: { 'flatRateShippingSettings.shippingCountry': [] } };
+				if (countriesByRegion[val]) return { values: { 'flatRateShippingSettings.shippingCountry': countriesByRegion[val] } };
+				return {};
+			})
+			.dependent('flatRateShippingSettings.shippingType', function (val) {
+				var limited = val === 'INCLUSIVE' || val === 'EXCLUSIVE';
+				$('#flatRateShippingSettings-shippingAreas-cb').prev().toggle(limited);
+				if (!limited) $('#flatRateShippingSettings-shippingAreas-cb').collapse('hide');
+				var names = ['selectAllExtendedAreas', 'selectAllIslandAreas'];
+				return limited ? { show: names } : { hide: names };
+			})
+			.dependent('selectAllExtendedAreas', function (val) {
+				if (!mgr._opening) frsTreeCheck(editor.field('flatRateShippingSettings.shippingAreas[]').node(), mgr.extendedPostcodes(editor), !!Number(val));
+				return {};
+			})
+			.dependent('selectAllIslandAreas', function (val) {
+				if (!mgr._opening) frsTreeCheck(editor.field('flatRateShippingSettings.shippingAreas[]').node(), frsIslandPostcodes, !!Number(val));
+				return {};
+			});
+	},
+	extendedPostcodes: function (editor) {
+		var opts = $(editor.field('extendedAreas[]').node()).find('option').map(function () { return this.value; }).get();
+		return opts;
+	},
+	buildDataTable: function (tableName) {
+		var mgr = this;
+		mgr.tableName = tableName;
+		var hidden = tableName === '#hiddenFlatRateShippingTable';
+		if (hidden && $(tableName).length === 0) {
+			var heads = ['', '排序', '名稱', '運費類型', '運費滿足條件', '[滿足條件x]', '[基本運費 y]', '[滿足條件後基本運費 z]', '貨到付款', '國外運費'];
+			$('body').append('<div class="d-none"><table id="hiddenFlatRateShippingTable"><thead><tr>' + $.map(heads, function (h) { return '<th>' + h + '</th>'; }).join('') + '</tr></thead></table></div>');
+		}
+		var editor = new $.fn.dataTable.Editor({
 			ajax: {
-				create: {
-					type: 'POST',
-					url: '{{baseUrl}}/ajax/FlatRateShipping/save.do?groupBuyAccountId={{tenantCode}}'
-				},
-				edit: {
-					type: 'POST',
-					url: '{{baseUrl}}/ajax/FlatRateShipping/update.do?flatRateShippingId=_id_'
-				},
-				remove: {
-					type: 'POST',
-					url: '{{baseUrl}}/ajax/FlatRateShipping/delete.do?flatRateShippingId=_id_'
-				}
+				create: { type: 'POST', url: mgr.createUrl },
+				edit: { type: 'POST', url: '{{baseUrl}}/ajax/FlatRateShipping/update.do?flatRateShippingId=_id_' },
+				remove: { type: 'POST', url: '{{baseUrl}}/ajax/FlatRateShipping/delete.do?flatRateShippingId=_id_' }
 			},
 			table: tableName,
 			template: '#customForm',
 			idSrc: 'flatRateShippingId',
-			fields: [
-				DataTableConfig.field_select('運費類型', 'shippingType',null,null,'','新增後無法修改'),
-				DataTableConfig.field_select('運費滿足條件', 'category'),
-				DataTableConfig.field_input('名稱', 'title'),
-				DataTableConfig.field_input('排序', 'seq','','','有多種運費時，會以排序作為顯示順序'),
-				DataTableConfig.field_select('超商', 'flatRateShippingSettings.cvsType','','選擇'),
-				DataTableConfig.field_select2('自取門市設定', 'flatRateShippingSettings.tenantId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/PickupStore/lookup', false),
-/* 				{
-					type:  "select",
-					label: "超商",
-					name:  "cvsName",
-					options: [
-						{ label: "選擇", value: '' },
-						{ label: "統一超商", value: 'UNIMART' },
-						{ label: "全家", value: 'FAMI' },
-						{ label: "全家冷凍", value: 'FAMI_FROZEN' }
-					]
-				}, */
-				{
-					label: '滿足條件x:',
-					name: 'x',
-					def: '0'
-				},
-				{
-					label: '基本運費 y:',
-					name: 'y',
-					def: '0'
-				},
-				{
-					label: '滿足條件後基本運費 z:',
-					name: 'z',
-					def: '0'
-				},
-				{
-					label: '貨到付款:',
-					name: 'payOnDeliveryFee',
-					def: '0'
-				},
-				DataTableConfig.field_input('外島滿足條件 x', 'islandFeeX'),
-				DataTableConfig.field_input('外島費用 y', 'islandFeeY'),
-				DataTableConfig.field_input('滿足條件後外島費用 z', 'islandFeeZ'),
-				DataTableConfig.field_select('偏遠方式費用方式', 'islandShippingRateType'),
-				{
-					label: '外島費用(舊選項僅用於舊版本):',
-					name: 'islandFee',
-					def: '0'
-				},
-				{
-					label: '國外運費:',
-					name: 'overseaFee',
-					def: '0'
-				},
-				{
-					label: '運費標籤:',
-					name: 'flatRateShippingTag',
-					type: 'textarea',
-					attr: {
-						rows: 6
-					},
-					fieldInfo: '格式:<p>訂單包含標籤商品特定數量以上：<br>標籤名稱#基本運費金額#滿足條件後運費金額#E#商品件數。<br>範例，訂單含襪子1件以上時基本運費改為90，滿足運費門檻時運費40：<br>襪子#90#40#E#1。</p><p>訂單包含標籤商品特定金額以上：<br>標籤名稱#基本運費金額#滿足條件後運費金額#R#商品金額。<br>範例，訂單含襪子500元以上時基本運費改為90，滿足運費門檻時運費40：<br>襪子#90#40#R#500。</p><p>可多行，越前面的越優先</p>'
-				},
-				DataTableConfig.field_input_f('限制性運費標籤', 'flatRateShippingSettings.restrictedShippingTag', '當使用限制性運費標籤時，結帳時只有符合相同限制性運費標籤的運費規則能被選取'),
-				DataTableConfig.field_checkbox_bool('品項運費規則計算以整張訂單計算:', 'subsetApplyFullAmount'),
-				DataTableConfig.field_checkbox('支援付款方式:', 'paymentMethods[]'),
-				DataTableConfig.field_checkbox('外島支援付款方式:', 'islandPaymentMethods[]'),
-				DataTableConfig.field_input('偏遠地區費用:', 'extendedAreaFee', '0'),
-				DataTableConfig.field_multiselect('偏遠地區:', 'extendedAreas[]'),
-				// DataTableConfig.field_checkbox('配送外島:','islands[]'),
-				DataTableConfig.field_textarea('額外滿足條件(x#z):','flatRateShippingSettings.main.tieredPricesString', '', 6,'','格式:滿足條件#運費<br>範例:<br>1999#200<br>2999#150<br>3999#0'),
-				DataTableConfig.field_textarea('外島額外滿足條件(x#z):','flatRateShippingSettings.island.tieredPricesString', '', 6,'','格式:滿足條件#運費<br>範例:<br>1999#200<br>2999#150<br>3999#0'),
-				DataTableConfig.field_checkbox_bool('滿額免運成本需扣除分潤:', 'flatRateShippingSettings.freeShippingAsInternalShipping'),
-				DataTableConfig.field_select('貨運標籤:', 'flatRateShippingSettings.shippingTag', 'M'),
-				DataTableConfig.field_input('免運標題:', 'flatRateShippingSettings.freeShippingLabel', '免運'),
-				DataTableConfig.field_multiselect('配送國家/區域:', 'flatRateShippingSettings.shippingCountry', '', '選擇（非）配送國家/區域','', '配送國家/區域未指定時，代表所有國家/區域均配送'),
-				DataTableConfig.field_multiselect('（非）配送國家/區域:', 'flatRateShippingSettings.shippingCountryExcluded', '', '選擇（非）配送國家/區域','', '配送及（非）配送國家/區域只需擇一設定'),
-				{
-					label: '',
-					name: 'flatRateShippingSettings.shippingAreas[]',
-					type: 'checkbox_tree',
-					attr: {'class': 'form-check-input'},
-				},
-				{
-					label: '',
-					name: 'flatRateShippingSettings.extendedAreas[]',
-					type: 'checkbox_tree',
-					attr: {'class': 'form-check-input'},
-				},
-				DataTableConfig.field_radio('運送設定:', 'flatRateShippingSettings.shippingType'),
-				DataTableConfig.field_checkbox_bool('自動勾選偏遠選項:', 'selectAllExtendedAreas'),
-				DataTableConfig.field_checkbox_bool('自動勾選預設外島選項:', 'selectAllIslandAreas'),
-				DataTableConfig.field_textarea('貨到付款額外滿足條件(x#z):', 'flatRateShippingSettings.payOnDeliveryFee.tieredPricesString', '', 6, '', '訂單滿多少金額#貨到付款費用，-1代表不配送<br>範例:<br>999#60<br>2999#90<br>9999#-1'),
-				DataTableConfig.field_checkbox_bool('多商品運費不累加（僅收最高者）','flatRateShippingSettings.subsetApplyHighestAmount',0,'當訂單包含多個商品時，不疊加各商品的運費，整筆訂單僅收取單項運費最高的金額。<br>預設（未勾選）：運費直接累加（例如：$100 + $200 = $300）。<br>套用（勾選後）：品項 A 運費 $100、品項 B 運費 $200，整筆訂單僅收取 $200。', ''),
-				DataTableConfig.field_checkbox_bool('滿足優惠時運費不累加（僅收最低者）','flatRateShippingSettings.subsetApplyLowestAmount',0,'當訂單商品達到指定優惠門檻時，不疊加各商品的運費，整筆訂單僅收取優惠後最低的金額。<br>未達優惠門檻：運費依各商品正常累加（例如：$120 + $120 = $240）。<br>達優惠門檻後：若品項 A 優惠後運費為 $0、品項 B 為 $120，整筆訂單僅收取 $0。', ''),
-				DataTableConfig.field_checkbox_bool('滿足條件x需搭配折扣碼:','couponX',0,'套用此選項後，滿足條件x將不生效，運費會以基本運費y為主，直到訂單使用相關折扣碼'),
-				DataTableConfig.field_textarea('運費說明', 'flatRateShippingSettings.descr', '',3,'','運費說明-限50字'),
-				DataTableConfig.field_input_f('商品重量上限:','flatRateShippingSettings.weightLimit', '當「商品」重量超過上限時，該運費無法使用。0或未填代表不限制'),
-				DataTableConfig.field_input_f('商品金額上限:','flatRateShippingSettings.amountLimit', '當「商品」總金額超過上限時，該運費無法使用。0或未填代表不限制'),
-				DataTableConfig.field_select('訂單現貨預購限制:','flatRateShippingSettings.orderStockType'),
-				{
-					type:  "radio",
-					label: "快速設定",
-					name:  "quickCountry",
-					options: regions
-				},
-			],
+			fields: mgr.fields(),
 			formOptions: DataTableConfig.formOptions,
-			i18n: DataTableConfig.i18n,
-		} )
-		.dependent('shippingType', function(val, data, callback) {
-			var field = this.field('paymentMethods[]');
-			var islandField = this.field('islandPaymentMethods[]');
-			var $node = $(field.node());
-			var $islandNode = $(islandField.node());
-			var disabled = [];
-			var enabled = [];
-			var hide =[];
-			var show =[];
-			var values = {'flatRateShippingSettings.cvsType':''};
-			var isCreate = !data.row;
-			
-			$node.find('input:checkbox').prop('disabled',false);
-			$islandNode.find('input:checkbox').prop('disabled',false);
-
-			$('#customForm3').show();
-			$('#customForm5').show();
-			$('#customForm6').show();
-			$('button[jumpto=customForm5]').show()
-			$('button[jumpto=customForm6]').show()
-			
-			switch (val) {
-			case 'NORMAL':
-				disabled = ['PICKUP', 'CVS_PICKUP'];
-			//enabled = ['PAY_ON_DELIVERY'];
-				show = ['overseaFee']
-				hide = ['flatRateShippingSettings.cvsType','quickCountry','flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded'];
-				break;
-			case 'PICKUP':
-				disabled = ['CVS_PICKUP', 'PAY_ON_DELIVERY'];
-				//enabled = ['PICKUP'];
-				hide = ['flatRateShippingSettings.cvsType','quickCountry','flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded'];
-				$('#customForm3').hide();
-				$('#customForm5').hide();
-				$('#customForm6').hide();
-				$('button[jumpto=customForm5]').hide()
-				$('button[jumpto=customForm6]').hide()
-				break;
-			case 'CVS':
-				disabled = ['PICKUP','PAY_ON_DELIVERY'];
-				show = ['flatRateShippingSettings.cvsType'];
-				//enabled = ['CVS_PICKUP'];
-				// only show when creating, it will assign/create the correct shippingTag
-				if (isCreate) {
-					hide = ['quickCountry','flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded']
-				} else {
-					hide = ['quickCountry','flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded'];
-				}
-				values = {};
-				break;
-			case 'INTL':
-				disabled = ['PICKUP','PAY_ON_DELIVERY'];
-				//enabled = ['CVS_PICKUP'];
-				hide = ['overseaFee']
-				show = ['quickCountry','flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded'];
-				values = {};
-				$('#customForm3').hide();
-				$('#customForm5').hide();
-				$('#customForm6').hide();
-				$('button[jumpto=customForm5]').hide()
-				$('button[jumpto=customForm6]').hide()
-				break;
-			case 'HK_SF':
-				disabled = ['PICKUP','PAY_ON_DELIVERY'];
-				//enabled = ['CVS_PICKUP'];
-				hide = ['overseaFee','quickCountry']
-				show = ['flatRateShippingSettings.shippingCountry', 'flatRateShippingSettings.shippingCountryExcluded'];
-				values = {'flatRateShippingSettings.shippingCountry':'HK'};
-				$('#customForm3').hide();
-				$('#customForm5').hide();
-				$('#customForm6').hide();
-				$('button[jumpto=customForm5]').hide()
-				$('button[jumpto=customForm6]').hide()
-				break;
-			}
-			disabled.forEach(o=> {
-				$node.find('input:checkbox[value="'+o+'"]').prop('checked',false);
-				$node.find('input:checkbox[value="'+o+'"]').prop('disabled',true);
-				$islandNode.find('input:checkbox[value="'+o+'"]').prop('checked',false);
-				$islandNode.find('input:checkbox[value="'+o+'"]').prop('disabled',true);
-			})
-			enabled.forEach(o=> {
-				$node.find('input:checkbox[value="'+o+'"]').prop('checked',true);
-				//$islandNode.find('input:checkbox[value="'+o+'"]').prop('checked',true);
-			})
-
-			if (val === 'PICKUP') {
-				show.push('flatRateShippingSettings.tenantId');
-			} else {
-				hide.push('flatRateShippingSettings.tenantId');
-				values['flatRateShippingSettings.tenantId'] = '';
-			}
-
-			return {hide:hide,show:show,values:values};
-		})
-		.dependent('paymentMethods[]', function (val, data, callback) {
-			var show = [];
-			var pod = false
-			for (var i in val) {
-				switch (val[i]) {
-					case 'PAY_ON_DELIVERY':
-						pod = true;
-						break;
-					default:
-						break;
-				}
-			}
-			if (!pod) {
-				pod = data.values['islandPaymentMethods[]'].filter(p => p == 'PAY_ON_DELIVERY').length > 0;
-			}
-			if (pod) {
-				show.push('payOnDeliveryFee');
-				if (data.values.payOnDeliveryFee > 0)
-					show.push('flatRateShippingSettings.payOnDeliveryFee.tieredPricesString');
-			}
-			var hide = ['payOnDeliveryFee', 'flatRateShippingSettings.payOnDeliveryFee.tieredPricesString'];
-			hide = hide.filter(function (el) {
-				return show.indexOf(el) < 0;
-			});
-			return {
-				show: show,
-				hide: hide
-			};
-		})
-		.dependent('islandPaymentMethods[]', function (val, data, callback) {
-			var show = [];
-			var pod = false;
-			for (var i in val) {
-				switch (val[i]) {
-					case 'PAY_ON_DELIVERY':
-						pod = true;
-						break;
-					default:
-						vb = true;
-						break;
-				}
-			}
-			if (!pod) {
-				pod = data.values['paymentMethods[]'].filter(p => p == 'PAY_ON_DELIVERY').length > 0;
-			}
-			if (pod) {
-				show.push('payOnDeliveryFee');
-				if (data.values.payOnDeliveryFee > 0)
-					show.push('flatRateShippingSettings.payOnDeliveryFee.tieredPricesString');
-			}
-			var hide = ['payOnDeliveryFee', 'flatRateShippingSettings.payOnDeliveryFee.tieredPricesString'];
-			hide = hide.filter(function (el) {
-				return show.indexOf(el) < 0;
-			});
-			return {
-				show: show,
-				hide: hide
-			};
-		}).dependent('payOnDeliveryFee', function (val, data, callback) {
-			var p = parseInt(val);
-			var hide = [];
-			var show = [];
-			var values = {};
-			if (p > 0) show = ['flatRateShippingSettings.payOnDeliveryFee.tieredPricesString'];
-			else {
-				hide = ['flatRateShippingSettings.payOnDeliveryFee.tieredPricesString'];
-				values['flatRateShippingSettings.payOnDeliveryFee.tieredPricesString'] = '';
-			}
-			return {
-				show: show,
-				hide: hide,
-				values: values,
-			};
-		})
-		.dependent('category', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.categoryReturnedOptions(this);
-		})
-		.dependent('x', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.xyzReturnedOptions(this);
-		}, {
-			event: 'change keyup'
-		})
-		.dependent('y', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.xyzReturnedOptions(this);
-		}, {
-			event: 'change keyup'
-		})
-		.dependent('z', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.xyzReturnedOptions(this);
-		}, {
-			event: 'change keyup'
-		})
-		.dependent('islandFeeX', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.xyzReturnedOptions(this, 'islandFee');
-		}, {
-			event: 'change keyup'
-		})
-		.dependent('islandFeeY', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.xyzReturnedOptions(this, 'islandFee');
-		}, {
-			event: 'change keyup'
-		})
-		.dependent('islandFeeZ', function (val, data, callback) {
-			return flatRateShippingManager.shippingFee.xyzReturnedOptions(this, 'islandFee');
-		}, {
-			event: 'change keyup'
-		})
-		.dependent('quickCountry', function(val, data, callback) {
-			var c = null;
-			var values = {};
-			switch (val) {
-			case 'none':
-				break;
-			case 'removeAll':
-				values['flatRateShippingSettings.shippingCountry'] = [];
-				break;
-			default:
-				values['flatRateShippingSettings.shippingCountry'] = countriesByRegion[val];
-				break;
-			}
-
-			return {
-				values: values,
-			};
-		})
-		.on('open', function (e, mode, action) {
-			var isCreate = (action == 'create');
-			$('#DTE_Field_islands\\[\\]_0').change(function () {
-				var chk = $(this).prop('checked');
-				if (!chk) return;
-				$('[id^=DTE_Field_islands]').each(function (idx, obj) {
-					$(obj).prop('checked', true);
-				});
-			});
-
-			$('#DTE_Field_flatRateShippingSettings-shippingCountry').on('change', shippingCountryChangeFunc);
-			$('input[name^="DTE_Field_flatRateShippingSettings-extendedAreas\\[\\]_"]').on('change', function () {
-				changeFunc('DTE_Field_flatRateShippingSettings-extendedAreas', $(this));
-			});
-			$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').on('change', function () {
-				changeFunc('DTE_Field_flatRateShippingSettings-shippingAreas', $(this));
-			});
-			$('input[name="flatRateShippingSettings.shippingType"]').on('change', function () {
-				shippingTypeFunc($(this).val());
-			});
-
-			$('.customAreas').on('click', function () {
-				$(this).find('i').toggleClass('fa-square-chevron-up fa-square-chevron-down');
-			});
-
-			$('#DTE_Field_selectAllExtendedAreas_0').on('change', function () {
-				selectAllExtendedAreas($(this).prop('checked'));
-			});
-
-			$('#DTE_Field_selectAllIslandAreas_0').on('change', function () {
-				selectAllIslandAreas($(this).prop('checked'));
-			});
-
-			initShipping(isCreate, this);
-
-			if (isCreate) {
-				//$('#DTE_Field_extendedAreas\\[\\]_0').prop('checked', true);
-				$('#DTE_Field_islands\\[\\]_0').prop('checked', true);
-				$('[id^=DTE_Field_paymentMethods]').each(function (idx, obj) {
-					$(obj).prop('checked', true);
-				});
-			} else {
-				//this.disable('shippingType')
-			}
-		})
-		.on('close', function (e, mode, action) {
-			//$('#DTE_Field_extendedAreas\\[\\]_0').unbind('change');
-			$('#DTE_Field_islands\\[\\]_0').unbind('change');
-			$('#DTE_Field_selectAllExtendedAreas_0').unbind('change');
-			$('#DTE_Field_selectAllIslandAreas_0').unbind('change');
-			$('#DTE_Field_flatRateShippingSettings-shippingCountry').unbind('change', shippingCountryChangeFunc);
-			$('input[name^="DTE_Field_flatRateShippingSettings-extendedAreas\\[\\]_"]').unbind('change');
-			$('input[name^="DTE_Field_flatRateShippingSettings-shippingAreas\\[\\]_"]').unbind('change');
-		})
-		.on('preSubmit', function (event, data, action) {
-			checkSubmitData(data.action, data.data);
+			i18n: DataTableConfig.i18n
 		});
-
-		let tableAjax = null;
-		if (this.tableName === '#hiddenFlatRateShippingTable') {
-			if ($('#hiddenFlatRateShippingTable').length === 0) {
-				const hiddenTable = '<div class="d-none">' +
-					'<table id="hiddenFlatRateShippingTable">' +
-					'<thead>' +
-					'<tr>' +
-					'<th></th>' +
-					'<th>排序</th>' +
-					'<th>名稱</th>' +
-					'<th>運費類型</th>' +
-					'<th>[滿足條件x]</th>' +
-					'<th>[基本運費 y]</th>' +
-					'<th>[滿足條件後基本運費 z]</th>' +
-					'<th>運費滿足條件</th>' +
-					'<th>貨到付款</th>' +
-					'<th>國外運費</th>' +
-					'</tr>' +
-					'</thead>' +
-					'</table>';
-				$('body').append(hiddenTable);
+		mgr.setupDependents(editor);
+		editor.on('open', function (e, mode, action) {
+			if (mode !== 'main') return;
+			var creating = action === 'create';
+			mgr._opening = true;
+			if (creating) {
+				$(editor.field('paymentMethods[]').node()).find('input:checkbox:not(:disabled)').prop('checked', true).first().trigger('change');
+				if (!editor.field('flatRateShippingSettings.shippingType').val()) editor.field('flatRateShippingSettings.shippingType').val('NOT_USED');
 			}
-			tableAjax = GBF.baseUrl + '/ajax/FlatRateShipping/dList.do';
-		} else {
-			tableAjax = GBF.baseUrl + '/ajax/FlatRateShipping/list.do';
-		}
-
-		var table = $(this.tableName).DataTable( {
+			setTimeout(function () { editor.field('shippingType')[creating ? 'enable' : 'disable'](); }, 0);
+			editor.field('extendedAreas[]').disable();
+			editor.field('extendedAreas[]').val(mgr.extendedPostcodes(editor));
+			setTimeout(function () { mgr._opening = false; }, 0);
+		}).on('close', function () {
+			editor.s.ajax.create.url = mgr.createUrl;
+		});
+		var table = $(tableName).DataTable({
 			dom: 'Bfrtip',
-			scrollX:'true',
+			scrollX: true,
 			serverSide: true,
-						ajax: {
-							url: tableAjax,
-							type: "POST",
-							data: function (d) {
-								var filterMode = $('#filterModeSelect').val();
-								d.showUnused = (filterMode === 'showUnused');
-								d.showExpiredUnused = (filterMode === 'showExpiredUnused');
-								return d;
-							}
-						},
-						language: DataTableConfig.i18n,
-						columns: [
-							DataTableConfig.data_select_checkbox,
+			ajax: {
+				url: GBF.baseUrl + (hidden ? '/ajax/FlatRateShipping/dList.do' : '/ajax/FlatRateShipping/list.do'),
+				type: 'POST',
+				data: function (params) {
+					params.filterMode = $('#filterModeSelect').val() || '';
+					return params;
+				}
+			},
+			language: DataTableConfig.i18n,
+			columns: [
+				DataTableConfig.data_select_checkbox,
 				DataTableConfig.data_input('seq'),
-							{
-								data: 'title',
-					render: function ( data, type, row ) {
-						var extra = '';
-						if (!row.inUse) {
-							extra = ' <span class="badge badge-warning">未使用</span>';
-						}
-
-						if (row.maxDateEnd) {
-							const maxDate = new Date(row.maxDateEnd);
-							var clzz = (maxDate > new Date()) ? 'warning' : 'info';
-							extra = ' <span class="badge badge-'+clzz+'">最後結團日:'+row.maxDateEnd+'</span>';
-						}
-						
-						if (data == undefined ||data.length == 0) {
-							data = '[未命名]';
-						}
-						if (row.flatRateShippingSettings.shippingTag != null && row.flatRateShippingSettings.shippingTag != '') {
-							extra += ' <span class="badge badge-info">'+row.flatRateShippingSettings.shippingTag+'</span>';
-						}
-						if (row.couponX) {
-							extra += '<span class="badge badge-info mr-1 mt-1">滿足條件x需搭配折扣碼</span>';	
-						}
-						if (extra != '') {
-							extra = '<br>' + extra;
-						}
-						return data + extra;
-					}
-				},
 				{
-					data: 'shippingType',
-					render: function ( data, type, row ) {
-						return renderOption(table, data, 'shippingType');
+					data: 'title',
+					render: function (data, type, row) {
+						if (type !== 'display') return data;
+						var badges = [];
+						if (row.maxDateEnd) badges.push('<span class="badge badge-' + (new Date(row.maxDateEnd) > new Date() ? 'warning' : 'info') + '">最後結團日:' + row.maxDateEnd + '</span>');
+						else if (!row.inUse) badges.push('<span class="badge badge-warning">未使用</span>');
+						var s = row.flatRateShippingSettings || {};
+						if (s.shippingTag) badges.push('<span class="badge badge-info">' + $('<div>').text(s.shippingTag).html() + '</span>');
+						if (row.couponX) badges.push('<span class="badge badge-info mr-1 mt-1">滿足條件x需搭配折扣碼</span>');
+						var name = data ? $('<div>').text(data).html() : '[未命名]';
+						return badges.length ? name + '<br>' + badges.join(' ') : name;
 					}
 				},
-				{
-					data: 'category',
-					render: function ( data, type, row ) {
-						return row.categoryString
-						.replace('x', row.x)
-						.replace('y', row.y)
-						.replace('z', row.z)
-						
-					}
-				},
+				{ data: 'shippingType', render: function (data) { return renderOption(table, data, 'shippingType'); } },
+				{ data: 'category', render: function (data, type, row) { return row.categoryMessage || row.categoryString || data; } },
 				DataTableConfig.data_input('x'),
 				DataTableConfig.data_input('y'),
 				DataTableConfig.data_input('z'),
 				{ data: 'payOnDeliveryFee' },
-				{ data: 'overseaFee' },
+				{ data: 'overseaFee' }
 			],
 			keys: DataTableConfig.keysInlineTab,
-			"order": [[ 1, "asc" ]],
+			order: [[1, 'asc']],
 			select: DataTableConfig.selectOptionsOS,
 			buttons: [
 				{ extend: 'create', editor: editor },
-				{ extend: 'edit',	editor: editor },
+				{ extend: 'edit', editor: editor },
 				{
-					extend: "selectedSingle",
+					extend: 'selectedSingle',
 					text: '複製',
-					action: function ( e, dt, node, config ) {
-						// Place the selected row into edit mode (but hidden),
-						// then get the values for all fields in the form
-						var values = editor.edit(
-							table.row( { selected: true } ).index(),
-							false
-						)
-							.val();
-						resetSalesOrder(values);
-						// Create a new entry (discarding the previous edit) and
-						// set the values from the read values
-						editor
-							.create( {
-								title: '複製',
-								buttons: {label:'複製', className:'btn-primary', action: function () {this.submit();}}
-							} )
-							.set( values );
+					action: function (e, dt) {
+						var copied = editor.edit(dt.row({ selected: true }).index(), false).val();
+						editor.create({ title: '複製', buttons: { label: '複製', className: 'btn-primary', action: function () { this.submit(); } } }).set(copied);
 					}
 				},
-							{ extend: 'remove', editor: editor, className: 'btn-remove-shipping' },
-							DataTableConfig.actionButton({
-								className: 'btn-unlink-association',
-								text: '解除表單關聯',
-								confirm: '確定要解除所選 {0} 個運費規則的關聯？',
-								url: '{{baseUrl}}/ajax/FlatRateShipping/unlinkAssociation.do',
-							}),
+				{ extend: 'remove', editor: editor },
+				DataTableConfig.actionButton({
+					className: 'btn-unlink-association',
+					text: '解除表單關聯',
+					confirm: '確定要解除所選 {0} 個運費規則與已結團團購的關聯？',
+					url: '{{baseUrl}}/ajax/FlatRateShipping/unlinkAssociation.do'
+				})
 			],
 			initComplete: function () {
-				$(".dataTables_scrollBody").floatingScroll();
-				DataTableConfig.initFooterSearch(
-						this,
-						[3],
-						[0]);
+				$('.dataTables_scrollBody').floatingScroll();
+				DataTableConfig.initFooterSearch(this, [3], [0]);
 			}
-		} );
-
+		});
+		// 「（非）配送國家」與「配送國家」共用同一組國家選項
+		table.on('xhr.dt', function (e, settings, json) {
+			if (json && json.options) json.options['flatRateShippingSettings.shippingCountryExcluded'] = json.options['flatRateShippingSettings.shippingCountry'];
+		});
 		injectDetailsControl(tableName, table);
-		DataTableHelper.initEditorOnCallback(table,editor);
-		DataTableHelper.inlineModePlugin(table);
-		DataTableHelper.injectInline(table,editor);
+		DataTableHelper.initEditorOnCallback(table, editor);
+		if (!hidden) {
+			DataTableHelper.inlineModePlugin(table);
+			DataTableHelper.injectInline(table, editor);
+		}
 		DataTableHelper.injectQuickMenu(editor, 'customForm');
-
-		this.table = table;
-		this.editor = editor;
-
-		table.on('xhr.dt', function (e, settings, json, xhr) {
-			json.options['flatRateShippingSettings.shippingCountryExcluded'] = json.options['flatRateShippingSettings.shippingCountry']
-					});
-
-					var updateUnlinkButtonVisibility = function () {
-						var filterMode = $('#filterModeSelect').val();
-						var isExpiredUnused = (filterMode === 'showExpiredUnused');
-						var isShowUnused = (filterMode === 'showUnused');
-						table.button('.btn-unlink-association').nodes().css('display', isExpiredUnused ? '' : 'none');
-						table.button('.btn-remove-shipping').nodes().css('display', isShowUnused ? '' : 'none');
-					};
-					updateUnlinkButtonVisibility();
-
-					$('#filterModeSelect').on('change', function () {
-						table.ajax.reload();
-						updateUnlinkButtonVisibility();
-					});
-
-					return this;
-				},
-				showEditor: function (flatRateShippingId) {
-					if (!flatRateShippingId) return;
-
-		const cEditor = this.editor;
-		const cTable = this.table;
-
-		const tableUrl = GBF.baseUrl + '/ajax/FlatRateShipping/dList.do?' + $.param({flatRateShippingId: flatRateShippingId});
-		this.table.ajax.url(tableUrl);
-		this.table.ajax.reload(function (json) {
-			cEditor.edit(
-				cTable.row(0),
-				true,
-				{
-					title: '編輯運費規則',
-					buttons: '確定操作?',
-				}
-			)
-			;
+		$('#filterModeSelect').on('change', function () { table.ajax.reload(); });
+		mgr.table = table;
+		mgr.editor = editor;
+		return mgr;
+	},
+	/* 單一規則編輯（團購運費頁）：以 dList 讀出該規則後開啟編輯器 */
+	showEditor: function (flatRateShippingId) {
+		if (!flatRateShippingId) return;
+		var mgr = this;
+		mgr.table.ajax.url(GBF.baseUrl + '/ajax/FlatRateShipping/dList.do?flatRateShippingId=' + encodeURIComponent(flatRateShippingId));
+		mgr.table.ajax.reload(function () {
+			mgr.editor.edit(mgr.table.row(0), true, { title: '編輯運費規則', buttons: '儲存' });
 		});
 	},
-	showCreateEditor: function ( arg ) {
-		// arg = {query: {}, fields: {}}
-		// query is query string
-		// fields is a parameter for the create editor
-		// ex. query: { bindGroupBuy: true, groupBuyId: 1 } or { bindItemSet: true, itemSetId: 1 }
-		if ( typeof arg !== 'object' ) {
-			console.log('arg is not object');
-		}
-		if ( !arg.hasOwnProperty('query') || typeof arg.query !== 'object' ) {
-			console.log('arg has no attribute query or arg.query is not object');
-		}
-
-		this.editor.ajax().create.url = this.editorCreateUrl + '&' + $.param( arg.query );
-
-		if ( !arg.hasOwnProperty('fields') || typeof arg.fields !== 'object' ) {
-			arg.fields = {};
-		}
-
-		this.editor.create( {
-			title: '新增',
-			buttons: '新增'
-		} )
-		.set( arg.fields )
-		;
-	},
-	shippingFee: {
-		categoryLabels: {
-			'PRICE_TAG': {
-				'x': '訂單滿額（門檻）',
-				'y': '訂單滿額在門檻以下時基本運費',
-				'z': '訂單滿額大於門檻後基本運費',
-				'islandFeeX': '外島訂單滿額（門檻）',
-				'islandFeeY': '外島訂單滿額在門檻以下時基本運費',
-				'islandFeeZ': '外島訂單滿額大於門檻後基本運費',
-				'fieldInfo': '訂單金額 {0} 元時，運費為 {1} 元',
-			},
-			'PIECE_TAG': {
-				'x': '總件數（門檻）',
-				'y': '總件數在門檻以下時基本運費',
-				'z': '總件數大於門檻後基本運費',
-				'islandFeeX': '外島總件數（門檻）',
-				'islandFeeY': '外島總件數在門檻以下時基本費用',
-				'islandFeeZ': '外島總件數大於門檻後基本費用',
-				'fieldInfo': '訂單件數為 {0} 件時，運費為 {1} 元',
-			},
-			'WEIGHT': {
-				'x': '總重量（門檻）',
-				'y': '總重量在門檻以下時基本運費',
-				'z': '總重量大於門檻後基本運費',
-				'islandFeeX': '外島總重量（門檻）',
-				'islandFeeY': '外島總重量在門檻以下時基本費用',
-				'islandFeeZ': '外島總重量大於門檻後基本費用',
-				'fieldInfo': '訂單總重量 {0} 公斤時，運費為 {1} 元',
-			},
-			'PER_PIECE': {
-				'x': '總件數（門檻）',
-				'y': '總件數在門檻以下時每件基本運費',
-				'z': '總件數大於門檻後每件基本運費',
-				'islandFeeX': '外島總件數（門檻）',
-				'islandFeeY': '外島總件數在門檻以下時每件基本費用',
-				'islandFeeZ': '外島總件數大於門檻後每件基本費用',
-				'fieldInfo': '訂單總件數為 {0} 件時，每件運費為 {1} 元',
-			},
-			'MIX': { // No x, y, z
-				'x': '滿足條件 x',
-				'y': '基本運費 y',
-				'z': '滿足條件後基本運費 z',
-				'islandFeeX': '外島滿足條件 x',
-				'islandFeeY': '外島費用 y',
-				'islandFeeZ': '滿足條件後外島費用 z',
-				'fieldInfo': '',
-			},
-			'PRICE': {
-				'x': '總金額（門檻）',
-				'y': '總金額在門檻以下時基本運費',
-				'z': '總金額大於門檻後基本運費',
-				'islandFeeX': '外島總金額（門檻）',
-				'islandFeeY': '外島總金額在門檻以下時基本費用',
-				'islandFeeZ': '外島總金額大於門檻後基本費用',
-				'fieldInfo': '訂單金額 {0} 元時，運費為 {1} 元',
-			},
-			'PIECE': {
-				'x': '總件數（門檻）',
-				'y': '總件數在門檻以下時基本運費',
-				'z': '總件數大於門檻後基本運費',
-				'islandFeeX': '外島總件數（門檻）',
-				'islandFeeY': '外島總件數在門檻以下時基本費用',
-				'islandFeeZ': '外島總件數大於門檻後基本費用',
-				'fieldInfo': '訂單件數為 {0} 件時，運費為 {1} 元',
-			},
-			'STANDARD_FREE': { // 免收基本運費
-				'x': '滿足條件 x',
-				'y': '基本運費 y',
-				'z': '滿足條件後基本運費 z',
-				'islandFeeX': '外島滿足條件 x',
-				'islandFeeY': '外島費用 y',
-				'islandFeeZ': '滿足條件後外島費用 z',
-				'fieldInfo': '',
-			}
-		},
-		_fieldInfo: function (editor, labelToData, prefix) {
-			// get field info of fields x|y|z, islandFeeX|Y|Z
-			let message = '';
-			const x = this._fieldValueInt(editor, prefix, 'x', 0);
-			if (x <= 0) return message;
-			const y = this._fieldValueInt(editor, prefix, 'y', 0);
-			const z = this._fieldValueInt(editor, prefix, 'z', 0);
-			const template = labelToData.fieldInfo;
-			message += '模擬運費計算結果：<br>';
-			message += template.replace('{0}', x).replace('{1}', y);
-			message += '<br>';
-			message += template.replace('{0}', x + 1).replace('{1}', z);
-			return message;
-		},
-		_fieldValueInt: function(editor, prefix, name, defVal) {
-			// get int value of fields x|y|z, islandFeeX|Y|Z
-			const editorFieldName = this._fieldNameFunc(prefix, name);
-			const editorFieldVal = editor.field(editorFieldName).val();
-			const intVal = parseInt(editorFieldVal);
-			if (isNaN(intVal)) return defVal;
-			return intVal;
-		},
-		_fieldNameFunc: function(prefix, name) {
-			// get field name of fields x|y|z, islandFeeX|Y|Z
-			return !!prefix ? prefix + '' + name.toUpperCase() : name;
-		},
-		_calculateShippingFee: function (editor, prefix='') {
-			// calculate shipping fee
-			const categoryVal = editor.field('category').val();
-			const labelToData = this.categoryLabels[categoryVal];
-			return this._fieldInfo(editor, labelToData, prefix);
-		},
-		_buildMessagesObj: function (msg, prefix='', obj={}) {
-			// build messages object for fields x|y|z, islandFeeX|Y|Z
-			if (!obj.messages) obj.messages = {};
-			if (prefix === '') {
-				obj.messages.z = msg;
-			} else {
-				obj.messages.islandFeeZ = msg;
-			}
-			return obj;
-		},
-		_labels: function (categoryVal) {
-			const labelToData = this.categoryLabels[categoryVal];
-			return {
-				labels: {
-					'x': labelToData.x,
-					'y': labelToData.y,
-					'z': labelToData.z,
-					'islandFeeX': labelToData.islandFeeX,
-					'islandFeeY': labelToData.islandFeeY,
-					'islandFeeZ': labelToData.islandFeeZ,
-				}
-			};
-		},
-		xyzReturnedOptions: function (editor, prefix='', obj={}) {
-			// return value of dependent for fields x|y|z, islandFeeX|Y|Z
-			// prefix is empty string or 'islandFee'
-			const threshold = this._fieldValueInt(editor, prefix, 'x', 0);
-			if (isNaN(threshold) || threshold <= 0) return {};
-			const zMsg = this._calculateShippingFee(editor, prefix);
-			return this._buildMessagesObj(zMsg, prefix, obj);
-		},
-		categoryReturnedOptions: function (editor) {
-			const categoryVal = editor.val('category');
-			const obj = {};//this._labels(categoryVal);
-			this.xyzReturnedOptions(editor, '', obj);
-			this.xyzReturnedOptions(editor, 'islandFee', obj);
-			return obj;
-		},
+	/* 新增規則並同時綁定（arg.query：bindMode=1 綁團購／bindMode=2 綁品項；arg.fields：預填值） */
+	showCreateEditor: function (arg) {
+		arg = arg || {};
+		this.editor.s.ajax.create.url = this.bindCreateUrl + '&' + $.param(arg.query || {});
+		this.editor.create({ title: '新增', buttons: '新增' }).set(arg.fields || {});
 	}
 };
 </script>

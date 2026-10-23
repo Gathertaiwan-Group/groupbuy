@@ -2,7 +2,7 @@
 // 原站：spec/html/flatrateshipping-list.html、runtime/flatrateshipping-list.records.txt、SPEC「運費規則」。
 //
 //   GET  /backend/FlatRateShipping/list                      頁面
-//   POST /ajax/FlatRateShipping/list                         列表（serverSide；showUnused／showExpiredUnused）
+//   POST /ajax/FlatRateShipping/list                         列表（serverSide；filterMode＝showUnused／showExpiredUnused，值取自頁面篩選選單）
 //   POST /ajax/FlatRateShipping/save|update|delete           Editor
 //   POST /ajax/FlatRateShipping/dList?flatRateShippingId=    團購運費頁「編輯運費規則」用的隱藏表（只回該筆）
 //   POST /ajax/FlatRateShipping/dSave?bindMode=1&bGroupBuyId=          新增並綁定到團購（表單運費）
@@ -56,8 +56,9 @@ async function listSpecFor(ctx: EntityCtx, ids: number[] | null): Promise<ListSp
 async function listFlatRate(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ectx = ctx as EntityCtx;
-  const showUnused = (await ctx.param("showUnused")) === "true";
-  const showExpired = (await ctx.param("showExpiredUnused")) === "true";
+  const filterMode = String((await ctx.param("filterMode")) ?? "");
+  const showUnused = filterMode === "showUnused";
+  const showExpired = filterMode === "showExpiredUnused";
   let ids: number[] | null = null;
   if (showUnused || showExpired) {
     const all = await allRuleIds(session.tenantId);
