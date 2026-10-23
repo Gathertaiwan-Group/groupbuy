@@ -1,0 +1,366 @@
+{{!-- Editor 相容 shim 自我測試頁（/backend/dev/editorShimTest）：不寫入資料庫，全部用本地資料來源 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<style>
+#shim-results { font-size: 12px; max-height: 50vh; overflow: auto; background: #fff; padding: 10px; }
+#shim-results .ok { color: #28a745; }
+#shim-results .ng { color: #dc3545; font-weight: bold; }
+</style>
+<script type="text/javascript" class="init">
+window.__shimTest = { results: [], done: false };
+function T(name, fn) {
+	try {
+		var r = fn();
+		var ok = r !== false;
+		window.__shimTest.results.push({ name: name, ok: ok, detail: r === true || r === undefined ? '' : String(r) });
+	} catch (e) {
+		window.__shimTest.results.push({ name: name, ok: false, detail: 'EXCEPTION ' + (e && e.message) });
+	}
+}
+function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function render() {
+	var html = window.__shimTest.results.map(function (r) {
+		return '<div class="' + (r.ok ? 'ok' : 'ng') + '">' + (r.ok ? '✔' : '✘') + ' ' + $('<i>').text(r.name).html() + (r.detail ? ' — ' + $('<i>').text(r.detail).html() : '') + '</div>';
+	}).join('');
+	$('#shim-results').html(html);
+}
+
+$(document).ready(async function () {
+	var E = $.fn.dataTable.Editor;
+	T('全域：$.fn.dataTable.Editor / $.fn.DataTable.Editor / DataTable.ext.editorFields', function () {
+		return typeof E === 'function' && $.fn.DataTable.Editor === E && $.fn.dataTable.ext.editorFields === E.fieldTypes;
+	});
+	T('全域：Editor.Field.defaults 已被 dataTable.config 合併 autocomplete=new-password', function () {
+		return E.Field.defaults.attr && E.Field.defaults.attr.autocomplete === 'new-password';
+	});
+	T('全域：Editor.safeId / pairs / upload / display.bootstrap / classes / models', function () {
+		return E.safeId('a.b[]') === 'a-b[]' && typeof E.pairs === 'function' && typeof E.upload === 'function' && !!E.display.bootstrap && !!E.classes.field && !!E.models.displayController;
+	});
+	T('外掛型別已註冊：ckeditorClassic（editor.ckeditor5）、customColorPicker（editor.colorPicker）、radioImage 等（dataTable.api.editor）', function () {
+		var ft = E.fieldTypes;
+		var missing = ['ckeditorClassic', 'customColorPicker', 'radioImage', 'gridRadioIcon', 'fontType', 'fontAlign', 'button'].filter(function (k) { return !ft[k]; });
+		return missing.length === 0 || ('缺少：' + missing.join(','));
+	});
+
+	// ── 獨立表單：全部欄位型別 ──
+	var ed = new E({
+		ajax: { create: { type: 'POST', url: '/dev/null' } },
+		idSrc: 'id',
+		fields: [
+			DataTableConfig.field_input('文字', 'text1', '預設值'),
+			{ type: 'password', label: '密碼', name: 'pwd' },
+			DataTableConfig.field_textarea('多行', 'area', '', 3),
+			DataTableConfig.field_hidden('hid', '9'),
+			{ type: 'readonly', label: '唯讀', name: 'ro', def: 'R' },
+			DataTableConfig.field_select('下拉', 'sel', 'B'),
+			DataTableConfig.field_checkbox_bool('布林', 'flag', 0),
+			{ type: 'checkbox', label: '多選', name: 'multi[]', options: [{ label: 'A', value: 1 }, { label: 'B', value: 2 }, { label: 'C', value: 4 }] },
+			DataTableConfig.field_radio('單選', 'rad', 'y'),
+			DataTableConfig.field_datetime('日期', 'date1', 'YYYY-MM-DD'),
+			DataTableConfig.field_datetime('時間', 'date2', 'YYYY-MM-DD HH:mm'),
+			DataTableConfig.field_upload('圖片', 'image'),
+			DataTableConfig.field_select2('團購', 'groupBuyId', '', '選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/groupBuy', false),
+			DataTableConfig.field_ckeditor('CK4', 'ck4'),
+			DataTableConfig.field_ckeditor5('CK5', 'ck5'),
+			DataTableConfig.field_colorPicker('顏色', 'color1', '')
+		],
+		formOptions: DataTableConfig.formOptions,
+		i18n: DataTableConfig.i18n
+	});
+	ed.field('sel').update([{ label: '甲', value: 'A' }, { label: '乙', value: 'B' }]);
+	ed.field('rad').update([{ label: '是', value: 'y' }, { label: '否', value: 'n' }]);
+
+	T('fields() 依順序回傳 16 個欄位', function () { return ed.fields().length === 16 || ed.fields().join(','); });
+	T('DOM：欄位外框 class（DTE_Field form-group row DTE_Field_Type_x DTE_Field_Name_x）', function () {
+		return $(ed.field('text1').node()).is('.DTE_Field.form-group.row.DTE_Field_Type_text.DTE_Field_Name_text1');
+	});
+	T('DOM：input id = DTE_Field_<name>，checkbox 選項 id = DTE_Field_<name>_<i>', function () {
+		return $(ed.field('text1').node()).find('#DTE_Field_text1').length === 1 && $(ed.field('multi[]').node()).find('#DTE_Field_multi\\[\\]_0').length === 1;
+	});
+	T('hidden 型別不顯示', function () { return $(ed.field('hid').node()).css('display') === 'none'; });
+
+	ed.create(false);
+	T('create(false)：action=create、預設值', function () {
+		return ed.mode() === 'create' && ed.field('text1').val() === '預設值' && ed.field('hid').val() === '9' && ed.field('sel').val() === 'B';
+	});
+	ed.set({ text1: '你好', area: '多\n行', flag: 1, 'multi[]': [1, 4], rad: 'n', date1: '2026-10-23', date2: '2026-10-23 12:30', color1: '#ff0000' });
+	await wait(50);
+	T('set(obj)/get()：text/textarea/checkbox_bool/checkbox 多選/radio/datetime', function () {
+		var v = ed.get();
+		return (v.text1 === '你好' && v.area === '多\n行' && String(v.flag) === '1' && JSON.stringify(v['multi[]']) === '[1,4]' && v.rad === 'n' && v.date1 === '2026-10-23' && v.date2 === '2026-10-23 12:30') || JSON.stringify(v);
+	});
+	T('checkbox_bool 未勾選回 unselectedValue 0', function () { ed.field('flag').val([]); return String(ed.field('flag').val()) === '0'; });
+	T('set() 會 HTML entity 解碼', function () { ed.field('text1').val('a &amp; b &lt;c&gt;'); return ed.field('text1').val() === 'a & b <c>'; });
+	T('def 可為函式（field_datetime 的 new Date）', function () {
+		var e2 = new E({ fields: [{ name: 'd', def: function () { return 'X'; } }] });
+		e2.create(false);
+		return e2.field('d').val() === 'X';
+	});
+	T('show/hide/enable/disable（欄位層與表單層、陣列參數）', function () {
+		ed.hide(['pwd', 'area'], false);
+		var h = $(ed.field('pwd').node()).css('display') === 'none';
+		ed.show('pwd', false);
+		ed.disable('text1');
+		var d = $(ed.field('text1').node()).hasClass('disabled') && ed.field('text1').input().prop('disabled');
+		ed.enable('text1');
+		return h && d && !ed.field('text1').input().prop('disabled');
+	});
+	T('field().error()/message()/fieldInfo()/label()（getter 與 setter）', function () {
+		var f = ed.field('text1');
+		f.error('錯了');
+		var e1 = f.inError() && f.error() === '錯了';
+		f.error('');
+		f.message('訊息');
+		f.fieldInfo('說明');
+		var lbl = f.label();
+		return e1 && !f.inError() && f.message() === '訊息' && lbl.indexOf('文字') === 0;
+	});
+	T('editor.error()/message()/title()/inError()（含 s.globalError）', function () {
+		ed.error('全域錯誤');
+		var a = ed.inError() && ed.s.globalError === '全域錯誤';
+		ed.error('');
+		ed.message('上方訊息');
+		ed.title('標題');
+		return a && !ed.inError() && ed.title() === '標題';
+	});
+	T('s.fields / s.idSrc / s.mode 內部屬性存在', function () {
+		return !!ed.s.fields.text1 && ed.s.idSrc === 'id' && ed.s.mode === 'main';
+	});
+	T('add(field, after) / clear(name)', function () {
+		ed.add({ name: 'extra', label: '額外' }, 'text1');
+		var pos = ed.order().indexOf('extra') === 1;
+		ed.clear('extra');
+		return pos && !ed.s.fields.extra;
+	});
+	var depCalled = 0;
+	ed.dependent('sel', function (val, data, callback) {
+		depCalled++;
+		return val === 'A' ? { hide: 'area', values: { text1: 'dep' } } : { show: 'area' };
+	});
+	ed.field('sel').val('A');
+	await wait(80);
+	T('dependent()：set 觸發 change → 回傳 hide/values', function () {
+		return (depCalled > 0 && $(ed.field('area').node()).css('display') === 'none' && ed.field('text1').val() === 'dep') || ('called=' + depCalled);
+	});
+	ed.dependent('rad', function (val, data, callback) { setTimeout(function () { callback({ messages: { rad: '非同步' } }); }, 10); }, { event: 'change keyup' });
+	ed.field('rad').val('y');
+	await wait(120);
+	T('dependent()：callback 非同步回應 + {event} 選項', function () { return ed.field('rad').message() === '非同步'; });
+
+	var evs = [];
+	ed.on('open', function (e, mode, action) { evs.push('open:' + mode + ':' + action); });
+	ed.on('opened', function () { evs.push('opened'); });
+	ed.on('preClose', function () { evs.push('preClose'); });
+	ed.on('close', function () { evs.push('close'); });
+	ed.on('closed', function () { evs.push('closed'); });
+	ed.buttons([{ text: '確定', className: 'btn-primary', action: function () { this.submit(); } }, { label: '關閉', fn: function () { this.close(); } }]);
+	ed.open();
+	await wait(700);
+	T('open()：bootstrap modal（.modal.DTED > .modal-dialog > .DTE.modal-content）與事件', function () {
+		return ($('.modal.DTED.show .modal-dialog > .DTE.modal-content').length === 1 && evs.indexOf('open:main:create') !== -1 && evs.indexOf('opened') !== -1) || evs.join(',');
+	});
+	T('buttons()：{text|label, className, action|fn}', function () {
+		var b = $('.DTE_Form_Buttons button');
+		return b.length === 2 && b.eq(0).hasClass('btn') && b.eq(0).hasClass('btn-primary') && b.eq(0).text() === '確定';
+	});
+	T('bootstrap 顯示：輸入元件加上 form-control', function () { return $('#DTE_Field_text1').hasClass('form-control'); });
+	T('select2 欄位已初始化', function () { return !!$('#DTE_Field_groupBuyId').data('select2'); });
+	T('upload 欄位：選擇檔案按鈕與 upload.editor 事件', function () {
+		var got = null;
+		ed.field('image').input().on('upload.editor', function (e, v) { got = v; });
+		ed.field('image').val('vcf/aa/bb.jpg');
+		return got === 'vcf/aa/bb.jpg' && $(ed.field('image').node()).find('div.rendered img').length === 1 && $(ed.field('image').node()).find('div.upload button').text() === '選擇檔案';
+	});
+	ed.field('groupBuyId').val({{json firstGroupBuyId}});
+	await wait(1500);
+	T('select2：set() 不在選項內的值 → initialValue 查詢補 option', function () {
+		var v = $('#DTE_Field_groupBuyId').val();
+		var t = $('#DTE_Field_groupBuyId option:selected').text();
+		return (String(v) === String({{json firstGroupBuyId}}) && t.length > 0) || ('val=' + v + ' text=' + t);
+	});
+	T('ckeditor（CK4）在開啟後初始化', function () { return !!ed.field('ck4').inst() || 'CKEDITOR=' + (typeof CKEDITOR); });
+	await wait(800);
+	T('ckeditorClassic（CK5 外掛 editor.ckeditor5）可設值/取值', function () {
+		ed.field('ck5').val('<p>五</p>');
+		var v = ed.field('ck5').val();
+		return (typeof v === 'string' && v.indexOf('五') !== -1) || ('val=' + v);
+	});
+	T('customColorPicker（外掛 editor.colorPicker）可設值/取值', function () {
+		ed.field('color1').val('#123456');
+		return ed.field('color1').val() === '#123456' || ('val=' + ed.field('color1').val());
+	});
+	ed.close();
+	await wait(700);
+	T('close()：preClose → close → closed，modal 關閉', function () {
+		return (evs.indexOf('close') !== -1 && evs.indexOf('closed') !== -1 && $('.modal.DTED.show').length === 0) || evs.join(',');
+	});
+
+	// ── 綁定表格（本地資料來源，不打 API）──
+	var data = [
+		{ rid: 1, name: '一', 'cat': 'A', qty: 1, 'gb': { title: 'x' } },
+		{ rid: 2, name: '二', 'cat': 'B', qty: 2, 'gb': { title: 'y' } },
+		{ rid: 3, name: '三', 'cat': 'A', qty: 3, 'gb': { title: 'z' } }
+	];
+	var ted = new E({
+		table: '#shimTable',
+		idSrc: 'rid',
+		fields: [
+			DataTableConfig.field_input('名稱', 'name'),
+			DataTableConfig.field_select('分類', 'cat'),
+			DataTableConfig.field_input('數量', 'qty'),
+			DataTableConfig.field_input('巢狀', 'gb.title')
+		],
+		formOptions: DataTableConfig.formOptions,
+		i18n: DataTableConfig.i18n
+	});
+	ted.field('cat').update([{ label: '甲', value: 'A' }, { label: '乙', value: 'B' }]);
+	var table = $('#shimTable').DataTable({
+		dom: 'Bfrtip',
+		data: data,
+		columns: [
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('name'),
+			DataTableConfig.data_input('cat'),
+			DataTableConfig.data_input('qty'),
+			{ data: 'gb.title' }
+		],
+		keys: DataTableConfig.keysInlineTab,
+		select: DataTableConfig.selectOptionsOS,
+		order: [[3, 'asc']],
+		buttons: [
+			{ extend: 'create', editor: ted },
+			{ extend: 'edit', editor: ted },
+			{ extend: 'remove', editor: ted, className: 'btn-danger' },
+			{ extend: 'duplicate' },
+			DataTableConfig.actionButton({ text: '動作', confirm: '確定處理 {0} 筆?', url: '/dev/null' })
+		]
+	});
+	DataTableHelper.initEditorOnCallback(table, ted);
+	DataTableHelper.inlineModePlugin(table);
+	DataTableHelper.injectInline(table, ted);
+	await wait(100);
+	T('DataTables API editor()（Buttons/actionButton 依賴）', function () { return table.editor() === ted; });
+	T('Buttons 文字（新增/編輯/刪除/複製）', function () {
+		var t = $('#shimTable_wrapper .dt-buttons button').map(function () { return $(this).text().trim(); }).get();
+		return (t.slice(0, 4).join(',') === '新增,編輯,刪除,複製') || t.join(',');
+	});
+
+	table.row(0).select();
+	$('#shimTable_wrapper .buttons-edit').trigger('click');
+	await wait(700);
+	T('edit 按鈕：載入列資料（含巢狀 gb.title）', function () {
+		return (ted.mode() === 'edit' && ted.field('name').val() === '一' && ted.field('gb.title').val() === 'x' && ted.title() === '編輯') || JSON.stringify(ted.get());
+	});
+	var submitted = null;
+	ted.one('preSubmit', function (e, d, action) { submitted = JSON.parse(JSON.stringify(d)); });
+	ted.field('name').val('一改');
+	ted.field('gb.title').val('xx');
+	ted.submit();
+	await wait(800);
+	T('submit（submit:changed）：只送改動欄位、巢狀鍵、action=edit、data[<id>]', function () {
+		return (submitted && submitted.action === 'edit' && submitted.data['1'] && submitted.data['1'].name === '一改' && submitted.data['1'].gb.title === 'xx' && submitted.data['1'].qty === undefined) || JSON.stringify(submitted);
+	});
+	T('本地資料來源：表格列已更新', function () { return table.row(0).data().name === '一改' || JSON.stringify(table.row(0).data()); });
+
+	$('#shimTable_wrapper .buttons-create').trigger('click');
+	await wait(700);
+	ted.set({ name: '四', cat: 'B', qty: 4, 'gb.title': 'w' });
+	var created = null;
+	ted.one('preSubmit', function (e, d) { created = JSON.parse(JSON.stringify(d)); });
+	ted.submit();
+	await wait(800);
+	T('create：data[0] 全欄位、表格新增一列', function () {
+		return (created && created.action === 'create' && created.data['0'].name === '四' && table.rows().count() === 4) || JSON.stringify(created);
+	});
+
+	table.rows().deselect();
+	table.row(1).select();
+	$('#shimTable_wrapper .buttons-remove').trigger('click');
+	await wait(700);
+	T('remove 按鈕：確認訊息（i18n confirm）、表單隱藏、紅色按鈕', function () {
+		return ($('.DTE_Form_Info').text().indexOf('確定要刪除這1個項目') !== -1 && $('.DTE form').css('display') === 'none' && $('.DTE_Form_Buttons button').hasClass('btn-danger')) || $('.DTE_Form_Info').text();
+	});
+	ted.submit();
+	await wait(800);
+	T('remove：表格列已刪除', function () { return table.rows().count() === 3; });
+
+	table.rows().deselect();
+	table.row(0).select();
+	$('#shimTable_wrapper .dt-buttons button').filter(function () { return $(this).text().trim() === '動作'; }).trigger('click');
+	await wait(700);
+	T('DataTableConfig.actionButton：以 remove(editor,true) 當確認框，訊息帶筆數', function () {
+		return ($('.modal.DTED.show').length === 1 && $('.DTE_Form_Info').text().indexOf('確定處理 1 筆') !== -1 && $('.DTE_Form_Buttons button').eq(0).text() === '確定') || $('.DTE_Form_Info').text();
+	});
+	$('.DTE_Form_Buttons button').eq(1).trigger('click');
+	await wait(700);
+
+	table.rows().deselect();
+	table.row(0).select();
+	$('#shimTable_wrapper .dt-buttons button').filter(function () { return $(this).text().trim() === '複製'; }).trigger('click');
+	await wait(700);
+	T('duplicate 按鈕：edit(idx,false).val() → create().set()', function () {
+		return (ted.mode() === 'create' && ted.field('name').val() === table.row(0).data().name) || (ted.mode() + ':' + ted.field('name').val());
+	});
+	ted.close();
+	await wait(700);
+
+	table.inlineEnabled = true;
+	$(table.cell(0, 1).node()).trigger('click');
+	await wait(300);
+	T('inline()：儲存格內出現欄位（DTE DTE_Inline）', function () { return $('#shimTable div.DTE_Inline input').length === 1; });
+	$('#shimTable div.DTE_Inline input').val('行內');
+	ted.submit();
+	await wait(800);
+	T('inline 送出後儲存格更新', function () { return table.row(0).data().name === '行內' || table.row(0).data().name; });
+
+	ted.bubble(table.cell(1, 3).node(), 'qty', { title: '泡泡', buttons: '確定' });
+	await wait(500);
+	T('bubble()：浮動編輯框', function () { return $('div.DTE_Bubble input').length >= 1; });
+	ted.close();
+	await wait(600);
+
+	// 多列編輯：值不同 → 顯示「多個數值」，點擊後統一
+	table.rows().deselect();
+	table.rows([0, 1]).select();
+	ted.edit(table.rows({ selected: true }).indexes(), false);
+	T('多列編輯：不同值顯示 multi-value、相同值正常顯示', function () {
+		var nameMulti = ted.field('name').isMultiValue();
+		var shown = $(ted.field('name').node()).find('div.multi-value').css('display') === 'block';
+		return (nameMulti && shown) || ('multi=' + nameMulti + ' shown=' + shown);
+	});
+	var multiSent = null;
+	ted.one('preSubmit', function (e, d) { multiSent = JSON.parse(JSON.stringify(d)); });
+	ted.field('qty').val(99);
+	ted.submit();
+	await wait(800);
+	T('多列編輯送出：每列各自 data[<id>]', function () {
+		return (multiSent && Object.keys(multiSent.data).length === 2) || JSON.stringify(multiSent);
+	});
+
+	// template（<editor-field name>）
+	var tpl = $('<div id="shimTpl"><fieldset><legend>區塊A</legend><editor-field name="ta"></editor-field></fieldset><fieldset><legend>區塊B</legend><editor-field name="tb"></editor-field></fieldset></div>').appendTo('body');
+	var ted2 = new E({ template: '#shimTpl', fields: [{ name: 'ta', label: 'A' }, { name: 'tb', label: 'B' }] });
+	ted2.create(false);
+	T('template：欄位插入 <editor-field> 位置、fieldset/legend 保留', function () {
+		var f = $(ted2.dom.formContent);
+		return f.find('fieldset legend').length === 2 && f.find('fieldset').eq(1).find('.DTE_Field_Name_tb').length === 1;
+	});
+
+	var opt = $.fn.dataTable.ext.buttons;
+	T('ext.buttons.create/edit/remove/editSingle/removeSingle 已定義', function () { return !!(opt.create && opt.edit && opt.remove && opt.editSingle && opt.removeSingle); });
+
+	window.__shimTest.done = true;
+	render();
+});
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">Editor 相容 shim 自我測試</div>
+<div class="card-body">
+	<div id="shim-results">執行中…</div>
+	<table id="shimTable" class="table table-striped display nowrap" width="100%">
+		<thead><tr><th></th><th>名稱</th><th>分類</th><th>數量</th><th>巢狀</th></tr></thead>
+	</table>
+</div>
+</div>
+</div>

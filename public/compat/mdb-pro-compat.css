@@ -192,3 +192,167 @@
   clip: rect(0, 0, 0, 0);
   pointer-events: none;
 }
+
+/* ── MDB 風格 checkbox / radio（input.form-check-input ＋ 相鄰 label）────────
+   與原站相同：所有 checkbox/radio 原生框隱藏，由 label 偽元素畫框；未配對 label 的 input 在原站同樣看不到。
+   站內常用 pl-4 / mr-2 覆寫 label，所以這裡不加 !important。 */
+[type="checkbox"]:checked,
+[type="checkbox"]:not(:checked),
+[type="radio"]:checked,
+[type="radio"]:not(:checked) {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.form-check-input[type="checkbox"] + label,
+label.btn input[type="checkbox"] + label,
+.form-check-input[type="radio"] + label,
+label.btn input[type="radio"] + label {
+  position: relative;
+  display: inline-block;
+  height: 1.5625rem;
+  padding-left: 35px;
+  line-height: 1.5625rem;
+  cursor: pointer;
+  user-select: none;
+}
+.form-check-input[type="checkbox"] + label:before,
+label.btn input[type="checkbox"] + label:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 3px;
+  border: 2px solid #8a8a8a;
+  border-radius: 1px;
+  transition: 0.2s;
+}
+.form-check-input[type="checkbox"]:checked + label:before,
+label.btn input[type="checkbox"]:checked + label:before {
+  top: -4px;
+  left: -5px;
+  width: 12px;
+  height: 1.375rem;
+  border-top: 2px solid transparent;
+  border-left: 2px solid transparent;
+  border-right: 2px solid #4285f4;
+  border-bottom: 2px solid #4285f4;
+  transform: rotate(40deg);
+  transform-origin: 100% 100%;
+  backface-visibility: hidden;
+}
+.form-check-input[type="checkbox"]:indeterminate + label:before {
+  top: -11px;
+  left: -12px;
+  width: 10px;
+  height: 1.375rem;
+  border: none;
+  border-right: 2px solid #4285f4;
+  transform: rotate(90deg);
+  transform-origin: 100% 100%;
+}
+.form-check-input[type="checkbox"]:disabled:not(:checked) + label:before { background-color: #bdbdbd; border: none; }
+.form-check-input[type="checkbox"]:disabled:checked + label:before { border-right: 2px solid #bdbdbd; border-bottom: 2px solid #bdbdbd; }
+.form-check-input[type="checkbox"]:disabled + label { cursor: default; color: rgba(0, 0, 0, 0.46); }
+
+.form-check-input[type="radio"] + label { transition: 0.28s ease; }
+.form-check-input[type="radio"] + label:before,
+.form-check-input[type="radio"] + label:after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  width: 16px;
+  height: 16px;
+  margin: 4px;
+  border-radius: 50%;
+  transition: 0.28s ease;
+}
+.form-check-input[type="radio"]:not(:checked) + label:before,
+.form-check-input[type="radio"]:not(:checked) + label:after { border: 2px solid #5a5a5a; }
+.form-check-input[type="radio"]:not(:checked) + label:after { transform: scale(0); }
+.form-check-input[type="radio"]:checked + label:before { border: 2px solid transparent; }
+.form-check-input[type="radio"]:checked + label:after { border: 2px solid #4285f4; background-color: #4285f4; transform: scale(1.02); }
+.form-check-input[type="radio"].with-gap:checked + label:before { border: 2px solid #4285f4; }
+.form-check-input[type="radio"].with-gap:checked + label:after { border: 2px solid #4285f4; background-color: #4285f4; transform: scale(0.5); }
+.form-check-input[type="radio"]:disabled + label { cursor: default; color: rgba(0, 0, 0, 0.46); }
+.form-check-input[type="radio"]:disabled:not(:checked) + label:before,
+.form-check-input[type="radio"]:disabled:checked + label:before { border-color: rgba(0, 0, 0, 0.46); background-color: transparent; }
+.form-check-input[type="radio"]:disabled:checked + label:after { border: none; background-color: rgba(0, 0, 0, 0.46); }
+
+/* ── .btn-flat / .btn-floating ─────────────────────────────── */
+.btn.btn-flat { box-shadow: none; font-weight: 500; background-color: transparent; color: inherit; }
+.btn.btn-flat:not([disabled]):not(.disabled):active { box-shadow: none; }
+.btn-floating {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  width: 47px;
+  height: 47px;
+  margin: 10px;
+  padding: 0;
+  overflow: hidden;
+  vertical-align: middle;
+  cursor: pointer;
+  border-radius: 50%;
+  box-shadow: 0 5px 11px 0 rgba(0, 0, 0, 0.18), 0 4px 15px 0 rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease-in-out;
+}
+.btn-floating i { display: inline-block; width: inherit; font-size: 1.25rem; line-height: 47px; color: #fff; text-align: center; }
+.btn-floating:hover { box-shadow: 0 8px 17px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19); }
+.btn-floating.btn-sm { width: 36.15px; height: 36.15px; }
+.btn-floating.btn-sm i { font-size: 0.96154rem; line-height: 36.15px; }
+.btn-floating.btn-lg { width: 61.1px; height: 61.1px; }
+.btn-floating.btn-lg i { font-size: 1.625rem; line-height: 61.1px; }
+.btn-floating.btn-flat { padding: 0; color: #fff; background: #4285f4; }
+.btn-floating.btn-flat:hover { box-shadow: none; }
+
+/* ── classic-tabs / tabs-primary（純 CSS，切換由 Bootstrap tab）── */
+.classic-tabs .nav { white-space: nowrap; overflow-x: auto; border-radius: 0.3rem 0.3rem 0 0; }
+@media (min-width: 62rem) {
+  .classic-tabs .nav { overflow-x: hidden; }
+  .classic-tabs .nav li:first-child { margin-left: 56px; }
+}
+.classic-tabs .nav li a {
+  display: block;
+  padding: 20px 24px;
+  font-size: 13px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  border-radius: 0;
+}
+.classic-tabs .nav li a:not(.active) { margin-bottom: 3px; }
+.classic-tabs .nav li a.active { border-bottom: 3px solid; color: #fff; }
+.classic-tabs .nav.tabs-primary li a.active { border-color: #fff; }
+.tabs-primary { background-color: #4285f4 !important; }
+
+/* ── dropdown 配色 ───────────────────────────────────────── */
+.dropdown .dropdown-menu,
+.dropup .dropdown-menu,
+.dropleft .dropdown-menu,
+.dropright .dropdown-menu { padding: 0.5rem; }
+.dropdown .dropdown-menu .dropdown-item:hover,
+.dropdown .dropdown-menu .dropdown-item:active,
+.dropup .dropdown-menu .dropdown-item:hover,
+.dropup .dropdown-menu .dropdown-item:active,
+.dropleft .dropdown-menu .dropdown-item:hover,
+.dropleft .dropdown-menu .dropdown-item:active,
+.dropright .dropdown-menu .dropdown-item:hover,
+.dropright .dropdown-menu .dropdown-item:active {
+  background-color: #4285f4;
+  color: #fff !important;
+  border-radius: 0.125rem;
+  box-shadow: 0 5px 11px 0 rgba(0, 0, 0, 0.18), 0 4px 15px 0 rgba(0, 0, 0, 0.15);
+  transition: all 0.1s linear;
+}
+.dropdown-menu.dropdown-primary .dropdown-item.active,
+.dropdown-menu.dropdown-primary .dropdown-item:hover { background-color: #4285f4 !important; }
+
+/* ── select：MDB PRO 會隱藏所有 select（站內 style_v4 以 display:inline!important 反制），browser-default 為 block ── */
+select.browser-default { display: block !important; }
+select:disabled { color: rgba(0, 0, 0, 0.3); }

@@ -7,6 +7,7 @@ import * as system from "./system";
 import { lookupGroupBuy } from "./lookup";
 import { uploadedImage } from "./uploads";
 import { uploadImage } from "./upload-api";
+import { getServiceClient } from "@/lib/supabase/server";
 
 export const routes: RouteDef[] = [
   // ── 入口 ────────────────────────────────────────────────
@@ -58,6 +59,22 @@ export const routes: RouteDef[] = [
     title: "csv 編輯器",
     permission: "csvEditor",
     groupBuy: "none",
+  }),
+
+  // ── Editor 相容 shim 自我測試頁（不寫資料庫；驗證欄位型別/API/事件/Buttons 整合）──
+  page("/backend/dev/editorShimTest", {
+    template: "core/dev/editor-shim-test.html",
+    title: "Editor 相容 shim 自我測試",
+    groupBuy: "none",
+    async data(ctx) {
+      const { data } = await getServiceClient()
+        .from("group_buys")
+        .select("id")
+        .eq("tenant_id", ctx.session.tenantId)
+        .order("id", { ascending: false })
+        .limit(1);
+      return { firstGroupBuyId: (data?.[0] as { id: number } | undefined)?.id ?? null };
+    },
   }),
 
   // ── 共用 select2 查詢 ─────────────────────────────────────

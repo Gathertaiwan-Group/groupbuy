@@ -8,7 +8,9 @@
   'use strict';
   if (!$) return;
 
-  /* ── collapsible（側欄手風琴）──────────────────────────────── */
+  /* ── collapsible（側欄手風琴；PRO 行為：350ms easeOutQuart、載入即自動初始化）── */
+  var EASE = $.easing && $.easing.easeOutQuart ? 'easeOutQuart' : 'swing';
+  function clearHeight() { $(this).css('height', ''); }
   $.fn.collapsible = function (options) {
     var opts = $.extend({ accordion: true }, options);
     return this.each(function () {
@@ -27,13 +29,13 @@
             var $o = $(this);
             $o.removeClass('active');
             $o.children('a.collapsible-header').removeClass('active');
-            $o.children('.collapsible-body').stop(true, false).slideUp(200);
+            $o.children('.collapsible-body').stop(true, false).slideUp(350, EASE, clearHeight);
           });
         }
         $li.toggleClass('active', opening);
         $header.toggleClass('active', opening);
-        if (opening) $body.stop(true, false).slideDown(200);
-        else $body.stop(true, false).slideUp(200);
+        if (opening) $body.stop(true, false).slideDown(350, EASE, clearHeight);
+        else $body.stop(true, false).slideUp(350, EASE, clearHeight);
       });
       // 初始：已標 active 的群組展開
       $root.children('li.active').each(function () {
@@ -230,6 +232,9 @@
     window.toastr = toastr;
   }
 
+  // PRO 在載入時自動初始化所有 .collapsible（說明中心等頁面沒有顯式呼叫）
+  $(function () { $('.collapsible').collapsible(); });
+
   /* ── materialSelect（最小相容：保留原生 select 外觀）──────────── */
   if (!$.fn.materialSelect) {
     $.fn.materialSelect = function (options) {
@@ -239,5 +244,8 @@
         $s.addClass('gb-material-select browser-default custom-select');
       });
     };
+  }
+  if (!$.fn.material_select) {
+    $.fn.material_select = function (options) { return this.materialSelect(options); };
   }
 })(window.jQuery, window, document);

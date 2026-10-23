@@ -9,10 +9,10 @@ export interface AdminNewsItem {
 
 /**
  * 每個模組在 lib/modules/<key>/index.ts `export default` 一個 ModuleDef。
- * 中央 lib/modules/index.ts 只負責把 8 個模組串起來，模組 agent 不需要改它。
+ * 中央 lib/modules/index.ts 只負責把 10 個模組（core＋9）串起來，模組 agent 不需要改它。
  */
 export interface ModuleDef {
-  /** 模組 key：core / groupbuy / items / marketing / orders / shipping / analytics / storefront */
+  /** 模組 key：core / groupbuy / items / marketing / orders / accounting / shipping / warehouse / analytics / storefront */
   key: string;
   /** 本模組的所有路由（頁面、AJAX 端點、HTML 片段） */
   routes: RouteDef[];

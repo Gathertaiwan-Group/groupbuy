@@ -3,3 +3,17 @@
  * 原站後台載入 MDB PRO 的 dashboard 版 CSS，其中與 MDB Free 不同、且影響整體外觀的規則在此補上。
  */
 body { background-color: #eee; }
+/* dashboard pack 對 Bootstrap 共用選擇器的改寫（原站全站觀感） */
+.table td { font-weight: 400; color: #4f4f4f; }
+.progress { height: 6px; }
+button,
+[type="submit"],
+[type="reset"],
+html [type="button"] { -webkit-appearance: none; -moz-appearance: none; appearance: none; }
+button:focus { outline: 0 !important; }
+select { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
+.dark-grey-text { color: #4f4f4f; }
+.md-form .form-control[readonly] { border-bottom: 1px solid #ced4da; }
+.font-small { font-size: 0.8rem; }
+.font-weight-500 { font-weight: 500 !important; }
+.card .btn-action { margin-top: -1.44rem; margin-bottom: -1.44rem; }
