@@ -1,6 +1,17 @@
 // 模組：orders（擁有者：orders agent）
 // 範圍：所有訂單、單一團購訂單、分割訂單、退換貨、保留單、自取訂單、客服對話、預購轉現貨
-// 新增頁面/端點：在本目錄加檔案，把 RouteDef 加進下面陣列即可（不需改任何共用檔）。做法見 docs/MODULE_GUIDE.md。
+// 各頁面的路由在各自檔案登錄，這裡只彙整。做法見 docs/MODULE_GUIDE.md。
 import type { RouteDef } from "@/lib/core/http/types";
+import { salesOrderListRoutes } from "./sales-order-list";
+import { returnRoutes } from "./returns";
+import { reservationRoutes } from "./reservations";
+import { helpdeskRoutes } from "./helpdesk";
+import { preorderToStockRoutes } from "./preorder-to-stock";
 
-export const routes: RouteDef[] = [];
+export const routes: RouteDef[] = [
+  ...salesOrderListRoutes, // 所有訂單／單一團購訂單／分割訂單／自取訂單／批次操作／匯出匯入／列印
+  ...returnRoutes, // 退換貨訂單＋加退換商品精靈
+  ...reservationRoutes, // 保留單
+  ...helpdeskRoutes, // 客服對話
+  ...preorderToStockRoutes, // 預購商品轉現貨
+];
