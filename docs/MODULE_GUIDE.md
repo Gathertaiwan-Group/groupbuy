@@ -221,7 +221,12 @@ get("/:shortUrl", async (ctx) => {
 - 第一段是參數的路由（`/:shortUrl…`）與全萬用 `/*` **不會**比對保留字開頭的網址（`backend`、`ajax`、`public`、`scripts`、`images`、`upload`、`js`、`css`、`fonts`、`compat`、`_next`、`api`、`rp`、`pups`），所以前台 fallback 不會吃掉後台網址。
 - 認證預設：`/backend/*`、`/ajax/*` → 需後台登入；`/ajax/web/*` 與其他 → public（前台）。可用 `auth: 'admin' | 'public' | 'optional'` 覆寫（`optional`：有登入就帶 session，例如前台 `?preview=true`）。
 - 網址帶的租戶前綴必須等於登入者租戶，否則 403；**資料一律以 `ctx.session.tenantId` 過濾**，不要信任網址或參數中的租戶。
-- 同一路徑＋方法重複登錄會在 log 報 `[router] 重複路由`，請改名或協調。
+- **路由重疊與 `priority`**（數字小的先比對，預設 100）：
+  - 「重疊」＝同一個網址樣式（`:參數` 名稱不計，`/x/:a` 與 `/x/:b` 相同）且方法集合有交集（`any()`／`ANY` 與任何方法都重疊；`GET,POST` 與 `POST` 重疊）。重疊時只有排在前面的那條會被用到。
+  - **priority 相同的重疊＝錯誤**：誰先比對到取決於模組登錄順序（曾讓 `/backend/Item/exportItemSalesReport` 在正式站 404）。`next dev` 輸出 `[routes] 重複路由 …`；**CI 與 Vercel build 會失敗**。
+  - priority 不同＝刻意覆蓋：輸出 `[routes] 路由覆蓋 …` 警告，不擋 build。
+  - 使用規則：①不要登錄別的模組擁有的路徑；②確實要接手別人的端點（例：你的處理是原站參數的超集）時給 `priority: 90` 之類小於 100 的值，並在註解寫明原因、通知對方刪掉舊的；③暫時的樁／fallback 給大於 100 的值（例 `priority: 900`），對方正式版登錄後自然勝出；④前台萬用路由（`/:shortUrl`、`/*`）用 1000 以上。
+  - 檢查：登入後開 **`/backend/dev/routes`**（JSON：全部路由與 `conflicts`），或看 `next dev` 終端機的 `[routes]` 訊息。
 
 ### 4.2 handler
 
@@ -413,7 +418,7 @@ const mod: ModuleDef = {
 ## 11. 交付前自查清單
 
 1. `npm run typecheck` 綠（本機 build 依 §2 的磁碟守則，或交給 CI；push 後 CI 的 build 必須綠）。
-2. 會改資料的端點都是 `post()`；模板屬性內的插值用 `{{jsattr}}` 或 `data-*`，沒有 `'{{x}}'` 寫法。
+2. 會改資料的端點都是 `post()`；模板屬性內的插值用 `{{jsattr}}` 或 `data-*`，沒有 `'{{x}}'` 寫法；`/backend/dev/routes` 的 `conflicts` 沒有你模組的「重複路由」。
 3. 本機登入後實際點過：列表（排序/搜尋/分頁）、每個按鈕、Editor 新增/編輯/刪除/行內、匯出、彈窗；`scripts/dev/shot.mjs` 的輸出沒有 `[exception]`、沒有非預期的 `[http 4xx/5xx]`。
 4. 畫面與 `spec/html`（必要時原站 m4 armand 分頁）比對：欄位順序、按鈕文字、class、顏色、間距。
 5. 所有查詢都有租戶過濾；換一個租戶前綴打 AJAX 應 403。

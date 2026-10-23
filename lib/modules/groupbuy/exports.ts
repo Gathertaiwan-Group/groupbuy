@@ -2,7 +2,7 @@
 //   GET|POST /backend/SalesReturnRecord/exportDaily[?groupBuyId=]   匯出昨日銷退報表（昨日售出＋昨日退貨，台灣時間）
 //   GET|POST /backend/GroupBuy/exportPaidOrderItems  groupBuyId、separateItem   匯出商品報表 → 已付款訂單商品
 //   GET|POST /backend/GroupBuy/exportERPItems        groupBuyId                 匯出商品報表 → ERP 商品資料
-//   GET|POST /backend/Item/exportItemSalesReport     groupBuyId、shipped、exportBy=SHIPPED  匯出商品報表 → 上月出貨商品統計
+//   （匯出商品報表 → 上月出貨商品統計 /backend/Item/exportItemSalesReport 由 analytics 模組處理：它是原站端點參數的超集）
 //   GET      /backend/ShippingCSV/exportShippingCSV?groupBuyId=1,2      工具列「匯出貨運清單」彈窗（導向出貨模組的匯出出貨紀錄頁）
 // 下載回應走 download()（Set-Cookie fileDownload=true，jquery.fileDownload 判斷成功用）。
 import ExcelJS from "exceljs";
@@ -15,7 +15,7 @@ import { enumLabel } from "@/lib/core/enums";
 import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import { paymentBitsToCodes } from "@/lib/db/derived";
 import { loadGroupBuyMenu } from "@/lib/core/groupbuy-menu";
-import { ownGroupBuyIds, parseIdList, taipeiMonthRange } from "./common";
+import { ownGroupBuyIds, parseIdList } from "./common";
 
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const VALID_STATES = ["NEW", "PROCESSING", "COMPLETE", "HOLDED", "RETURNING", "RETURNED"];
@@ -180,48 +180,10 @@ async function exportERPItems(ctx: RequestContext): Promise<Response> {
   );
 }
 
-/* 上月出貨商品統計 */
-async function exportItemSalesReport(ctx: RequestContext): Promise<Response> {
-  const session = requireSession(ctx);
-  const gb = await requireGroupBuy(ctx, session);
-  const db = getServiceClient();
-  const { from, to } = taipeiMonthRange(-1);
-  const { data: orders, error } = await db
-    .from("sales_orders")
-    .select("id")
-    .eq("tenant_id", session.tenantId)
-    .eq("group_buy_id", gb.groupBuyId)
-    .in("state", VALID_STATES)
-    .gte("date_shipped", from)
-    .lt("date_shipped", to)
-    .limit(5000);
-  if (error) throw new Error(`[exportItemSalesReport] ${error.message}`);
-  const ids = ((orders ?? []) as { id: number }[]).map((o) => o.id);
-  const agg = new Map<string, (string | number)[]>();
-  for (let i = 0; i < ids.length; i += 500) {
-    const { data } = await db
-      .from("order_items")
-      .select("uid, title, specifications_label, total, amount, bundle_child")
-      .eq("tenant_id", session.tenantId)
-      .in("sales_order_id", ids.slice(i, i + 500));
-    for (const it of (data ?? []) as { uid: string | null; title: string; specifications_label: string | null; total: number; amount: number; bundle_child: boolean }[]) {
-      if (it.bundle_child) continue;
-      const key = `${it.uid ?? ""}|${it.title}|${it.specifications_label ?? ""}`;
-      const row = agg.get(key) ?? [it.uid ?? "", it.title, it.specifications_label ?? "", 0, 0];
-      row[3] = Number(row[3]) + Number(it.total);
-      row[4] = Number(row[4]) + Number(it.amount);
-      agg.set(key, row);
-    }
-  }
-  const month = taipeiDate(from).slice(0, 7);
-  return workbook("上月出貨商品", ["商品代碼", "商品名稱", "規格", "出貨數量", "金額"], [...agg.values()], `出貨商品統計_${gb.groupBuyId}_${month}.xlsx`);
-}
-
 export const exportRoutes: RouteDef[] = [
   any("/backend/SalesReturnRecord/exportDaily", exportDaily),
   any("/backend/GroupBuy/exportPaidOrderItems", exportPaidOrderItems),
   any("/backend/GroupBuy/exportERPItems", exportERPItems),
-  any("/backend/Item/exportItemSalesReport", exportItemSalesReport),
   fragment("/backend/ShippingCSV/exportShippingCSV", {
     template: "groupbuy/modal-shippingcsv-export.html",
     method: "GET",

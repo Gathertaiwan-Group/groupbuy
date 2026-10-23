@@ -1,7 +1,7 @@
 // core 模組路由：登入/登出、後台首頁、頂列共用彈窗、服務條款、系統設定（無權限）、select2 共用查詢。
 import type { RouteDef } from "@/lib/core/http/types";
 import { any, fragment, get, page, post } from "@/lib/core/http/route-helpers";
-import { redirect } from "@/lib/core/http/responses";
+import { json, redirect } from "@/lib/core/http/responses";
 import * as authApi from "./auth-api";
 import * as system from "./system";
 import { lookupGroupBuy } from "./lookup";
@@ -62,6 +62,18 @@ export const routes: RouteDef[] = [
   }),
 
   // ── Editor 相容 shim 自我測試頁（不寫資料庫；驗證欄位型別/API/事件/Buttons 整合）──
+  // 除錯：路由表與重疊清單（JSON）。新增端點後可開這頁確認沒有和別的模組重疊
+  get("/backend/dev/routes", async () => {
+    const { getRouter } = await import("@/lib/core/http/dispatch");
+    const { formatRouteConflict } = await import("@/lib/core/http/router");
+    const r = getRouter();
+    const routes = r.list();
+    return json({
+      total: routes.length,
+      conflicts: r.conflicts.map((c) => ({ ...c, message: formatRouteConflict(c) })),
+      routes,
+    });
+  }),
   page("/backend/dev/editorShimTest", {
     template: "core/dev/editor-shim-test.html",
     title: "Editor 相容 shim 自我測試",

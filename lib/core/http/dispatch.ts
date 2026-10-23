@@ -2,6 +2,7 @@
 // 1) 正規化路徑（.do、;jsessionid、/backend/ajax）→ 2) 路由比對（含 /{租戶}/ 前綴）→
 // 3) 認證（後台 session）與權限 → 4) 呼叫 handler → 5) 統一錯誤格式。
 import { Router, normalizePath } from "./router";
+import { checkRouteTable } from "./route-check";
 import type { AdminSession, AuthMode, HttpMethod, RegisteredRoute, RequestContext } from "./types";
 import { parseBody, type ParsedBody } from "./body";
 import { FieldErrors, HttpError } from "./errors";
@@ -16,6 +17,9 @@ export function getRouter(): Router {
   if (!router) router = new Router(allRoutes());
   return router;
 }
+
+// 模組載入時（next dev 第一次編譯、next build 收集頁面資料、伺服器冷啟動）檢查路由重疊；CI／Vercel build 時重複會讓 build 失敗
+checkRouteTable(allRoutes());
 
 export function defaultAuth(path: string): AuthMode {
   if (path === "/backend" || path.startsWith("/backend/")) return "admin";

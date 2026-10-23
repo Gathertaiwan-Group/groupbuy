@@ -22,7 +22,7 @@
 ```
 app/[[...path]]/route.ts        唯一的 route handler（GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS → dispatch）
 lib/core/                       core 共用（模組不可改）
-  http/        dispatch.ts（入口）router.ts（比對）types.ts body.ts errors.ts responses.ts route-helpers.ts（page/fragment/get/post…）
+  http/        dispatch.ts（入口）router.ts（比對、重疊偵測）route-check.ts（載入時檢查）types.ts body.ts errors.ts responses.ts route-helpers.ts（page/fragment/get/post…）
   auth/        session.ts（GBSID cookie ↔ groupbuy.admin_sessions）password.ts（bcrypt）
   render/      template.ts（Handlebars）layout.ts（版面殼）vars.ts（共用模板變數）
   datatables/  request.ts（legacy 參數解析）query.ts（套到 PostgREST）response.ts（原站信封）
@@ -52,7 +52,9 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
   1. normalizePath：decode、去 ;jsessionid、去最後一段 .do、/backend/ajax/* → /ajax/*
   2. Router.match(path, method)
        候選＝「整條路徑」比對 ＋「第一段當租戶前綴」比對（/{tenant}/ajax/...、/{tenant}/p/...）
-       排序：priority（小先）→ 非萬用 → 靜態段多 → 不帶租戶前綴；方法不符 → 405
+       排序：priority（小先）→ 非萬用 → 靜態段多 → 不帶租戶前綴 → 登錄順序；方法不符 → 405
+       重疊檢查（route-check.ts，模組載入時）：同樣式＋方法有交集且 priority 相同 → [routes] 重複路由（CI／Vercel build 失敗）；
+       priority 不同 → [routes] 路由覆蓋（警告）。除錯：/backend/dev/routes
   3. 認證：route.auth（預設 /backend、/ajax → admin；/ajax/web 與其他 → public）
        admin 未登入：頁面回登入頁（HTTP 200、網址不變，與原站同）；AJAX 回 401 {code:401}
        admin 路由的 AJAX 與非 GET 請求帶 Sec-Fetch-Site: cross-site → 403（CSRF，見 §11）

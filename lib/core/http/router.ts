@@ -124,22 +124,88 @@ function matchSegments(c: CompiledRoute, segs: string[]): Record<string, string>
   return params;
 }
 
+/** 兩條路由的比對先後（同 match() 的排序）：負值＝a 先 */
+function precedence(a: CompiledRoute, b: CompiledRoute): number {
+  if (a.priority !== b.priority) return a.priority - b.priority;
+  if (a.wildcard !== b.wildcard) return a.wildcard ? 1 : -1;
+  return b.staticCount - a.staticCount;
+}
+
+const ALL_METHODS: HttpMethod[] = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"];
+
+/** 路由重疊：同一個網址樣式（參數名不計）＋方法有交集。後者（loser）在交集的方法上永遠不會被用到。 */
+export interface RouteConflict {
+  /** ambiguous＝priority 相同（誰先比對到取決於模組登錄順序，多半是 bug）；override＝priority 不同（刻意覆蓋） */
+  kind: "ambiguous" | "override";
+  pattern: string;
+  /** 交集的方法（不含自動加上的 HEAD） */
+  methods: string[];
+  winner: { module: string; path: string; method: string; priority: number };
+  loser: { module: string; path: string; method: string; priority: number };
+}
+
+function methodLabel(c: CompiledRoute): string {
+  return c.methods ? [...c.methods].filter((m) => m !== "HEAD").join("|") : "ANY";
+}
+
+/**
+ * 找出重疊的路由（方法集合有交集即算；ANY 與任何方法都重疊；`/x/:a` 與 `/x/:b` 視為同一樣式）。
+ * 不同的租戶前綴模式（require／deny）比對的網址不重疊，不列入。
+ */
+export function findRouteConflicts(routes: RegisteredRoute[]): RouteConflict[] {
+  const compiled = routes.map(compile);
+  const groups = new Map<string, number[]>();
+  compiled.forEach((c, i) => {
+    const key = "/" + c.segments.map((s) => (s.startsWith(":") ? ":" : s)).join("/") + (c.wildcard ? "/*" : "");
+    const g = groups.get(key);
+    if (g) g.push(i);
+    else groups.set(key, [i]);
+  });
+  const out: RouteConflict[] = [];
+  groups.forEach((idx, pattern) => {
+    if (idx.length < 2) return;
+    for (let x = 0; x < idx.length; x++) {
+      for (let y = x + 1; y < idx.length; y++) {
+        const a = compiled[idx[x]];
+        const b = compiled[idx[y]];
+        const tp = [a.tenantPrefix, b.tenantPrefix].sort().join(",");
+        if (tp === "deny,require") continue;
+        const ma = a.methods ? [...a.methods] : ALL_METHODS;
+        const mb = new Set(b.methods ? [...b.methods] : ALL_METHODS);
+        const common = ma.filter((m) => m !== "HEAD" && mb.has(m));
+        if (common.length === 0) continue;
+        // 同 match()：先比 priority 等，再依登錄順序（陣列穩定排序 → 先登錄者勝）
+        const [w, l] = precedence(a, b) <= 0 ? [a, b] : [b, a];
+        out.push({
+          kind: a.priority === b.priority ? "ambiguous" : "override",
+          pattern,
+          methods: common,
+          winner: { module: w.route.module, path: w.route.path, method: methodLabel(w), priority: w.priority },
+          loser: { module: l.route.module, path: l.route.path, method: methodLabel(l), priority: l.priority },
+        });
+      }
+    }
+  });
+  return out;
+}
+
+export function formatRouteConflict(c: RouteConflict): string {
+  return (
+    `${c.kind === "ambiguous" ? "重複路由" : "路由覆蓋"} ${c.methods.join("|")} ${c.pattern}：` +
+    `${c.winner.module}（${c.winner.method} ${c.winner.path}，priority ${c.winner.priority}）勝過 ` +
+    `${c.loser.module}（${c.loser.method} ${c.loser.path}，priority ${c.loser.priority}）` +
+    (c.kind === "ambiguous" ? "——priority 相同，後者在這些方法上永遠不會被用到" : "")
+  );
+}
+
 export class Router {
   private compiled: CompiledRoute[];
+  readonly conflicts: RouteConflict[];
 
   constructor(routes: RegisteredRoute[]) {
     this.compiled = routes.map(compile);
-    const seen = new Map<string, RegisteredRoute>();
-    for (const c of this.compiled) {
-      const key = `${c.methods ? [...c.methods].sort().join(",") : "ANY"} ${c.route.path}`;
-      const prev = seen.get(key);
-      if (prev) {
-        // 不同模組登錄了同一路徑＋方法：後者永遠不會被用到，提早報出來
-        console.error(`[router] 重複路由 ${key}（${prev.module} 與 ${c.route.module}）`);
-      } else {
-        seen.set(key, c.route);
-      }
-    }
+    // 重疊的路由由 route-check.ts 在模組載入時報出（這裡只保留結果，供除錯頁 /backend/dev/routes 顯示）
+    this.conflicts = findRouteConflicts(routes);
   }
 
   /** 列出所有路由（除錯/文件用） */
