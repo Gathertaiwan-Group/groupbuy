@@ -1,0 +1,1791 @@
+{{!-- 新增優惠條件〈精靈模式〉片段：GET /backend/SalesRule/wizard?groupBuyId=（openFormL 載入 #myModalContent）。原站 spec/html/modal-salesrule-wizard.html，缺段已依原站原始碼補齊 --}}
+<style>
+.breadcrumb-item {cursor: pointer;}
+.wizard-body {min-height:678px;}
+.card-wizard.card {border:1px solid #dee2e6;text-align:center;letter-spacing: 4px;transform: scale(1);transition-duration: 0.3s;}
+.card-wizard.card:hover {border: solid 1px #7f8c98;transform: scale(1.05);transition-duration: 0.3s;}
+.card-wizard .card-header {font-size: 16pt;font-weight: 400;}
+.card-wizard .card-body {display: flex;justify-content: center;min-height: 158px;align-items: center;flex-wrap: wrap;}
+.wizard-step1 .card-wizard .card-body {min-height: 128px;}
+
+.card-wizard span {display:inline-block;}
+.wizard-stepfinal .modal-footer {position: absolute;bottom: 0px;width: 100%;}
+.btn-input-check,.btn-input-check:hover,.btn-input-check.active {min-width:72px !important;background-color: #fff!important;color: black;border: 1px solid #ced4da;}
+.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;color:#10ad1d}
+.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
+label.error {display: flex;justify-content: center;align-items: center;height: 38px;margin: 0;padding: 0 2px;background-color: red;color: #fff;font-weight: 500;}
+</style>
+
+<div class="modal-header">
+	<h5>團購 &raquo; 優惠條件精靈</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body modal-body-wizard">
+	<div class="modal-message"></div>
+
+	<nav aria-label="breadcrumb">
+		<ol class="breadcrumb breadcrumb-wizard">
+			<li class="breadcrumb-item" data-step="wizard-step1-all">精靈</li>
+		</ol>
+	</nav>
+	<div class="wizard-body">
+		<div class="wizard-step wizard-stepfinal" id="wizard-stepfinal">
+			<form id="wizard-stepfinal-form">
+				<div class="form-group row">
+					<label class="col-3 text-center" for="minimum"></label>
+					<div class="col-9">
+						<input type="text" name="minimum" placeholder="" class="form-control">
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-3 text-center" for="maximum"></label>
+					<div class="col-9">
+						<input type="text" name="maximum" placeholder="" class="form-control">
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-3 text-center" for="dollarOrPercentage"></label>
+					<div class="col-9">
+						<div class="input-group-append">
+							<div class="btn-group btn-group-toggle" data-toggle="buttons" id='dollarOrPercentage-group'></div>
+						</div>
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-3 text-center" for=discount>優惠</label>
+					<div class="col-9">
+						<input type="text" name="discount" class="form-control">
+					</div>
+				</div>
+				<div class="form-group row" id="repeatable-group">
+					<label class="col-3 text-center" for=repeatable>累送次數</label>
+					<div class="col-9">
+						<div class="input-group">
+							<div class="input-group-prepend">
+								<div class="btn-group btn-group-toggle" data-toggle="buttons">
+									<label class="btn btn-sm btn-input-check m-0 p-2 active">
+										<input type="radio" name="repeatable" value="0" checked>僅一次
+									</label>
+									<label class="btn btn-sm btn-input-check m-0 p-2">
+										<input type="radio" name="repeatable" value="-1">不限
+									</label>
+									<label class="btn btn-sm btn-input-check m-0 p-2">
+										<input type="radio" name="repeatable" value="1">有上限
+									</label>
+								</div>
+							</div>
+							<input type="text" name="maxApplyTimes" class="form-control d-none" placeholder="輸入次數">
+						</div>
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-3 text-center" for=item1>贈品標籤</label>
+					<div class="col-9">
+						<input type="text" name="tag" placeholder="" class="form-control">
+						<div class="help-block text-primary small">
+						請給贈品命名一個標籤名稱，可盡量簡短，如：衣服,主商品,贈品,贈品2
+						<br>標籤名稱將會影響到其他有相同標籤名稱的優惠條件是否能重複套用
+						</div>
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-3 text-center" for="item1">選擇贈品</label>
+					<div class="col-9">
+						<select id="item1" class="form-control" multiple="multiple"></select>
+						<div class="help-block text-primary small">
+						可多選。<br>
+						現在也可先不挑選贈品，等優惠條件新增後，再至商品明細中指定個別商品內的優惠條件。
+						</div>
+					</div>
+				</div>
+				<div class="form-group row" id="autoOrManual-group">
+					<label class="col-3 text-center" for="">贈送方式</label>
+					<div class="col-9">
+						<div class="input-group">
+							<div class="input-group-prepend">
+								<div class="btn-group btn-group-toggle" data-toggle="buttons">
+									<label class="btn btn-sm btn-input-check m-0 p-2 active">
+										<input type="radio" name="autoOrManual" value="auto" checked>自動贈送
+									</label>
+									<label class="btn btn-sm btn-input-check m-0 p-2">
+										<input type="radio" name="autoOrManual" value="manual">客人自選
+									</label>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="form-group row" id="giftTagRule-group">
+					<label class="col-3 text-center" for="salesRuleSettings.giftTagRule">當贈品超過一種商品時</label>
+					<div class="col-9">
+						<div class="input-group">
+							<div class="input-group-prepend">
+								<div class="btn-group btn-group-toggle" data-toggle="buttons">
+									<label class="btn btn-sm btn-input-check m-0 p-2 active">
+										<input type="radio" name="salesRuleSettings.giftTagRule" value="ALL" checked>全部贈送
+									</label>
+									<label class="btn btn-sm btn-input-check m-0 p-2">
+										<input type="radio" name="salesRuleSettings.giftTagRule" value="ONE">隨機送一
+									</label>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="form-group row" id="combinable-group">
+					<label class="col-3 text-center">能否合併</label>
+					<div class="col-9">
+						<div class="custom-control custom-switch">
+							<input type="checkbox" class="custom-control-input" name="combinable" id="combinable">
+							<label class="custom-control-label" for="combinable">若有其他滿額贈，是否能合併送</label>
+						</div>
+					</div>
+				</div>
+			</form>
+			<!--
+			<div class="row preview">
+				<label class="col-3 text-center">結果預覽</label>
+				<div class="col-9">
+					<div class="help-block small" id="salesRuleDescr"></div>
+				</div>
+			</div>
+			 -->
+		</div> <!-- step-final -->
+	</div>
+</div> <!-- modal-body -->
+<div class="modal-footer modal-footer-wizard">
+	<span class="submit-result"></span>
+	<button class="btn btn-default text-nowrap" data-dismiss="modal">關閉</button>
+	<button class="btn btn-primary text-nowrap" data-action="submit">新增</button>
+	<button class="btn btn-primary text-nowrap" data-action="continue">繼續新增同類型優惠</button>
+	<button class="btn btn-primary text-nowrap" data-action="new">從新開始</button>
+</div>
+<script>
+var groupBuyId = '{{groupBuyId}}';
+var groupBuyItemSetHref = '<a class="btn btn-sm btn-primary p-1 my-0" target="_blank" href="'+GBF.ctx + '/backend/GroupBuy/show.do?groupBuyId=' + groupBuyId + '">管理團購</a>'
+var s = function(step,type,title,descr,steps) {
+	return {
+		step:step,
+		type:type,
+		title:title,
+		descr:descr,
+		steps:steps,
+	};
+};
+
+var ssd = function(name,label,placeholder,unit) {
+	return {
+		name:name,
+		label:label,
+		placeholder:placeholder,
+		unit:unit,
+	};
+}
+var options = {
+	repeatable:{
+		def:[
+			ssd('1','僅一次'),
+			ssd('-1','不限'),
+			ssd('0','有上限'),
+		],
+		piece:[
+			ssd('1','僅一個'),
+			ssd('-1','不限'),
+			ssd('0','有上限'),
+		],
+		level:[
+			ssd('1','僅一個'),
+			ssd('-1','不限'),
+			ssd('0','有上限'),
+			ssd('2','有其他門檻'),
+		],
+		unlimited:[
+			ssd('-1','不限'),
+			ssd('0','有上限'),
+		],
+	},
+	autoOrManual:{
+		def : [
+			ssd('auto','自動贈送'),
+			ssd('manual','客人自選'),
+		],
+		auto : [
+			ssd('auto','自動贈送'),
+		],
+		manual : [
+			ssd('manual','客人自選'),
+		],
+	},
+	dollarOrPercentage: {
+		order:[
+			ssd('DOLLAR','折扣(金額)','輸入折扣金額','$'),
+			ssd('PERCENTAGE','折扣數(%)','輸入折數(10=九折,15=八五折)','%'),
+		],
+		orderAndPoint:[
+			ssd('DOLLAR','折扣(金額)','輸入折扣金額','$'),
+			ssd('PERCENTAGE','折扣數(%)','輸入折數(10=九折,15=八五折)','%'),
+			ssd('POINT','會員點數累積','輸入點數','點'),
+		],
+		price:[
+			ssd('DOLLAR','折扣(金額)','輸入折扣金額','$'),
+			ssd('SALE_PRICE','新售價','輸入新售價','$'),
+			ssd('PERCENTAGE','團購價折扣數(%)','輸入折數(10=九折,15=八五折)','%'),
+			ssd('PERCENTAGE_RETAIL_PRICE','原價折扣數(%)','輸入折數(10=九折,15=八五折)','%'),
+		],
+		discount:[
+			ssd('DOLLAR','折扣(金額)','輸入折扣金額','$'),
+		],
+		piece:[
+			ssd('PIECE','贈品','輸入數量','個/件'),
+		],
+		pack:[
+			ssd('PACK_DOLLAR','組合折扣','輸入折扣金額','$'),
+			ssd('PACK_SALE_PRICE','組合價','輸入新售價','$'),
+		],
+		dollar_pack_discount:[
+			ssd('DOLLAR_PACK_DISCOUNT','固定金額','輸入折扣金額','$'),
+			ssd('PERCENTAGE','折扣數(%)','輸入折數(10=九折,15=八五折)','%'),
+		],
+		bundle_price:[
+			ssd('BUNDLE_PRICE','組合價','輸入組合金額','$'),
+		]
+	},
+}
+
+var gtros = [
+	ssd('ALL','全部贈送'),
+	ssd('ONE','隨機送一'),
+];
+
+var previewSalesRule = {
+	type1 : function (s) {
+		if (typeof s.descr == 'function') {
+			var descr = s.descr();
+			if (descr.length) {
+				descr = '<span class="help-text">' + descr + '</span>';
+				descr += '<button type="button" class="btn btn-sm btn-default btn-copy-title p-2 ml-2">貼上</button>';
+			}
+			$('#title-group .help-block').html(descr);
+		}
+	},
+	typeX : function (s) {
+		var minimum = s.field('minimum');
+		var dollarOrPercentage = s.field('dollarOrPercentage');
+		var discount = s.field('discount');
+		var isPercent = wizard.isPercent(dollarOrPercentage.data());
+		var descr = isPercent ? (s.descrP || s.descr) : s.descr;
+		var html = descr
+			.format(
+				minimum.label,
+				minimum.data(),
+				dollarOrPercentage.label,
+				dollarOrPercentage.option().label,
+				discount.data()
+			);
+		var maxApplyTimes = s.field('maxApplyTimes').data();
+		if (maxApplyTimes == -1) {
+			if (isPercent) maxApplyTimes = 1;
+			else maxApplyTimes = 10;
+		}
+		for (var i = 2; i <= 10; i++) {
+			var factor = Math.min(i,maxApplyTimes);
+			if (i == 4) html += '<br>...';
+			if (i < 4 || i == maxApplyTimes || i == 10) {
+				html += '<br>' + descr
+				.format(
+					minimum.label,
+					minimum.data()*i,
+					dollarOrPercentage.label,
+					dollarOrPercentage.option().label,
+					discount.data()*factor,
+				);
+			}
+		}
+		$('#salesRuleDescr').html(html);
+	},
+	type2 : function (s) {
+		var minimum = s.field('minimum');
+		var dollarOrPercentage = s.field('dollarOrPercentage');
+		var discount = s.field('discount');
+		var isPercent = wizard.isPercent(dollarOrPercentage.data());
+		var descr = isPercent ? (s.descrP || s.descr) : s.descr;
+		var minimumV = minimum.data();
+		var startI = Math.max(1, minimumV-2);
+		var maxApplyTimes = s.field('maxApplyTimes').data();
+		if (maxApplyTimes == -1) {
+			if (isPercent) maxApplyTimes = 1;
+			else maxApplyTimes = 10;
+		}
+		var html = '';
+		for (var i = startI; i < startI+10; i++) {
+			var factor = Math.min(i,maxApplyTimes);
+			var d = 0;
+			if (i >= minimumV && i <= maxApplyTimes) {
+				d = discount.data();
+			}
+			html += '<br>' + descr
+			.format(
+				minimum.label,
+				i,
+				dollarOrPercentage.label,
+				dollarOrPercentage.option().label,
+				d,
+			);
+		}
+		$('#salesRuleDescr').html(html);
+	}
+}
+var f = function(name,label,opts,type,required = false) {
+	opts = opts || {};
+	var ret = {
+		name:name,
+		type:type,
+		label:label,
+		opts:opts,
+		required:required,
+		selector:function(selected = false) {
+			var nameEscaped = $.escapeSelector(name);
+			var selector = '#wizard-stepfinal :input[name='+nameEscaped+']';
+			var input = $(selector);
+			if (selected && input.length > 1 && (this.type == 'radio' || this.type == 'select' || this.type == 'checkbox') ) {
+				selector = '#wizard-stepfinal :input[name='+nameEscaped+']:checked';
+				input = $(selector);
+			}
+			return input;
+		},
+		data:function () {
+			return this.selector(true).val();
+		},
+		option:function() {
+			if (this.opts.options == null) return null;
+			var value = this.data();
+			return this.opts.options.find(o=>o.name == value);
+		},
+		appendTo:function(selector) {
+			var body = '';
+			var placeholder = this.opts.placeholder || '';
+			var inputGroupClassName = this.opts.groupClassName || '';
+			var formGroupClassName = this.opts.formGroupClassName || '';
+			var inputClassName = this.opts.inputClassName || '';
+			var fieldInfo = this.opts.fieldInfo || '';
+			var defaultValue = this.opts.defaultValue || '';
+			var nextField = (this.opts.ignoreNextField) ? '' :
+				`<div class="col-md-2 text-right text-md-center pt-2 p-md-0">
+					<button type="button" class="btn btn-sm btn-primary m-0 p-2 wizard-next-field">
+						下一步
+					</button>
+				</div>`;
+			if (typeof fieldInfo == 'function') fieldInfo = fieldInfo();
+			fieldInfo = '<div class="help-block text-primary small mt-1">'+(fieldInfo || '')+'</div>';
+			var prependText = '';
+			var appendText = '';
+			if (this.opts.prependText) {
+				prependText = '<div class="input-group-prepend"><span class="input-group-text">'+this.opts.prependText+'</span></div>';
+			}
+			if (this.opts.appendText) {
+				appendText = '<div class="input-group-append"><span class="input-group-text">'+this.opts.appendText+'</span></div>';
+			}
+			switch (this.type) {
+			case 'radio': case 'checkbox':
+				if (this.opts.options) {
+					var _this = this;
+					body = '<div class="input-group-prepend">'+prependText+'<div class="btn-group btn-group-toggle" data-toggle="buttons">';
+					this.opts.options.forEach(function(o,i) {
+						body += `<label class="btn btn-sm btn-input-check m-0 p-2 {0}">
+							<input type="{1}" name="{2}" value="{3}" {4}>{5}
+						</label>`
+						.format(
+							(i == 0) ? 'active' : '',
+							_this.type,
+							_this.name,
+							o.name,
+							(i == 0) ? 'checked' : '',
+							o.label
+						);
+					});
+					body += '</div></div>';
+				} else {
+					body = `<div class="custom-control custom-switch {0}">
+						<input type="checkbox" class="custom-control-input" name="{1}" value="1" id="{2}">
+						<label class="custom-control-label" for="{3}">{4}</label>
+					</div>`
+					.format(
+						inputClassName,
+						this.name,
+						this.name,
+						this.name,
+						placeholder,
+					);
+				}
+				break;
+			case 'hidden':
+				body = `<input type="hidden" id="{0}" name="{1}" value="{2}" placeholder="{3}" class="form-control {4}" autocomplete="off">`
+				.format(
+					this.name,
+					this.name,
+					defaultValue,
+					placeholder,
+					inputClassName,
+				);
+				break;
+			case 'text': case 'date':
+				body = `<input type="text" id="{0}" name="{1}" value="{2}" placeholder="{3}" class="form-control {4}" autocomplete="off">`
+				.format(
+					this.name,
+					this.name,
+					defaultValue,
+					placeholder,
+					inputClassName,
+				);
+				if (prependText.length || appendText.length) {
+					body = `<div class="input-group {0}">{1}{2}{3}</div>`
+					.format(
+						inputGroupClassName,
+						prependText,
+						body,
+						appendText
+					);
+				}
+				break;
+			case 'select2':
+				body = `<select id="{0}" name="{1}" class="form-control {2}" multiple="multiple"></select>`
+				.format(
+					this.name,
+					this.name,
+					inputClassName,
+				);
+			}
+
+			if (this.opts.appendTo) {
+				$form = $(this.opts.appendTo).append(body);
+			} else if (this.type == 'hidden') {
+				$form = $(selector).append(body);
+			} else if (this.type == 'container') {
+				var html = `<div class="" id="{0}-group">
+				</div>`
+				.format(this.name);
+				$form = $(selector).append(html);
+			} else {
+				var html = `<div class="form-group row {0}" id="{1}-group">
+					<label class="col-md-3 text-md-center" for="{2}">{3}</label>
+					<div class="col-md-7">
+						<div class="input-group">
+						{4}
+						</div>
+						{5}
+					</div>
+					{6}
+				</div>`
+				.format(
+					formGroupClassName,
+					this.name,
+					this.name,
+					this.label,
+					body,
+					fieldInfo,
+					nextField,
+				);
+				if (this.opts.after) {
+					$form = $(this.opts.after).after(html);
+				} else {
+					$form = $(selector).append(html);
+				}
+			}
+
+			var $input = this.selector();
+			var $formGroup = $input.closest('.form-group');
+			if (this.opts.callback) {
+				$input.on('change', this.opts.callback);
+			} else if (callbacks[this.name]) {
+				$input.on('change', callbacks[this.name]);
+			}
+
+			switch (this.type) {
+			case 'select2':
+				$input.select2({
+					width: '100%',
+					inputClass:'input-large',
+					closeOnSelect : false,
+					dropdownAutoWidth:true,
+					placeholder:placeholder,
+					language:'zh-TW',
+					ajax: {
+						delay:350,
+						url: this.opts.lookup,
+						dataType: 'json'
+					}
+				});
+				$formGroup.find(".select2-search.select2-search--inline").prepend("<i class='fa-light fa-search mr-1'></i>");
+				$input.on("select2:unselect", function(e) {
+					var $this = $(this);
+					var option = $this.find('option[value='+e.params.data.id+']');
+					var selected = option.prop('selected');
+					if (selected) {
+						option.prop('selected', false);
+						$this.data('select2').trigger('unselect', e.params);
+						$this.trigger('change');
+					}
+					//$input.parent().find('input.select2-search__field').prop('placeholder', placeholder);
+				});
+				break;
+			case 'date':
+				var dateFormat = this.opts.dateFormat || 'YYYY-MM-DD';
+				initDatetimePicker($input, dateFormat, 'days');
+				break;
+			}
+			return $formGroup;
+		},
+		trigger:function(evt) {
+			this.selector(true).trigger(evt);
+		}
+	};
+	return ret;
+};
+
+var sr = function(name, opts) {
+	var ret = opts;
+	ret.name = name;
+	if (!ret.category) {
+		ret.category = name;
+	}
+	ret.field = function(name) {
+		return this.fields.find(o=>o.name == name);
+	};
+	ret.buildForm = function(selector) {
+		$(selector).html('');
+		this.fields.forEach(f => f.appendTo(selector));
+		this.fields.forEach(f => f.trigger('change'));
+		ret.formGroup = $(selector).find('.form-group')[0];
+		//@TEST
+		ret.nextField(true);
+		$('#wizard-stepfinal .preview').hide();
+		$('button[data-action]').hide();
+		$('#wizard-stepfinal')
+			.off('click')
+			.on('click', '.wizard-next-field', function() {
+				console.log('click');
+				$(this).hide();
+				ret.nextField();
+			});
+	};
+	ret.nextField = function(hasNextField = false) {
+		$(ret.formGroup).nextAll('.form-group').each((i,f) => {
+			var $formGroup = $(f);
+			if ($formGroup.hasClass('d-none')) return;
+
+			if (hasNextField) {
+				$formGroup.hide();
+			} else {
+				$formGroup.show().animateCss('fadeIn ');
+			}
+			if (!hasNextField) {
+				hasNextField = $formGroup.find('.wizard-next-field').length > 0;
+				if (hasNextField) {
+					ret.formGroup = f;
+				}
+			}
+		});
+		if (!hasNextField) {
+			$('#wizard-stepfinal .preview').show().animateCss('fadeIn ');
+			$('button[data-action="submit"]').show().animateCss('fadeIn ');
+		}
+	}
+
+	var copyMap = function(full, sub) {
+		var ret = {};
+		if (!full && !sub) {
+			ret = {};
+		} else if (!sub) {
+			ret = full;
+		} else {
+			//ret = full;
+			for (var n in full) {
+				ret[n] = full[n];
+			}
+			for (var n in sub) {
+				ret[n] = sub[n];
+			}
+		}
+		return ret;
+	}
+
+	if (ret.mode && ret.mode == 'f') {
+		ret.fields = ret.fields.flatMap(f => {
+			var df = defaultFields.find(f1 => f1.name == f.name);
+			f.type = f.type || df.type;
+			f.label = f.label || df.label;
+			f.required = f.required || df.required;
+			// f.opts = f.opts || df.opts || {};
+			f.opts = copyMap(df.opts, f.opts);
+			return f;
+		});
+	} else {
+		ret.fields = defaultFields
+			.filter(e => {
+				return e.required || opts.fields.find(e2 => e2.name == e.name);
+			})
+			.flatMap(f => {
+				var df = opts.fields.find(f1 => f1.name == f.name);
+				if (!df) return f;
+				df.type = df.type || f.type;
+				df.label = df.label || f.label;
+				df.required = df.required || f.required;
+				// df.opts = df.opts || f.opts || {};
+				df.opts = copyMap(f.opts, df.opts);
+				return df;
+			});
+	}
+
+	ret.fields.push(f('category','',{defaultValue:ret.category},'hidden'));
+
+	return ret;
+}
+
+var callbacks = {
+	withinPeriod : function() {
+		var checked = $(this).prop('checked');
+		var $ds = wizard.s.field("dateStartString").selector();
+		var $de = wizard.s.field("dateEndString").selector()
+		if (checked) {
+			$ds.removeClass('d-none');
+			$de.removeClass('d-none');
+		} else {
+			$ds.addClass('d-none');
+			$de.addClass('d-none');
+			$ds.val('');
+			$de.val('');
+		}
+	},
+	irregular : function() {
+		var checked = $(this).prop('checked');
+		var $ds = wizard.s.field("repeatMinimum").selector().closest('.input-group');
+		var $de = wizard.s.field("repeatDiscount").selector().closest('.input-group');
+		if (checked) {
+			$ds.removeClass('d-none');
+			$de.removeClass('d-none');
+		} else {
+			$ds.addClass('d-none');
+			$de.addClass('d-none');
+			$ds.val('');
+			$de.val('');
+		}
+	},
+	dollarOrPercentage : function() {
+		var v = $(this).val();
+		var option = wizard.s.field('dollarOrPercentage').option();
+		$('input[name$=iscount]').prop('placeholder', option.placeholder);
+		$('input[name$=iscount]').parent().find('.input-group-append .input-group-text').text(option.unit);
+		$('input[name$=iscount]').parent().find('.input-group-prepend .input-group-text').text(option.label);
+		if (wizard.isPercent(v)) {
+			$('input[name=repeatable]').filter((i,o) => $(o).val() != -1).parent().hide();
+			$('input[name=repeatable][value=-1]').click().change();
+
+			$('input[name=repeatMinimum]').val('');
+			$('input[name=repeatDiscount]').val('');
+		} else {
+			$('input[name=repeatable]').parent().show();
+			$('input[name=repeatable]:first').click().change()
+		}
+	},
+	autoOrManual : function () {
+		if (!$(this).prop('checked')) return;
+		var v = $(this).val();
+		if (v == 'auto') {
+			$('#giftTagRule-group').show();
+		} else {
+			$('#giftTagRule-group').hide();
+		}
+	},
+	repeatable : function () {
+		if (!$(this).prop('checked')) return;
+		var v = $(this).val();
+		if (v == 0) {
+			$('input[name=maxApplyTimes]').closest('.input-group').removeClass('d-none');
+			$('input[name=maxApplyTimes]').val('1').change();
+		} else {
+			$('input[name=maxApplyTimes]').closest('.input-group').addClass('d-none');
+			$('input[name=maxApplyTimes]').val(v).change();
+		}
+	},
+	needMainItem : function() {
+		var checked = $(this).prop('checked');
+		if (checked) {
+			$('#tag1-group').removeClass('d-none');
+			$('#tag1Id-group').removeClass('d-none');
+			$('#tag1Minimum-group').removeClass('d-none');
+		} else {
+			$('#tag1-group').addClass('d-none');
+			$('#tag1Id-group').addClass('d-none');
+			$('#tag1Minimum-group').addClass('d-none');
+			$(':input[name=tag1]').val(null).change();
+			$(':input[name=tag1Id]').val(null).change();
+		}
+	},
+	tagTotal : function() {
+		var v = parseInt($(this).val());
+		if (isNaN(v)) return;
+		v = Math.max(1,v);
+		v = Math.min(6,v);
+		for (var i = 1; i < 7; i++) {
+			if (i <= v) {
+				$(':input[name^=tag'+i+']').closest('.form-group').removeClass('d-none');
+			} else {
+				$(':input[name^=tag'+i+']').closest('.form-group').addClass('d-none');
+			}
+		}
+	},
+	packDiscount : function() {
+		if (!$(':input[name^=tag][name$=Minimum]').length) return;
+		var v = parseInt($(':input[name=packDiscount]').val());
+		if (isNaN(v)) {
+			$(':input[name=packDiscount]').val('');
+			v = 0;
+		}
+		var round = function(value, decimals) {
+			return Number(Math.floor(value+'e'+decimals)+'e-'+decimals);
+		}
+		var total = $(':input[name^=tag][name$=Minimum]').toArray().flatMap(o=>parseInt($(o).val()) || 0).reduce((a,b)=>a+b) || 1;
+		$(':input[name=discount]').val(round(v/total,2));
+	},
+	level : function() {
+		var v = parseInt($(this).val());
+		if (isNaN(v)) return;
+		var option = wizard.s.field('dollarOrPercentage').option();
+		v = Math.max(1,v);
+		v = Math.min(6,v);
+
+		$('div[id^=discount][id$=group]').filter((i,s)=>s.id != 'discount-group').remove();
+		$('div[id^=minimum][id$=group]').filter((i,s)=>s.id != 'minimum-group').remove();
+		for (var i = 1; i < v; i++) {
+			var after = (i == 1) ? '#levelGroup-group' : '#discount'+(i-1)+'-group';
+
+			f('discount'+i,' ',{after:after,placeholder:option.placeholder,prependText:option.label,appendText:option.unit,groupClassName:'mb-2'},'text')
+			.appendTo().hide();
+			f('minimum'+i,' ',{after:after,placeholder:'輸入滿額',prependText:'下個滿額'},'text')
+			.appendTo().hide();
+		}
+	},
+}
+
+var lookupUrls = {
+	'item' : '{{baseUrl}}/ajax/Lookup/item?itemType=NORMAL&groupBuyId='+groupBuyId,
+	'gift' : '{{baseUrl}}/ajax/Lookup/item?itemType=GIFT&groupBuyId='+groupBuyId,
+	'groupBuyItemSet' : '{{baseUrl}}/ajax/Lookup/groupBuyItemSet?groupBuyId={{groupBuyId}}',
+}
+
+var defaultOpts = {
+	tag:{
+		placeholder:'輸入標籤',
+		inputClassName:'required',
+		ignoreNextField:true,
+	},
+	itemId:{
+		placeholder:'輸入商品關鍵字',
+		fieldInfo:'指定個別商品。可多選。<br>可至'+groupBuyItemSetHref+'中「商品明細」內建立「商品」後繼續選擇。也可先不選擇，等優惠條件新增後，再透過綁定或是至商品明細內設定此優惠條件及其優惠標籤。',
+		inputClassName:'',
+		ignoreNextField:true,
+		lookup:lookupUrls.item,
+	},
+	gbisId:{
+		placeholder:'輸入品項關鍵字',
+		fieldInfo:'所有在該品項內的商品均會包含。可多選。<br>現在也可先不選擇，等優惠條件新增後，再至管理團購中於該品項內選擇此優惠條件。',
+		inputClassName:'',
+		ignoreNextField:true,
+		lookup:lookupUrls.groupBuyItemSet,
+	},
+	gbisIdOpt:{
+		placeholder:'輸入品項關鍵字',
+		fieldInfo:'所有在該品項內的商品均會包含。可多選。<br>若無指定任何品項或是商品，代表任何商品均為主商品<br>現在也可先不選擇，等優惠條件新增後，再至管理團購中於該品項內選擇此優惠條件。',
+		inputClassName:'',
+		ignoreNextField:true,
+		lookup:lookupUrls.groupBuyItemSet,
+	},
+	giftId:{
+		placeholder:'輸入商品關鍵字',
+		fieldInfo:'可多選。商品種類須為<span class="badge badge-info ml-1">贈品</span>。<br>可至'+groupBuyItemSetHref+'中「商品明細」內建立「商品」後繼續選擇。也可先不選擇，等優惠條件新增後，再透過綁定或是至商品明細內設定此優惠條件及其優惠標籤。',
+		inputClassName:'',
+		ignoreNextField:true,
+		lookup:lookupUrls.gift,
+	},
+	excludeItemId:{
+		placeholder:'輸入商品關鍵字',
+		fieldInfo:'可多選。<br>。可先不選擇，等優惠條件新增後，再到此優惠條件綁定內不參與活動商品',
+		inputClassName:'',
+		ignoreNextField:true,
+		lookup:lookupUrls.item,
+	},
+	tagMinimum:{
+		placeholder:'輸入標籤1數量',
+		inputClassName:'required',
+		ignoreNextField:true,
+	}
+}
+
+var defaultFields = [
+	f('withinPeriod', '有期限限制', {placeholder:'優惠有期限限制',inputClassName:'w-100'}, 'checkbox',true),
+	f('dateStartString', '開始日期', {placeholder:'輸入開始日期',inputClassName:'d-none mt-2 mr-2',dateFormat:'YYYY-MM-DD HH:mm',appendTo:'#withinPeriod-group .input-group'}, 'date',true),
+	f('dateEndString', '截止日期', {placeholder:'輸入截止日期',inputClassName:'d-none mt-2',dateFormat:'YYYY-MM-DD HH:mm',appendTo:'#withinPeriod-group .input-group'}, 'date',true),
+	f('level', '請問有幾個優惠級距', {placeholder:''},'text'),
+	f('minimum', '滿額', {placeholder:'輸入金額 ',inputClassName:'required',appendText:'$'}, 'text',true),
+	f('maximum', '最大', {placeholder:'輸入金額 ',inputClassName:'required',appendText:'$', fieldInfo:'上限輸入-1代表不限制'}, 'text',true),
+	f('needMainItem', '必須先購買特定商品？', {placeholder:'需購買「指定前置商品」，主優惠才生效。例如：買電磁爐享洗碗精兩件以上9折，請在此處搜尋「電磁爐」'}, 'checkbox'),
+	f('additonalOptional', '原價購買', {placeholder:'未達優惠時可用原價購買加購品'}, 'checkbox'),
+	f('addTag', '', {placeholder:'增加標籤'}, 'button'),
+	f('packDeal', '組合可享', {options:options.dollarOrPercentage.pack}, 'radio'),
+	f('packDiscount', '', {placeholder:'輸入折扣金額',inputClassName:'required',prependText:'組合折扣',appendText:'元'}, 'text'),
+	f('dollarOrPercentage', '可享', {options:options.dollarOrPercentage.price}, 'radio',true),
+	f('discount', '', {placeholder:'輸入折扣金額',inputClassName:'required',prependText:'優惠',appendText:'元'}, 'text',true),
+	f('levelGroup', '', {}, 'container'),
+	f('repeatable', '重複滿額次數', {options:options.repeatable.def,fieldInfo:'重複滿額時，重複享有優惠次數'},'radio',true),
+	f('maxApplyTimes', '最多套用次數', {placeholder:'輸入次數',appendTo:'#repeatable-group .col-md-7',prependText:'最多',appendText:'次',groupClassName:'my-2 d-none'}, 'text',true),
+	f('irregular', '有重複滿額時', {placeholder:'是否有不同重複規律',fieldInfo:'如果有其他滿額門檻，請透過「繼續新增」另一個優惠條件',inputClassName:'w-100'}, 'checkbox',true),
+	f('repeatMinimum', '之後每滿', {placeholder:'輸入金額 ',groupClassName:'d-none mt-2',prependText:'之後每滿',appendText:'$',appendTo:'#irregular-group .input-group:first'}, 'text',true),
+	f('repeatDiscount', '', {placeholder:'輸入折扣金額',groupClassName:'d-none mt-2',prependText:'優惠',appendText:'元',appendTo:'#irregular-group .input-group:first'}, 'text',true),
+	f('autoOrManual', '贈送方式', {options:options.autoOrManual.def}, 'radio'),
+	f('salesRuleSettings.giftTagRule', '當贈品超過一種商品時', {options:gtros}, 'radio'),
+	f('combinable', '能否合併', {placeholder:'有其他更高門檻優惠符合條件時，是否送此贈品？'}, 'checkbox'),
+	f('tagTotal', '有多少類別商品', {placeholder:'輸入種類數(上限為3)',inputClassName:'required',appendText:'種類商品',fieldInfo:'紅標商品任選3個搭配綠標商品任選2個現折$100。此範例為：有2種類商品。前者商品標籤為：紅標。後者商品標籤為：綠標'}, 'text'),
+	f('tag1', '標籤1', defaultOpts.tag,'text'),
+	f('tag1Id', '標籤1Id', defaultOpts.itemId,'select2'),
+	f('tag1GbisId', '標籤1GbisId', defaultOpts.gbisId,'select2'),
+	f('tag1Minimum', '標籤1最小數量', defaultOpts.tagMinimum,'text'),
+	f('tag2', '標籤2', defaultOpts.tag,'text'),
+	f('tag2Id', '標籤2Id', defaultOpts.itemId,'select2'),
+	f('tag2GbisId', '標籤2GbisId', defaultOpts.gbisId,'select2'),
+	f('tag2Minimum', '標籤2最小數量', defaultOpts.tagMinimum,'text'),
+	f('tag3', '標籤3', defaultOpts.tag,'text'),
+	f('tag3Id', '標籤3Id', defaultOpts.itemId,'select2'),
+	f('tag3GbisId', '標籤2GbisId', defaultOpts.gbisId,'select2'),
+	f('tag3Minimum', '標籤3最小數量', defaultOpts.tagMinimum,'text'),
+	f('tag4', '標籤4', defaultOpts.tag,'text'),
+	f('tag4Id', '標籤4Id', defaultOpts.itemId,'select2'),
+	f('tag4Minimum', '標籤4最小數量', defaultOpts.tagMinimum,'text'),
+	f('tag5', '標籤5', defaultOpts.tag,'text'),
+	f('tag5Id', '標籤5Id', defaultOpts.itemId,'select2'),
+	f('tag5Minimum', '標籤5最小數量', defaultOpts.tagMinimum,'text'),
+	f('tag6', '標籤6', defaultOpts.tag,'text'),
+	f('tag6Id', '標籤6Id', defaultOpts.itemId,'select2'),
+	f('tag6Minimum', '標籤6最小數量', defaultOpts.tagMinimum,'text'),
+	f('excludeItemId', '不參與活動商品', defaultOpts.excludeItemId,'select2'),
+	f('groupBuyItemSetId', '選擇享該優惠的品項', {placeholder:'輸入品項關鍵字',
+		inputClassName:'',
+		fieldInfo:'可多選。<br>現在也可先不選擇，等優惠條件新增後，再至管理團購中於該品項內選擇此優惠條件。',
+		lookup:lookupUrls.groupBuyItemSet},'select2'),
+	f('title', '標題', {placeholder:'輸入優惠標題',inputClassName:'required'}, 'text',true),
+	f('continue', '繼續新增', {placeholder:'保存後繼續新增其他同類型優惠條件'},'radio',true),
+	f('applyToGroupBuy', '可跨品項合併', {defaultValue:true,placeholder:''},'hidden'),
+	f('salesRuleSettings.maxDiscountAmount', '最多累積折扣金額上限',{placeholder:'輸入上限金額(可不填)',prependText:'$',
+		fieldInfo:'輸入超過0的數字才會生效'}, 'text'),
+	f('salesRuleSettings.minDiscountTotalPrice', '折扣後訂單最少金額',{placeholder:'輸入最少金額(可不填)',prependText:'$',
+		fieldInfo:'輸入超過0的數字才會生效'}, 'text'),
+
+];
+
+var fnGiftTag = function() {
+	var html = '給這(些)贈品下個標籤，若有其他同性質的優惠，標籤需使用相同才會彼此有關聯 <span class="badge badge-default">贈品</span> <span class="badge badge-default">贈品1</span>';
+	return html;
+}
+var fnItemTag = function() {
+	var html = '給這(些)指定商品下個標籤，標籤相同會視為同類型商品 <span class="badge badge-default">主商品</span> <span class="badge badge-default">眼鏡</span> <span class="badge badge-default">帽子</span>';
+	return html;
+}
+
+var fnGiftDescr = function() {
+	return _fnGiftDescr('訂單', this);
+}
+var fnGiftDescrItem = function() {
+	return _fnGiftDescr('指定商品', this);
+}
+var _fnGiftDescr = function(prefix = '訂單', xthis) {
+	var minimum = xthis.field('minimum');
+	var dollarOrPercentage = xthis.field('dollarOrPercentage');
+	var discount = xthis.field('discount');
+	var maxApplyTimes = xthis.field('maxApplyTimes').data();
+	var isPercent = wizard.isPercent(dollarOrPercentage.data());
+	var a = $(':input[name^=tag]')
+		.toArray()
+		.filter(o=>$(o).val() && $(o).prop('name').match('\\d$'))
+		.flatMap(o=>{
+			var n = $(o).prop('name');
+			var minimum = xthis.field(n+'Minimum');
+			if (minimum == null) {
+				minimum = xthis.field('minimum');
+			}
+			return xthis.field(n).data() + '任選' + minimum.data() + xthis.unit.minimum;
+		}).join('搭配')
+	if (!a.length) {
+		a = prefix+((maxApplyTimes == -1 || maxApplyTimes > 1) && !isPercent ? '每':'')+'滿' + minimum.data() + xthis.unit.minimum;
+	}
+	return a
+		+ '可享' + dollarOrPercentage.option().label + discount.data() + dollarOrPercentage.option().unit
+		+ ((maxApplyTimes > 1) ? '最多'+maxApplyTimes+'次' : '');
+}
+
+var fnDescr = {
+	salesOrder:function() {
+		var minimum = this.field('minimum');
+		var dollarOrPercentage = this.field('dollarOrPercentage');
+		var discount = this.field('discount');
+		var isPercent = wizard.isPercent(dollarOrPercentage.data());
+		var a = minimum.opts.prependText || minimum.label;
+		return a + minimum.data() + this.unit.minimum + dollarOrPercentage.label + dollarOrPercentage.option().label + discount.data() + dollarOrPercentage.option().unit;
+	},
+}
+
+var salesRules = {
+	rules : [
+		sr('MINIMUM_PRICE_MEET', {
+			level:'salesOrder',
+			type: 'Discount',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				//f('level','請問有幾個滿額級距'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','訂單滿額'),
+				f('dollarOrPercentage',' ',{options:options.dollarOrPercentage.orderAndPoint,prependText:'可享'}),
+				f('discount'),
+				//f('levelGroup'),
+				f('repeatable'),
+				f('maxApplyTimes',' ', {placeholder:'輸入次數',appendText:'次',prependText:'最多'}),
+				f('irregular'),
+				f('repeatMinimum'),
+				f('repeatDiscount'),
+				f('salesRuleSettings.minDiscountTotalPrice'),
+				f('title'),
+				f('continue'),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('MINIMUM_PIECE_MEET_MAIN_PIECE', {
+			level:'itemSet',
+			type: 'Discount',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('groupBuyItemSetId'),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'件',placeholder:'輸入件數'}),
+				f('dollarOrPercentage','可享每件商品',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable','最多幾件商品享優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes',' ', {placeholder:'輸入件數',appendText:'件',prependText:'最多'}),
+				f('salesRuleSettings.maxDiscountAmount'),
+				f('needMainItem'),
+				f('tag1',' ',{formGroupClassName:'d-none',prependText:'商品標籤'}),
+				f('tag1Minimum',' ',{formGroupClassName:'d-none',placeholder:'輸入件數',prependText:'需任選',appendText:'件'}),
+				f('tag1Id','選擇商品',{formGroupClassName:'d-none'}),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('ITEMSET_BUNDLE_PRICE', {
+			level:'itemSet',
+			type: 'Discount',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('groupBuyItemSetId'),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'件',placeholder:'輸入件數'}),
+				f('dollarOrPercentage','可享組合價',{options:options.dollarOrPercentage.bundle_price}),
+				f('discount'),
+				f('repeatable','最多幾組能享組合價優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes',' ', {placeholder:'輸入組數',appendText:'組',prependText:'最多'}),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('MINIMUM_PIECE_CONSTRAINT', {
+			level:'itemSet',
+			type: 'Constraint',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('groupBuyItemSetId', '選擇有該限制的品項'),
+				f('minimum',' ',{prependText:'最少挑選',appendText:'件',placeholder:'輸入件數'}),
+				f('maximum',' ', {prependText:'數量上限',appendText:'件',placeholder:'輸入件數'}),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:function() {
+				var minimum = this.field('minimum');
+				var maximum = this.field('maximum');
+				var a = minimum.opts.prependText || minimum.label;
+				return a + minimum.data() + this.unit.minimum + maximum.data() + this.unit.minimum
+			}
+		}),
+
+		sr('ITEM_PRICE_MEET', {
+			level:'item',
+			category:'ITEM_PRICE_MEET',
+			type: 'Discount',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1','商品標籤',{defaultValue:'滿額商品',placeholder:'輸入商品標籤',fieldInfo:fnItemTag,inputClassName:'required'}),
+				f('tag1GbisId','選擇商品品項',defaultOpts.gbisId),
+				f('tag1Id','選擇商品',defaultOpts.itemId),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'元',placeholder:'輸入金額'}),
+				f('dollarOrPercentage','可享總折扣',{options:options.dollarOrPercentage.dollar_pack_discount}),
+				f('discount'),
+				f('repeatable','最多享幾次優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes',' ', {placeholder:'輸入次數',appendText:'次',prependText:'最多'}),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('MINIMUM_PRICE_MEET_ITS', {
+			level:'itemSet',
+			type: 'Discount',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('groupBuyItemSetId'),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'元',placeholder:'輸入金額'}),
+				f('dollarOrPercentage','可享每件商品',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable','最多幾件商品享優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes',' ', {placeholder:'輸入件數',appendText:'件',prependText:'最多'}),
+				f('salesRuleSettings.maxDiscountAmount'),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('MINIMUM_PRICE_MEET_ITS_ITEM_TAG', {
+			level:'itemSet',
+			category:'MINIMUM_PRICE_MEET_ITS',
+			type: 'Discount',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1','指定品項標籤',{placeholder:'輸入品項標籤',fieldInfo:fnItemTag,inputClassName:'required',defaultValue:'品項標籤'}),
+				f('tag1GbisId','選擇品項',defaultOpts.gbisIdOpt),
+				f('tag2','商品標籤',{placeholder:'輸入商品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'商品標籤'}),
+				f('tag2Id','選擇商品'),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'元',placeholder:'輸入金額'}),
+				f('dollarOrPercentage','可享每件商品',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable','最多幾件商品享優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes',' ', {placeholder:'輸入件數',appendText:'件',prependText:'最多'}),
+				f('salesRuleSettings.maxDiscountAmount'),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('MINIMUM_PRICE_MEET_ITS_PACK_DISCOUNT', {
+			level:'itemSet',
+			category:'MINIMUM_PRICE_MEET_ITS',
+			type: 'Discount',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('applyToGroupBuy'),
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('groupBuyItemSetId'),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'元',placeholder:'輸入金額'}),
+				f('dollarOrPercentage','可享總折扣',{options:options.dollarOrPercentage.dollar_pack_discount}),
+				f('discount'),
+				f('repeatable','最多享幾次優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes',' ', {placeholder:'輸入次數',appendText:'次',prependText:'最多'}),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('TAG_MATCH_1', {
+			level:'item',
+			category:'TAG_MATCH',
+			type: 'Discount',
+			unit:{
+				minimum:'件',
+			},
+			//preview: previewSalesRule.type2,
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1',' ',{formGroupClassName:' ',prependText:'商品標籤',fieldInfo:'紅標商品任選3件以上，每件可享折扣$100。此範例為：商品標籤為：紅標'}),
+				f('tag1Id','選擇享該優惠的商品'),
+				f('minimum',' ',{prependText:'任選滿',appendText:'件',placeholder:'輸入件數'}),
+				f('dollarOrPercentage','可享每件',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable','最多幾個商品享優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes'),
+				f('salesRuleSettings.maxDiscountAmount'),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('TAG_MATCH_2', {
+			level:'item',
+			category:'TAG_MATCH',
+			type: 'Discount',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tagTotal'),
+				f('tag1',' ',{formGroupClassName:'d-none',prependText:'商品標籤1'}),
+				f('tag1Minimum',' ',{formGroupClassName:'d-none',placeholder:'輸入件數',prependText:'需任選',appendText:'件',callback:callbacks.packDiscount}),
+				f('tag1Id','選擇商品',{formGroupClassName:'d-none'}),
+				f('tag2',' ',{formGroupClassName:'d-none',prependText:'商品標籤2'}),
+				f('tag2Minimum',' ',{formGroupClassName:'d-none',placeholder:'輸入件數',prependText:'需任選',appendText:'件',callback:callbacks.packDiscount}),
+				f('tag2Id','選擇商品',{formGroupClassName:'d-none'}),
+				f('tag3',' ',{formGroupClassName:'d-none',prependText:'商品標籤3'}),
+				f('tag3Minimum',' ',{formGroupClassName:'d-none',placeholder:'輸入件數',prependText:'需任選',appendText:'件',callback:callbacks.packDiscount}),
+				f('tag3Id','選擇商品',{formGroupClassName:'d-none'}),
+				f('minimum','',{},'hidden'),
+				f('packDiscount','組合可享'),
+				f('dollarOrPercentage','組合可享',{options:options.dollarOrPercentage.discount,formGroupClassName:'d-none'}),
+				f('discount','相當於每件商品',{inputClassName:'disabled'}),
+				f('repeatable','最多幾組享優惠',{options:options.repeatable.unlimited,fieldInfo:''}),
+				f('maxApplyTimes','',{appendText:'組'}),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻優惠'}),
+			],
+			descr:function() {
+				return $(':input[name^=tag]')
+					.toArray()
+					.filter(o=>$(o).val() && $(o).prop('name').match('\\d$'))
+					.flatMap(o=>{
+						var n = $(o).prop('name');
+						return wizard.s.field(n).data() + '任選' + wizard.s.field(n+'Minimum').data()+'件';
+					}).join('搭配')
+					+ '現折' + wizard.s.field('packDiscount').data() + '元';
+			}
+		}),
+		sr('ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET', {
+			level:'salesOrder',
+			type: 'AdditionalPurchase',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1','加價購商品標籤',{defaultValue:'加購商品',placeholder:'輸入加價購商品標籤',fieldInfo:fnItemTag,inputClassName:'required'}),
+				f('tag1GbisId','選擇加價購商品品項',defaultOpts.gbisId),
+				f('tag1Id','選擇加價購商品',defaultOpts.itemId),
+				f('minimum','訂單滿額'),
+				f('dollarOrPercentage','可享加價購',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable', '加購次數', {options:options.repeatable.def,fieldInfo:'重複滿額時，享有加購次數'},'radio',true),
+				f('maxApplyTimes'),
+				f('additonalOptional'),
+				f('title'),
+			],
+			descr:fnDescr.salesOrder,
+		}),
+		sr('ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET_ITEM', {
+			level:'salesOrder',
+			type: 'AdditionalPurchase',
+			category:'ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1','主商品標籤',{placeholder:'輸入主商品標籤',fieldInfo:fnItemTag,inputClassName:'required'}),
+				f('tag1GbisId','選擇主商品品項',defaultOpts.gbisIdOpt),
+				f('tag1Id','選擇主商品',defaultOpts.itemId),
+				f('minimum','商品滿額'),
+				f('tag2','加價購商品標籤',{placeholder:'輸入加價購商品標籤',fieldInfo:fnItemTag,inputClassName:'required'}),
+				f('tag2GbisId','選擇加價購商品品項',defaultOpts.gbisId),
+				f('tag2Id','選擇加價購商品',defaultOpts.itemId),
+				f('dollarOrPercentage','可享加價購',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable', '加購次數', {options:options.repeatable.def,fieldInfo:'重複滿額時，享有加購次數'},'radio',true),
+				f('maxApplyTimes'),
+				f('additonalOptional'),
+				f('title'),
+			],
+			descr:fnDescr.salesOrder,
+		}),
+		sr('ADDITIONAL_PURCHASE', {
+			level:'salesOrder',
+			type: 'AdditionalPurchase',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1','主商品標籤',{placeholder:'輸入主商品標籤',fieldInfo:fnItemTag,inputClassName:'required'}),
+				f('tag1GbisId','選擇主商品品項',defaultOpts.gbisIdOpt),
+				f('tag1Id','選擇主商品',defaultOpts.itemId),
+				f('minimum','商品滿件',{prependText:'任選商品滿',appendText:'件',placeholder:'輸入件數'}),
+				f('tag2','加價購商品標籤',{placeholder:'輸入加價購商品標籤',fieldInfo:fnItemTag,inputClassName:'required'}),
+				f('tag2GbisId','選擇加價購商品品項',defaultOpts.gbisId),
+				f('tag2Id','選擇加價購商品',defaultOpts.itemId),
+				f('dollarOrPercentage','可享加價購',{options:options.dollarOrPercentage.price}),
+				f('discount'),
+				f('repeatable', '加購次數', {options:options.repeatable.def,fieldInfo:'重複滿件時，享有加購次數'},'radio',true),
+				f('maxApplyTimes'),
+				f('additonalOptional'),
+				f('title'),
+			],
+			descr:fnDescr.salesOrder,
+		}),
+		sr('GIFT_WITH_PURCHASE', {
+			level:'salesOrder',
+			type: 'Gift',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','訂單滿額'),
+				f('dollarOrPercentage','贈送',{options:options.dollarOrPercentage.piece}),
+				f('discount',' ',{defaultValue:1}),
+				f('autoOrManual','贈送方式',{options:options.autoOrManual.auto}),
+				f('repeatable'),
+				f('maxApplyTimes'),
+				f('tag1','贈品標籤',{placeholder:'輸入贈品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'贈品'},),
+				f('tag1Id','選擇贈品',defaultOpts.giftId),
+				f('excludeItemId','不參與活動商品',defaultOpts.excludeItemId),
+				f('salesRuleSettings.giftTagRule'),
+				f('combinable'),
+				f('title'),
+				//f('continue','',{placeholder:'保存後繼續新增其他門檻滿額贈品'}),
+			],
+			descr:fnGiftDescr,
+		}),
+		sr('GIFT_MINIMUM_PRICE_MEET_TOTAL_PAID', {
+			level:'item',
+			type: 'Gift',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','訂單滿額'),
+				f('dollarOrPercentage','贈送',{options:options.dollarOrPercentage.piece}),
+				f('discount',' ',{defaultValue:1}),
+				f('autoOrManual','贈送方式',{options:options.autoOrManual.manual}),
+				f('repeatable'),
+				f('maxApplyTimes'),
+				f('tag1','贈品標籤',{placeholder:'輸入贈品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'贈品'}),
+				f('tag1Id','選擇贈品',defaultOpts.giftId),
+				f('title'),
+			],
+			descr:fnGiftDescr
+		}),
+		sr('GIFT_MINIMUM_PRICE_MEET', {
+			level:'item',
+			type: 'Gift',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','指定商品滿額'),
+				f('dollarOrPercentage','贈送',{options:options.dollarOrPercentage.piece}),
+				f('discount',' ',{defaultValue:1}),
+				f('autoOrManual','贈送方式',{options:options.autoOrManual.manual}),
+				f('repeatable'),
+				f('maxApplyTimes'),
+				f('tag1','指定商品標籤',{placeholder:'輸入商品標籤',fieldInfo:fnItemTag,inputClassName:'required',defaultValue:'主商品'}),
+				f('tag1GbisId','選擇主商品品項',defaultOpts.gbisIdOpt),
+				f('tag1Id','選擇指定商品',defaultOpts.itemId),
+				f('tag2','贈品標籤',{placeholder:'輸入贈品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'贈品'}),
+				f('tag2Id','選擇贈品',defaultOpts.giftId),
+				f('title'),
+			],
+			descr:fnGiftDescrItem
+		}),
+		sr('GIFT_MINIMUM_PRICE_MEET_NO_PICK', {
+			level:'item',
+			type: 'Gift',
+			unit:{
+				minimum:'元',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','指定商品滿額'),
+				f('dollarOrPercentage','贈送',{options:options.dollarOrPercentage.piece}),
+				f('discount',' ',{defaultValue:1}),
+				f('autoOrManual','贈送方式',{options:options.autoOrManual.auto}),
+				f('repeatable'),
+				f('maxApplyTimes'),
+				f('tag1','指定商品標籤',{placeholder:'輸入商品標籤',fieldInfo:fnItemTag,inputClassName:'required',defaultValue:'主商品'}),
+				f('tag1GbisId','選擇主商品品項',defaultOpts.gbisIdOpt),
+				f('tag1Id','選擇指定商品',defaultOpts.itemId),
+				f('tag2','贈品標籤',{placeholder:'輸入贈品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'贈品'}),
+				f('tag2Id','選擇贈品',defaultOpts.giftId),
+				f('title'),
+			],
+			descr:fnGiftDescrItem
+		}),
+		sr('GIFT_MINIMUM_PIECE_MEET', {
+			level:'item',
+			type: 'Gift',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','指定商品滿件',{placeholder:'輸入件數 ',inputClassName:'required',appendText:'個/件'}),
+				f('dollarOrPercentage','贈送',{options:options.dollarOrPercentage.piece}),
+				f('discount',' ',{defaultValue:1}),
+				f('autoOrManual','贈送方式',{options:options.autoOrManual.manual}),
+				f('repeatable'),
+				f('maxApplyTimes'),
+				f('tag1','指定商品標籤',{placeholder:'輸入商品標籤',fieldInfo:fnItemTag,inputClassName:'required',defaultValue:'主商品'}),
+				f('tag1GbisId','選擇主商品品項',defaultOpts.gbisIdOpt),
+				f('tag1Id','選擇指定商品',defaultOpts.itemId),
+				f('tag2','贈品標籤',{placeholder:'輸入贈品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'贈品'}),
+				f('tag2Id','選擇贈品',defaultOpts.giftId),
+				f('title'),
+			],
+			descr:fnGiftDescrItem
+		}),
+		sr('GIFT_MINIMUM_PIECE_MEET_NO_PICK', {
+			level:'item',
+			type: 'Gift',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','指定商品滿件',{placeholder:'輸入件數 ',inputClassName:'required',appendText:'個/件'}),
+				f('dollarOrPercentage','贈送',{options:options.dollarOrPercentage.piece}),
+				f('discount',' ',{defaultValue:1}),
+				f('autoOrManual','贈送方式',{options:options.autoOrManual.auto}),
+				f('repeatable'),
+				f('maxApplyTimes'),
+				f('tag1','指定商品標籤',{placeholder:'輸入商品標籤',fieldInfo:fnItemTag,inputClassName:'required',defaultValue:'主商品'}),
+				f('tag1GbisId','選擇主商品品項',defaultOpts.gbisIdOpt),
+				f('tag1Id','選擇指定商品',defaultOpts.itemId),
+				f('tag2','贈品標籤',{placeholder:'輸入贈品標籤',fieldInfo:fnGiftTag,inputClassName:'required',defaultValue:'贈品'}),
+				f('tag2Id','選擇贈品',defaultOpts.giftId),
+				f('title'),
+			],
+			descr:fnGiftDescrItem
+		}),
+		sr('ITEM_BUY_X_GOT_Y_FREE', {
+			level:'item',
+			type: 'Discount',
+			unit:{
+				minimum:'件',
+			},
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('tag1',' ',{formGroupClassName:'d-none',prependText:'商品標籤'}),
+				f('tag1Minimum',' ',{formGroupClassName:'d-none',placeholder:'輸入件數',prependText:'需任選',appendText:'件'}),
+				f('tag1Id','選擇商品',{formGroupClassName:'d-none'}),
+				f('minimum',' ',{prependText:'任選商品滿',appendText:'件',placeholder:'輸入件數'}),
+				f('dollarOrPercentage','額外贈送數量',{options:options.dollarOrPercentage.piece}),
+				f('discount'),
+				f('maxApplyTimes',' ', {defaultValue:-1},'hidden'),
+				f('title'),
+			],
+			descr:fnDescr.salesOrder
+		}),
+		sr('CHECKOUT_MINIMUM_PRICE', {
+			level:'salesOrder',
+			type: 'Constraint',
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','訂單滿額'),
+				f('title'),
+			],
+			descr:function() {
+				var minimum = this.field('minimum');
+				return '結帳訂單金額(不含運)需滿' + minimum.data();
+			}
+		}),
+		sr('CREDIT_CARD', {
+			level:'salesOrder',
+			type: 'Constraint',
+			mode:'f',
+			fields: [
+				f('withinPeriod'),
+				f('dateStartString'),
+				f('dateEndString'),
+				f('minimum','訂單滿額'),
+				f('title'),
+			],
+			descr:function() {
+				var minimum = this.field('minimum');
+				return '結帳訂單金額(不含運)需滿' + minimum.data();
+			}
+		}),
+	],
+	r : function (name) {
+		return this.rules.find(o=>o.name == name);
+	},
+};
+
+var wizard = {
+	formSelectorName : 'form#wizard-stepfinal-form',
+	s,
+	isPercent : function(dollarOrPercentage) {
+		return dollarOrPercentage.startsWith('PERCENTAGE');
+	},
+	steps : [
+		s(1,'discount','折扣','<span>滿額折抵</span>/<span>滿件折抵</span>/<span>加價購</span>',[
+			s(2,'MINIMUM_PRICE_MEET','<span class="red-text">訂單</span>折扣','整張訂單滿額折扣'),
+			s(2,'discount_2','<span class="teal-text">商品</span>折扣','商品本身折扣',[
+				s(3,'discount_price','<span class="red-text">滿額</span>折扣','商品滿額折扣',[
+					s(4,'ITEM_PRICE_MEET','商品滿額折扣','<p>購買指定商品享有滿額折扣</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>指定商品任選滿$2000，優惠折扣$99</li><li>指定商品任選滿$3000，可享85折優惠</li></ul>'),
+					s(4,'MINIMUM_PRICE_MEET_ITS','同品項滿額商品折扣','<p>購買指定品項內的任何商品，所有商品皆享有滿額折扣</p><p>*不同品項內商品也可合併計算</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>同品項商品任選滿$1000，每件折扣$20</li></ul>'),
+					s(4,'MINIMUM_PRICE_MEET_ITS_ITEM_TAG','同品項滿額標籤商品折扣','<p>購買品項內的任何商品，標籤商品可享有滿額折扣</p><p>*不同品項內商品也可合併計算</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>同品項商品任選滿$1000，標籤商品每件折扣$20</li></ul>'),
+					s(4,'MINIMUM_PRICE_MEET_ITS_PACK_DISCOUNT','同品項滿額折扣','<p>購買指定品項內的任何商品，可享固定折扣金額</p><p>*不同品項內商品也可合併計算</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>同品項商品任選滿$1000，折扣$80</li></ul>'),
+				]),
+				s(3,'discount_piece','<span class="teal-text">滿件</span>折扣','商品滿件折扣',[
+					s(4,'MINIMUM_PIECE_MEET_MAIN_PIECE','同品項滿件折扣','<p>購買指定品項內的任何商品，這些商品可享有滿件折扣</p><p>*不同品項內商品也可合併計算</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>同品項商品任選3件以上，每件折扣$20</li></ul>'),
+					s(4,'ITEMSET_BUNDLE_PRICE','同品項商品組合價','<p>購買指定品項內的任何商品，這些商品可享有固定件數組合價</p><p>*不同品項內商品也可合併計算</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>原價$699任選3件，組合價$2000</li></ul>'),
+					s(4,'discount_4','特定商品','購買特定商品，這些商品可享有滿件折扣',[
+						s(5,'TAG_MATCH_1','滿件折扣（標籤符合）','<p>購買特定商品滿件可享折扣</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>紅標商品任選3件以上，每件可享折扣$100</li></ul>'),
+						s(5,'TAG_MATCH_2','組合價（標籤符合）','<p>購買特定組合搭配，可享組合折扣</p><ul class="small text-left px-0 mb-0"><li>例如:</li><li>紅標商品每3件可享折扣$100</li><li>任選2件紅標＋1件綠標可享折扣$100</li></ul>'),
+					]),
+					s(4,'ITEM_BUY_X_GOT_Y_FREE','買X件送Y件','指定商品任選X件送Y件'),
+				]),
+			]),
+			s(2,'discount_3','加價購','商品加價購折扣',[
+				s(3,'additional_price','<span class="red-text">滿額</span><span class="orange-text">加購</san>','訂單滿額加價購/商品滿額加價購',[
+					s(4,'ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET','訂單滿額','<p>訂單滿額後，指定商品可享加購價</p>'),
+					s(4,'ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET_ITEM','商品滿額','<p>主商品滿額後，指定商品可享加購價</p>'),
+				]),
+				s(3,'ADDITIONAL_PURCHASE','商品滿件','<p>特定商品滿件後，指定商品可享加購價</p>'),
+				/*
+				s(3,'additional_price_piece','<span class="teal-text">滿件</span><span class="orange-text">加購</span>','訂單滿件加價購/商品滿件加價購',[
+					s(4,'ADDITIONAL_PURCHASE_MINIMUM_PIECE_MEET','訂單滿件','<p>訂單滿件後，指定商品可享加購價</p>'),
+					s(4,'ADDITIONAL_PURCHASE_MINIMUM_PIECE_MEET_ITEM','主商品滿件','<p>主商品滿件後，指定商品可享加購價</p>'),
+				]),
+				*/
+			])
+		]),
+		s(1,'gift','贈品','<span>滿額贈</span>/<span>滿件贈</span>',[
+			s(2,'gift_order','訂單贈品','整張訂單滿額送贈品',[
+				s(3,'GIFT_WITH_PURCHASE','自動獲得','整張訂單滿額訂單自動獲得贈品'),
+				s(3,'GIFT_MINIMUM_PRICE_MEET_TOTAL_PAID','客人自選','整張訂單滿額客人自行挑選贈品'),
+			]),
+			s(2,'gift_item','商品贈品','指定商品滿額/滿件送贈品',[
+				s(3,'gift_item_price','商品滿額','商品滿額送贈品',[
+					s(4,'GIFT_MINIMUM_PRICE_MEET_NO_PICK','自動獲得','指定商品滿額自動獲得贈品'),
+					s(4,'GIFT_MINIMUM_PRICE_MEET','客人自選','指定商品滿額客人自行挑選贈品'),
+				]),
+				s(3,'gift_item_piece','商品滿件','商品滿件送贈品',[
+					s(4,'GIFT_MINIMUM_PIECE_MEET_NO_PICK','自動獲得','指定商品滿件自動獲得贈品'),
+					s(4,'GIFT_MINIMUM_PIECE_MEET','客人自選','指定商品滿件客人自行挑選贈品'),
+				]),
+			]),
+			//s(2,'GIFT_MINIMUM_PRICE_MEET_TOTAL_PAID','訂單滿額','訂單滿額後，贈送指定商品'),
+		]),
+		//s(1,'package','組合','<span>組合包</span>'),
+		s(1,'constraint','限制','<span>訂購限制</span>/<span>刷卡門檻</span>',[
+			s(2,'CHECKOUT_MINIMUM_PRICE','結帳門檻','整張訂單超過指定金額才能結帳'),
+			s(2,'CREDIT_CARD','刷卡門檻','整張訂單超過指定金額才能使用信用卡方式付款'),
+			s(2,'MINIMUM_PIECE_CONSTRAINT','同品項訂購數量限制','<p>特定品項內需最少選購一定數量商品後才能結帳，或是至多只能選購一定數量商品。</p><p>不同品項內商品數也可合併計算</p>'),
+		]),
+		//s(1,'others','其他','<span>排除優惠</span>'),
+	],
+	loading:function(loading = true) {
+		if (loading) {
+			btnStartLoading($('button[data-action="submit"]'));
+		} else {
+			btnStopLoading($('button[data-action="submit"]'));
+		}
+	},
+	registerCallbacks : function () {
+		this.registerInputCallback();
+		this.registerCopyTitleCallback();
+		this.registerButtons();
+	},
+	registerButtons : function () {
+		var _this = this;
+		$('button[data-action]').on('click', function() {
+			var action = $(this).data('action');
+			switch(action) {
+			case 'submit':
+				_this.loading(true);
+				var validator = $('#wizard-stepfinal-form').validate();
+				if (validator.valid()) {
+					_this.submit();
+				} else {
+					_this.loading(false);
+					var msg = '有'+validator.numberOfInvalids()+'個欄位有問題';
+					$('.submit-result').attr('class', 'submit-result text-danger').html(msg);
+				}
+				break;
+			case 'new':
+				_this.goStep('wizard-step1-all');
+				break;
+			case 'continue':
+				$('.submit-result').html('');
+				$(".modal-body-wizard").animate({scrollTop:0},200);
+				$('button[data-action]').hide();
+				$('button[data-action="submit"]').show().animateCss('fadeIn ');
+				//$('select[name^=tag').val('').change();
+				{{!-- 原站選擇器少了 ]（jQuery 會丟語法錯誤），此處補上 --}}
+				$('input[name=minimum]').val('');
+				break;
+			}
+		});
+	},
+	registerInputCallback : function () {
+		var _this = this;
+		$('#wizard-stepfinal').on('change', ':input', function() {
+			var s = _this.s;
+			if (s.preview) {
+				s.preview(s);
+			} else {
+				previewSalesRule.type1(s);
+			}
+		})
+	},
+	registerCopyTitleCallback : function() {
+		$(this.formSelectorName).on('click', '.btn-copy-title', function() {
+			var parent = $(this).parent().parent();
+			parent.find('input').val(parent.find('.help-text').html());
+		});
+	},
+	init : function(groupBuyId) {
+		console.log('w.init');
+		var _this = this;
+		if (_this.inited) return;
+		_this.init = true;
+		_this.groupBuyId = groupBuyId;
+		_this.stepsHtml(_this.steps, 1, 'all');
+		$('.wizard-step').hide();
+		$('.wizard-step1').show();
+		$(' .card.card-wizard').click(function(){
+			var type = $(this).data('type');
+			var step = $(this).data('step') + 1;
+			var id = 'wizard-step{0}-{1}'.format(step,type);
+			if (salesRules.r(type) != null) {
+				id = 'wizard-stepfinal';
+				_this.buildForm(type);
+			}
+			_this.goStep(id);
+			var title = $(this).find('.card-header').text() || $(this).find('.card-body').text();
+			$('.breadcrumb-wizard').append(
+				`<li class="breadcrumb-item" data-step="{0}">{1}</li>`
+				.format(id, title)
+			);
+		});
+		$('.breadcrumb-wizard').on('click', '.breadcrumb-item', function() {
+			var step = $(this).data('step');
+			_this.goStep(step);
+		});
+		$('.modal-footer-wizard').hide();
+		_this.registerCallbacks();
+	},
+	submit:function() {
+		var _this = this;
+		var data = {};
+		$(this.formSelectorName).serializeArray().forEach(obj => {
+			var name = obj.name;
+			// hack for salesRuleSettings;
+			if (name == 'repeatMinimum' || name == 'repeatDiscount') {
+				name = 'salesRuleSettings.' + name;
+			}
+			if (obj.value == '') return;
+			if (name.indexOf('.') > 0) {
+				var arr = name.split('.');
+				if (data[arr[0]] == null) {
+					data[arr[0]] = {};
+				}
+				data[arr[0]][arr[1]] = obj.value;
+			} else if (data[name] != null) {
+				if (typeof data[name] != 'object') {
+					// in case there are other forms with the same input
+					data[name] = $('#wizard-stepfinal-form :input[name="'+name+'"]').val();;
+				}
+			} else {
+				data[name] = obj.value;
+			}
+		});
+		var dataArray = [data];
+		console.log('da=%o', dataArray);
+		var url = GBF.baseUrl + '/ajax/SalesRule/save';
+		$.post(url, {
+			data:dataArray,
+			groupBuyId:this.groupBuyId
+		})
+		.done(function(data, textStatus, jqXHR) {
+			var json = data.data;
+			$('.submit-result').attr('class', 'submit-result text-success').html('成功新增');
+			salesRuleTable.ajax.reload();
+
+			$('button[data-action="new"]').show().animateCss('fadeIn ');
+			$('button[data-action="continue"]').show().animateCss('fadeIn ');
+			$('button[data-action="submit"]').hide().animateCss('fadeOut ');
+		})
+		.fail(function(jqXHR, textStatus, errorThrown) {
+			var json = jqXHR.responseJSON;
+			var msg = (json != null && json.error != null) ? json.error : textStatus;
+			$('.submit-result').attr('class', 'submit-result text-danger').html(msg);
+		})
+		.always(function(jqXHR, textStatus, errorThrown) {
+			_this.loading(false);
+		});
+	},
+	data:function(name) {
+		var selector = '#wizard-stepfinal :input[name='+name+']';
+		var input = $(selector);
+		var type = input.prop('type');
+		if (type == 'radio' || type == 'select' || type == 'checkbox') {
+			selector = '#wizard-stepfinal :input[name='+name+']:checked';
+			input = $(selector);
+		}
+		return input.val();
+	},
+	stepsHtml: function(steps, step, type) {
+		if (steps == null) return;
+		var _this = this;
+		var html = `<div class="wizard-step wizard-step{0}" id="wizard-step{1}-{2}">
+			<div class="row">`
+		.format(step, step, type);
+		steps.forEach(function(obj,i) {
+			if (obj.type == 'DESCR') {
+				html += `<div class="col-12 my-4"><h4>{0}</h4></div>`
+				.format(obj.descr);
+			} else {
+				html += `<div class="col-6 mb-4"><div class="card card-wizard" data-type="{0}" data-step="{1}">
+					<div class="card-header">{2}</div>
+					<div class="card-body">{3}</div>
+				</div></div>`
+				.format(obj.type, obj.step, obj.title, obj.descr);
+			}
+		});
+		html += '</div></div>';
+		$('.wizard-body').append(html);
+		steps.forEach(function(obj,i) {
+			_this.stepsHtml(obj.steps, obj.step+1, obj.type);
+		});
+	},
+	currentStep : function() {
+		return $('.breadcrumb-wizard .breadcrumb-item:last-child').data('step');
+	},
+	goStep : function(step) {
+		var _this = this;
+		console.log('gostep');
+		if (step == _this.currentStep()) return;
+
+		$('.wizard-step').hide();
+		$('#'+step).show().animateCss('slideInRight faster');
+		$('.breadcrumb-wizard .breadcrumb-item').each(function(idx, obj) {
+			var s = $(obj).data('step');
+			if (s > step) $(obj).remove();
+		});
+		if (step == 'wizard-stepfinal') {
+			$('.modal-footer-wizard').show();
+		} else {
+			$('.modal-footer-wizard').hide();
+		}
+	},
+	buildForm : function(type) {
+		var s = salesRules.r(type);
+		this.s = s;
+		s.buildForm('#wizard-stepfinal-form');
+	},
+	buildFormDollarOrPercentage : function(opts) {
+		var html = '';
+		opts.forEach(function(obj,i) {
+			var active = (i == 0) ? 'active' : '';
+			var checked = (i == 0) ? 'checked' : '';
+			html += `
+			<label class="btn btn-sm btn-input-check m-0 p-2 {0}">
+				<input type="radio" name="dollarOrPercentage" value="{1}" {2}>{3}
+			</label>`
+			.format(active, obj.name, checked, obj.label)
+		});
+		$('#dollarOrPercentage-group').html(html);
+		$('input[name=dollarOrPercentage]').change();
+	}
+};
+
+$(document).ready(function() {
+	$('#myModal').data('bs.modal')._config.keyboard = false;
+	$('#myModal').data('bs.modal')._config.backdrop = 'static';
+	console.log('wizard init');
+	wizard.init({{groupBuyId}});
+});
+</script>

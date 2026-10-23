@@ -1,0 +1,703 @@
+{{!-- 優惠條件（單一團購）/backend/GroupBuy/salesRule?groupBuyId=：原站 spec/html/groupbuy-salesrule.html；缺段已依原站頁面原始碼補齊 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	var table; // gbis table
+	var editor; // use a global for the submit and return data rendering in the examples
+	var salesRuleEditor;
+	var groupBuyCouponTable;
+	var salesRuleTable;
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": false,
+		"pageLength":20,
+	} );
+
+	$(document).ready(function() {
+
+
+var salesRuleTableName = '#salesRuleTable';
+var salesRuleEditor = {};
+var groupBuyId = '{{groupBuyId}}';
+$(document).ready(function() {
+	salesRuleEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:'{{baseUrl}}/ajax/SalesRule/save.do?groupBuyId={{groupBuyId}}'
+			},
+			edit: {
+				type: 'POST',
+				url:'{{baseUrl}}/ajax/SalesRule/update.do?groupBuyId={{groupBuyId}}&salesRuleId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:'{{baseUrl}}/ajax/SalesRule/delete.do?groupBuyId={{groupBuyId}}&salesRuleId=_id_'
+			}
+		},
+		template: '#salesRuleCustomForm',
+		table: salesRuleTableName,
+		idSrc: 'salesRuleId',
+		fields: [
+		DataTableConfig.field_input_r('名稱','title'),
+		DataTableConfig.field_datetime('開始期限(留空白代表不限制)','dateStartString','YYYY-MM-DD HH:mm'),
+		DataTableConfig.field_datetime('結束期限(留空白代表不限制)','dateEndString','YYYY-MM-DD HH:mm'),
+		DataTableConfig.field_select('優惠類別','category'),
+		DataTableConfig.field_select('折扣方式','dollarOrPercentage'),
+		DataTableConfig.field_input('折扣','discount', '0'),
+		DataTableConfig.field_input('最小單位','minimum', '0'),
+		DataTableConfig.field_input('最多套用次數','maxApplyTimes','-1','','','-1代表不限制'),
+		DataTableConfig.field_input('可供優惠數量','availableQuota','100000'),
+		DataTableConfig.field_input('優先順序','priority','1'),
+		DataTableConfig.field_input('顯示順序','salesRuleSettings.seq'),
+		DataTableConfig.field_input_f('優惠標籤（請用|區隔）','tag','','<div class="help-block px-2 small"><p>贈品優惠標籤均為最後一個。<br>當未設定主商品優惠標籤時，則所有商品均為主商品</p><p>範例：</p><p class="text-primary">贈品</p><p class="text-primary">主商品|贈品</p><p class="text-primary">主商品1|主商品2|贈品</p></div>'),
+		DataTableConfig.field_select('商品-禮物。主商品庫存類型','mainItemType','ANY'),
+		DataTableConfig.field_checkbox_bool('可跨品項合併','applyToGroupBuy'),
+		DataTableConfig.field_checkbox_bool('隱藏不顯示標籤','hidden'),
+		DataTableConfig.field_checkbox_bool('可合併計算(用於滿額贈)','combinable'),
+		DataTableConfig.field_input('不合併計算標籤（請用|區隔）','excludeTag'),
+		DataTableConfig.field_checkbox_bool('自選贈品必須挑選:','salesRuleSettings.giftMandatory'),
+		DataTableConfig.field_input('滿足最小單位後，每滿多少單位重複折扣。預設同最小單位（規律）:','salesRuleSettings.repeatMinimumString','', '範例:1000#100'),
+		DataTableConfig.field_textarea('額外滿足單位（不規律）:','salesRuleSettings.tieredMinimumsString','格式：最小單位#折扣\n範例：\n2000#2\n3000#3\n4000#5',6),
+		DataTableConfig.field_checkbox_bool('系統自動調整優先順序','smartPriority'),
+		DataTableConfig.field_select('不自選贈品優惠當指定贈品超過一種商品時','salesRuleSettings.giftTagRule', '', null, '', '舉例：買包包送襪子\n主商品標籤：包包\n贈品標籤分別設在紅襪子跟綠襪子身上\n\n當選擇「全部贈送時」：會同時送紅襪子跟綠襪子\n當選擇「擇一贈送時」：會送紅襪子或是綠襪子其中一個'),
+		DataTableConfig.field_select('主標籤符合規則','salesRuleSettings.tagMatchRule', '', null, '', '標籤範例：A|B|C|D。需全部符合時：A,B,C,D四個均需要存在優惠才會成立。任一符合時：A,B,C,D只要其中一個存在即優惠成立'),
+		DataTableConfig.field_input('該優惠最多累積折扣金額上限:','salesRuleSettings.maxDiscountAmount','','', '輸入超過0的數字才會生效'),
+		DataTableConfig.field_input('折扣後訂單最少金額:','salesRuleSettings.minDiscountTotalPrice','','', '優惠折扣後訂單金額不得少於該金額'),
+		DataTableConfig.field_textarea('限定郵遞區號:','salesRuleSettings.includedPostcodes','',3, '僅收件人符合郵遞區號時，該優惠條件能生效。可用英文逗點分隔多筆。另外可用 * 代表全部如：1*,2*,302。所有開頭為1以及2以及302的郵遞區號都包含'),
+
+		DataTableConfig.field_radio('商品折扣順序','salesRuleSettings.priceSortOrder'),
+		DataTableConfig.field_select('子商品數量規則','salesRuleSettings.packRule.rule', '', '選擇'),
+		DataTableConfig.field_input('子商品加總數量','salesRuleSettings.packRule.subItemTotal'),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} )
+	.dependent('dollarOrPercentage', function(val, data, callback) {
+		var label = '';
+		switch(val) {
+		case 'DOLLAR':
+			switch(data.values.category) {
+			case 'MINIMUM_PRICE_MEET':
+				label = '訂單折扣金額';
+				break;
+			default:
+				label = '商品折扣金額';
+			}
+			break;
+		case 'DOLLAR_PACK_DISCOUNT':
+			label = '優惠總折扣金額';
+			break;
+		case 'SALE_PRICE':
+			label = '單品新售價';
+			break;
+		case 'PERCENTAGE':
+		case 'PERCENTAGE_RETAIL_PRICE':
+			label = '折數(%)';
+			break;
+		case 'PIECE':
+			switch(data.values.category) {
+			case 'GIFT_WITH_PURCHASE':
+				label = '贈品數量';
+				break;
+			default:
+				label = '數量/件數';
+			}
+			break;
+		case 'BUNDLE_PRICE':
+			label = '組合價';
+			break;
+		}
+
+		return {
+			labels:{
+				discount:label
+			}
+		};
+	})
+	.dependent('category', function(val, data, callback) {
+		var showMaxDiscountAmount = false;
+		var showMinDiscountTotalPrice = false;
+		var maxApplyTimes = '最多套用次數';
+		var minimum = '最小單位';
+		var hide = [];
+		var dop = [
+			{label: "折扣金額", value: "DOLLAR"},
+			{label: "單品新價格", value: "SALE_PRICE"},
+			{label: "依團購價折數(10=九折,15=八五折)", value: "PERCENTAGE"},
+			{label: "依原價折數(10=九折,15=八五折)", value: "PERCENTAGE_RETAIL_PRICE"}
+		];
+
+		if (val.indexOf('PRICE') > -1) {
+			minimum = '優惠需滿足金額';
+		} else {
+			minimum = '優惠需滿足件數';
+		}
+
+		if (val.indexOf('GIFT') == 0 ) {
+			dop = [{label: "數量", value: "PIECE"}];
+			$('#salesRuleCustomForm-gift').show();
+		} else {
+			$('#salesRuleCustomForm-gift').hide();
+		}
+
+		switch (val) {
+		case 'CREDIT_CARD':
+			minimum = '刷卡門檻金額';
+		case 'CHECKOUT_MINIMUM_PRICE':
+			minimum = '下單門檻金額';
+			break;
+		case 'X_PIECE_ORIGINAL_PRICE_Y_DISCOUNT':
+			minimum = '優惠需滿足件數';
+			break;
+		}
+
+		switch (val) {
+		case 'MINIMUM_PRICE_MEET':
+			minimum = '訂單需滿額金額';
+			maxApplyTimes = '滿額重複可享優惠次數';
+			// show tag, 可用tag判斷是否重複套用
+			hide = ['hidden','applyToGroupBuy','salesRuleSettings.maxDiscountAmount'];
+			dop = [
+				{label: "訂單折扣金額", value: "DOLLAR"},
+				{label: "依折數(10=九折,15=八五折)", value: "PERCENTAGE"},
+				{label: "會員點數累積", value: "POINT"},
+			];
+			showMinDiscountTotalPrice = true;
+			break;
+		case 'GIFT_WITH_PURCHASE':
+			minimum = '訂單需滿額金額';
+			hide = ['applyToGroupBuy','salesRuleSettings.maxDiscountAmount'];
+			break;
+		case 'CREDIT_CARD':
+		case 'CHECKOUT_MINIMUM_PRICE':
+			hide = ['dollarOrPercentage', 'discount','maxApplyTimes','tag','hidden','applyToGroupBuy','salesRuleSettings.maxDiscountAmount'];
+			break;
+		case 'MINIMUM_PIECE_CONSTRAINT':
+			minimum = '最少數量';
+			maxApplyTimes = '數量上限';
+			hide = ['dollarOrPercentage', 'discount','salesRuleSettings.maxDiscountAmount'];
+			break;
+		case 'MINIMUM_PRICE_CONSTRAINT':
+			minimum = '最少金額';
+			maxApplyTimes = '金額上限';
+			hide = ['dollarOrPercentage', 'discount','salesRuleSettings.maxDiscountAmount'];
+			break;
+		case 'MINIMUM_PIECE_MEET':
+			//hide = ['tag'];
+			dop.push({label: "總折扣金額", value: "DOLLAR_PACK_DISCOUNT"});
+			showMaxDiscountAmount = true;
+			break;
+		case 'MINIMUM_PRICE_MEET_ITS':
+			dop.push({label: "總折扣金額", value: "DOLLAR_PACK_DISCOUNT"});
+			showMaxDiscountAmount = true;
+			break;
+		case 'MINIMUM_PIECE_MEET_MAIN_PIECE':
+			dop.push({label: "總折扣金額", value: "DOLLAR_PACK_DISCOUNT"});
+			showMaxDiscountAmount = true;
+			break;
+
+		case 'ITEM_PRICE_MEET':
+			minimum = '商品需滿額金額';
+			maxApplyTimes = '滿額重複可享優惠次數';
+			hide = ['applyToGroupBuy','salesRuleSettings.maxDiscountAmount', 'salesRuleSettings.tagMatchRule'];
+			dop = [
+				{label: "總折扣金額", value: "DOLLAR_PACK_DISCOUNT"},
+				{label: "折數(10=九折,15=八五折)", value: "PERCENTAGE"},
+			];
+			break;
+		case 'ITEMSET_LIMITED_ITEMS':
+			minimum = '最少總類';
+			maxApplyTimes = '總類上限';
+			hide = ['dollarOrPercentage', 'discount','tag'];
+			break;
+		case 'ITEMSET_BUY_X_GOT_Y_FREE':
+			dop = [{label: '數量', value: 'PIECE'}];
+			hide = ['tag','hidden'];
+			break;
+		case 'TAG_MATCH':
+			hide = ['applyToGroupBuy'];
+			showMaxDiscountAmount = true;
+			break;
+		case 'ITEM_BUY_X_GOT_Y_FREE':
+			dop = [{label: '數量', value: 'PIECE'}];
+			hide = ['applyToGroupBuy'];
+			break;
+		case 'ITEM_EXCLUDED':
+			hide = ['dollarOrPercentage', 'discount','minimum','maxApplyTimes','tag','applyToGroupBuy'];
+			break;
+		case 'ITEM_PACKAGE':
+			hide = ['dollarOrPercentage', 'discount','minimum','maxApplyTimes','applyToGroupBuy'];
+			break;
+		case 'ITEMSET_BUNDLE_PRICE':
+			minimum = '組合件數';
+			maxApplyTimes = '可享組合價最多次數';
+			dop = [{label: '組合價', value: 'BUNDLE_PRICE'}];
+			break;
+		default:
+			hide = ['applyToGroupBuy'];
+		}
+
+		var show = ['dollarOrPercentage', 'discount','minimum','maxApplyTimes','tag','hidden','applyToGroupBuy'];
+
+		if (showMaxDiscountAmount) {
+			show.push('salesRuleSettings.maxDiscountAmount');
+		} else {
+			hide.push('salesRuleSettings.maxDiscountAmount');
+		}
+
+		if (showMinDiscountTotalPrice) {
+			show.push('salesRuleSettings.minDiscountTotalPrice');
+		} else {
+			hide.push('salesRuleSettings.minDiscountTotalPrice');
+		}
+
+		show = show.filter(function(el) {return hide.indexOf(el) < 0;});
+
+		return {
+			show:show,
+			hide:hide,
+			labels:{
+				minimum:minimum,
+				maxApplyTimes:maxApplyTimes,
+			},
+			options:{
+				dollarOrPercentage:dop,
+			}
+		};
+	});
+
+	salesRuleTable = $(salesRuleTableName).DataTable( {
+		dom: 'lBrtip',
+		searching:true,
+		lengthMenu: [10, 25],
+		searchDelay: 600,
+		serverSide: true,
+		processing: true,
+		scrollX: true,
+		ajax: {
+			url:'{{baseUrl}}/ajax/SalesRule/list.do?groupBuyId={{groupBuyId}}',
+			type: "POST",
+			data: function ( d ) {
+				d.status = $('#salesRuleStatus').val();
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			{ data: 'title',
+				render: function ( data, type, row ) {
+					var extra = '';
+					if (!row.relationshipApplied) {
+						extra += '<br><span class="badge badge-danger">尚未套用到商品或是品項</span>';
+					}
+					if (!row.available) {
+						if (row.status == 'DISABLED')
+							extra += '<br><span class="badge badge-danger">停用中</span>';
+						else if (row.expired)
+							extra += '<br><span class="badge badge-danger">{0} 已結束了</span>';
+						else
+							extra += '<br><span class="badge badge-danger">優惠條件尚未套用完成</span>';
+					}
+					data = '<div class="text-wrap" style="min-width:320px;max-width:640px;">' + data + '</div>'
+					data += extra;
+					return data;
+				}
+			},
+			{
+				data:null,
+				class:'inline-disabled',
+				orderable:false,
+				render: function ( data, type, row ) {
+					if (data.levelItemSetItem) {
+						return ''
+						+ '<a target="_blank" class="btn btn-default btn-detail px-2" style="min-width:66px;" '
+						+ ' href="/backend/SalesRule/details.do?level=ItemSet&groupBuyId=' + row.groupBuyId + '&salesRuleId=' + row.salesRuleId + '">綁定品項</a>'
+						+ '<a target="_blank" class="btn btn-default btn-detail px-2" style="min-width:66px;" '
+						+ ' href="/backend/SalesRule/details.do?level=Item&groupBuyId=' + row.groupBuyId + '&salesRuleId=' + row.salesRuleId + '">綁定商品</a>';
+					} else if (data.levelItem || data.levelItemSet || data.categoryAllowExcludeItemTag) {
+						var extra = '';
+						if (data.category == 'ITEM_PACKAGE') {
+							extra += '<button class="btn btn-default text-nowrap" data-action="itemPackage">複製組合</button>'
+						}
+						return extra
+						+ '<a target="_blank" class="btn btn-default btn-detail px-2" style="min-width:66px;" '
+						+ ' href="/backend/SalesRule/details.do?groupBuyId=' + row.groupBuyId + '&salesRuleId=' + row.salesRuleId + '">綁定</a>';
+					} else {
+						return '';
+					}
+				}
+			},
+			{
+				data: 'category',
+				render: function ( data, type, row ) {
+					return renderOption(salesRuleTable, row.category, 'category');
+				}
+			},
+			{
+				data: 'dollarOrPercentage',
+				render: function ( data, type, row ) {
+					return renderOption(salesRuleTable, row.dollarOrPercentage, 'dollarOrPercentage');
+				}
+			},
+			DataTableConfig.data_input('discount'),
+			DataTableConfig.data_input('minimum'),
+			DataTableConfig.data_input('priority'),
+			DataTableConfig.data_input('salesRuleSettings.seq'),
+			DataTableConfig.data_input('tag'),
+			DataTableConfig.data_input('excludeTag'),
+		],
+		columnDefs: [
+			{ orderable: false, targets: [0,2,4,8,9] }
+		],
+		"order": [[ 1, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		keys: DataTableConfig.keysInlineTab,
+		buttons: [
+
+
+			{
+				extend: 'create',
+				text: '新增<精靈模式>',
+				className:'btn-primary',
+				action: function ( e, dt, node, config ) {
+					openFormL('/backend/SalesRule/wizard', 'groupBuyId={{groupBuyId}}')
+				}
+			},
+
+			{ extend: 'create', editor: salesRuleEditor },
+			{ extend: 'edit',	editor: salesRuleEditor },
+			{ extend: 'duplicate' },
+			{ extend: 'remove',	editor: salesRuleEditor, className:'btn-danger' },
+			DataTableConfig.actionButton({
+					text:'啟用',
+					confirm:'啟用',
+					url:'{{baseUrl}}/ajax/SalesRule/setActive',
+				}),
+			DataTableConfig.actionButton({
+				text:'停用',
+				confirm:'停用優惠條件後會移除原先商品/品項綁定設定。後續啟用後需重新綁定，確定要停用？',
+				url:'{{baseUrl}}/ajax/SalesRule/setDisabled',
+			}),
+			{
+				extend: "edit",
+				text:'複製優惠至其他表單',
+				className:'',
+				action:function(e, dt, node, config) {
+					salesRuleCopyManager().showEditor(salesRuleTableName, groupBuyId, 'to');
+				}
+			},
+			{
+				extend: "",
+				text:'複製其他表單優惠',
+				className:'',
+				action:function(e, dt, node, config) {
+					salesRuleCopyManager().showEditor(salesRuleTableName, groupBuyId, 'from');
+				}
+			},
+			{
+				extend: "",
+				text: '系統自動調整優先順序',
+				action: function ( e, dt, node, config ) {
+					if (!confirm('系統自動調整優先順序僅作參考，設定完後請務必到前台測試！')) return;
+					$.ajax({
+						type: 'POST',
+						url:'{{baseUrl}}/ajax/SalesRule/smartPriority.do',
+						data:{groupBuyId:'{{groupBuyId}}'},
+						async: false,
+						success: function (response){
+							salesRuleTable.ajax.reload();
+						}
+					});
+				}
+			},
+			{
+				extend: "",
+				text: '測試優惠',
+				action: function ( e, dt, node, config ) {
+					$.ajax({
+						type: 'POST',
+						url:'{{baseUrl}}/ajax/SalesRule/simulateResult',
+						data:{groupBuyId:'{{groupBuyId}}'},
+						async: false,
+						success: function (response){
+							var salesOrder = response.data.salesOrder;
+							var salesRuleResult = response.data.salesRuleResult;
+							var title = '測試優惠';
+							var body = '沒有優惠';
+							var dataArr = [];
+							dataArr = salesOrder.sortedOrderItems;
+							if (dataArr.length > 0) {
+								body = '<div class="blue-grey lighten-5 small p-2">測試當將以下商品加入購物車時的優惠結果</div>';
+								body += '<div class="row small mt-2">'
+									+ '<div class="col-3">單價</div>'
+									+ '<div class="col-3">訂購數量</div>'
+									+ '<div class="col-3">折價</div>'
+									+ '<div class="col-3">小計</div>'
+									+ '</div>'
+								for (i = 0; i < dataArr.length; i++) {
+									var orderItem = dataArr[i];
+									body += '<div class="row small mt-2">'
+										+ '<div class="col-12">' + orderItem.title + '</div>'
+										+ '<div class="col-3">$' + orderItem.price + '</div>'
+										+ '<div class="col-3">' + orderItem.total + '</div>'
+										+ '<div class="col-3">$' + orderItem.discount + '</div>'
+										+ '<div class="col-3">$' + orderItem.totalPriceAfterDiscount + '</div>'
+										+ '</div>'
+										+ '<hr>'
+										;
+								}
+
+								if (salesRuleResult != null && salesRuleResult.salesRules != null) {
+									for (var i = 0; i< salesRuleResult.salesRules.length; i++) {
+										var salesRule = salesRuleResult.salesRules[i];
+										body += '<div class="row small mt-2">'
+											+ '<div class="col-9"><span class="badge badge-warning mr-1">折價 $' + salesRule.sessionDiscount + '</span>' + salesRule.title + '</div>'
+											+ '<div class="col-3">$' + salesRule.sessionDiscount + '</div>'
+											+ '</div>'
+											+ '<hr>'
+											;
+									}
+									body += '<div class="row mt-2">'
+										+ '<div class="col-9">折扣小計</div>'
+										+ '<div class="col-3">$' + salesRuleResult.totalDiscount + '</div>'
+										+ '</div>';
+								}
+
+								body += '<div class="row mt-2">'
+									+ '<div class="col-9">結帳金額</div>'
+									+ '<div class="col-3">$' + salesOrder.grandTotalWithoutShipping + '</div>'
+									+ '</div>'
+							}
+							messageLargeDialog(title, body, '關閉');
+						}
+					});
+				}
+			},
+
+		],
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [1,3,9],[16,0,16]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	$('#groupBuy-salesRule .filters').on('change', function() {
+		salesRuleTable.clear().ajax.reload();
+	});
+
+	injectDetailsControl(salesRuleTableName, salesRuleTable);
+	DataTableHelper.injectInline(salesRuleTable, salesRuleEditor);
+	DataTableHelper.initReuqiredFields(salesRuleEditor, ['title']);
+	DataTableHelper.initEditorOnCallback(salesRuleTable,salesRuleEditor);
+	DataTableHelper.inlineModePlugin(salesRuleTable);
+	DataTableHelper.injectXhrForJsonDefault(salesRuleTable, {
+		dateStartString:'',dateEndString:'',smartPriority:0
+	});
+
+	$(salesRuleTableName +' tbody').on('click', 'button', function (e) {
+		var tr = $(this).closest('tr');
+		var row = salesRuleTable.row( tr );
+		var id = row.data().salesRuleId;
+		var action = $(this).attr('data-action');
+		if (action == null) return;
+		e.stopPropagation();
+
+		var msg = '';
+
+		switch (action) {
+		case 'itemPackage':
+			openFormF('/ajax/SalesRule/displayCopyPackage', 'salesRuleId=' + id);
+			return;
+		};
+	} );
+
+	$('.filters').on('change', function() {
+		{{!-- 原站單頁版此處 table（品項表）未定義會丟例外；改為無品項表時重整優惠條件表 --}}
+		if (table) table.clear().ajax.reload(); else if ($('#groupBuy-salesRule').length == 0) salesRuleTable.clear().ajax.reload();
+	});
+
+	function viewItems(row, tr) {
+		var uuid = row.data().uuid;
+		if ( row.child.isShown()) {
+			// This row is already open - close it
+			row.child.hide();
+			tr.removeClass('shown');
+		}
+		else {
+			// Open this row
+			format(row, uuid, null);
+			// row.child( format(row.data()) ).show();
+			tr.addClass('shown');
+		}
+	}
+
+	var categorySwitcher = function(category) {
+		switch (category) {
+		case 'MINIMUM_PRICE_MEET':
+		break;
+		case 'GIFT_WITH_PURCHASE':
+		break;
+		case 'CREDIT_CARD':
+		break;
+		case 'MINIMUM_PIECE_CONSTRAINT':
+		break;
+		case 'MINIMUM_PIECE_MEET':
+		break;
+		case 'MINIMUM_PIECE_MEET_MAIN_PIECE':
+		break;
+		case 'MINIMUM_PRICE_MEET_ITS':
+		break;
+		case 'ITEMSET_LIMITED_ITEMS':
+		break;
+		case 'X_PIECE_ORIGINAL_PRICE_Y_DISCOUNT':
+		break;
+		case 'ITEMSET_BUY_X_GOT_Y_FREE':
+		break;
+		case 'TAG_MATCH':
+		break;
+		case 'ADDITIONAL_PURCHASE':
+		break;
+		case 'ADDITIONAL_PURCHASE_OPTIONAL':
+		break;
+		case 'ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET':
+		break;
+		case 'ADDITIONAL_PURCHASE_MINIMUM_PRICE_MEET_OPTIONAL':
+		break;
+		case 'GIFT_MINIMUM_PRICE_MEET_TOTAL_PAID':
+		break;
+		case 'GIFT_MINIMUM_PRICE_MEET_NO_PICK_TOTAL_PAID':
+		break;
+		case 'GIFT_MINIMUM_PRICE_MEET':
+		break;
+		case 'GIFT_MINIMUM_PRICE_MEET_NO_PICK':
+		break;
+		case 'GIFT_MINIMUM_PIECE_MEET':
+		break;
+		case 'GIFT_MINIMUM_PIECE_MEET_NO_PICK':
+		break;
+		case 'GIFT_LOTTERY':
+		break;
+		case 'ITEM_BUY_X_GOT_Y_FREE':
+		break;
+		case 'ITEM_EXCLUDED':
+		break;
+		case 'ITEM_PACKAGE':
+		break;
+		}
+	}
+
+});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item">{{groupBuy.title}}</li>
+		<li class="breadcrumb-item active" aria-current="page">優惠條件</li>
+	</ol>
+</nav>
+
+<div class="card panel-success">
+	<div class="card-header d-none"></div>
+	<div class='card-footer section-item'>
+		<p>額外搜尋條件</p>
+		<select id="salesRuleStatus" class="filters custom-select custom-select-sm w-auto">
+		<option value="ACTIVE">已啟用</option>
+		<option value="DISABLED">停用中</option>
+		<option value="">全部</option>
+		</select>
+	</div>
+	<div class="card-body">
+		<table id="salesRuleTable" class="table table-striped nowrap w-100">
+			<thead>
+				<tr>
+					<th></th>
+					<th>名稱</th>
+					<th>綁定</th>
+					<th>優惠類別</th>
+					<th>折扣方式</th>
+					<th>折扣</th>
+					<th>最小單位</th>
+					<th>優先順序</th>
+					<th>顯示順序</th>
+					<th>優惠標籤</th>
+					<th>不合併計算標籤（請用|區隔）</th>
+				</tr>
+			</thead>
+			<tfoot>
+				<tr>
+					<th></th>
+					<th>名稱</th>
+					<th>綁定</th>
+					<th>優惠類別</th>
+					<th>折扣方式</th>
+					<th>折扣</th>
+					<th>最小單位</th>
+					<th>優先順序</th>
+					<th>顯示順序</th>
+					<th>優惠標籤</th>
+					<th>不合併計算標籤（請用|區隔）</th>
+				</tr>
+			</tfoot>
+		</table>
+	</div>
+</div><div style="display:none">
+<div id="salesRuleCustomForm" class="dtForm row">
+	<div class="col-12 col-md-6">
+		<fieldset >
+		<legend>基本設定</legend>
+		<editor-field name="title"></editor-field>
+		<editor-field name="dateStartString"></editor-field>
+		<editor-field name="dateEndString"></editor-field>
+		<editor-field name="priority"></editor-field>
+		<div class="help-block px-2 small">
+		<p>[整張訂單][同品項]類型優惠條件：優先數字小者被套用</p>
+		<p>[商品]類型優惠條件：優先數字大者先被套用</p>
+		</div>
+		<editor-field name="smartPriority"></editor-field>
+		<editor-field name="salesRuleSettings.seq"></editor-field>
+		<editor-field name="availableQuota"></editor-field>
+		<editor-field name="excludeTag"></editor-field>
+		<editor-field name="salesRuleSettings.erp"></editor-field>
+		<editor-field name="salesRuleRoyaltyPrograms[].royaltyProgramId"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12 col-md-6">
+		<fieldset >
+		<legend>優惠設定</legend>
+		<editor-field name="category"></editor-field>
+		<editor-field name="minimum"></editor-field>
+		<editor-field name="dollarOrPercentage"></editor-field>
+		<editor-field name="discount"></editor-field>
+		<editor-field name="maxApplyTimes"></editor-field>
+		<editor-field name="salesRuleSettings.maxDiscountAmount"></editor-field>
+		<editor-field name="salesRuleSettings.minDiscountTotalPrice"></editor-field>
+		<editor-field name="tag"></editor-field>
+		<editor-field name="hidden"></editor-field>
+		<editor-field name="applyToGroupBuy"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12 col-md-6">
+		<fieldset id="salesRuleCustomForm-gift-advanced">
+		<legend>進階設定</legend>
+		<editor-field name="salesRuleSettings.repeatMinimumString"></editor-field>
+		<editor-field name="salesRuleSettings.tieredMinimumsString"></editor-field>
+		<editor-field name="salesRuleSettings.includedPostcodes"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12 col-md-6">
+		<fieldset id="salesRuleCustomForm-gift">
+		<legend>「贈品」相關優惠設定</legend>
+		<editor-field name="combinable"></editor-field>
+		<editor-field name="salesRuleSettings.giftMandatory"></editor-field>
+		<editor-field name="salesRuleSettings.giftTagRule"></editor-field>
+		<editor-field name="mainItemType"></editor-field>
+		</fieldset>
+	</div>
+</div>
+</div>
+</div>

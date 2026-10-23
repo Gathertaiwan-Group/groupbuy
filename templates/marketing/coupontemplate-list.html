@@ -1,0 +1,125 @@
+{{!-- 優惠卷樣板 /backend/CouponTemplate/list：原站 spec/html/coupontemplate-list.html；缺段已依原站頁面原始碼補齊 --}}
+<!--#head-->
+<script type="text/javascript" class="init">
+
+var editor; // use a global for the submit and return data rendering in the examples
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":20,
+	} );
+	$(document).ready(function() {
+
+		var tableName = '#example';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:	'{{baseUrl}}/ajax/CouponTemplate/save.do?groupBuyAccountId={{tenantCode}}'
+				},
+				edit: {
+					type: 'POST',
+					url:	'{{baseUrl}}/ajax/CouponTemplate/update.do?couponTemplateId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:	'{{baseUrl}}/ajax/CouponTemplate/delete.do?couponTemplateId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'couponTemplateId',
+			fields: [
+					DataTableConfig.field_select('優待卷類型','category'),
+					DataTableConfig.field_input('標題','title'),
+					DataTableConfig.field_select('折扣方式','dollarOrPercentage'),
+					DataTableConfig.field_input('折扣(金額/折數)','discount', '0'),
+					DataTableConfig.field_input('最小單位(金額/件數)','minimum', '0'),
+					DataTableConfig.field_input('相同折扣碼可被重複使用結帳次數(-1代表無限制)','availableQuota','1'),
+					//DataTableConfig.field_input('優先順序','priority','1'),
+					DataTableConfig.field_checkbox_bool('會員限定','couponSettings.customerOnly'),
+					DataTableConfig.field_input('獲取數量','couponSettings.redeemNumber','1','','當會員使用該折扣碼時，可獲得該折扣碼的數量，最少(預設)為1。若數量為3則該會員能使用同一個折扣碼3次。'),
+					DataTableConfig.field_input('折抵金額上限','couponSettings.maxDiscount','','',''),
+					//DataTableConfig.field_checkbox_bool('可合併計算','combinable'),
+			],
+			i18n:DataTableConfig.i18n,
+			formOptions:DataTableConfig.formOptions,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			scrollX:true,
+			ajax: '{{baseUrl}}/ajax/CouponTemplate/list.do',
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				{ data: 'title' },
+					{
+					data: 'category',
+					render: function ( data, type, row ) {
+						return row.categoryString;
+					}
+				},
+				{ data: 'discount' },
+				{ data: 'minimum' },
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',	editor: editor },
+				{ extend: 'duplicate' },
+				{ extend: 'remove',	editor: editor, className:'btn-danger' },
+			]
+		} );
+
+		editor
+			.on( 'postCreate postRemove', function () {
+				// After create or edit, a number of other rows might have been effected -
+				// so we need to reload the table, keeping the paging in the current position
+				table.ajax.reload( null, false );
+			} )
+			.on( 'initCreate', function () {
+				// Enable order for create
+			//	editor.field( 'seq' ).enable();
+			} )
+			.on( 'initEdit', function () {
+				// Disable for edit (re-ordering is performed by click and drag)
+			//	editor.field( 'seq' ).disable();
+			} )
+			.on( 'open', function (e,mode,action) {
+				$('#DTE_Field_category').change(function() {
+					v = $(this).val();
+					editor.show();
+					if (v == 'SALES_RULE') {
+						editor.hide('dollarOrPercentage');
+						editor.hide('discount');
+						editor.hide('minimum');
+					}
+				});
+			})
+			.on( 'close', function (e,mode,action) {
+				$('#DTE_Field_category').unbind('change');
+			});
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+	} ); // end ready
+	</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">優惠卷樣板</div>
+<div class="card-body">
+	<table id="example" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>標題</th>
+				<th>優待卷類型</th>
+				<th>折扣(金額/折數)</th>
+				<th>最小單位(金額/件數)</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

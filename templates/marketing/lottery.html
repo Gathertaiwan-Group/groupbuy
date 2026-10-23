@@ -1,0 +1,271 @@
+{{!-- 抽獎 /backend/Lottery/lottery?groupBuyId=：原站 spec/html/lottery.html；缺段已依原站頁面原始碼補齊 --}}
+<!--#head-->
+<script type="text/javascript" class="init">
+
+var editor; // use a global for the submit and return data rendering in the examples
+
+$.extend( true, $.fn.dataTable.defaults, {
+	"searching": false,
+	"pageLength":50,
+} );
+
+var timerId = -1;
+var timerCount = 0;
+var drawLottery = function () {
+	$('#drawResultTitle').html('抽獎中...');
+	var ajaxurl = '{{baseUrl}}/ajax/Lottery/draw.do';
+	jQuery.post( ajaxurl,
+		{
+			'groupBuyId':{{groupBuyId}},
+			'mask':$('#mask').prop("checked")
+		},
+		function( data ) {
+			$('#drawResultTitle').html('抽獎結果');
+			var winners = 0;
+			var html = '';
+			var table = '';
+			for (var i = 0 ; i < data.data.length; i++) {
+				var lottery = data.data[i];
+				html += '<h4>' + lottery.title + '</h4>';
+				if (lottery.winners.length == 0) {
+					html += '<p class="badge badge-warning">從缺</p>';
+					continue;
+				}
+				var lbDate = lottery.orderBy == 'UUID' ? '訂單日期' : '付款日期';
+				/*
+				html += '<div class="row mt-2">'
+					+ '<div class="col-md-2">訂單編號</div>'
+					+ '<div class="col-md-2">'+lbDate+'</div>'
+					+ '<div class="col-md-2">顧客姓名</div>'
+					+ '<div class="col-md-2">顧客電話</div>'
+					+ '<div class="col-md-3">顧客Email</div>'
+					+ '<div class="col-md-1">已付金額</div>'
+					+ '</div>'
+					;
+				*/
+				table += '<thead>'
+					+ '<tr>'
+					+ '<th>訂單編號</th>'
+					+ '<th>'+lbDate+'</th>'
+					+ '<th>顧客姓名</th>'
+					+ '<th>顧客電話</th>'
+					+ '<th>顧客Email</th>'
+					+ '<th>已付金額</th>'
+					+ '</tr>'
+					+ '</thead>'
+					;
+				table += '<tbody>';
+				for (var j = 0; j < lottery.winners.length; j++) {
+					var winner = lottery.winners[j];
+					var dt = lottery.orderBy == 'UUID' ? winner.dateCreatedString : winner.datePaidString;
+					/*
+					html += '<div class="row mt-2">'
+						+ '<div class="col-md-2">'+ winner.uuid + '</div>'
+						+ '<div class="col-md-2">'+ dt + '</div>'
+						+ '<div class="col-md-2">'+ winner.customerFirstname + '</div>'
+						+ '<div class="col-md-2">'+ winner.customerTelephone + '</div>'
+						+ '<div class="col-md-3">'+ winner.customerEmail + '</div>'
+						+ '<div class="col-md-1">$'+ winner.totalPaid + '</div>'
+						+ '</div>'
+						;
+					*/
+					table += '<tr">'
+						+ '<td>'+ winner.uuid + '</td>'
+						+ '<td class="tableexport-string">'+ dt + '</td>'
+						+ '<td>'+ winner.customerFirstname + '</td>'
+						+ '<td class="tableexport-string">'+ winner.customerTelephone + '</td>'
+						+ '<td>'+ winner.customerEmail + '</td>'
+						+ '<td class="tableexport-string">$'+ winner.totalPaid + '</td>'
+						+ '</tr>'
+						;
+					winners++;
+				}
+				table += '</tbody>';
+
+			}
+			if (winners == 0) {
+				html = '無人可抽';
+			}
+			$('#drawResultContainer').show();
+			$('#drawResult').html(html);
+			$('#drawResultTable').html(table);
+
+			$('.tableexport-caption').remove();
+			$("#drawResultTable").tableExport({filename:'lottery',formats:['xlsx'],position:'top'});
+
+			if (timerCount++ > 1 || winners == 0) {
+				clearInterval(timerId);
+				timerId = -1;
+			}
+		}
+	);
+}
+
+$(document).ready(function() {
+	var tableName = '#shippingTable';
+	editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				title:'upload',
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/Lottery/save.do?groupBuyId={{groupBuyId}}'
+			},
+			edit: {
+				title:'upload',
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/Lottery/update.do?groupBuyId={{groupBuyId}}&lotteryId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/Lottery/delete.do?groupBuyId={{groupBuyId}}&lotteryId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'lotteryId',
+		fields: [
+			DataTableConfig.field_input('編號:','lotteryId'),
+			DataTableConfig.field_input('獎項名稱:','title'),
+			DataTableConfig.field_input('名額:','quota', '1'),
+			DataTableConfig.field_select('訂單排序方式:','orderBy'),
+			DataTableConfig.field_datetime('開始時間','dateStartString','YYYY-MM-DD HH:mm'),
+			DataTableConfig.field_datetime('結束時間','dateEndString','YYYY-MM-DD HH:mm'),
+			DataTableConfig.field_input('前幾名下單者:','numberOfOrders', '-1'),
+			DataTableConfig.field_input('訂單金額滿:','amountOfOrders', '-1'),
+		],
+		i18n:DataTableConfig.i18n,
+	} );
+
+	var table = $(tableName).DataTable( {
+		dom: 'Bfrtip',
+		ajax: '{{baseUrl}}/ajax/Lottery/list.do?groupBuyId={{groupBuyId}}',
+		language:DataTableConfig.i18n,
+		columns: [
+			DataTableConfig.data_select_checkbox,
+			{ data: 'lotteryId', defaultContent:'-1' },
+			{ data: 'title', defaultContent:'##' },
+			{ data: 'quota' },
+			DataTableConfig.data_select('orderBy', 'orderBy'),
+			DataTableConfig.data_input('dateStartString'),
+			DataTableConfig.data_input('dateEndString'),
+			{ data: 'numberOfOrders', render: function ( data, type, row ) {
+					if (data == '-1') return '-1代表不限制數量';
+					else return data;
+				},
+			},
+			{ data: 'amountOfOrders' },
+		],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{
+				extend: "create",
+				text: '新增獎項',
+				action: function ( e, dt, node, config ) {
+					var idIndex = table.data().length + 1;
+					table.row.add(
+						{
+							'lotteryId':idIndex,
+							'title':'',
+							'quota':1,
+							'orderBy':'UUID',
+							'numberOfOrders':-1,
+							'amountOfOrders':0,
+						} ).draw( false );
+				}
+			},
+			{ extend: 'remove', editor: editor, className:'btn-danger'},
+			{
+				extend: "create",
+				text: '抽獎',
+				action: function ( e, dt, node, config ) {
+					drawLottery();
+					//if (timerId != -1) return;
+					//timerCount = 0;
+					//timerId = setInterval(drawLottery,1000);
+				}
+			},
+		]
+	} );
+
+	$(tableName).on( 'click', 'tbody td:not(:first-child)', function (e) {
+		editor.inline( this, {
+			onBlur: 'submit',
+			submit: 'all'
+		} );
+	} );
+	editor
+		.on( 'postCreate postRemove', function () {
+			// After create or edit, a number of other rows might have been effected -
+			// so we need to reload the table, keeping the paging in the current position
+			table.ajax.reload( null, false );
+		} )
+		.on( 'initCreate', function () {
+			// Enable order for create
+			// editor.field( 'seq' ).enable();
+		} )
+		.on( 'initEdit', function () {
+			// Disable for edit (re-ordering is performed by click and drag)
+			// editor.field( 'seq' ).disable();
+		} );
+
+	var filters = '<div class="ml-2 mt-2">'
+		+ '<input type="checkbox" id="mask" class="filters form-check-input" value="1"><label class="pl-4 mr-2" for="mask">隱藏部分個資</label>'
+		+ '</div>';
+
+	$('#shippingTable_wrapper').find(".dt-buttons").append(filters);
+
+	$('input:checkbox.filters').on('change', function() {
+		table.clear().ajax.reload();
+		table.columns.adjust();
+	});
+
+	TableExport.prototype.formatConfig.xlsx.buttonContent = '匯出EXCEL';
+	TableExport.prototype.formatConfig.xlsx.defaultClass = 'xlsx ml-2';
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+		<div class="card-header">抽獎 - {{groupBuy.title}}</div>
+		<div class="card-body">
+			<table id="shippingTable" class="table table-striped display" width="100%">
+				<thead>
+					<tr>
+						<th></th>
+						<th>編號</th>
+						<th>獎項名稱</th>
+						<th>名額</th>
+						<th>訂單排序方式</th>
+						<th>開始時間</th>
+						<th>結束時間</th>
+						<th>前幾名下單者</th>
+						<th>訂單金額滿</th>
+					</tr>
+				</thead>
+			</table>
+		</div>
+		<div class="card-header" id="drawResultTitle"></div>
+		<div class="card-body">
+			<div id="drawResult"></div>
+			<table id="drawResultTable" class="table table-borderless w-100">
+			</table>
+		</div>
+	</div>
+
+	<div class="card-footer mt-4" id="rules">
+		<button type="button" id="btn-rules-close" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+		<p>＊系統不會永久保留抽獎相關設定及紀錄</p>
+		<p>＊獎項名稱必填，未填獎項不會參加抽獎</p>
+		<p>＊抽獎結果顯示金額為分割訂單後之金額</p>
+		<p>＊系統會重複抽獎三次以最後一次為結果</p>
+	</div>
+
+	<script>
+	$('#btn-rules-close').on('click', function() {
+		$('#rules').hide();
+	});
+
+	</script>
+</div>
+<!--#foot-->
+<script src="//cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.8/FileSaver.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/xlsx/0.15.4/xlsx.core.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/TableExport/5.2.0/js/tableexport.min.js"></script>

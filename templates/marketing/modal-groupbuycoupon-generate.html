@@ -1,0 +1,88 @@
+{{!-- 產生優惠卷（/backend/GroupBuyCoupon/wizardGenCoupon.do?groupBuyCouponId=、generateCoupon.do 同）
+     推導：原站未擷取（原站 405167 無團購優惠卷可開），依原站彈窗（modal-groupbuy-displaysms 等）的 form + initAjaxForm 風格補完。 --}}
+<form name="CouponForm" method="post" action="{{baseUrl}}/ajax/GroupBuyCoupon/generateCoupon.do" class="form-horizontal" id="CouponForm"><input type="hidden" name="groupBuyCouponId" value="{{groupBuyCouponId}}" id="groupBuyCouponId"><div class="modal-header">
+	<h5 style="overflow:hidden">產生優惠卷 &raquo; {{title}}</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+
+	<div class="blue-grey lighten-5 small p-2 mb-3">
+		<p>優待卷類型：{{categoryString}}</p>
+		<p>產生的折扣碼可提供給消費者於結帳時輸入，每組折扣碼可被使用的次數依下方設定（-1代表無限制）。</p>
+	</div>
+
+	<div class="form-group row">
+		<label class="col-4">產生方式</label>
+		<div class="col-8">
+			<div class="btn-group btn-group-toggle" data-toggle="buttons">
+				<label class="btn btn-sm btn-input-check m-0 p-2 active">
+					<input type="radio" name="mode" value="AUTO" checked>系統亂數產生
+				</label>
+				<label class="btn btn-sm btn-input-check m-0 p-2">
+					<input type="radio" name="mode" value="CUSTOM">自訂折扣碼
+				</label>
+			</div>
+		</div>
+	</div>
+	<div class="mode-auto">
+		<div class="form-group row">
+			<label class="col-4" for="quantity">產生數量</label>
+			<div class="col-8">
+				<input type="number" name="quantity" id="quantity" class="form-control" value="1" min="1" max="1000">
+			</div>
+		</div>
+		<div class="form-group row">
+			<label class="col-4" for="prefix">折扣碼前綴</label>
+			<div class="col-8">
+				<input type="text" name="prefix" id="prefix" class="form-control" maxlength="12" placeholder="可不填，如：VIP">
+			</div>
+		</div>
+		<div class="form-group row">
+			<label class="col-4" for="length">亂數長度</label>
+			<div class="col-8">
+				<input type="number" name="length" id="length" class="form-control" value="8" min="4" max="16">
+			</div>
+		</div>
+	</div>
+	<div class="mode-custom" style="display:none">
+		<div class="form-group row">
+			<label class="col-12" for="codes">折扣碼(每行一組，最多1000組，限英數字)</label>
+			<div class="col-12">
+				<textarea name="codes" id="codes" class="form-control" rows="6"></textarea>
+			</div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-4" for="maxUses">每組折扣碼可使用次數</label>
+		<div class="col-8">
+			<input type="number" name="maxUses" id="maxUses" class="form-control" value="{{availableQuota}}" min="-1">
+			<div class="help-block small">-1代表無限制</div>
+		</div>
+	</div>
+</div> <!-- modal-body -->
+
+<div class="progress">
+	<div class="progress-bar" role="progressbar"></div>
+</div>
+<div class="modal-footer">
+	<button class="btn btn-default" data-dismiss="modal">關閉</button>
+	<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+</div>
+</form><script>
+$(document).ready(function() {
+	$('#CouponForm input[name=mode]').on('change', function() {
+		var v = $('#CouponForm input[name=mode]:checked').val();
+		$('#CouponForm .mode-auto').toggle(v == 'AUTO');
+		$('#CouponForm .mode-custom').toggle(v == 'CUSTOM');
+	});
+});
+
+var success = function(json) {
+	modalShowSuccess($('#myModal'), json.error || json.message);
+	$('#submitButton').hide();
+	if (typeof groupBuyCouponTable !== 'undefined' && groupBuyCouponTable) groupBuyCouponTable.ajax.reload(null, false);
+}
+
+initAjaxForm('CouponForm', success);
+</script>

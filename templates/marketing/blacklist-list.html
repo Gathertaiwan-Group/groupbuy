@@ -1,0 +1,116 @@
+{{!-- 黑名單 /backend/Blacklist/list：原站 spec/html/blacklist-list.html；缺段已依原站頁面原始碼補齊 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+
+		var tableName = '#rpTable';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/Blacklist/save.do?groupBuyAccount={{tenantCode}}'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/Blacklist/update.do?blacklistId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/Blacklist/delete.do?blacklistId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'blacklistId',
+			fields: [
+					DataTableConfig.field_input('姓名','firstname'),
+					DataTableConfig.field_input('Email','email'),
+					DataTableConfig.field_input('電話','telephone'),
+					DataTableConfig.field_input('IP','ip'),
+					DataTableConfig.field_textarea('備註', 'note','', 10),
+					DataTableConfig.field_textarea('Log', 'log','', 10),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/Blacklist/list.do',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('dateModifiedString'),
+				DataTableConfig.data_input('firstname'),
+				DataTableConfig.data_input('email'),
+				DataTableConfig.data_input('telephone'),
+				DataTableConfig.data_input('note'),
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [2,3,4],[16,16,16]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		$(editor.field('log').node()).find('textarea').prop('readonly',true)
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">黑名單</div>
+<div class="card-body">
+	<div class="blue-grey lighten-5 small p-2">
+		<p>＊下單時會檢查訂單電話號碼是否在黑名單內（若訂單未填電話號碼，則使用Email判斷）</p>
+		<p>＊若在黑名單內，下單後會顯示「銀行系統維護中，請稍後再試」</p>
+		<p>一但被系統偵測為黑名單，在瀏覽器未關閉前使用其他電話號碼下單也會被判定為黑名單</p>
+		<p>既有訂單，可透過「加入黑名單」功能將訂單加入黑名單</p>
+	</div>
+</div>
+<div class="card-body">
+	<table id="rpTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>更新日期</th>
+				<th>姓名</th>
+				<th>Email</th>
+				<th>電話</th>
+				<th>備註</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>更新日期</th>
+				<th>姓名</th>
+				<th>Email</th>
+				<th>電話</th>
+				<th>備註</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

@@ -1,0 +1,98 @@
+{{!-- 查看優惠卷（/backend/Coupon/list.do?groupBuyCouponId=）
+     推導：原站未擷取，依「優惠卷樣板」等列表頁（card + DataTables + Editor 刪除 + 啟用/停用 actionButton）風格補完；匯出用 DataTables Buttons excelHtml5。 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":50,
+	} );
+	$(document).ready(function() {
+		var tableName = '#couponTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/Coupon/delete.do?groupBuyCouponId={{groupBuyCouponId}}&couponCodeId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'couponCodeId',
+			fields: [],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			scrollX:true,
+			ajax: {
+				url:'{{baseUrl}}/ajax/Coupon/list.do?groupBuyCouponId={{groupBuyCouponId}}',
+				type: "POST"
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				{ data: 'code' },
+				{ data: 'usedCount' },
+				{ data: 'maxUsesString' },
+				{ data: 'customerName', defaultContent: '' },
+				{ data: 'status', render: function (data, type, row) {
+					if (type !== 'display') return data;
+					return data == 'DISABLED' ? '<span class="badge badge-danger">停用中</span>' : '<span class="badge badge-success">已啟用</span>';
+				} },
+				{ data: 'dateCreatedString' },
+				{ data: 'dateUsedString', defaultContent: '' },
+			],
+			"order": [[ 6, "desc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+				DataTableConfig.actionButton({
+					text:'啟用',
+					confirm:'啟用',
+					url:'{{baseUrl}}/ajax/Coupon/setActive',
+				}),
+				DataTableConfig.actionButton({
+					text:'停用',
+					confirm:'停用',
+					url:'{{baseUrl}}/ajax/Coupon/setDisabled',
+				}),
+				{ extend: 'excelHtml5', text: '匯出EXCEL', title: '優惠卷-' + {{json couponTitle}}, exportOptions: { columns: [1,2,3,4,5,6,7] } },
+			],
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+		DataTableHelper.initEditorOnCallback(table,editor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item">{{couponGroupBuyTitle}}</li>
+		<li class="breadcrumb-item"><a href="/backend/GroupBuy/coupon?groupBuyId={{couponGroupBuyId}}">團購優惠卷</a></li>
+		<li class="breadcrumb-item active" aria-current="page">優惠卷</li>
+	</ol>
+</nav>
+	<div class="card mt-4">
+<div class="card-header">優惠卷 - {{couponTitle}}</div>
+<div class="card-body">
+	<table id="couponTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>折扣碼</th>
+				<th>已使用次數</th>
+				<th>可使用次數</th>
+				<th>會員</th>
+				<th>狀態</th>
+				<th>建立時間</th>
+				<th>使用時間</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

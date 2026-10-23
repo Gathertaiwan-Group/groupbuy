@@ -1,0 +1,131 @@
+{{!-- 優惠條件綁定（/backend/SalesRule/details?level=ItemSet|Item&groupBuyId=&salesRuleId=）
+     推導：原站此頁未擷取（原站帳號所有團購皆無優惠條件可開），依「優惠條件」頁的卡片/表格/按鈕風格補完。
+     level=ItemSet 綁定品項；Item 綁定商品；無 level 時依類別（整張訂單類＝不參與活動商品，以不合併計算標籤實作）。 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var tableName = '#bindingTable';
+		var level = {{json level}};
+		var bindPost = function (dt, bind, btn) {
+			var ids = dt.rows({ selected: true }).data().map(function (r) { return r.id; }).toArray();
+			if (!ids.length) {
+				displayAlertWarning ? displayAlertWarning('請先勾選要設定的資料') : alert('請先勾選要設定的資料');
+				return;
+			}
+			btnStartLoading($(btn));
+			$.ajax({
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/SalesRule/bind.do',
+				data: { salesRuleId: '{{salesRuleId}}', groupBuyId: '{{groupBuyId}}', level: level, ids: ids.join(','), bind: bind ? 1 : 0, tag: $('#bindTag').val() || '' },
+				success: function (res) {
+					btnStopLoading($(btn));
+					toastr.success(res.error || res.message || '已更新');
+					dt.ajax.reload(null, false);
+				},
+				error: function (xhr) {
+					btnStopLoading($(btn));
+					var json = xhr.responseJSON || {};
+					toastr.error(json.error || '更新失敗');
+				}
+			});
+		};
+		var columns = [
+			DataTableConfig.data_select_checkbox,
+		];
+		if (level == 'ItemSet') {
+			columns.push({ data: 'seq' }, { data: 'title' });
+		} else {
+			columns.push({ data: 'itemSetTitle' }, { data: 'title' }, { data: 'uid' }, { data: 'price' });
+		}
+		columns.push(
+			{ data: 'bound', render: function (data, type, row) {
+				if (type !== 'display') return data ? 1 : 0;
+				return data ? '<i class="fa fa-check text-success"></i>' : '';
+			} },
+			{ data: 'tags', defaultContent: '' }
+		);
+		var table = $(tableName).DataTable( {
+			dom: 'lBfrtip',
+			scrollX: true,
+			pageLength: 50,
+			lengthMenu: [25, 50, 100, 250],
+			ajax: {
+				url: '{{baseUrl}}/ajax/SalesRule/bindingList.do?groupBuyId={{groupBuyId}}&salesRuleId={{salesRuleId}}&level=' + level,
+				type: 'POST'
+			},
+			language: DataTableConfig.i18n,
+			columns: columns,
+			order: [[1, 'asc']],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ text: level == 'Exclude' ? '設為不參與活動' : '綁定', className: 'btn-primary', action: function (e, dt, node) { bindPost(dt, true, node); } },
+				{ text: level == 'Exclude' ? '取消不參與活動' : '解除綁定', className: 'btn-danger', action: function (e, dt, node) { bindPost(dt, false, node); } },
+				{ text: '返回優惠條件', action: function () { window.location = '/backend/GroupBuy/salesRule?groupBuyId={{groupBuyId}}'; } },
+			],
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+		$(tableName + '_wrapper .dataTables_scrollHead').on('click', 'th.select-checkbox', function () {
+			if ($(this).hasClass('selected')) { table.rows().deselect(); $(this).removeClass('selected'); }
+			else { table.rows({ search: 'applied' }).select(); $(this).addClass('selected'); }
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item">{{groupBuy.title}}</li>
+		<li class="breadcrumb-item"><a href="/backend/GroupBuy/salesRule?groupBuyId={{groupBuyId}}">優惠條件</a></li>
+		<li class="breadcrumb-item active" aria-current="page">{{pageTitle}}</li>
+	</ol>
+</nav>
+
+<div class="card panel-success">
+	<div class="card-header">{{pageTitle}}：{{rule.title}}</div>
+	<div class="card-body">
+		<div class="blue-grey lighten-5 small p-2">
+			<p>優惠類別：{{rule.categoryString}}</p>
+			{{#if isExclude}}
+			<p>勾選的商品將不列入此優惠計算（以不合併計算標籤「{{rule.excludeTag}}」標記；未設定時系統自動建立）。</p>
+			{{else}}
+			<p>勾選{{#if isItemSet}}品項{{else}}商品{{/if}}後按「綁定」即套用此優惠條件；可同時指定優惠標籤（優惠標籤：{{rule.tag}}）。</p>
+			<p>贈品優惠標籤均為最後一個。當未設定主商品優惠標籤時，則所有商品均為主商品</p>
+			{{/if}}
+		</div>
+	</div>
+	{{#unless isExclude}}
+	<div class='card-footer section-item'>
+		<p>同時設定優惠標籤</p>
+		<select id="bindTag" class="custom-select custom-select-sm w-auto">
+		<option value="">不設定</option>
+		{{#each tagOptions}}
+		<option value="{{this}}">{{this}}</option>
+		{{/each}}
+		</select>
+	</div>
+	{{/unless}}
+	<div class="card-body">
+		<table id="bindingTable" class="table table-striped nowrap w-100">
+			<thead>
+				<tr>
+					<th></th>
+					{{#if isItemSet}}
+					<th>排序</th>
+					<th>品項名稱</th>
+					{{else}}
+					<th>品項名稱</th>
+					<th>商品名稱</th>
+					<th>商品代碼</th>
+					<th>價格</th>
+					{{/if}}
+					<th>{{#if isExclude}}不參與活動{{else}}已綁定{{/if}}</th>
+					<th>優惠標籤</th>
+				</tr>
+			</thead>
+		</table>
+	</div>
+</div>
+</div>

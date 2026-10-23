@@ -1,0 +1,135 @@
+{{!-- 商品系統標籤 /backend/GroupBuyItemSysTag/list?groupBuyId=：原站 spec/html/groupbuyitemsystag-list.html；缺段已依原站頁面原始碼補齊 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	var groupBuyItemSysTagTable;
+	$(document).ready(function() {
+		var groupBuyId = '{{groupBuyId}}';
+		var tableName = '#groupBuyItemSysTagTable';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyItemSysTag/save.do?groupBuyId=' + groupBuyId
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyItemSysTag/update.do?groupBuyItemSysTagId=_id_&groupBuyId=' + groupBuyId
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyItemSysTag/delete.do?groupBuyItemSysTagId=_id_&groupBuyId=' + groupBuyId
+				}
+			},
+			table: tableName,
+			idSrc: 'groupBuyItemSysTagId',
+			fields: [
+					DataTableConfig.field_select('分類','category'),
+					DataTableConfig.field_input('標籤','tag'),
+					DataTableConfig.field_input('顯示名稱','displayName'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/GroupBuyItemSysTag/list.do?groupBuyId=' + groupBuyId,
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_select('category', 'category', true),
+				DataTableConfig.data_input('tag', true),
+				DataTableConfig.data_input('displayName', true),
+				{
+					sortable:false,
+					render: function ( data, type, row ) {
+						var html = ''
+							+ '<button class="btn btn-default text-nowrap mt-0" data-action="showItems">商品</button>'
+							;
+						return html;
+					}
+				}
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [],[]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+		groupBuyItemSysTagTable = table;
+
+		$(tableName +' tbody').on('click', 'button', function (e) {
+			var td = $(this).closest('td');
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var data = row.data();
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+			var $btn = $(this);
+			$btn.addClass('disabled');
+			setTimeout(function () {
+				$btn.removeClass('disabled');
+			}, 1000);
+			switch (action) {
+			case 'showItems':
+				showItems(data.groupBuyItemSysTagId);
+				break;
+			}
+		});
+
+		var showItems = function(groupBuyItemSysTagId) {
+			var href = '/backend/ItemSysTag/list?groupBuyId='+groupBuyId+'&groupBuyItemSysTagId=' + groupBuyItemSysTagId;
+			window.open(href, '_blank');
+		}
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">商品系統標籤</div>
+<div class="card-body">
+	<table id="groupBuyItemSysTagTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>分類</th>
+				<th>標籤</th>
+				<th>顯示名稱</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>分類</th>
+				<th>標籤</th>
+				<th>顯示名稱</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

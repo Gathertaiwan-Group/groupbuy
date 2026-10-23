@@ -1,0 +1,200 @@
+{{!-- 短網址 /backend/ShortUrl/list：原站 spec/html/shorturl-list.html。
+     原站列表/新增走外部短網址服務 uuo.io（帳號密碼放在頁面 hidden 欄位）——本系統不串外部服務：
+     改打本站 {{baseUrl}}/ajax/ShortUrl/*（資料存 groupbuy.short_urls，短網址由本站 /s/<code> 轉址），hidden 帳密欄位留空。 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+
+		var tableName = '#rpTable';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ShortUrl/save'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ShortUrl/update'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ShortUrl/delete'
+				}
+			},
+			table: tableName,
+			idSrc: 'code',
+			fields: [
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/ShortUrl/list',
+				type: "POST",
+				data: function (d) {
+					d.account = '';
+					d.password = '';
+					return d;
+				},
+				error: function (xhr, error, code) {
+					$('#rpTable_processing').hide();
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('url'),
+				DataTableConfig.data_input('shortUrl'),
+				DataTableConfig.data_input('views'),
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [1,2],[16,16]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		$('#ShortUrlForm').validate();
+		$submitBtn = $('#ShortUrlForm button[type=submit]');
+		$submitBtn.on('click', function(event) {
+			event.preventDefault();
+			createShortUrl();
+			return false;
+		});
+
+		var createAccount = function() {
+			return jQuery.post(
+				'{{baseUrl}}/ajax/ShortUrl/createAccount',
+				{
+					account:$('#ShortUrlForm input[name=account]').val(),
+					email:'guest@erawppa.com',
+					password:$('#ShortUrlForm input[name=password]').val(),
+				}
+			)
+			.fail(jqHXR => {
+				var json = jqHXR.responseJSON;
+				btnStopLoading($submitBtn);
+				$('#shortUrl-result-error').html(json.error);
+			});
+		};
+
+		var createShortUrl = function() {
+			$('#shortUrl').val('');
+			$('#shortUrl-result-error').html('');
+			$('#shortUrl-result-body').addClass('d-none');
+			btnStartLoading($submitBtn);
+			return jQuery.post(
+				'{{baseUrl}}/ajax/ShortUrl/newurl',
+				{
+					account:$('#ShortUrlForm input[name=account]').val(),
+					password:$('#ShortUrlForm input[name=password]').val(),
+					url:$('#ShortUrlForm input[name=url]').val(),
+					domain:$('#ShortUrlForm input[name=domain]:checked').val(),
+				}
+			)
+			.fail(jqHXR => {
+				var json = jqHXR.responseJSON;
+				if (json.code == 404) {
+					createAccount()
+					.then(() => $submitBtn.click());
+				} else {
+					btnStopLoading($submitBtn);
+					$('#shortUrl-result-error').html(json.error);
+				}
+			})
+			.then(json => {
+				btnStopLoading($submitBtn);
+				var url = 'https://' + json.domain + '/' + json.code;
+				$('#shortUrl').val(url);
+				$('#shortUrl-result-body').removeClass('d-none');
+				$('#ShortUrlForm input[name=url]').val('');
+				table.ajax.reload(null, false);
+			});
+		};
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<form action="{{baseUrl}}/ajax/ShortUrl/newurl" method="POST" id="ShortUrlForm">
+<input type="hidden" name="account" value="">
+<input type="hidden" name="password" value="">
+<div class="card mt-4">
+	<div class="card-header card-header bg-info white-text">新增短網址</div>
+	<div class="card-body">
+	<p>有太長的網址想要分享到臉書或是其他地方嗎？</p>
+	<p>可將一般網頁網址轉成短網址格式(如：https://uuo.io/a21fax)。有6種短網址可供選擇。</p>
+	</div>
+	<div class="card-body">
+		<div class="input-group pb-3">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon">網址</span>
+			</div>
+			<input type="text" name="url" id="url" class="form-control required" required>
+		</div>
+		<div class="input-group py-0">
+			<div class="btn-group-toggle" data-toggle="buttons">
+				<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2 active">
+					<input type="radio" name="domain" value="attt.at" class="required" required checked>attt.at</label>
+				<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2">
+					<input type="radio" name="domain" value="ii.cafe" class="required" required >ii.cafe</label>
+				<label class="btn btn-sm btn-outline-input btn-input-check m-0 mb-2 p-2">
+					<input type="radio" name="domain" value="uuo.io" class="required" required >uuo.io</label>
+			</div>
+		</div>
+	</div>
+	<div class="card-footer">
+		<span class="help-block" id="shortUrl-result-error"></span>
+		<button type="submit" class="btn btn-secondary btn-submit mx-0 pull-right"><i class="fa-light fa-plus mr-1"></i>新增</button>
+	</div>
+	<div class="card-body text-right d-none" id="shortUrl-result-body">
+		<div class="input-group mb-3">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon">短網址</span>
+			</div>
+			<input type="text" id="shortUrl" class="form-control">
+		</div>
+		<button type="button" class="btn btn-default" onclick="copyClipboard(this, '#shortUrl')"><i class="fa-light fa-copy">複製</i></button>
+		<button type="button" class="btn btn-default mr-0" onclick="openUrlInNewTab(this, '#shortUrl')"><i class="fa-light fa-external-link-alt"></i>開啟</button>
+	</div>
+</div>
+</form>
+<div class="card mt-4">
+<div class="card-header">短網址</div>
+<div class="card-body">
+	<table id="rpTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>網址</th>
+				<th>短網址</th>
+				<th>瀏覽數</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>網址</th>
+				<th>短網址</th>
+				<th>瀏覽數</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
