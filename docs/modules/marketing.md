@@ -96,7 +96,7 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - 查看優惠卷頁、產生優惠卷彈窗（亂數：數量 1–1000、前綴、長度 4–16；自訂：每行一組英數字 3–32 字，全租戶不可重複；每組可使用次數預設帶優惠卷的 availableQuota）。
 - 優惠條件綁定頁（品項／商品／不參與活動商品；不參與活動以規則的不合併計算標籤實作，未設時自動建立 `不參與活動-<規則id>`）。
 - 商品銷售標籤／商品系統標籤的「商品」頁（列出本團商品勾選加入／移除）。
-- 抽獎：獎項名稱必填才參加；條件＝時間區間（依訂單排序方式取付款時間或下單時間）、前幾名下單者、訂單金額滿；同一張訂單不重複得獎；依原站說明「重複抽獎三次以最後一次為結果」；結果寫 `lottery_winners`、`lotteries.date_drawn`；遮罩：姓名留頭尾、電話留前 4 後 3、Email 留前 2 碼。
+- 抽獎：獎項名稱必填才參加；條件＝時間區間（依訂單排序方式取付款時間或下單時間）、前幾名下單者、訂單金額滿；同一張訂單不重複得獎；每個獎項洗牌抽選三次、取最後一次結果；再次抽獎會覆蓋該獎項前一次的得獎者；結果寫 `lottery_winners`、`lotteries.date_drawn`；遮罩：姓名留頭尾、電話留前 4 後 3、Email 留前 2 碼。
 - 訂單「加入黑名單」（所有訂單明細卡，原站未擷取）：loadAjax 會把回應放進隱藏 div，所以 `/backend/Blacklist/add` 只回一段 script，以 openForm 開啟彈窗；彈窗欄位同黑名單編輯器（姓名／Email／電話／IP／備註），預填訂單的顧客姓名／Email／電話／IP，備註預填訂單編號；送出時電話（或 Email）已在黑名單內則只在 Log 追加「由訂單 … 加入」，不重複新增。
 - 黑名單：新增時至少要有電話／Email／IP 其一；Log 欄唯讀（伺服器寫入「後台新增」紀錄，`appendBlacklistLog` 供前台命中時追加）。
 - 團購關鍵字標籤：批次條件＝結團時間在最近 90 天內（含未結團）且標題包含所有關鍵字，預覽列前 20 筆；「解除關聯」後若標籤已無任何團購使用即刪除字典列（對應頁面說明「系統自動進行回收刪除」）；標籤字元規則同「所有團購」新增標籤。
@@ -108,7 +108,7 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - 防 XSS：抽獎結果（消費者姓名/電話/Email）、關鍵字標籤頁的標籤與團購名稱、推導頁的表格欄位改為跳脫後輸出（外觀相同）。
 - 優惠條件單頁補引用 `/scripts/salesRule.js`（原站只在「團購品項」頁引用；沒有它「複製組合」彈窗會 ReferenceError）。
 - `cloneTo`／`cloneFrom` 回應不帶 `code`：原站對話框在 `code==200` 時呼叫不存在的 `l._editor.close()` 會丟例外；成功後表單由 Editor 預設行為關閉。
-- 團購優惠卷「優待卷類型」dependent 在值為空時直接略過（下拉選項隨列表重整更新時 Editor 會觸發 change；原站在 `couponMeta[val]` 丟例外後中止，結果相同）。
+- 團購優惠卷「優待卷類型」dependent 在值為空或類型不在設定表內時直接略過、不調整欄位（下拉選項隨列表重整更新時 Editor 會觸發 change）。
 - 團購關鍵字標籤欄位標籤 `???GroupBuySysTag.tag???` 為原站缺 i18n 鍵，照原樣保留。
 
 ## 6. 已知缺口
@@ -122,7 +122,7 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 ## 7. 給 core 的問題
 
 1. Editor shim：`DataTableConfig.actionButton` 以 `editor.remove(editor, true)` 當確認框時，若 Editor 有自訂 `template`（如團購優惠卷），彈窗會顯示整份表單欄位與「多個數值」提示；原版 remove 模式只顯示訊息。
-2. （給 items）`templates/items/groupbuy-show-items.html` 的團購優惠卷 dependent 有同樣的 `couponMeta[val].discount` 例外（列表重整時 console 錯誤），可加同 §5 的防護。
+2. （給 items）`templates/items/groupbuy-show-items.html` 的團購優惠卷 dependent 已同樣在值為空／類型不在設定表內時略過（items e435393）。
 
 ## 8. 自查工具與驗證紀錄
 

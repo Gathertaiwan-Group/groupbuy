@@ -199,7 +199,7 @@ async function draw(ctx: RequestContext): Promise<Response> {
     const n = Number(l.number_of_orders ?? -1);
     if (n > 0) pool = pool.slice(0, n);
     pool = pool.filter((o) => !won.has(o.id));
-    // 原站：系統會重複抽獎三次以最後一次為結果
+    // 洗牌抽選三次，取最後一次的結果
     let picked: OrderRow[] = [];
     for (let k = 0; k < 3; k++) picked = shuffle(pool).slice(0, Math.max(1, Number(l.quota ?? 1)));
     for (const o of picked) won.add(o.id);
