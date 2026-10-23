@@ -3,10 +3,13 @@
 //   POST /ajax/GroupBuy/countMonthlyReport           彈窗內「符合結果:N」
 //   POST /backend/GroupBuy/exportMonthlyReport       下載 {租戶}{起MMDD}{迄MMDD}.xlsx，工作表「YYYY-MM月報表」
 //   GET  /ajax/GroupBuy/exportItemSalesReport        彈窗（匯出銷售商品總表）
-//   POST /backend/Item/exportItemSalesReport         下載 匯出銷售商品總表_{團購}_{匯出依照}_{起}_{迄}.xlsx，工作表「ALL」（ERP 格式「ERP」）
+//   GET|POST /backend/Item/exportItemSalesReport     下載 匯出銷售商品總表_{團購}_{匯出依照}_{起}_{迄}.xlsx，工作表「ALL」（ERP 格式「ERP」）
+//     原站同一端點也供團購列表「匯出商品報表 → 匯出上月出貨報表」（groupBuyExportModal：groupBuyId、toErpFormat、shipped、
+//     exportBy=SHIPPED，不帶日期）→ 未帶日期且依出貨日期時預設上個月（台灣時間）。groupbuy 模組也登錄了同路徑，
+//     此處以 priority 90 優先比對，兩種呼叫都由本處理（參數為其超集）。
 import { getServiceClient } from "@/lib/supabase/server";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
-import { fragment, post, requireSession } from "@/lib/core/http/route-helpers";
+import { fragment, post, route, requireSession } from "@/lib/core/http/route-helpers";
 import { download, html, json } from "@/lib/core/http/responses";
 import { taipeiDateTime } from "@/lib/core/time";
 import { buildXlsx, XLSX_CONTENT_TYPE, type CellInput } from "./xlsx";
@@ -15,11 +18,13 @@ import {
   FEATURE_TAG_BITS,
   FEATURE_TAG_LABELS,
   addDays,
+  addMonths,
   boolParam,
   ensureFresh,
   featureBits,
   fetchAll,
   int,
+  monthEnd,
   num,
   parseDate,
   tpeDayStartIso,
@@ -343,6 +348,12 @@ async function exportItemSalesReport(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   let from = parseDate(await ctx.param("dateStart"));
   let to = parseDate(await ctx.param("dateEnd"));
+  const exportBy = String((await ctx.param("exportBy")) ?? "UUID");
+  // 團購列表「匯出上月出貨報表」不帶日期：依出貨日期、上個月（台灣時間）
+  if (!from && !to && exportBy === "SHIPPED") {
+    from = addMonths(todayTpe().slice(0, 8) + "01", -1);
+    to = monthEnd(from);
+  }
   if (!from || !to) return textError("請選擇開始與結束時間");
   if (from > to) [from, to] = [to, from];
   // 最多匯出跨越兩個月資料
@@ -359,7 +370,6 @@ async function exportItemSalesReport(ctx: RequestContext): Promise<Response> {
     const { data } = await getServiceClient().from("group_buys").select("id").eq("tenant_id", session.tenantId).in("id", groupBuyIds);
     if ((data ?? []).length !== groupBuyIds.length) return textError("團購不存在");
   }
-  const exportBy = String((await ctx.param("exportBy")) ?? "UUID");
   const bo = String((await ctx.param("backOrder")) ?? "");
   const sh = String((await ctx.param("shipped")) ?? "");
   const out = await buildItemSalesReport(session.tenantId, {
@@ -385,5 +395,6 @@ export const exportRoutes: RouteDef[] = [
     template: "analytics/modal-export-itemsalesreport.html",
     method: "GET",
   }),
-  post("/backend/Item/exportItemSalesReport", exportItemSalesReport),
+  // priority 90：同路徑 groupbuy 模組亦有登錄（上月出貨），本處理為原站端點參數的超集，需先比對
+  route(["GET", "POST"], "/backend/Item/exportItemSalesReport", exportItemSalesReport, { priority: 90 }),
 ];

@@ -74,7 +74,9 @@
 |---|---|---|---|
 | 團購月報表 | `{租戶代碼去符號}{起MMDD}{迄MMDD}.xlsx`（例 guestep01011231.xlsx） | `YYYY-MM月報表`（第一列團購的開始/結束月份） | 團購ID、團購名稱、開始時間、結束時間、標籤、訂單數量、未出貨數量、銷售金額、已收匯款金額、已收匯款金額(扣除運費)、分潤金額、分潤（％）；最後一列為 F/H/I/J 合計。無符合團購時回純文字「團購不存在」（同原站） |
 | 銷售商品總表 | `匯出銷售商品總表_{團購ID或null}_{匯出依照}_{起}_{迄}.xlsx` | `ALL` | 商品名稱、商品編號、商品單價、已付款/未付款/加總 ×[現]/[預]/[現＋預]、原始/剩餘 現貨/預購庫存、共用主庫存 4 欄、國際條碼、商品原價 |
-| 銷售商品總表（ERP 格式） | 同上 | `ERP` | 單據日期、品號、品名、數量、單價、金額、備註（推導） |
+| 銷售商品總表（ERP 格式） | 同上 | `ERP` | 單據日期、品號、品名、數量、單價、金額、備註（推導）；數量／金額＝已付款 |
+
+`/backend/Item/exportItemSalesReport` 在原站是同一支端點，兩個入口：本模組的「匯出銷售商品總表」彈窗（dateStart/dateEnd/exportBy/backOrder/shipped/toErpFormat/多個 groupBuyId），以及團購列表「匯出商品報表 → 匯出上月出貨報表」（原站 `groupBuyExportModal.min.js` 只送 `groupBuyId, toErpFormat=true, shipped=true, exportBy=SHIPPED`，不帶日期）。本處理接受兩種參數：未帶日期且 `exportBy=SHIPPED` 時預設上個月（台灣時間）。groupbuy 模組也登錄了同路徑（其「上月出貨商品統計」推導格式），本模組以 `priority: 90`（GET/POST）先比對，兩個入口都由此處理。
 
 ## 5. 推導項目（原站未擷取或資料不足以實測）
 
@@ -96,6 +98,7 @@
 ## 7. 給 core / 其他模組的問題
 
 - `is_valid_order_state` 已加入 `RETURNED`（統計用有效訂單）；datamodel 的團購統計（groupbuy 列表）同步受影響且已重算——datamodel 若之後修改 0014 函式請保持此口徑。
+- **路由重複**：`/backend/Item/exportItemSalesReport` 同時由 groupbuy（`lib/modules/groupbuy/exports.ts` 的 `any(...)`）與 analytics 登錄；原站為同一端點，analytics 版本為參數超集並以 priority 90 先比對（見 §4）。建議 groupbuy 移除自己的登錄（現為不會被用到的死碼）；未移除也不影響功能。
 - 原站頁面麵包屑「首頁」連結寫死 `/backend`（無租戶前綴），依賴 core 的導向；已實測 `/backend` → 302 `/backend/panel.do`，core 若調整導向請保持此行為。
 
 ## 8. 驗證紀錄
