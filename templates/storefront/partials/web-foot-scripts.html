@@ -966,6 +966,8 @@ $.ShoppingCart.prototype = {
 		else this.add().then(goCheckoutPage);
 	},
 	load: function() {
+		// 無團購情境（最新消息、文章等官網頁沒有購物袋）：不發請求，避免打到 /p/null/... 得到 404
+		if (!this.uuid) return;
 		this.addShoppingCart(0,0,0,0,'', true);
 	},
 	remove: function(event, gbisi, ii) {

@@ -6,27 +6,12 @@ import { gbSetting, type SfGroupBuy, type SfTenant } from "./site";
 import { readCustomerSession, type CustomerSession } from "./customer-session";
 import { loadCatalog, type Catalog, type CatalogItem } from "./catalog";
 import { cartItems, findCart, ensureCart, deleteCartLine, updateCartLine, saveCheckout, type CartItemRow, type CartRow, type AddressDraft } from "./cart-store";
-import { isIslandPostcode, loadGroupBuyShippingRules, priceCart, type FlatRateShippingRow, type PricingLine, type PricingResult } from "./pricing";
+import { loadGroupBuyShippingRules, loadShippingPreload, priceCart, shippingAvailability, type FlatRateShippingRow, type PricingLine, type PricingResult } from "./pricing";
+import { isIslandPostcode } from "@/lib/modules/shipping/shipping-fee";
 import { groupBuyState } from "./form-page";
 
-/** 付款方式位元（原站 PaymentMethodCode；value_int） */
-export const PM_CODES: Record<string, number> = {
-  BANK_ACCOUNT: 1,
-  VIRTUAL_BANK: 2,
-  ALLPAY_CREDITCARD: 4,
-  PICKUP: 8,
-  PAY_ON_DELIVERY: 16,
-  CVS: 32,
-  CVS_PICKUP: 64,
-  PERIOD: 128,
-  CUSTOM: 256,
-  EMPLOYEE_PURCHASE: 512,
-  LINEPAY: 1024,
-  POINT: 2048,
-  EASYWALLET: 4096,
-  TWPAY: 8192,
-  UNIONPAY: 16384,
-};
+import { PM_CODES } from "./payment-codes";
+export { PM_CODES };
 const PM_ORDER = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
 /** 前台付款方式文字（i18n.zh-tw.js 的 i18n.zh_tw.paymentMethodN；其餘取列舉中文） */
 export const PM_LABEL: Record<number, string> = {
@@ -163,28 +148,15 @@ interface ShippingOptionOut {
   disabledReason?: string;
 }
 
-function shippingOptions(rules: FlatRateShippingRow[], lines: CartLine[], amount: number): ShippingOptionOut[] {
-  const hasBackOrder = lines.some((l) => l.backOrder);
-  const hasInStock = lines.some((l) => !l.backOrder);
+/** 前台配送方式清單；可用性（disabled/disabledReason）一律取 shipping 模組的計算結果 */
+function shippingOptions(rules: FlatRateShippingRow[], avail: Map<number, { available: boolean; reason: string | null }>): ShippingOptionOut[] {
   return rules.map((r) => {
     const s = r.flat_rate_shipping_settings ?? {};
     const cvsType = String(s.cvsType ?? "").toUpperCase();
     const areas = Array.isArray(s.shippingAreas) ? (s.shippingAreas as unknown[]).map(String) : [];
-    let disabled = false;
-    let reason = "";
-    const stockType = String(s.orderStockType ?? "ANY");
-    if (stockType === "INSTOCK" && hasBackOrder) {
-      disabled = true;
-      reason = "此配送方式僅限現貨商品";
-    } else if (stockType === "BACKORDER" && hasInStock) {
-      disabled = true;
-      reason = "此配送方式僅限預購商品";
-    }
-    const amountLimit = Number(s.amountLimit);
-    if (!disabled && amountLimit > 0 && amount > amountLimit) {
-      disabled = true;
-      reason = `訂單金額超過此配送方式上限 ${amountLimit} 元`;
-    }
+    const a = avail.get(r.id);
+    const disabled = !!a && !a.available;
+    const reason = a?.reason || "此配送方式目前無法使用";
     const out: ShippingOptionOut = {
       groupBuyFlatRateShippingId: r.groupBuyFlatRateShippingId,
       flatRateShippingId: r.id,
@@ -302,14 +274,16 @@ export async function buildCartData(
 ): Promise<BuiltCart> {
   const { lines, issues, outOfStock } = await reconcileLines(cc);
   const checkout = cc.cart?.checkout ?? {};
-  const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0);
-  const opts = shippingOptions(cc.rules, lines, subtotal);
+  const shipDraft = checkout.shipping ?? {};
+  const shipAddr = { country: shipDraft.country, postcode: NA(shipDraft.postcode), city: NA(shipDraft.city), district: NA(shipDraft.district) };
+  // 運費一律由 shipping 模組正式版計算（可用性＋金額），預載一次給可用性與計價共用
+  const shipPre = await loadShippingPreload(cc.tenant.id, cc.gb.id, lines.map((l) => l.itemId));
+  const opts = shippingOptions(cc.rules, shippingAvailability(shipPre, lines, shipAddr, checkout.coupons ?? []));
   // 選定的配送方式：已選且可用 → 否則第一個可用
   let sel = opts.find((o) => o.groupBuyFlatRateShippingId === Number(checkout.groupBuyFlatRateShippingId) && !o.disabled) ?? null;
   if (!sel) sel = opts.find((o) => !o.disabled) ?? null;
   const rule = sel ? cc.rules.find((r) => r.groupBuyFlatRateShippingId === sel!.groupBuyFlatRateShippingId) ?? null : null;
-  const shipDraft = checkout.shipping ?? {};
-  const island = !!rule && rule.shipping_type === "NORMAL" && isIslandPostcode(NA(shipDraft.postcode), rule);
+  const island = !!rule && rule.shipping_type === "NORMAL" && (shipAddr.country || "TW") === "TW" && isIslandPostcode(shipAddr.postcode);
   const pm = paymentOptions(cc.gb, rule, island);
   let paymentMethod = Number(checkout.paymentMethod) || 0;
   if (!pm.available.some((p) => p.value === paymentMethod)) paymentMethod = pm.available[0]?.value ?? 0;
@@ -322,9 +296,9 @@ export async function buildCartData(
       customerId: cc.customer?.customer.id ?? null,
       flatRateShippingId: rule?.id ?? null,
       paymentMethod,
-      shippingAddress: { country: shipDraft.country, postcode: NA(shipDraft.postcode), city: NA(shipDraft.city), district: NA(shipDraft.district) },
+      shippingAddress: shipAddr,
     },
-    { rules: cc.rules },
+    { rules: cc.rules, shipping: shipPre },
   );
   const errors = [...(extra.errors ?? []), ...issues, ...pricing.errors];
   if (extra.consumeFlash !== false && checkout.flashErrors?.length && cc.cart) {

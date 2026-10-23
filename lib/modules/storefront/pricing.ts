@@ -2,10 +2,15 @@
 // orders 模組可 import（只讀依賴）：priceCart()、型別 PricingInput / PricingResult。
 //
 // 優惠：marketing 模組正式版（pricing-marketing.ts 包裝 marketing 的 pricing-loader + evaluatePricing）。
-// 運費：shipping 模組尚無運費計算正式版，使用本檔的 fallbackShippingFee。
+// 運費：shipping 模組正式版（lib/modules/shipping/shipping-fee.ts 的 calculateShippingFee，
+//       資料由 shipping-data.ts 的 loadGroupBuyShipping／cartLineFromItem 載入）。
 // fallbackPricingRules 保留作為對照／緊急切回用（setPricingProviders）。
 import { getServiceClient } from "@/lib/supabase/server";
+import type { Row } from "@/lib/db/mapping";
+import { calculateShippingFee, type CartLine as ShipCartLine, type ShippingFeeResult } from "@/lib/modules/shipping/shipping-fee";
+import { cartLineFromItem, loadGroupBuyShipping, type GroupBuyShippingData } from "@/lib/modules/shipping/shipping-data";
 import { marketingPricingRules } from "./pricing-marketing";
+import { PM_CODE_BY_BIT } from "./payment-codes";
 import type { SfGroupBuy } from "./site";
 
 // ───────────────────────── 型別 ─────────────────────────
@@ -97,6 +102,17 @@ export interface ShippingQuote {
   freeShippingLabel: string;
   island: boolean;
   oversea: boolean;
+  /** 選定配送方式無法成立的原因（shipping 計算結果；未指定配送方式時為空） */
+  errors?: string[];
+  /** shipping 模組的完整計算結果（運費明細 subs、貨運標籤等） */
+  result?: ShippingFeeResult | null;
+}
+
+/** 運費計算所需的預載資料（同一次請求重複使用，避免重複查詢） */
+export interface ShippingPreload {
+  data: GroupBuyShippingData;
+  /** items.id → items 列（cartLineFromItem 用） */
+  itemRows: Map<number, Row>;
 }
 
 export interface PricingResult {
@@ -128,6 +144,8 @@ export interface ShippingFeeProvider {
     amount: number;
     paymentMethod: number;
     address: ShippingAddressInput;
+    couponCodes?: string[];
+    preload?: ShippingPreload;
   }): Promise<ShippingQuote> | ShippingQuote;
 }
 
@@ -203,63 +221,89 @@ export async function loadGroupBuyShippingRules(tenantId: number, groupBuyId: nu
   return out;
 }
 
-/** 台灣外島郵遞區號（運費規則 islands 未設定時的預設：澎湖、金門、連江、綠島、蘭嶼、琉球） */
-export const DEFAULT_ISLAND_POSTCODES = new Set([
-  "209", "210", "211", "212", "880", "881", "882", "883", "884", "885", "890", "891", "892", "893", "894", "896", "929", "951", "952",
-]);
+// ───────────────────────── 運費：shipping 模組正式版 ─────────────────────────
 
-export function isIslandPostcode(postcode: string | undefined, rule?: FlatRateShippingRow | null): boolean {
-  const p = String(postcode ?? "").trim().slice(0, 3);
-  if (!/^\d{3}$/.test(p)) return false;
-  const list = rule?.islands?.filter((x) => x && x !== "0") ?? [];
-  return list.length ? list.includes(p) : DEFAULT_ISLAND_POSTCODES.has(p);
+const ITEM_SHIPPING_COLUMNS =
+  "id, title, price, item_type, item_set_id, item_settings, exclude_shipping_rule, shipping_price, internal_shipping_price, flat_rate_shipping_tag";
+
+/** 載入運費計算所需資料（團購運費設定＋購物袋商品列）；一律以 tenantId 過濾 */
+export async function loadShippingPreload(tenantId: number, groupBuyId: number, itemIds: number[]): Promise<ShippingPreload> {
+  const ids = [...new Set(itemIds.filter((n) => Number.isSafeInteger(n) && n > 0))];
+  const db = getServiceClient();
+  const [data, itemsRes] = await Promise.all([
+    loadGroupBuyShipping(tenantId, groupBuyId, db),
+    ids.length ? db.from("items").select(ITEM_SHIPPING_COLUMNS).eq("tenant_id", tenantId).in("id", ids) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (itemsRes.error) throw new Error(`讀取商品運費設定失敗：${itemsRes.error.message}`);
+  const itemRows = new Map<number, Row>();
+  for (const r of (itemsRes.data ?? []) as Row[]) itemRows.set(Number(r.id), r);
+  return { data, itemRows };
 }
 
-// ───────────────────────── 降級實作：運費 ─────────────────────────
-
-/** 依運費規則計算基本運費（PRICE/PRICE_TAG：金額未滿 x 收 y、滿 x 收 z；PIECE/PIECE_TAG：件數；PER_PIECE：每件；STANDARD_FREE：0） */
-export function baseShippingFee(rule: FlatRateShippingRow, amount: number, pieces: number, weight: number): number {
-  switch (rule.category) {
-    case "STANDARD_FREE":
-      return 0;
-    case "PIECE":
-    case "PIECE_TAG":
-      return pieces <= 0 ? 0 : pieces <= rule.x ? rule.y : rule.z;
-    case "PER_PIECE":
-      return pieces <= 0 ? 0 : pieces <= rule.x ? rule.y * pieces : rule.z * pieces;
-    case "WEIGHT":
-      return weight <= rule.x ? rule.y : rule.z;
-    case "PRICE":
-    case "PRICE_TAG":
-    case "MIX":
-    default:
-      return amount < rule.x ? rule.y : rule.z;
-  }
+/** 購物袋明細 → shipping 計算用 CartLine（商品運費欄位取自 items 列；單價取伺服器計價的 price） */
+export function shippingCartLines(lines: PricingLine[], itemRows: Map<number, Row>): ShipCartLine[] {
+  return lines
+    .filter((l) => l.qty > 0)
+    .map((l) => {
+      const row: Row = itemRows.get(l.itemId) ?? { id: l.itemId, title: l.title, price: l.price, item_type: l.gift ? "GIFT" : "NORMAL", exclude_shipping_rule: !!l.excludeShippingRule };
+      return cartLineFromItem(row, { quantity: l.qty, backOrder: l.backOrder, groupBuyItemSetId: l.groupBuyItemSetId || null, price: l.price });
+    });
 }
 
-export const fallbackShippingFee: ShippingFeeProvider = {
-  quote({ rules, flatRateShippingId, lines, amount, paymentMethod, address, groupBuy }) {
-    const rule = rules.find((r) => r.id === flatRateShippingId) ?? null;
-    const freeLabel = String(rule?.flat_rate_shipping_settings?.freeShippingLabel ?? "") || "免運";
+/** 各配送方式在目前購物袋＋收件地址下是否可用（未選付款方式；前台 gbfrss 的 disabled/disabledReason 用） */
+export function shippingAvailability(
+  preload: ShippingPreload,
+  lines: PricingLine[],
+  address: ShippingAddressInput,
+  couponCodes: string[] = [],
+): Map<number, { available: boolean; reason: string | null }> {
+  const res = calculateShippingFee({
+    groupBuy: preload.data.groupBuy,
+    rules: preload.data.rules,
+    itemSetRules: preload.data.itemSetRules,
+    lines: shippingCartLines(lines, preload.itemRows),
+    selectedRuleId: null,
+    address: { country: address.country || "TW", postcode: address.postcode ?? "" },
+    paymentMethod: null,
+    couponCodes,
+  });
+  const out = new Map<number, { available: boolean; reason: string | null }>();
+  for (const e of [...res.availableRules, ...res.unavailablePaymentRules]) out.set(e.flatRateShippingId, { available: true, reason: null });
+  for (const e of res.unavailableRules) out.set(e.flatRateShippingId, { available: false, reason: e.disabledReason });
+  return out;
+}
+
+export const shippingModuleFee: ShippingFeeProvider = {
+  async quote({ tenantId, groupBuy, flatRateShippingId, lines, amount, paymentMethod, address, couponCodes, preload }) {
     const oversea = !!address.country && address.country !== "TW";
-    if (!rule || lines.length === 0) {
-      return { flatRateShippingId: rule?.id ?? null, shippingAmount: 0, codFee: 0, amountToFreeShipping: null, freeShippingLabel: freeLabel, island: false, oversea };
+    const pre = preload ?? (await loadShippingPreload(tenantId, groupBuy.id, lines.map((l) => l.itemId)));
+    const shipLines = shippingCartLines(lines, pre.itemRows);
+    if (shipLines.length === 0) {
+      return { flatRateShippingId, shippingAmount: 0, codFee: 0, amountToFreeShipping: null, freeShippingLabel: "免運", island: false, oversea, errors: [], result: null };
     }
-    const shippable = lines.filter((l) => !l.excludeShippingRule && !l.gift);
-    const pieces = shippable.reduce((s, l) => s + l.qty, 0);
-    const weight = shippable.reduce((s, l) => s + (l.weight ?? 0) * l.qty, 0);
-    let fee = shippable.length ? baseShippingFee(rule, amount, pieces, weight) : 0;
-    const island = rule.shipping_type === "NORMAL" && !oversea && isIslandPostcode(address.postcode, rule);
-    if (island && rule.island_fee > 0) fee = rule.island_shipping_rate_type === "TOP_ON_BASE_RATE" ? fee + rule.island_fee : rule.island_fee;
-    if (oversea && rule.oversea_fee > 0) fee += rule.oversea_fee;
-    if (rule.extended_area_fee > 0 && rule.extended_areas.includes(String(address.postcode ?? "").slice(0, 3))) fee += rule.extended_area_fee;
-    // 貨到付款手續費（付款方式位元 16）
-    const codFee = paymentMethod === 16 ? rule.pay_on_delivery_fee : 0;
-    let hint: string | null = null;
-    if ((rule.category === "PRICE" || rule.category === "PRICE_TAG") && rule.z < rule.y && amount > 0 && amount < rule.x && !island) {
-      hint = `再買 ${groupBuy.currency === "TWD" ? "NT$" : ""}${round(rule.x - amount)} 即可享${rule.z === 0 ? freeLabel : "運費優惠"}`;
-    }
-    return { flatRateShippingId: rule.id, shippingAmount: round(fee), codFee: round(codFee), amountToFreeShipping: hint, freeShippingLabel: freeLabel, island, oversea };
+    const gross = lines.reduce((s, l) => s + (l.gift ? 0 : l.price * l.qty), 0);
+    const res = calculateShippingFee({
+      groupBuy: pre.data.groupBuy,
+      rules: pre.data.rules,
+      itemSetRules: pre.data.itemSetRules,
+      lines: shipLines,
+      selectedRuleId: flatRateShippingId,
+      address: { country: address.country || "TW", postcode: address.postcode ?? "" },
+      paymentMethod: PM_CODE_BY_BIT[paymentMethod] ?? null,
+      couponCodes: couponCodes ?? [],
+      discountAmount: Math.max(0, gross - amount),
+    });
+    return {
+      flatRateShippingId: res.rule?.flatRateShippingId ?? flatRateShippingId,
+      shippingAmount: res.shippingAmount,
+      codFee: res.codFee,
+      amountToFreeShipping: res.amountToFreeShipping,
+      freeShippingLabel: res.freeShippingLabel,
+      island: res.island,
+      oversea: res.oversea,
+      errors: flatRateShippingId != null ? res.errors : [],
+      result: res,
+    };
   },
 };
 
@@ -436,8 +480,7 @@ export const fallbackPricingRules: PricingRulesProvider = {
 };
 
 // ───────────────────────── provider 切換點 ─────────────────────────
-// 運費：shipping 模組推出運費計算正式版後，在這裡包成 ShippingFeeProvider 換掉 fallbackShippingFee。
-let shippingProvider: ShippingFeeProvider = fallbackShippingFee;
+let shippingProvider: ShippingFeeProvider = shippingModuleFee;
 let rulesProvider: PricingRulesProvider = marketingPricingRules;
 export function setPricingProviders(p: { shipping?: ShippingFeeProvider; rules?: PricingRulesProvider }): void {
   if (p.shipping) shippingProvider = p.shipping;
@@ -445,7 +488,7 @@ export function setPricingProviders(p: { shipping?: ShippingFeeProvider; rules?:
 }
 
 /** 伺服器端計價主流程 */
-export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatRateShippingRow[] }): Promise<PricingResult> {
+export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatRateShippingRow[]; shipping?: ShippingPreload }): Promise<PricingResult> {
   const lines = input.lines.filter((l) => l.qty > 0);
   const subtotal = lines.reduce((s, l) => s + (l.gift ? 0 : l.price * l.qty), 0);
   const totalPieces = lines.reduce((s, l) => s + l.qty, 0);
@@ -461,7 +504,7 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
   const couponDiscount = applied.coupons.reduce((s, c) => s + c.discount, 0);
   const totalDiscount = Math.min(subtotal, ruleDiscount + couponDiscount);
   const grandTotalWithoutShipping = Math.max(0, subtotal - totalDiscount);
-  const rules = preloaded?.rules ?? (await loadGroupBuyShippingRules(input.tenantId, input.groupBuy.id));
+  const rules = preloaded?.rules ?? [];
   const quoted = await shippingProvider.quote({
     tenantId: input.tenantId,
     groupBuy: input.groupBuy,
@@ -471,6 +514,8 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     amount: grandTotalWithoutShipping,
     paymentMethod: input.paymentMethod,
     address: input.shippingAddress,
+    couponCodes: input.couponCodes,
+    preload: preloaded?.shipping,
   });
   const shipping: ShippingQuote = applied.freeShipping ? { ...quoted, shippingAmount: 0, amountToFreeShipping: null } : quoted;
   const taxRate = num(input.groupBuy.tax_rate);
@@ -489,6 +534,6 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     grandTotal,
     totalPieces,
     couponNotes: [...applied.couponNotes, ...(applied.giftNotes ?? [])],
-    errors: applied.blockers ?? [],
+    errors: [...(applied.blockers ?? []), ...(shipping.errors ?? [])],
   };
 }

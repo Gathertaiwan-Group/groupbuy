@@ -76,7 +76,19 @@ async function findCustomer(tenantId: number, account: string): Promise<Customer
   return null;
 }
 
-/** 產生並「寄出」6 碼驗證碼：未串接 Email，寫 email_messages；為了讓功能可用，回應中附上測試用驗證碼 */
+/**
+ * 是否在回應中附上測試用驗證碼：只有「非 production 部署」且明確開啟 dev 旗標 GROUPBUY_DEV_EXPOSE_CODES=1 時才附。
+ * production 一律不附（否則任何人都能以他人 Email 註冊並自行完成驗證）。
+ */
+function exposeTestCode(): boolean {
+  return process.env.VERCEL_ENV !== "production" && process.env.GROUPBUY_DEV_EXPOSE_CODES === "1";
+}
+
+function testCodeSuffix(code: string): string {
+  return exposeTestCode() ? `（測試用驗證碼：${code}）` : "";
+}
+
+/** 產生並「寄出」6 碼驗證碼：未串接 Email，只寫 email_messages（後台寄信紀錄）；回應是否附碼見 exposeTestCode() */
 async function issueActivationCode(tenant: SfTenant, groupBuyId: number | null, c: { id: number; uuid: string; email: string | null }) {
   const code = newCode();
   const token = `${codeHash(c.uuid, code)}|${Date.now() + CODE_TTL_MS}`;
@@ -124,7 +136,7 @@ export async function login(ctx: RequestContext): Promise<Response> {
     let extra = "若未收到，請按「寄送帳號認證信」重新寄送。";
     if (!(exp > Date.now())) {
       const { code, ni } = await issueActivationCode(tenant, groupBuy?.id ?? null, c);
-      extra = `<br>${ni.message}（測試用驗證碼：${code}）`;
+      extra = `<br>${ni.message}${testCodeSuffix(code)}`;
     }
     const msg = `帳號尚未完成驗證，${sms ? "驗證碼已發送簡訊" : "認證信已寄送至 " + escapeHtml(c.email ?? "")}，請輸入6碼驗證碼。${extra}`;
     return json({ code: sms ? 484 : 483, error: msg, message: msg, data: c.uuid });
@@ -195,7 +207,7 @@ export async function signup(ctx: RequestContext): Promise<Response> {
     row = data as typeof row;
   }
   const { code, ni } = await issueActivationCode(tenant, groupBuy?.id ?? null, row);
-  const msg = `認證信已寄送至 ${escapeHtml(email)}，請輸入信中的6碼驗證碼完成註冊。<br>${ni.message}（測試用驗證碼：${code}）`;
+  const msg = `認證信已寄送至 ${escapeHtml(email)}，請輸入信中的6碼驗證碼完成註冊。<br>${ni.message}${testCodeSuffix(code)}`;
   return json({ code: 200, error: msg, message: msg, data: row.uuid, notIntegrated: true });
 }
 
@@ -248,7 +260,7 @@ export async function sendActivateEmail(ctx: RequestContext): Promise<Response> 
   if (!c) throw badRequest("找不到帳號");
   if (c.is_activated) return json({ code: 200, error: "帳號已完成驗證，請直接登入", message: "帳號已完成驗證，請直接登入" });
   const { code, ni } = await issueActivationCode(tenant, groupBuy?.id ?? null, c);
-  const msg = `已重新寄送帳號認證信至 ${escapeHtml(c.email ?? "")}。${ni.message}（測試用驗證碼：${code}）`;
+  const msg = `已重新寄送帳號認證信至 ${escapeHtml(c.email ?? "")}。${ni.message}${testCodeSuffix(code)}`;
   return json({ code: 200, error: msg, message: msg, notIntegrated: true });
 }
 

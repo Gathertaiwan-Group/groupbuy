@@ -44,7 +44,7 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 
 - 金額只在伺服器端算（`pricing.ts` 的 `priceCart`）：前端送來的 grandTotal／price／discount／total 一律忽略（已用竄改參數實測）。
 - 優惠：`pricing-marketing.ts` 包裝 marketing 正式版（`loadSalesRulesForGroupBuy`→`loadCartLines`→`findCouponByCode`→`evaluatePricing`→`resolveGifts`）；免運優惠會把運費歸零；限制類優惠不允許結帳時擋下；折扣碼不符條件時回原因且不保留。`fallbackPricingRules` 保留作緊急切回（`setPricingProviders`）。
-- 運費：`fallbackShippingFee`（shipping 模組尚無運費計算正式版）。
+- 運費：shipping 模組正式版（`pricing.ts` 的 `shippingModuleFee` → `lib/modules/shipping/shipping-data.ts` 的 `loadGroupBuyShipping`／`cartLineFromItem` ＋ `shipping-fee.ts` 的 `calculateShippingFee`）。購物袋與送出訂單共用同一份預載（`loadShippingPreload`）；配送方式清單的可用性（`disabled`／`disabledReason`）也取同一個計算結果（`shippingAvailability`）；付款方式位元轉 shipping 的付款代碼（`payment-codes.ts`）。選定的配送方式不可用時，計算錯誤會擋下結帳。伺服器端重算原則不變（不採用前端金額）。
 - 下單：`sf_place_order` 單一交易內鎖庫存列→扣現貨／預購→折扣碼／優惠卷／優惠條件名額遞增（超額整筆回滾）→點數折抵→寫訂單與明細→清空購物袋；成功後 `syncCouponTotals`。
 - 黑名單：marketing `findBlacklistMatch`（訂購人、收件人電話／Email）＋本模組補查 IP；`SILENT_BLOCK` 假裝成功不建單、`BLOCK_PAYMENT` 可下單不可付款；命中以 `appendBlacklistLog` 記錄。
 - 限流（`sf_rate_limits`）：登入（帳號 15 分 5 次、IP 15 分 30 次）、訂單查詢失敗、查訂單號、優惠碼、客服、會員資料修改。
@@ -65,11 +65,12 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 
 - 贈品：引擎算出的自動／可選贈品目前只以提示呈現（`salesRuleResult.note`），尚未自動加入購物袋與訂單明細。
 - 點數回饋（引擎 `points`）未入帳；點數折抵已實作。
-- 運費仍用本模組降級實作，待 shipping 提供運費計算正式版後換 provider。
-- Email 未串接：註冊驗證碼為了讓流程可測，回應中附測試用驗證碼——**接上真實 Email 前必須移除**（重設密碼連結只寫寄信紀錄、不放回應）。
+- Email 未串接時的註冊流程：註冊／未驗證帳號登入／「寄送帳號認證信」都會產生 6 碼驗證碼，只寫入 `email_messages`（狀態 `NOT_SENT_UNINTEGRATED`，後台寄信紀錄可查），回應只帶「【未串接】」提示與帳號 uuid，**不含驗證碼**。因此在正式站（`VERCEL_ENV=production`）消費者收不到碼、無法自行完成註冊驗證，須由管理者從寄信紀錄取得驗證碼轉交，或等 Email 串接後才開放。
+  - 本機／預覽部署測試用：同時滿足 `VERCEL_ENV !== "production"` 且設定 `GROUPBUY_DEV_EXPOSE_CODES=1` 時，回應訊息尾端才附「（測試用驗證碼：xxxxxx）」。正式站絕不可設此旗標（即使設了，production 判斷仍會擋下）。
+  - 重設密碼代碼一律只寫寄信紀錄、不放回應（不受旗標影響）。
 - 超商電子地圖／門市查詢未串接（回一筆標示【未串接】的測試門市）；Facebook 快速登入、reCAPTCHA 未載入。
 - 說明中心：快訊跑馬燈、導覽列樣式 2–8 與選單樣式 2–3 的差異、深色主題、文章瀏覽數未做；示範資料「所有教學」子分類無文章。
-- 說明中心／公告／403 等沒有團購的官網頁，購物袋小工具會打 `/{t}/p/null/ajax/web/ShoppingCart/addToShoppingCart.do` 得到 404（console 一筆，畫面正常）；原站此情境的回應未擷取。
+- 說明中心／公告／403 等沒有團購的官網頁：購物袋小工具在沒有購物袋 uuid（無團購）時不發 `addToShoppingCart` 請求（`web-foot-scripts.html` 的 `ShoppingCart.load()`），不再出現 `/p/null/...` 404；原站此情境的行為未擷取（推導）。
 - 正式網址的「送出訂單」「會員登入／註冊」未由 agent 執行（見下方驗證紀錄），需 user 同意後再做或由 user 手動點一次。
 
 ## 給 core 的問題
