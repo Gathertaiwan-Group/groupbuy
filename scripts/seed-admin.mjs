@@ -48,7 +48,8 @@ if (existing && !rotate) {
   process.exit(0);
 }
 
-const password = randomBytes(18).toString("base64url"); // 24 字元
+// 16 字元（base64url，英數與 -_）：原站/本系統登入表單密碼欄 maxlength=20，需能由畫面輸入
+const password = randomBytes(12).toString("base64url");
 const password_hash = bcrypt.hashSync(password, 10);
 const row = {
   tenant_id: tenant.id,

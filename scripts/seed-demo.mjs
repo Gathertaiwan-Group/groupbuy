@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 // 示範資料：租戶 guest_ep（示範團購 405167 / 短網址 ak98i 依原站擷取內容）＋平台租戶 groupbuyforms（說明中心/公告）。
-// 可重複執行：所有示範列使用保留 ID 區段，重跑時先刪該區段再建立，不會動到其他人建立的資料。
+// 可重複執行（保護規則）：
+//   - 刪除只針對「示範租戶（guest_ep、groupbuyforms）× 保留 ID 區段/指定 ID」的列（及其 cascade 子列），每條 delete 都帶 tenant_id 條件；
+//   - 結束時把各表 identity sequence 推到「保留區段上界」與「max(id)」與「目前序號」三者最大值之後，
+//     因此系統/模組之後新建的資料不會落入保留區段，重跑不會刪到它們；
+//   - 示範團購 405167 以 upsert 還原示範內容；掛在示範列底下的子資料（例如在示範訂單上新增的商品）會隨示範列一起重建。
 // 示範個資皆為明顯虛構（姓名帶「測試」、電話 0900-xxx、Email @example.com）。
 // 用法：set -a; . <secrets.env>; set +a; node scripts/seed-demo.mjs        （經 Supabase Management API 執行 SQL）
 // 帳號密碼不在這裡（見 scripts/seed-admin.mjs）。
@@ -38,65 +42,84 @@ const insert = (table, cols, rows, suffix = "") =>
   rows.length ? `insert into groupbuy.${table} (${cols.join(",")}) values\n${rows.map((r) => `(${r.map(lit).join(",")})`).join(",\n")}${suffix ? `\n${suffix}` : ""};\n` : "";
 
 // ---------- 0) 清除保留區段（反向相依順序） ----------
-const cleanup = `
-delete from groupbuy.sales_orders where id between 900001 and 900999;
-delete from groupbuy.shipping_records where id between 930001 and 930099;
-delete from groupbuy.bank_transactions where id between 940001 and 940099;
-delete from groupbuy.refund_requisitions where id between 941001 and 941099;
-delete from groupbuy.sales_return_records where id between 942001 and 942099;
-delete from groupbuy.preorder_to_stock_logs where id between 943001 and 943099;
-delete from groupbuy.email_messages where id between 944001 and 944099;
-delete from groupbuy.sms_messages where id between 945001 and 945099;
-delete from groupbuy.conversations where id between 946001 and 946099;
-delete from groupbuy.invoices where id between 947001 and 947099;
-delete from groupbuy.sales_order_transactions where id between 948001 and 948099;
-delete from groupbuy.point_transactions where id between 949001 and 949099;
-delete from groupbuy.warehouse_inventories where id between 950001 and 950099;
-delete from groupbuy.inbound_records where id between 951001 and 951099;
-delete from groupbuy.inbounds where id between 952001 and 952099;
-delete from groupbuy.warehouse_requisitions where id between 953001 and 953099;
-delete from groupbuy.warehouse_stocks where id between 954001 and 954099;
-delete from groupbuy.warehouses where id between 955001 and 955099;
-delete from groupbuy.distribution_channels where id between 956001 and 956099;
-delete from groupbuy.facebook_auth_group_buys where id between 957001 and 957099;
-delete from groupbuy.facebook_auths where id between 957101 and 957199;
-delete from groupbuy.lotteries where id between 958001 and 958099;
-delete from groupbuy.influencers where id between 958101 and 958199;
-delete from groupbuy.coupon_codes where id between 958201 and 958299;
-delete from groupbuy.group_buy_coupons where id between 958301 and 958399;
-delete from groupbuy.sales_rules where id between 958401 and 958499;
-delete from groupbuy.item_bundles where id between 958501 and 958599;
-delete from groupbuy.schedulers where id between 958601 and 958699;
-delete from groupbuy.short_urls where id between 958701 and 958799;
-delete from groupbuy.uploads where id between 958801 and 958899;
-delete from groupbuy.system_notifications where id between 958901 and 958999;
-delete from groupbuy.blacklists where id between 959001 and 959099;
-delete from groupbuy.customers where id between 700001 and 700099;
-delete from groupbuy.royalty_programs where id between 701001 and 701099;
-delete from groupbuy.loyalty_cards where id between 702001 and 702099;
-delete from groupbuy.group_buy_preferences where id between 960001 and 960099;
-delete from groupbuy.group_buy_tags where id between 961001 and 961099;
-delete from groupbuy.group_buy_sys_tag_refs where id between 962001 and 962099;
-delete from groupbuy.home_views where id between 963001 and 963099;
-delete from groupbuy.web_menus where id between 964001 and 964099;
-delete from groupbuy.web_menu_nodes where id in (4411) or id between 964101 and 964199;
-delete from groupbuy.posts where id between 965001 and 965099;
-delete from groupbuy.news where id between 966001 and 966099;
-delete from groupbuy.roas_data_items where id between 967001 and 967099;
-delete from groupbuy.billing_transactions where id between 968001 and 968099;
-delete from groupbuy.billing_plans where id between 968101 and 968199;
-delete from groupbuy.pickup_store_settings where id between 969001 and 969099;
-delete from groupbuy.group_buy_item_sys_tags where id between 970001 and 970099;
-delete from groupbuy.group_buy_item_crm_tags where id between 970101 and 970199;
-delete from groupbuy.group_buy_item_sets where id between 3969200 and 3969299;
-delete from groupbuy.items where id between 36800700 and 36800799;
-delete from groupbuy.item_sets where id between 3968000 and 3968099;
-delete from groupbuy.group_buy_flat_rate_shippings where group_buy_id in (405158, 405163, 405166, 405167, 405169, 405170);
-delete from groupbuy.flat_rate_shippings where id between 8509 and 8512;
-delete from groupbuy.coupon_templates where id in (1224, 1422, 1424, 1523, 1524, 1526, 1531, 1536, 1537, 1538);
-delete from groupbuy.shipping_tags where id between 971001 and 971099;
-delete from groupbuy.group_buys where id in (34565, 405158, 405163, 405166, 405169, 405170);
-`;
+// 保留 ID 區段（表 → 刪除條件）；只在示範租戶內刪除
+const DEMO_TENANTS = `(select id from groupbuy.tenants where code in ('guest_ep', 'groupbuyforms'))`;
+const RESERVED_DELETES = [
+  ["sales_orders", "id between 900001 and 900999"],
+  ["shipping_records", "id between 930001 and 930099"],
+  ["bank_transactions", "id between 940001 and 940099"],
+  ["refund_requisitions", "id between 941001 and 941099"],
+  ["sales_return_records", "id between 942001 and 942099"],
+  ["preorder_to_stock_logs", "id between 943001 and 943099"],
+  ["email_messages", "id between 944001 and 944099"],
+  ["sms_messages", "id between 945001 and 945099"],
+  ["conversations", "id between 946001 and 946099"],
+  ["invoices", "id between 947001 and 947099"],
+  ["sales_order_transactions", "id between 948001 and 948099"],
+  ["point_transactions", "id between 949001 and 949099"],
+  ["warehouse_inventories", "id between 950001 and 950099"],
+  ["inbound_records", "id between 951001 and 951099"],
+  ["inbounds", "id between 952001 and 952099"],
+  ["warehouse_requisitions", "id between 953001 and 953099"],
+  ["warehouse_stocks", "id between 954001 and 954099"],
+  ["warehouses", "id between 955001 and 955099"],
+  ["distribution_channels", "id between 956001 and 956099"],
+  ["facebook_auth_group_buys", "id between 957001 and 957099"],
+  ["facebook_auths", "id between 957101 and 957199"],
+  ["lotteries", "id between 958001 and 958099"],
+  ["influencers", "id between 958101 and 958199"],
+  ["coupon_codes", "id between 958201 and 958299"],
+  ["group_buy_coupons", "id between 958301 and 958399"],
+  ["sales_rules", "id between 958401 and 958499"],
+  ["item_bundles", "id between 958501 and 958599"],
+  ["schedulers", "id between 958601 and 958699"],
+  ["short_urls", "id between 958701 and 958799"],
+  ["uploads", "id between 958801 and 958899"],
+  ["system_notifications", "id between 958901 and 958999"],
+  ["blacklists", "id between 959001 and 959099"],
+  ["customers", "id between 700001 and 700099"],
+  ["royalty_programs", "id between 701001 and 701099"],
+  ["loyalty_cards", "id between 702001 and 702099"],
+  ["group_buy_preferences", "id between 960001 and 960099"],
+  ["group_buy_tags", "id between 961001 and 961099"],
+  ["group_buy_sys_tag_refs", "id between 962001 and 962099"],
+  ["home_views", "id between 963001 and 963099"],
+  ["web_menus", "id between 964001 and 964099"],
+  ["web_menu_nodes", "id in (4411) or id between 964101 and 964199"],
+  ["posts", "id between 965001 and 965099"],
+  ["news", "id between 966001 and 966099"],
+  ["roas_data_items", "id between 967001 and 967099"],
+  ["billing_transactions", "id between 968001 and 968099"],
+  ["billing_plans", "id between 968101 and 968199"],
+  ["pickup_store_settings", "id between 969001 and 969099"],
+  ["group_buy_item_sys_tags", "id between 970001 and 970099"],
+  ["group_buy_item_crm_tags", "id between 970101 and 970199"],
+  ["group_buy_item_sets", "id between 3969200 and 3969299"],
+  ["items", "id between 36800700 and 36800799"],
+  ["item_sets", "id between 3968000 and 3968099"],
+  ["group_buy_flat_rate_shippings", "group_buy_id in (405158, 405163, 405166, 405167, 405169, 405170) and flat_rate_shipping_id between 8509 and 8512"],
+  ["flat_rate_shippings", "id between 8509 and 8512"],
+  ["coupon_templates", "id in (1224, 1422, 1424, 1523, 1524, 1526, 1531, 1536, 1537, 1538)"],
+  ["shipping_tags", "id between 971001 and 971099"],
+  ["group_buys", "id in (34565, 405158, 405163, 405166, 405169, 405170)"],
+];
+const cleanup = RESERVED_DELETES.map(([t, cond]) => `delete from groupbuy.${t} where (${cond}) and tenant_id in ${DEMO_TENANTS};`).join("\n");
+// 各表保留區段上界（含以明確 ID 建立、經 cascade 重建的子表）；sequence 會推到此值之後
+const RESERVED_UPPER = {
+  sales_orders: 900999, order_items: 9100999, shipping_records: 930099, bank_transactions: 940099, refund_requisitions: 941099,
+  sales_return_records: 942099, preorder_to_stock_logs: 943099, email_messages: 944099, sms_messages: 945099, conversations: 946099,
+  invoices: 947099, sales_order_transactions: 948099, point_transactions: 949099, warehouse_inventories: 950099, inbound_records: 951099,
+  inbounds: 952099, warehouse_requisitions: 953099, warehouse_stocks: 954099, warehouses: 955099, distribution_channels: 956099,
+  distribution_channel_transactions: 956199, distribution_channel_group_buys: 956299, distribution_channel_group_buy_transactions: 956399,
+  facebook_auth_group_buys: 957099, facebook_auths: 957199, lotteries: 958099, influencers: 958199, coupon_codes: 958299,
+  group_buy_coupons: 958399, sales_rules: 958499, item_bundles: 958599, schedulers: 958699, short_urls: 958799, uploads: 958899,
+  system_notifications: 958999, blacklists: 959099, customers: 700099, royalty_programs: 701099, loyalty_cards: 702099,
+  group_buy_preferences: 960099, group_buy_tags: 961099, group_buy_sys_tag_refs: 962099, home_views: 963099, home_view_sections: 963199,
+  web_menus: 964099, web_menu_nodes: 964199, posts: 965099, news: 966099, roas_data_items: 967099, billing_transactions: 968099,
+  billing_plans: 968199, pickup_store_settings: 969099, group_buy_item_sys_tags: 970099, group_buy_item_crm_tags: 970199,
+  shipping_tags: 971099, group_buy_item_sets: 3969299, items: 36800799, item_sets: 3968099, flat_rate_shippings: 8512,
+  coupon_templates: 1538, group_buys: 405170,
+};
 
 // ---------- 1) 租戶、廠商資料、平台租戶 ----------
 const tenantSql = `
@@ -650,12 +673,21 @@ ${insert("distribution_channel_group_buy_transactions", ["id", "tenant_id", "dis
 // ---------- 11) 序列 / 統計 ----------
 const finalSql = `
 do $$
-declare r record;
+declare
+  r record;
+  reserved jsonb := '${JSON.stringify(RESERVED_UPPER)}'::jsonb;
+  seq text;
+  cur bigint;
+  mx bigint;
 begin
   for r in select c.relname as t, a.attname as col from pg_class c join pg_namespace n on n.oid = c.relnamespace
              join pg_attribute a on a.attrelid = c.oid and a.attidentity <> ''
             where n.nspname = 'groupbuy' and c.relkind = 'r' loop
-    execute format('select setval(pg_get_serial_sequence(%L, %L), greatest((select coalesce(max(%I), 0) from groupbuy.%I), 1))', 'groupbuy.' || r.t, r.col, r.col, r.t);
+    seq := pg_get_serial_sequence('groupbuy.' || quote_ident(r.t), r.col);
+    execute format('select last_value from %s', seq) into cur;
+    execute format('select coalesce(max(%I), 0) from groupbuy.%I', r.col, r.t) into mx;
+    -- 不往回調；至少推過保留區段上界，之後新建的列不會落入保留區段
+    perform setval(seq, greatest(cur, mx, coalesce((reserved ->> r.t)::bigint, 0), 1));
   end loop;
 end $$;
 select groupbuy.refresh_tenant_statistics(${T});

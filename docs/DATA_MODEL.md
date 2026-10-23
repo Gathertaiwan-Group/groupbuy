@@ -36,7 +36,7 @@ const patch = apiToRow(entities.groupBuy, body.data[id], existingRow);  // 不�
 
 | 物件 | 作用 |
 |---|---|
-| `touch_updated_at()` 觸發器 | 各表 `updated_at`（=dateModified 樂觀鎖）自動更新；`group_buys` 用 `touch_group_buys_updated_at()`，只有統計欄位變動時不更新 |
+| `touch_updated_at()` 觸發器 | 各表 `updated_at`（=dateModified 樂觀鎖）自動更新；`group_buys` 用 `touch_group_buys_updated_at()`（0017 修正）：比對時排除 generated 欄位與統計欄位，只改統計（含下單觸發的重算）時 `updated_at` 不變，改一般欄位才更新 |
 | `log_sales_order_history()` | 訂單 state/status/action 變動自動寫 `sales_order_histories`（可 `set_config('groupbuy.actor','ADMIN',true)`、`groupbuy.admin_user_id` 標註操作者） |
 | `refresh_group_buy_statistics(group_buy_id)` | 重算 `group_buys.group_buy_statistics`（orders/revenue/paidOrders/unshippedOrders…22 鍵）與 `date_first_order`；訂單/商品異動的 statement-level 觸發器會自動呼叫 |
 | `order_items_sync_order()` | 訂單商品異動 → 維護 `sales_orders.contain_back_orders` |
@@ -96,8 +96,8 @@ Tenant(tenants) ─┬─ AdminUser ─ AdminSession / admin_login_attempts(foun
 
 ## 5. 示範資料與帳號
 
-- `scripts/seed-admin.mjs`：租戶 `guest_ep`、管理員 `guest1_a`（bcrypt cost 10；明文只在主 checkout 的 `.credentials.local.md`，gitignored）。重設：`--rotate`。
-- `scripts/seed-demo.mjs`：可重複執行，所有示範列使用保留 ID 區段（訂單 900001–900999、團購 405158/405163/405166/405167/405169/405170、平台團購 34565 等），重跑只重建這些區段，不會動到模組自己建立的資料；最後呼叫 `refresh_tenant_statistics`。
+- `scripts/seed-admin.mjs`：租戶 `guest_ep`、管理員 `guest1_a`（16 碼隨機密碼，登入表單 maxlength=20 可輸入；bcrypt cost 10；明文只在主 checkout 的 `.credentials.local.md`，gitignored）。帳號已存在時略過，重設用 `--rotate`。
+- `scripts/seed-demo.mjs`：可重複執行。刪除只針對「示範租戶（guest_ep、groupbuyforms）× 保留 ID 區段/指定 ID」（訂單 900001–900999、團購 405158/405163/405166/405167/405169/405170、平台團購 34565 等，完整清單見檔內 `RESERVED_DELETES`），每條 delete 都帶 tenant_id 條件；結束時把各表 identity sequence 推到 `RESERVED_UPPER`（保留區段上界）、max(id)、目前序號三者最大值，之後新建的資料不會落入保留區段、重跑不會被刪；示範團購 405167 以 upsert 還原，掛在示範列底下的子資料會隨示範列重建；最後呼叫 `refresh_tenant_statistics`。
 - 示範內容：6 個團購（進行中/已結團/出貨中/未開始/官網/倉儲）、8 品項 18 商品、59 筆訂單（20 種 state/status 組合、付款方式 0/1/2/4/16/64、宅配/超取/自取）、拆單/退換貨/保留單、發票 23、出貨批次 4、超商追蹤 5、金流紀錄、匯款對帳、會員 12、黑名單、倉儲/調撥/入庫/盤點、通路結算、客服對話、統計表；平台租戶 `groupbuyforms`：說明中心（/jranv、選單 4411）文章 13、系統公告 14。個資皆虛構（姓名含「（測試）」、電話 0900xxxxxx、Email @example.com）。
 
 ## 6. 安全
