@@ -22,7 +22,7 @@
 | （推導）標籤的商品 | `/backend/ItemCrmTag/list`、`/backend/ItemSysTag/list` | 完成 | 原站未擷取 | — |
 | 複製組合彈窗 | `/ajax/SalesRule/displayCopyPackage?salesRuleId=`（片段） | 完成 | — | — |
 
-¹ `node lib/modules/marketing/tools/dom-compare.mjs --base http://localhost:3112 --jar <cookie jar>`：原站擷取每頁有 22–47 段「⟦未擷取⟧」缺段，主內容區只剩少量可比對內容；覆蓋率＝原站已擷取的內容區骨架（側欄結束標記之後到 `</main>`，去掉 script 與缺段頭尾殘缺）有多少比例依相同順序出現在本系統輸出。另列「缺段後 Dice」（同其他模組工具的算法）也全為 100%。
+¹ `node lib/modules/marketing/tools/dom-compare.mjs --base http://localhost:3112 --jar <cookie jar>`：原站擷取每頁有 22–47 段「⟦未擷取⟧」缺段，主內容區只剩少量可比對內容；覆蓋率＝原站已擷取的內容區骨架（側欄結束標記之後到 `</main>`，去掉 script 與缺段頭尾殘缺）有多少比例依相同順序出現在本系統輸出。另列「缺段後 Dice」（同其他模組工具的算法：只比最後一段缺段之後）除精靈片段外皆 100%；精靈片段原站最後一段缺段後沒有內容（0 tokens），該值無意義。
 ² `tools/ui-check.mjs`：在瀏覽器內抽出 DataTables（網址/型別/serverSide/每頁筆數/排序）、欄位（data/標題/顯示/排序/class）、工具列按鈕、Editor（idSrc/動作/各動作網址）、欄位（name/label/type/預設）、下拉選項，與 `spec/runtime/<代號>.records.txt` 逐行比對；各頁 0 個 JS 例外。
 
 ## 2. 端點
@@ -128,3 +128,5 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - `tools/dom-compare.mjs`（DOM 骨架覆蓋率）、`tools/ui-check.mjs`（runtime 設定逐行比對＋JS 錯誤）、`tools/ui-actions.mjs`（各頁按鈕／動作實測；`--downloads <dir>` 驗證匯出檔），共用 `tools/cdp.mjs`（headless Chrome，沿用 curl cookie，不重新登入）。
 - 動作實測（本機）：黑名單 8 項、短網址 6 項、商品銷售標籤 8 項、商品系統標籤 7 項、關鍵字標籤 10 項、優惠卷樣板 6 項、團購優惠卷 12 項＋查看優惠卷 5 項＋清理 5 項、抽獎 9 項（含遮罩與 xlsx 下載）、優惠條件 15 項（新增/編輯/複製/停用/啟用/篩選/自動調整優先順序/測試優惠/精靈/複製至其他表單/複製其他表單優惠）、綁定 11 項、複製組合 8 項，全部通過；測試資料皆以 `[測試-marketing]`／`測試-marketing-`／`測試mk` 開頭並已刪除，抽獎測試後已還原示範獎項（清除得獎者、date_drawn）。
 - 「團購品項」頁（items）的「優惠條件」「團購優惠卷」分頁以本模組端點載入正常（2 筆／1 筆，無錯誤）。
+- 正式網址（https://groupbuy-delta.vercel.app，部署 57fb838 起）：13 個頁面／片段登入後皆 200，未登入皆回原站登入頁（200＋登入表單）；runtime 比對與 DOM 覆蓋率同本機；動作實測全部通過（黑名單表尾搜尋因正式站延遲一次讀到舊資料，已改為等到篩選結果再判斷）；匯出 `lottery.xlsx`、`優惠卷-*.xlsx` 實際下載成功；換租戶前綴打 AJAX 回 403；正式站測試資料已全部刪除，示範獎項已還原、示範短網址瀏覽數已還原。
+- 自查：`.from()` 查詢 129 處皆以 tenant_id 過濾或寫入 tenant_id（`/s/:code` 以全站唯一代碼查詢為設計例外）；無商業授權檔、金鑰、帳密；模板無寫死 `/guest_ep`。
