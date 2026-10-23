@@ -20,6 +20,7 @@ function syncStock(groupBuyId) {
 }
 
 var tagManager = null;
+var table = null; // 全域：initTagManager 等頁面全域函式的回呼會用到（同原站）
 
 var appendExtra = function (d) {
 	d.showExpired = $('#showExpired').prop('checked');
@@ -255,7 +256,7 @@ $(document).ready(function() {
 		return {show: show, hide: hide};
 	});
 
-	var table = $(tableName).DataTable( {
+	table = $(tableName).DataTable( {
 		dom: 'Bfrtip<"pagejump">',
 		serverSide: true,
 		processing: true,
