@@ -620,6 +620,7 @@ async function getWarehouseItems(ctx: RequestContext): Promise<Response> {
   requireSession(ctx);
   return wmsList(ctx, {
     table: "wms_warehouse_items_v",
+    idColumn: "item_id",
     columns: {
       title: { column: "title", kind: "text" },
       uid: { column: "uid", kind: "text" },

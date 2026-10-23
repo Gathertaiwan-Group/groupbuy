@@ -222,6 +222,8 @@ export interface WmsListSpec {
   defaultOrder: { column: string; ascending: boolean }[];
   mapRows: (rows: AnyRow[], dt: DtRequest) => AnyRow[] | Promise<AnyRow[]>;
   options?: () => EditorOptions | Promise<EditorOptions>;
+  /** 唯一鍵欄位（穩定排序與計數用）；預設 "id"，沒有 id 欄的 view 要指定（例 wms_warehouse_items_v → item_id） */
+  idColumn?: string;
 }
 
 function applyColumnSearch(q: AnyRow, def: ColDef, value: string): AnyRow {
@@ -270,8 +272,9 @@ export async function wmsList(ctx: RequestContext, spec: WmsListSpec): Promise<R
 
   const prep = spec.prepare ? await spec.prepare(dt) : {};
   // 注意：回傳的是 PostgREST 查詢物件（thenable），不可放在 async 函式回傳或 await，否則會提前執行
+  const idCol = spec.idColumn ?? "id";
   const base = (withSearch: boolean, count: "exact" | null, head = false): AnyRow => {
-    let q: AnyRow = client.from(spec.table).select(head ? "id" : spec.select ?? "*", count ? { count, head } : undefined);
+    let q: AnyRow = client.from(spec.table).select(head ? idCol : spec.select ?? "*", count ? { count, head } : undefined);
     q = q.eq("tenant_id", session.tenantId);
     if (spec.where) q = spec.where(q, dt, prep);
     if (withSearch) {
@@ -296,7 +299,7 @@ export async function wmsList(ctx: RequestContext, spec: WmsListSpec): Promise<R
     ordered = true;
   }
   if (!ordered) for (const d of spec.defaultOrder) q = q.order(d.column, { ascending: d.ascending });
-  q = q.order("id", { ascending: false });
+  q = q.order(idCol, { ascending: false });
   const len = dt.serverSide ? (dt.length > 0 ? Math.min(dt.length, 1000) : 1000) : 5000;
   q = q.range(dt.start, dt.start + len - 1);
   const { data, error, count } = await q;
