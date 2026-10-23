@@ -1,67 +1,117 @@
-<form name="ItemForm" method="post" action="/ajax/Item/batchNameEdit.do" class="form-horizontal" id="ItemForm"><input type="hidden" name="itemId" value="{{itemIds}}">
-    <div class="modal-header">
-        <h5>商品 &raquo; 批次改名 &raquo; 已選擇{{count}}個商品</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-    </div>
-    <div class="modal-body">
-    <div class="modal-message"></div>
-
-    <div class="form-group">
-        <label class="control-label col-lg-3" for="column">修改欄位</label>
-        <div class="controls col-lg-9">
-			<div class="form-check"><input type="checkbox" name="column" value="title" id="bde-title" class="form-check-input" checked><label class="h-100" for="bde-title">名稱<span class="badge badge-default">{{first.title}}</span></label></div>
-			<div class="form-check"><input type="checkbox" name="column" value="shortNameDisplay" id="bde-shortNameDisplay" class="form-check-input"><label class="h-100" for="bde-shortNameDisplay">短名稱(表單顯示)<span class="badge badge-default">{{first.shortNameDisplay}}</span></label></div>
-			<div class="form-check"><input type="checkbox" name="column" value="shortName" id="bde-shortName" class="form-check-input"><label class="h-100" for="bde-shortName">短名稱(出貨用)<span class="badge badge-default">{{first.shortName}}</span></label></div>
-			<div class="form-check"><input type="checkbox" name="column" value="uid" id="bde-uid" class="form-check-input"><label class="h-100" for="bde-uid">商品代碼<span class="badge badge-default">{{first.uid}}</span></label></div>
-			<div class="form-check"><input type="checkbox" name="column" value="tag" id="bde-tag" class="form-check-input"><label class="h-100" for="bde-tag">名稱標籤(#區隔)</label> <span class="badge badge-default">{{first.tag}}</span></div>
-			<div class="form-check"><input type="checkbox" name="column" value="cateTag" id="bde-cateTag" class="form-check-input"><label class="h-100" for="bde-cateTag">分類標籤(#區隔)<span class="badge badge-default">{{first.cateTag}}</span></label></div>
-        </div>
-    </div>
-
-    <div class="form-group">
-        <label class="control-label col-lg-3" for="column">編輯方式</label>
-        <div class="controls col-lg-9">
-			<div class="form-check"><input type="radio" name="editType" value="replace" checked id="bde-replace" class="form-check-input"><label for="bde-replace">文字取代/刪除</label></div>
-			<div class="form-check"><input type="radio" name="editType" value="prepend" id="bde-prepend" class="form-check-input"><label for="bde-prepend">文字加在前面</label></div>
-			<div class="form-check"><input type="radio" name="editType" value="append" id="bde-append" class="form-check-input"><label for="bde-append">文字加在後面</label></div>
-        </div>
-    </div>
-
-    <div class="form-group" id="oriText">
-        <label class="control-label col-lg-3" for="oriText">要被取代的文字</label>
-        <div class="controls col-lg-9">
-			<input type="text" name="oriText" class="form-control">
-        </div>
-    </div>
-
-    <div class="form-group">
-        <label class="control-label col-lg-3" for="newText">新增文字</label>
-        <div class="controls col-lg-9">
-			<input type="text" name="newText" class="form-control">
-        </div>
-    </div>
-
-    </div> <!-- modal-body -->
-    <div class="progress">
-        <div class="progress-bar" role="progressbar"></div>
-    </div>
-    <div class="modal-footer">
-        <button class="btn btn-default" data-dismiss="modal">關閉</button>
-        <input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="更新" />
-    </div>
-</form><script>
-var onSuccess = function(json) {
-	table.ajax.reload(null, false);
-	$('#myModal').modal('hide');
-}
-
-$(document).ready(function() {
-	initAjaxForm('ItemForm', onSuccess);
-	$('input:radio[name=editType]').on('change', function(e) {
-		if (($(this).val() == 'replace'))
-			$('#oriText').show();
-		else
-			$('#oriText').hide();
+{{!-- 批次改名（商品明細工具列「批次改名」：openFormL('/backend/Item/displayBatchNameEdit.do', 'itemId=1,2,…')）。原站此彈窗未擷取，全段推導：
+     - 資料：pages.ts 傳入 itemIds、count、first{title, shortNameDisplay, shortName, uid, tag, cateTag}（第一個商品，用於預覽）。
+     - 欄位與參數依 item.ts batchNameEdit：itemId、column（可複選：title／shortNameDisplay／shortName／uid／tag／cateTag）、
+       editType（replace＝文字取代/刪除、prepend＝加在前面、append＝加在後面）、oriText、newText；成功回 { code:200, error:'已更新 N 個商品' }。
+     - 欄位名稱沿用 SPEC 商品明細編輯器的標籤（名稱、短名稱(表單顯示)、短名稱(出貨用)、商品代碼、名稱標籤、分類標籤）。
+     - 送出用原站 initAjaxForm；預覽與「取代時才需要原文字」為推導（行為）。 --}}
+<form name="BatchNameEditForm" method="post" action="{{baseUrl}}/ajax/Item/batchNameEdit.do" class="form-horizontal" id="BatchNameEditForm"><input type="hidden" name="itemId" value="{{itemIds}}">
+	<div class="modal-header">
+		<h5 class="modal-title">批次改名</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<p class="small text-muted mb-3">已選擇 <b>{{count}}</b> 個商品，以下設定會套用到全部所選商品。</p>
+	<div class="form-group row">
+		<label class="control-label col-sm-3">修改欄位</label>
+		<div class="col-sm-9">
+			<input type="checkbox" class="form-check-input" name="column" value="title" id="bneColumnTitle" checked><label class="pl-4 mr-2" for="bneColumnTitle">名稱</label>
+			<input type="checkbox" class="form-check-input" name="column" value="shortNameDisplay" id="bneColumnShortNameDisplay"><label class="pl-4 mr-2" for="bneColumnShortNameDisplay">短名稱(表單顯示)</label>
+			<input type="checkbox" class="form-check-input" name="column" value="shortName" id="bneColumnShortName"><label class="pl-4 mr-2" for="bneColumnShortName">短名稱(出貨用)</label>
+			<input type="checkbox" class="form-check-input" name="column" value="uid" id="bneColumnUid"><label class="pl-4 mr-2" for="bneColumnUid">商品代碼</label>
+			<input type="checkbox" class="form-check-input" name="column" value="tag" id="bneColumnTag"><label class="pl-4 mr-2" for="bneColumnTag">名稱標籤</label>
+			<input type="checkbox" class="form-check-input" name="column" value="cateTag" id="bneColumnCateTag"><label class="pl-4 mr-2" for="bneColumnCateTag">分類標籤</label>
+			<div class="small text-danger d-none" id="bneColumnError">請至少選擇一個欄位</div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="control-label col-sm-3">修改方式</label>
+		<div class="col-sm-9">
+			<input type="radio" class="form-check-input" name="editType" id="bneEditTypeReplace" value="replace" checked><label class="form-check-label mr-3" for="bneEditTypeReplace">文字取代/刪除</label>
+			<input type="radio" class="form-check-input" name="editType" id="bneEditTypePrepend" value="prepend"><label class="form-check-label mr-3" for="bneEditTypePrepend">加在前面</label>
+			<input type="radio" class="form-check-input" name="editType" id="bneEditTypeAppend" value="append"><label class="form-check-label mr-3" for="bneEditTypeAppend">加在後面</label>
+		</div>
+	</div>
+	<div class="form-group row" id="bneOriTextGroup">
+		<label class="control-label col-sm-3" for="bneOriText">原文字</label>
+		<div class="col-sm-9">
+			<input type="text" name="oriText" id="bneOriText" class="form-control" autocomplete="off" required>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="control-label col-sm-3" for="bneNewText">新文字</label>
+		<div class="col-sm-9">
+			<input type="text" name="newText" id="bneNewText" class="form-control" autocomplete="off">
+			<small class="form-text text-muted" id="bneNewTextHint">文字取代時，新文字留空＝刪除原文字</small>
+		</div>
+	</div>
+	<div class="card">
+		<div class="card-body p-2 small">
+			<div class="font-weight-bold mb-1">預覽（第一個商品）</div>
+			<table class="table table-sm mb-0" id="bnePreview">
+				<thead>
+					<tr><th>欄位</th><th>修改前</th><th>修改後</th></tr>
+				</thead>
+				<tbody></tbody>
+			</table>
+		</div>
+	</div>
+	</div> <!-- modal-body -->
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+</form>
+<script type="text/javascript">
+(function() {
+	var $form = $('#BatchNameEditForm');
+	var first = {{json first}};
+	var labels = {title: '名稱', shortNameDisplay: '短名稱(表單顯示)', shortName: '短名稱(出貨用)', uid: '商品代碼', tag: '名稱標籤', cateTag: '分類標籤'};
+	var editType = function() { return $form.find('input[name=editType]:checked').val() || 'replace'; };
+	var apply = function(cur, type, ori, nt) {
+		cur = cur || '';
+		if (type == 'prepend') return nt + cur;
+		if (type == 'append') return cur + nt;
+		return ori ? cur.split(ori).join(nt) : cur;
+	};
+	var refresh = function() {
+		var type = editType();
+		var replace = type == 'replace';
+		$('#bneOriTextGroup').toggleClass('d-none', !replace);
+		$('#bneOriText').prop('required', replace);
+		$('#bneNewTextHint').toggleClass('d-none', !replace);
+		var ori = $('#bneOriText').val();
+		var nt = $('#bneNewText').val();
+		var $tbody = $('#bnePreview tbody').empty();
+		var cols = $form.find('input[name=column]:checked').map(function() { return this.value; }).get();
+		$('#bneColumnError').toggleClass('d-none', cols.length > 0);
+		$.each(cols, function(i, c) {
+			var before = first ? first[c] || '' : '';
+			var after = apply(before, type, ori, nt);
+			$('<tr>')
+				.append($('<td>').text(labels[c] || c))
+				.append($('<td>').text(before))
+				.append($('<td>').toggleClass('text-success font-weight-bold', after != before).text(after))
+				.appendTo($tbody);
+		});
+	};
+	$form.on('change input', 'input', refresh);
+	refresh();
+	// 先於 initAjaxForm 綁定：沒有勾選任何欄位時不送出
+	$form.on('submit', function(e) {
+		if (!$form.find('input[name=column]:checked').length) {
+			$('#bneColumnError').removeClass('d-none');
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			return false;
+		}
 	});
-});
+	initAjaxForm('BatchNameEditForm', function(json) {
+		modalShowSuccess($form, json.error);
+		if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload(null, false);
+	});
+})();
 </script>

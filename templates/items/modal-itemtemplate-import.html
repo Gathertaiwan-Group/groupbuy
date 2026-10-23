@@ -1,6 +1,7 @@
-<form name="ItemTemplateForm" method="post" action="/ajax/ItemTemplate/importItemCSV.do" class="form-horizontal" enctype="multipart/form-data" id="ItemTemplateForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><div class="modal-header">
-		 <h5 class="modal-title">團購 &raquo; 匯入商品XLS</h5>
-		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+<form name="ItemTemplateForm" method="post" action="/ajax/ItemTemplate/importItemCSV.do" class="form-horizontal" enctype="multipart/form-data" id="ItemTemplateForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId">
+	<div class="modal-header">
+		<h5 class="modal-title">匯入商品XLS</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
 	</div>
 	<div class="modal-body">
 	<div class="modal-message"></div>
@@ -16,12 +17,14 @@
 	<div class="modal-footer">
 		<button class="btn btn-default" data-dismiss="modal">關閉</button>
 		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="上傳" />	 
-	</div>  
-</form><script>
-var onSuccess = function(json) {
-	$('#submitButton').attr('disabled', true);
-	modalShowSuccess($('#myModal'), json.error);
-}
-initAjaxForm('ItemTemplateForm', onSuccess);
+	</div>
+</form>
+{{!-- 推導：表頭依 ias_v5 messagebox() 的 modal-header 結構；送出沿用原站 initAjaxForm（成功時 modalShowSuccess 顯示伺服器回傳的 error 訊息），
+     另依行為補「匯入後重新載入所在頁的列表（table）」；檔案由下方 xlsx-reader 在瀏覽器解析成 rowsJson 一併送出。 --}}
+<script type="text/javascript">
+initAjaxForm('ItemTemplateForm', function(json) {
+	modalShowSuccess($('#ItemTemplateForm'), json.error);
+	if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload(null, false);
+});
 </script>
 {{> items/partials/xlsx-reader.html}}

@@ -1,94 +1,87 @@
-<style>
-.btn-input-check {min-width:72px !important;}
-.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;}
-.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
-.modal-body {    max-height: calc(100vh - 164px) !important;}
-span.input-group-text.md-addon {min-width: 152px;}
-.input-group-inventory .item-stock {width:200px !important; flex:0}
-.input-group-inventory .input-error {width:180px !important; flex:0}
-.input-group-inventory .input-group-text {
-	display: -webkit-box;
-	white-space: normal;
-	-webkit-line-clamp: 1;
-	-webkit-box-orient: vertical;
-	flex: 1 1;
-	text-align: left;
-	overflow:hidden;
-}
-.input-group-inventory .input-group-prepend {flex:1}
-</style>
-
-
-<form name="ItemForm" method="post" action="{{baseUrl}}/ajax/Item/inventory.do" class="form-horizontal" id="ItemForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><div class="modal-header">
-		<h5 style="overflow:hidden">盤點&raquo;</h5>
-		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+{{!-- 盤點（商品明細工具列「盤點」→ GET /backend/Item/inventory?itemId=&groupBuyId=；data：groupBuyId、itemId）。原站彈窗 HTML 未擷取，全段推導：
+     - 前端沿用 warehouse 模組的 /scripts/inventory.js：inventoryManager.init(itemId) 以 #invTable 建立倉儲商品列表（POST /ajax/Item/getWarehouseItems，帶 itemId），
+       錯誤訊息寫到 #ItemForm .modal-message／.modal-message-alert-text，檢視庫存後的明細（.inventory）也在 #ItemForm 內操作 → 整個彈窗包在 #ItemForm。
+     - #invTable 欄位（名稱／商品代碼／原始現貨庫存／可售現貨數量／檢視庫存）與說明文字依 spec/html/warehouse-inventory.html 可見內容（該頁 #invTable、盤點說明）。
+     - inventory.js 選擇入庫倉時會讀 inventoryManager.tableUpload（#invTableUpload）的同一列；彈窗內沒有匯入流程，
+       故放一個隱藏的 #invTableUpload，並把 #invTable 載入的列（盤點數＝目前庫存）同步進去，避免檢視庫存後選倉時出錯（推導（行為））。
+     - inventory.js 每次 init 都會在 body 綁定取消訂單／設為已盤點的委派事件，重複開啟彈窗前先解除，避免重複送出（推導（行為））。 --}}
+<div id="ItemForm">
+	<div class="modal-header">
+		<h5 class="modal-title">盤點</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
 	</div>
 	<div class="modal-body">
-	<div class="modal-message"></div>
-	<div class="mb-2">
-	<small>
-	***僅供倉儲商品使用
-	<br>盤點後，所有已出貨訂單商品將被標註為「已盤點」將不在列入庫存計算內
-	<br>商品原始庫存以及可售庫存將會被調整為：
-	</small>
-	<br><small class="font-weight-500">原始庫存=可售庫存+商品未出貨數量</small>
-	<br><small>*****按下[確認]後即對當前商品進行盤點</small>
-	</div>
-
-<div class="card mt-4">
-<div class="card-header">盤點</div>
-<div class="card-body"></div>
-<div class="card-body p-0">
-	<table id="invTable" class="table table-striped display nowrap" width="100%">
-		<thead>
-			<tr>
-				<th>名稱</th>
-				<th>商品代碼</th>
-				<th>原始現貨庫存</th>
-				<th>可售現貨數量</th>
-				<th></th>
-			</tr>
-		</thead>
-		<tfoot>
-			<tr>
-				<th>名稱</th>
-				<th>商品代碼</th>
-				<th>原始現貨庫存</th>
-				<th>可售現貨數量</th>
-				<th></th>
-			</tr>
-		</tfoot>
-	</table>
-</div>
-</div>
-
-
+		<div class="modal-message" style="display:none">
+			<div class="modal-message-alert alert alert-danger"><a href="#" class="close" onclick="$(this).closest('.modal-message').hide();return false;" aria-label="close">×</a><span class="modal-message-alert-text"></span></div>
+		</div>
+		<div class="blue-grey lighten-5 small p-2 mb-3">
+			***僅供倉儲商品使用
+			<br>盤點後，所有已出貨訂單商品將被標註為「已盤點」將不在列入庫存計算內
+			<br>商品原始庫存以及可售庫存將會被調整為：
+			<br><span class="font-weight-500">原始庫存=可售庫存+商品未出貨數量</span>
+			<br>*****按[檢視庫存]選擇倉庫，輸入盤點數量後按下[確認]即對當前商品進行盤點
+		</div>
+		<table id="invTable" class="table table-striped display nowrap" width="100%">
+			<thead>
+				<tr>
+					<th>名稱</th>
+					<th>商品代碼</th>
+					<th>原始現貨庫存</th>
+					<th>可售現貨數量</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tfoot>
+				<tr>
+					<th>名稱</th>
+					<th>商品代碼</th>
+					<th>原始現貨庫存</th>
+					<th>可售現貨數量</th>
+					<th></th>
+				</tr>
+			</tfoot>
+		</table>
+		<div class="d-none">
+			<table id="invTableUpload" class="table table-striped display" width="100%">
+				<thead>
+					<tr>
+						<th>名稱</th>
+						<th>盤點數量</th>
+						<th>當前庫存</th>
+						<th></th>
+					</tr>
+				</thead>
+			</table>
+		</div>
 	</div> <!-- modal-body -->
-
-	<div class="progress">
-		<div class="progress-bar" role="progressbar"></div>
-	</div>
 	<div class="modal-footer">
-		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
 	</div>
-</form><script type="text/javascript">
-$(function () {
-	$('.form-detail').hide();
-	$('input[name=rule]').click(e=>{
-		$('.form-detail').show();
-	});
-	console.log('x')
+</div>
+<script type="text/javascript">
+(function() {
 	var itemId = {{json itemId}};
-	inventoryManager.init(itemId);
-});
-
-var success = function(json) {
-	table.ajax.reload( null, false);
-	msg = '成功';
-	modalShowSuccess($('#myModal'), msg);
-	$('#submitButton').prop('disabled',true);
-}
-initAjaxForm('ItemForm', success);
-
+	var start = function() {
+		$('body').off('click', 'button.btn-cancelOrder').off('click', 'button.btn-markArchived');
+		inventoryManager.tableUpload = null;
+		inventoryManager.init(itemId);
+		var upload = inventoryManager.getTableUpload();
+		inventoryManager.table.on('xhr.dt', function(e, settings, json) {
+			var rows = (json && $.isArray(json.data) ? json.data : []).map(function(o) {
+				return $.extend({}, o, {
+					stockCounting: o.stock,
+					stockBackOrderCounting: o.stockBackOrder || 0,
+					stockBackOrder: o.stockBackOrder || 0,
+					stockBackOrderAvailable: o.stockBackOrderAvailable || 0
+				});
+			});
+			upload.clear().rows.add(rows).draw(false);
+		});
+	};
+	if (window.inventoryManager) {
+		start();
+	} else {
+		$.ajax({url: '/scripts/inventory.js?v={{assetVersion}}', dataType: 'script', cache: true}).done(start);
+	}
+})();
 </script>
-<script src="/scripts/inventory.js?v=250529"></script>

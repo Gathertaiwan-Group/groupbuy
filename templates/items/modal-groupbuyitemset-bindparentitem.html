@@ -1,141 +1,176 @@
+{{!-- 綁定主庫存（團購品項頁工具列「綁定主庫存」：openFormF('/backend/GroupBuyItemSet/bindParentItem', joinIds('groupBuyItemSetId', dt))）。原站此彈窗未擷取，全段推導：
+     - 資料：pages.ts 傳入 groupBuyItemSetId、itemSetId、title（本品項＝第一個勾選的團購品項）。
+     - 列表比照同模組「複製其他團購品項」彈窗（spec/html/modal-groupbuyitemset-import.html 可見部分）的 Editor＋DataTable 寫法：
+       POST /ajax/GroupBuyItemSet/uniqueList（expand=1、main=1 只列主表單品項、groupBuyId 篩選團購、month、sSearch、excludeGroupBuyItemSetId＝本品項），單選。
+     - 「綁定主庫存」＝Editor remove 協定 → POST /ajax/GroupBuyItemSet/bindParentItem?itemSetId=<本品項>&groupBuyItemSetId=_id_（gbis.ts bindParentItemGbis，
+       依商品代碼（無代碼時依名稱）把本品項商品綁到所選主表單品項的同名商品），回 { data: 綁定數 } → 顯示「成功綁定 N 個商品」（推導（行為））。
+     - 表頭依 ias_v5 messagebox() 的 modal-header 結構。 --}}
 <style>
-#import_gbis_table_wrapper .dt-buttons.btn-group {top:0px;}
+#bind_gbis_table_wrapper .dt-buttons.btn-group {top:0px;}
+#bind_gbis_table_wrapper .buttons-remove span::before {content: '';}
 </style>
-<script type="text/javascript">
-var import_gbis_editor;
-var import_gbis_table;
-
-var import_gbis_table_name = '#import_gbis_table';
-var i18n = DataTableConfig.i18n;
-i18n.remove = {
-	button: "綁定主庫存",
-	title:  "綁定主庫存",
-	submit: "綁定主庫存",
-	confirm: {
-		_: "確定要綁定這幾%d個品項?",
-		1: "確定要綁定這1個品項?",
-	}
-};
-import_gbis_editor = new $.fn.dataTable.Editor( {
-	idSrc:'groupBuyItemSetId',
-	ajax: {
-		remove: {
-			type: 'POST',
-			url:  '{{baseUrl}}/ajax/GroupBuyItemSet/bindParentItem.do?itemSetId={{itemSetId}}&groupBuyItemSetId=_id_'
-		},
-	},
-	table: import_gbis_table_name,
-	fields: [
-		DataTableConfig.field_input('品項名稱', 'itemSet.title'),
-	],
-	i18n:i18n,
-} );
-
-import_gbis_table = $(import_gbis_table_name).DataTable( {
-	serverSide: true,
-	searching: false,
-	processing:true,
-	searchDelay: 1000,
-	lengthMenu: [10, 25, 50, 100],
-	dom: 'lBrtip',
-	ajax: {
-		url:'{{baseUrl}}/ajax/GroupBuyItemSet/uniqueList.do',
-		type: "POST",
-		data: function ( d ) {
-			d.expand = 1;
-			d.main = 1;
-			d.groupBuyId = $('#groupBuyId').val();
-			d.groupBuyTitle = $('#groupBuyTitle').val();
-			d.month = 120;
-			d.excludeGroupBuyItemSetId = {{groupBuyItemSetId}};
-			d.sSearch = $('#sSearch').val();
-			return d;
-		}
-	},
-	language:DataTableConfig.i18n,
-	columns: [
-		DataTableConfig.data_select_checkbox,
-		{
-			data: 'itemSet.title',
-			render: function ( data, type, row ) {
-				return data+'<p class="small text-muted">'+row.groupBuyTitle + '</p>';
-			}
-		},
-	],
-	select: 'single',
-	buttons: [
-		{ extend: 'remove' , editor: import_gbis_editor },
-	]
-} );
-import_gbis_editor
-	.on( 'postRemove', function (e, json, ids ) {
-		modalShowSuccess($('#myModal'),'成功綁定' + json.data +'個商品');
-	});
-import_gbis_table
-	.on ('preXhr', function(e, settings) {
-		$('#btn-search').html('<i class="fa-light fa-spinner glyphicon glyphicon-refresh glyphicon-refresh-animate"></i>');
-	})
-	.on ('xhr', function(e, settings) {
-		$('#btn-search').html('<i class="fa-light fa-search glyphicon glyphicon-search"></i>');
-	});
-
-$(document).ready(function() {
-
-	var extraSection = '<div class="input-group mt-2">'
-		+ '<div class="input-group-prepend btn btn-default">篩選團購</div>'
-		+ '<select id="groupBuyId" class="form-control w-auto"></select>'
-		+ '<div class="d-inline-flex"><input type="text" id="sSearch" placeholder="輸入品項名稱" size=20 class="form-control filters w-auto"><div class="input-group-addon btn btn-default" id="btn-search"><i class="fa-light fa-search"></i></div></div>'
-		+ '</div>'
-		+ '</div>';
-$('#import_gbis_table_wrapper').find(".dt-buttons").append(extraSection);
-$('#groupBuyId').select2ForGroupBuy();
-$('input:checkbox.filters').on('change', function() {
-	import_gbis_table.clear().ajax.reload();
-	import_gbis_table.columns.adjust();
-});
-$('select.filters').on('change', function() {
-	import_gbis_table.clear().ajax.reload();
-	import_gbis_table.columns.adjust();
-});
-
-$('#btn-search').on('click', function() {
-	if ($('#btn-search i').hasClass('fa-refresh')) return;
-	import_gbis_table.clear().ajax.reload();
-	import_gbis_table.columns.adjust();
-});
-
-$('#btn-copyTitle').on('click', function() {
-	$('#sSearch').val({{json title}});
-	$('#btn-search').click();
-});
-/*
-$('input:text.filters')
-.keyup(delayInput(function (e) {
-	import_gbis_table.clear().ajax.reload();
-}, 500));
-*/
-
-})
-</script>
-
 <div class="modal-header">
-	<h5 class="modal-title">{{title}}<button id="btn-copyTitle" class="btn btn-sm btn-default p-1">複製標題</button> &raquo; 綁定主庫存</h5>
-	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	<h5 class="modal-title">綁定主庫存</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
 </div>
 <div class="modal-body">
 	<div class="modal-message"></div>
-	<table id="import_gbis_table" class="table table-striped display" width="100%">
+	<div class="blue-grey lighten-5 small p-2 mb-2">
+		將品項「<b>{{title}}</b>」的商品綁定到下方選擇的主表單品項：依商品代碼（沒有商品代碼時依商品名稱）對應同名商品，
+		綁定後兩邊共用主表單商品的庫存，下單時一起扣庫存。
+		<br>請先篩選並勾選一個主表單品項，再按[綁定主庫存]。要取消綁定請在團購品項頁使用[解除綁定主庫存]。
+	</div>
+	<div class="input-group mt-2" id="bindGroupBuyId-group">
+		<span class="input-group-text">篩選團購</span>
+		<select id="bindFromGroupBuyId" class="form-control w-auto"></select>
+		<select id="bindMonth" class="form-control w-auto">
+			<option value="-1" disabled>不限制期限</option>
+			<option value="1" selected>近1個月內品項</option>
+			<option value="3">近3個月內品項</option>
+			<option value="6">近半年內品項</option>
+			<option value="12">近1年內品項</option>
+		</select>
+		<input type="text" id="bindSSearch" placeholder="輸入品項名稱" size="20" class="form-control w-auto">
+		<button type="button" class="input-group-addon btn btn-flat" id="bindBtnSearch"><i class="fa-light fa-search"></i></button>
+	</div>
+	<table id="bind_gbis_table" class="table table-striped display nowrap" width="100%">
 		<thead>
 			<tr>
-				<th width="60px">選擇</th>
-				<th>品項名稱</th>
+				<th></th>
+				<th>主表單品項名稱</th>
 			</tr>
 		</thead>
 		<tfoot>
 			<tr>
 				<th></th>
-				<th>品項名稱</th>
+				<th>主表單品項名稱</th>
 			</tr>
 		</tfoot>
 	</table>
 </div> <!-- modal-body -->
+<script type="text/javascript">
+var bind_gbis_editor;
+var bind_gbis_table;
+var bind_gbis_table_name = '#bind_gbis_table';
+(function() {
+	var esc = $.fn.dataTable.render.text().display;
+	var title = {{json title}};
+	var i18n = $.extend(true, {}, DataTableConfig.i18n, {
+		remove: {
+			button: '綁定主庫存',
+			title: '綁定主庫存',
+			submit: '綁定',
+			confirm: {
+				_: '一次只能選擇一個主表單品項',
+				1: '確定要將「' + esc(title) + '」的商品綁定到所選主表單品項的庫存?'
+			}
+		}
+	});
+
+	bind_gbis_editor = new $.fn.dataTable.Editor( {
+		idSrc: 'groupBuyItemSetId',
+		ajax: {
+			remove: {
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/GroupBuyItemSet/bindParentItem.do?itemSetId={{itemSetId}}&groupBuyItemSetId=_id_'
+			}
+		},
+		table: bind_gbis_table_name,
+		fields: [
+			DataTableConfig.field_input('主表單品項名稱', 'itemSet.title')
+		],
+		i18n: i18n
+	} );
+
+	bind_gbis_table = $(bind_gbis_table_name).DataTable( {
+		dom: 'Brtip',
+		serverSide: true,
+		processing: true,
+		pageLength: 10,
+		ajax: {
+			type: 'POST',
+			url: '{{baseUrl}}/ajax/GroupBuyItemSet/uniqueList.do',
+			data: function ( d ) {
+				d.expand = 1;
+				d.main = 1;
+				d.groupBuyId = $('#bindFromGroupBuyId').val() || '';
+				d.month = $('#bindMonth').val();
+				d.sSearch = $('#bindSSearch').val() || '';
+				d.excludeGroupBuyItemSetId = {{json groupBuyItemSetId}};
+				return d;
+			}
+		},
+		language: DataTableConfig.i18n,
+		columns: [
+			DataTableConfig.data_select_checkbox,
+			{
+				data: 'itemSet.title',
+				render: function ( data, type, row ) {
+					var html = esc(data || '(未命名品項)');
+					if (type == 'display' && row.groupBuyTitle) html += '<span class="small text-muted ml-2">' + esc(row.groupBuyTitle) + '</span>';
+					return html;
+				}
+			}
+		],
+		order: [[ 1, "desc" ]],
+		select: { style: 'single' },
+		buttons: [
+			{ extend: 'removeSingle', text: '綁定主庫存', editor: bind_gbis_editor }
+		]
+	} );
+
+	bind_gbis_editor
+	.on( 'postSubmit', function ( e, json, data, action ) {
+		if (action == 'remove' && json && !json.error) {
+			modalShowSuccess($('#myModalContent'), '成功綁定 ' + (parseInt(json.data, 10) || 0) + ' 個商品');
+		}
+	} )
+	.on( 'postRemove', function () {
+		bind_gbis_table.ajax.reload( null, false );
+		if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload( null, false );
+	} );
+
+	var reload = function() {
+		bind_gbis_table.clear().ajax.reload();
+	};
+	$('#bindMonth').on('change', reload);
+	$('#bindBtnSearch').on('click', function() {
+		if ($('#bindBtnSearch i').hasClass('fa-refresh')) return;
+		reload();
+	});
+	$('#bindSSearch').on('keydown', function(e) {
+		if (e.keyCode == 13) {
+			e.preventDefault();
+			reload();
+		}
+	});
+	bind_gbis_table
+		.on('preXhr.dt', function() {
+			$('#bindBtnSearch i').removeClass('fa-search').addClass('fa-refresh fa-spin');
+		})
+		.on('xhr.dt', function() {
+			$('#bindBtnSearch i').removeClass('fa-refresh fa-spin').addClass('fa-search');
+		});
+	$('#bindFromGroupBuyId').select2({
+		placeholder: '全部團購',
+		allowClear: true,
+		width: '260px',
+		dropdownParent: $('#myModal'),
+		language: GBF.language,
+		ajax: {
+			url: GBF.baseUrl + '/ajax/Lookup/groupBuy',
+			dataType: 'json',
+			delay: 250,
+			data: function(params) {
+				return { q: params.term || '', page: params.page || 1 };
+			}
+		}
+	}).on('change', function() {
+		var selected = !!$(this).val();
+		$('#bindMonth option[value=-1]').prop('disabled', !selected);
+		if (selected) $('#bindMonth').val('-1');
+		else if ($('#bindMonth').val() == '-1') $('#bindMonth').val('1');
+		reload();
+	});
+})();
+</script>

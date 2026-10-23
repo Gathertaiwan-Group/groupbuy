@@ -331,20 +331,29 @@
                     }
                     .btn-toggle-matrix-expand:hover {
                         color: #1a73e8 !important;
-            		}
-					tr.sync-target-row input[type=checkbox] {
-						opacity: 1;
-						pointer-events: auto;
-					}
-				</style>
+                    }
+                    .btn-toggle-matrix-expand {
+                        color: #6c757d;
+                        transition: color 0.15s ease-in-out;
+                    }
+                </style>
 <!--#body--><div class="container-fluid ">
 	<div class="container-fluid mt-4 mb-5">
 
                     <!-- Header -->
-                    <div class="d-flex justify-content-between align-items-center mb-4 sticky-top bg-white py-1 shadow-sm border-bottom"
-						style="z-index: 1000; top: 40px; padding-left: 15px; padding-right: 15px;">
-						<h4 class="mb-0">新增/編輯 組合商品</h4>
-	                    <div>
+                    <div class="d-flex justify-content-between align-items-center mb-4 sticky-top bg-white py-2 border-bottom" style="z-index: 1020;">
+                        <div class="d-flex align-items-center flex-wrap">
+                            <h4 class="mb-0 mr-3" id="pageTitle">新增組合商品</h4>
+{{#if itemBundleV2Id}}
+                            <button type="button" class="btn btn-outline-info btn-sm my-1 mr-1" id="btnSyncAllNames" title="以本組合各候選單品的自訂品名，同步覆蓋其他組合包內相同商品的名稱">
+                                <i class="fas fa-sync-alt mr-1"></i>同步所有自訂名稱
+                            </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm my-1" id="btnSyncContentToChildren" title="正在讀取進行中的子表單..." disabled>
+                                <i class="fas fa-bolt mr-1"></i>跨團同步至子表單 <span id="syncContentBadge">(0)</span>
+                            </button>
+{{/if}}
+                        </div>
+                        <div>
                             <a href="/backend/ItemBundleV2/list?groupBuyId={{groupBuyId}}" target="_blank" class="btn btn-outline-info btn-sm mr-1">瀏覽所有組合</a>
                             <a href="/backend/ItemBundleV2/list?groupBuyId={{groupBuyId}}"
                                 class="btn btn-outline-secondary btn-sm">取消</a>
@@ -473,9 +482,9 @@
                     <div class="card mb-4">
                         <div class="card-header">2. 選擇組合類型</div>
                         <div class="card-body">
-                            <!-- Static Display for Edit Mode -->
-                            <div id="staticTypeDisplay" style="display:none;">
-                                <div class="alert alert-info mb-0">
+                            <!-- Edit Mode: Static Type Display -->
+                            <div id="staticTypeDisplay" style="display: none;">
+                                <div class="alert alert-info mb-3">
                                     <i class="fas fa-info-circle"></i> 目前類型：<strong id="staticTypeName"></strong>
                                     <span class="text-muted ml-2">(編輯模式下無法變更類型)</span>
                                 </div>
@@ -526,9 +535,9 @@
                                 </div>
                             </div>
                             <!-- Detailed Description Area -->
-                            <div class="alert alert-secondary mt-3" id="bundleTypeDescriptionBox" style="display:none;">
-								<h5><i class="fas fa-info-circle"></i> <span id="descTitle">類型說明</span></h5>
-								<p class="mb-0" id="descContent">請選擇上方類型以查看詳細說明。</p>
+                            <div class="alert alert-secondary mt-3" id="bundleTypeDescriptionBox">
+                                <h6 class="alert-heading font-weight-bold" id="descTitle">類型說明</h6>
+                                <p class="mb-0" id="descContent">請選擇上方類型以查看詳細說明。</p>
                             </div>
                         </div>
                     </div>
@@ -556,10 +565,12 @@
                         <div class="modal-content">
                             <div class="modal-header">
                                 <h5 class="modal-title">選擇商品</h5>
-                                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-							</div>
-							<div class="modal-body">
-								<div class="row mb-3">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row mb-3">
                                     <div class="col-md-12">
                                         <select class="form-control" id="searchItemSetId" style="width:100%"></select>
                                     </div>
@@ -578,11 +589,11 @@
                                 <div id="searchSelectAllContainer">
                                     <!-- Select All Toolbar injected here dynamically -->
                                 </div>
-                                <div id="searchResultList" style="max-height: 400px; overflow-y: auto;">
-									<!-- Results -->
-								</div>
-							</div>
-							<div class="modal-footer">
+                                <div id="searchResultList" style="max-height: 420px; overflow-y: auto;">
+                                    <div class="text-center p-3 text-muted">請輸入關鍵字後按「搜尋」</div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
                                 <button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
                                 <button type="button" class="btn btn-primary" id="btnAddSelected">加入選取項目</button>
                             </div>
@@ -616,10 +627,12 @@
                             <div class="modal-header bg-light">
                                 <h5 class="modal-title font-weight-bold">
                                     <i class="fas fa-sync-alt text-info mr-2"></i>同步商品名稱至其他組合包
-                           	 </h5>
-								<button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-							</div>
-							<div class="modal-body">
+                                </h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
                                 <div class="alert alert-warning mb-3 py-2 small">
                                     <i class="fas fa-exclamation-triangle mr-1"></i>
                                     <strong>注意：</strong> 此操作將以目前組合商品所設定的名稱為基準，批次推播覆蓋全站其他組合包內對應相同商品（Item ID）的名稱。
@@ -633,14 +646,14 @@
 
                                 <!-- Empty State -->
                                 <div id="syncModalEmpty" class="text-center py-5" style="display: none;">
-									<i class="fas fa-check-circle text-success fa-3x mb-3"></i>
-									<h6 class="text-muted">全系統其他組合商品的商品名稱與目前設定完全一致，無須同步。</h6>
+                                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                                    <h6 class="text-muted">全系統其他組合商品的商品名稱與目前設定完全一致，無須同步。</h6>
                                 </div>
 
                                 <!-- Content State -->
                                 <div id="syncModalContent" style="display: none;">
-									<div class="d-flex justify-content-between align-items-center mb-3">
-										<div class="font-weight-bold text-dark" id="syncSummaryText">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+                                        <div class="small font-weight-bold text-dark" id="syncSummaryText">
                                             共發現 <span class="text-danger" id="syncTotalItems">0</span> 項商品有差異，預計影響 <span class="text-danger font-weight-bold" id="syncTotalCandidates">0</span> 筆候選項目。
                                         </div>
                                         <div>
@@ -653,16 +666,16 @@
                                     <div class="table-responsive border rounded mb-2">
                                         <table class="table table-hover table-sm mb-0">
                                             <thead class="thead-light">
-												<tr>
-													<th style="width: 45px;" class="text-center">
-							                            <input type="checkbox" id="chkSyncHeaderSelectAll" checked>
+                                                <tr>
+                                                    <th class="text-center align-middle" style="width: 40px;">
+                                                        <input type="checkbox" id="chkSyncHeaderSelectAll" checked>
                                                     </th>
-                                                    <th>商品名稱 (ID)</th>
-													<th>本組合新設定名稱</th>
-													<th class="text-center" style="width: 120px;">預計影響筆數</th>
-													<th class="text-center" style="width: 100px;">明細</th>
-												</tr>
-										    </thead>
+                                                    <th class="align-middle">商品名稱</th>
+                                                    <th class="align-middle">同步後名稱 (本組合設定)</th>
+                                                    <th class="text-center align-middle" style="width: 110px;">影響筆數</th>
+                                                    <th class="text-center align-middle" style="width: 90px;">明細</th>
+                                                </tr>
+                                            </thead>
                                             <tbody id="syncItemsTableBody">
                                                 <!-- Dynamically generated rows -->
                                             </tbody>
@@ -691,10 +704,12 @@
                                 <h5 class="modal-title font-weight-bold">
                                     <i class="fas fa-bolt text-primary mr-2"></i>跨團組合商品同步中心
                                 </h5>
-                                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
-							</div>
-							<div class="modal-body">
-								<div class="alert alert-info mb-3 py-2 small">
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                    <span aria-hidden="true">&times;</span>
+                                </button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="alert alert-info mb-3 py-2 small">
                                     <i class="fas fa-info-circle mr-1"></i>
                                     <strong>一站式跨團同步：</strong> 支援將母表單的品項結構、自訂品名、單品加價、安全庫存、說明文字與進階顯示設定一鍵同步至進行中的子表單。
                                 </div>
@@ -703,17 +718,17 @@
                                 <div id="syncContentLoading" class="text-center py-5">
                                     <div class="spinner-border text-primary mb-2" role="status"></div>
                                     <div class="text-muted">正在檢索子表單與團購活動狀態...</div>
-   							 </div>
+                                </div>
 
-								<!-- Empty State -->
-								<div id="syncContentEmpty" class="text-center py-5" style="display: none;">
+                                <!-- Empty State -->
+                                <div id="syncContentEmpty" class="text-center py-5" style="display: none;">
                                     <i class="fas fa-calendar-times text-muted fa-3x mb-3"></i>
                                     <h6 class="text-muted">目前未檢索到任何進行中（未結束）的子表單。</h6>
-                    			</div>
+                                </div>
 
-								<!-- Content State -->
-								<div id="syncContentBody" style="display: none;">
-									<!-- Source Bundle Summary Card -->
+                                <!-- Content State -->
+                                <div id="syncContentBody" style="display: none;">
+                                    <!-- Source Bundle Summary Card -->
                                     <div class="card bg-light border-0 mb-3">
                                         <div class="card-body py-2 px-3">
                                             <div class="d-flex justify-content-between align-items-center">
@@ -757,8 +772,8 @@
                                     <!-- Sync Dimensions Collapse Card -->
                                     <div class="card mb-3 border">
                                         <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center" data-toggle="collapse" data-target="#syncDimensionsCollapse" style="cursor: pointer;">
-											<span class="font-weight-bold text-dark small">
-												<i class="fas fa-sliders-h mr-1 text-primary"></i>同步維度詳細設定 (<span id="syncSelectedDimensionsCount">6</span> 項已勾選)
+                                            <span class="font-weight-bold text-dark small">
+                                                <i class="fas fa-tasks mr-1 text-primary"></i>同步維度詳細設定 (<span id="syncSelectedDimensionsCount">6</span> 項已勾選)
                                             </span>
                                             <span class="small text-muted"><i class="fas fa-chevron-down"></i></span>
                                         </div>
@@ -771,9 +786,9 @@
                                                             <input type="checkbox" class="custom-control-input sync-dim-opt" id="chkSyncStructure" checked>
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncStructure">
                                                                 組合單品結構 (增/刪/排序)
-                                                     </label>
-															<div class="text-muted" style="font-size: 0.8rem;">依現有群組自動補齊候選單品並移除未使用候選單品。</div>
-										                </div>
+                                                            </label>
+                                                            <div class="text-muted" style="font-size: 0.78rem;">依母組合增加、刪除候選單品，並同步排列順序。</div>
+                                                        </div>
                                                     </div>
                                                     <!-- 2. 單品加價 -->
                                                     <div class="col-md-6 mb-3">
@@ -782,9 +797,9 @@
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncPrices">
                                                                 單品加價 (Price Offset)
                                                             </label>
-                              							  <div class="text-muted" style="font-size: 0.8rem;">同步各候選單品之額外加價金額。</div>
-														</div>
-								                    </div>
+                                                            <div class="text-muted" style="font-size: 0.78rem;">同步各候選單品的加價金額 (Price Offset) 與分攤價格。</div>
+                                                        </div>
+                                                    </div>
                                                     <!-- 3. 自訂品名 (收斂進維度) -->
                                                     <div class="col-md-6 mb-3">
                                                         <div class="custom-control custom-checkbox">
@@ -792,17 +807,17 @@
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncNames">
                                                                 自訂品名 (Custom Names)
                                                             </label>
-                                                            <div class="text-muted" style="font-size: 0.8rem;">同步覆蓋各候選單品之自訂名稱（未勾選時保留子表單現有品名）。</div>
-														</div>
-													</div>
-				                                    <!-- 4. 安全庫存 -->
+                                                            <div class="text-muted" style="font-size: 0.78rem;">以母組合的自訂品名覆蓋子表單（未勾選時保留子表單原有品名）。</div>
+                                                        </div>
+                                                    </div>
+                                                    <!-- 4. 安全庫存 -->
                                                     <div class="col-md-6 mb-3">
                                                         <div class="custom-control custom-checkbox">
                                                             <input type="checkbox" class="custom-control-input sync-dim-opt" id="chkSyncSafetyStock" checked>
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncSafetyStock">
-                                                                安全庫存 (現貨與預購)
-															</label>
-															<div class="text-muted" style="font-size: 0.8rem;">同步各候選單品的現貨安全庫存與預購安全庫存門檻。</div>
+                                                                安全庫存 (Safety Stock)
+                                                            </label>
+                                                            <div class="text-muted" style="font-size: 0.78rem;">同步各候選單品的安全庫存與預購安全庫存門檻。</div>
                                                         </div>
                                                     </div>
                                                     <!-- 5. 進階顯示與報表設定 -->
@@ -811,9 +826,9 @@
                                                             <input type="checkbox" class="custom-control-input sync-dim-opt" id="chkSyncDisplaySettings" checked>
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncDisplaySettings">
                                                                 進階顯示與報表設定
-                          								  </label>
-															<div class="text-muted" style="font-size: 0.8rem;">同步電子發票/訂單明細開關、ERP/出貨報表模式與價格均攤。</div>
-		                                                </div>
+                                                            </label>
+                                                            <div class="text-muted" style="font-size: 0.78rem;">同步電子發票、顧客訂單明細、ERP 報表與出貨報表的顯示方式與價格分配。</div>
+                                                        </div>
                                                     </div>
                                                     <!-- 6. 群組標題與輔助文字 -->
                                                     <div class="col-md-6 mb-3">
@@ -822,8 +837,8 @@
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncGroupInfo">
                                                                 群組標題與輔助說明文字
                                                             </label>
-															<div class="text-muted" style="font-size: 0.8rem;">同步各選項群組標題與說明文字（如「請選擇喜歡的口味」）。</div>
-												        </div>
+                                                            <div class="text-muted" style="font-size: 0.78rem;">同步各群組的標題、輔助說明文字、顯示版型與規格選單名稱。</div>
+                                                        </div>
                                                     </div>
                                                     <!-- 7. 群組選購規則 -->
                                                     <div class="col-md-6 mb-3">
@@ -832,9 +847,9 @@
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncGroupRules">
                                                                 群組選購規則 (輸入方式/件數限制/必選)
                                                             </label>
-                                							<div class="text-muted" style="font-size: 0.8rem;">同步單選/多選、minQty、maxQty、isRequired (已有訂單時請謹慎)。</div>
-														</div>
-	                                                </div>
+                                                            <div class="text-muted" style="font-size: 0.78rem;">同步各群組的輸入方式、Min/Max 件數限制與必選設定。</div>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -846,9 +861,9 @@
                                                 預計同步至 <span class="text-primary font-weight-bold" id="syncContentTotalTargets">0</span> 個子表單：
                                             </div>
                                         </div>
-                                        <div class="col-md-7 d-flex justify-content-md-end align-items-center">
-											<div class="input-group input-group-sm mr-2" style="max-width: 240px;">
-											    <div class="input-group-prepend">
+                                        <div class="col-md-7 d-flex justify-content-md-end align-items-center flex-wrap">
+                                            <div class="input-group input-group-sm mr-2 my-1" style="max-width: 260px;">
+                                                <div class="input-group-prepend">
                                                     <span class="input-group-text bg-white border-right-0 py-0"><i class="fas fa-search text-muted"></i></span>
                                                 </div>
                                                 <input type="text" class="form-control border-left-0" id="syncTargetSearchInput" placeholder="搜尋子表單名稱/ID...">
@@ -862,16 +877,16 @@
                                     <div class="sync-target-table-wrapper mb-3">
                                         <table class="table table-hover table-sm mb-0">
                                             <thead>
- 											   <tr>
-													<th style="width: 45px;" class="text-center align-middle">
-									                    <input type="checkbox" id="chkSyncContentHeaderSelectAll" checked>
+                                                <tr>
+                                                    <th class="text-center align-middle" style="width: 40px;">
+                                                        <input type="checkbox" id="chkSyncContentHeaderSelectAll" checked>
                                                     </th>
-                                                    <th class="align-middle">目標子表單活動</th>
-													<th style="width: 200px;" class="align-middle">活動期間</th>
-													<th class="text-center align-middle" style="width: 90px;">現有品項</th>
-												</tr>
-											</thead>
-							                <tbody id="syncContentTableBody">
+                                                    <th class="align-middle">子表單 (團購活動)</th>
+                                                    <th class="align-middle" style="width: 170px;">團購期間</th>
+                                                    <th class="text-center align-middle" style="width: 110px;">目前單品數</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="syncContentTableBody">
                                                 <!-- Dynamically populated by JavaScript -->
                                             </tbody>
                                         </table>
@@ -896,28 +911,29 @@
                     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
                         <div class="modal-content">
                             <div class="modal-header bg-light py-2">
-                                <h5 class="modal-title font-weight-bold text-dark" style="font-size: 1.05rem;">
-									<i class="fas fa-th mr-2 text-primary"></i>規格標籤矩陣批次設定 - <span id="matrixModalGroupTitle" class="text-primary"></span>
+                                <h5 class="modal-title font-weight-bold">
+                                    <i class="fas fa-th text-primary mr-2"></i>規格標籤矩陣快速設定
+                                    <span class="text-muted mx-1">-</span><span class="text-primary" id="matrixModalGroupTitle"></span>
                                 </h5>
                                 <div class="d-flex align-items-center">
-                                    <button type="button" class="btn btn-link text-secondary p-0 mr-3 btn-toggle-matrix-expand" id="btnToggleMatrixExpand" title="切換最大化檢視" style="font-size: 1.05rem; line-height: 1; text-decoration: none;">
-										<i class="fas fa-expand"></i>
-									</button>
-									<button type="button" class="close" data-dismiss="modal" aria-label="Close" style="padding: 0; margin: 0;">
-										<span aria-hidden="true">&times;</span>
-									</button>
-								</div>
-							</div>
-							<div class="modal-body p-2 d-flex flex-column" style="overflow: hidden; min-height: 0;">
-								<!-- Top Info & Action Bar -->
-								<div class="d-flex align-items-center justify-content-between flex-wrap p-2 mb-2 bg-white border rounded" style="gap: 8px; flex-shrink: 0;">
-									<div class="d-flex align-items-center flex-wrap" style="gap: 6px;">
-										<span class="small font-weight-bold text-muted">規格維度：</span>
-										<span id="matrixModalSpecTitlesBadges" class="d-inline-flex flex-wrap" style="gap: 4px;"></span>
-										<span class="badge badge-light border text-secondary ml-2" id="matrixModalItemStats">共 0 件商品</span>
-									</div>
-									<div class="d-flex align-items-center" style="gap: 8px;">
-			                            <button type="button" class="btn btn-outline-info btn-sm py-1 px-2" id="btnMatrixSmartParse" title="依據商品標題中的括號、顏色與尺寸詞彙，自動解析並回填維度欄位">
+                                    <button type="button" class="btn btn-link text-secondary btn-toggle-matrix-expand p-1 mr-2" id="btnToggleMatrixExpand" title="最大化檢視">
+                                        <i class="fas fa-expand"></i>
+                                    </button>
+                                    <button type="button" class="close ml-0" data-dismiss="modal" aria-label="Close">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="modal-body">
+                                <!-- Toolbar: spec dimension badges / item stats / actions -->
+                                <div class="d-flex justify-content-between align-items-center flex-wrap mb-2">
+                                    <div class="d-flex align-items-center flex-wrap my-1" style="gap: 6px;">
+                                        <span class="small font-weight-bold text-dark">規格維度：</span>
+                                        <span id="matrixModalSpecTitlesBadges" class="d-inline-flex flex-wrap" style="gap: 4px;"></span>
+                                        <span class="badge badge-light border text-secondary ml-1" id="matrixModalItemStats">共 0 件商品</span>
+                                    </div>
+                                    <div class="d-flex align-items-center my-1" style="gap: 6px;">
+                                        <button type="button" class="btn btn-outline-info btn-sm py-1 px-2" id="btnMatrixSmartParse" title="依據商品標題中的括號、顏色與尺寸詞彙，自動解析並回填維度欄位">
                                             <i class="fas fa-magic mr-1"></i>從商品名稱智能辨識
                                         </button>
                                         <button type="button" class="btn btn-outline-secondary btn-sm py-1 px-2" id="btnMatrixReset" title="還原至本次開啟彈窗時的原始狀態">
@@ -926,18 +942,17 @@
                                     </div>
                                 </div>
 
-                                <div class="alert alert-info py-1 px-3 small mb-2 d-flex align-items-center justify-content-between" style="flex-shrink: 0; font-size: 0.8rem;">
-									<div>
-										<i class="fas fa-keyboard mr-1"></i><strong>鍵盤捷徑提示</strong>：可使用 <kbd>Tab</kbd> 鍵橫向切換維度欄位，或按 <kbd>Enter</kbd> 鍵直向跳至下一列相同維度快速輸入！
-									</div>
-									<div id="matrixSmartParseNotice" style="display:none;" class="text-success font-weight-bold">
+                                <div class="alert alert-info py-1 px-3 small mb-2 d-flex align-items-center justify-content-between" role="alert">
+                                    <div>
+                                        <i class="fas fa-lightbulb mr-1"></i>直接在表格輸入各規格維度，按 Enter 可跳到下一列同一欄；合成標籤以「#」串接後寫回商品標籤。
+                                    </div>
+                                    <div id="matrixSmartParseNotice" style="display: none;" class="text-success font-weight-bold">
                                         <i class="fas fa-check-circle mr-1"></i>已完成智能辨識填入
                                     </div>
                                 </div>
 
- 							   <!-- Table Container -->
-								<div class="table-responsive border rounded bg-white flex-grow-1" style="overflow-y: auto; min-height: 0;">
-	                                <table class="table table-sm table-hover mb-0" id="matrixItemsTable">
+                                <div class="table-responsive border rounded">
+                                    <table class="table table-sm table-hover mb-0" id="matrixItemsTable">
                                         <thead class="thead-light sticky-top">
                                             <tr id="matrixTableHeaderRow">
                                                 <th class="matrix-th-num">#</th>
@@ -984,53 +999,52 @@
                         <option value="RADIO" {sel_RADIO}>單一選擇 (口味/規格/互斥)</option>
                         <option value="CHECKBOX" {sel_CHECKBOX}>多重選擇 (配料/複選)</option>
                     </select>
-                    <small class="form-text text-muted group-type-desc mt-1" style="min-height: 2.4em; line-height: 1.2;"></small>
-				</div>
-				<div class="col-md-4 col-lg-3 group-minmax-container">
-					<label>限制數量 (Min/Max)</label>
+                    <small class="form-text text-muted group-type-desc mt-1"></small>
+                </div>
+                <div class="col-md-6 col-lg-3 group-minmax-container">
+                    <label>數量限制 (Min/Max)</label>
                     <div class="input-group">
                         <input type="number" class="form-control group-min" value="{minQty}" placeholder="Min">
                         <input type="number" class="form-control group-max" value="{maxQty}" placeholder="Max">
                     </div>
                 </div>
-                <div class="col-md-4 col-lg-3 group-required-container" style="display:none;">
-					<label>是否必選</label>
-					<div class="custom-control custom-checkbox mt-2">
-						<input type="checkbox" class="custom-control-input group-required" id="req_{index}" {checked_required}>
+                <div class="col-md-4 col-lg-3 group-required-container" style="display: none;">
+                    <label class="d-none d-lg-block">&nbsp;</label>
+                    <div class="custom-control custom-checkbox mt-2">
+                        <input type="checkbox" class="custom-control-input group-required" id="req_{index}" {checked_required}>
                         <label class="custom-control-label" for="req_{index}">必選 (Required)</label>
                     </div>
                 </div>
-				<div class="col-md-4 col-lg-3 group-qty-fixed-container" style="display:none;">
-					<label>任選數量</label>
-					<input type="number" class="form-control group-qty-fixed" value="{minQty}" placeholder="數量">
-				</div>
-				<div class="col-md-2 col-lg-1 text-right">
-					<label class="d-none d-md-block">&nbsp;</label><br>
+                <div class="col-md-4 col-lg-3 group-qty-fixed-container" style="display: none;">
+                    <label>任選件數 (Quantity)</label>
+                    <input type="number" class="form-control group-qty-fixed" value="{minQty}" min="1">
+                </div>
+                <div class="col-md-2 col-lg-1 text-right">
+                    <label>&nbsp;</label><br>
                     <button class="btn btn-danger btn-sm btn-remove-group"><i class="fas fa-trash"></i></button>
                 </div>
                 <div class="col-md-12 mt-2">
                     <input type="text" class="form-control group-helper-text form-control-sm" value="{helperText}" placeholder="群組輔助說明文字 (Helper Text) - 例如：請選擇喜歡的口味">
                 </div>
-                <div class="col-md-5 col-lg-4 mt-2 group-layout-container" style="display:none;">
-					<label class="small font-weight-bold text-dark">呈現樣式 (Layout)</label>
-					<select class="form-control form-control-sm group-layout">
+                <div class="col-md-6 mt-2 group-layout-container" style="display: none;">
+                    <label class="small font-weight-bold text-dark mb-1">顯示版型 (Layout)</label>
+                    <select class="form-control form-control-sm group-layout">
                         <option value="LIST" {sel_layout_LIST}>一般商品清單 (預設)</option>
                         <option value="OUTFIT_BUILDER" {sel_layout_OUTFIT_BUILDER} class="opt-layout-outfit">多階規格選品器 (Variant Matrix / Outfit Builder)</option>
                         <option value="MATRIX_2D" {sel_layout_MATRIX_2D} class="opt-layout-matrix2d">棋盤格 - 橫向滑動 (僅支援兩個規格選單)</option>
                         <option value="MATRIX_2D_WRAP" {sel_layout_MATRIX_2D_WRAP} class="opt-layout-matrix2d-wrap">棋盤格 - 自動換排 (每排3款·免橫向滑動)</option>
                     </select>
-				</div>
-				<div class="col-md-7 col-lg-8 mt-2 group-spec-titles-container" style="display:none;">
-					<div class="d-flex align-items-center justify-content-between mb-1">
+                </div>
+                <div class="col-md-6 mt-2 group-spec-titles-container" style="display: none;">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
                         <label class="small font-weight-bold text-dark mb-0">規格選單名稱 (Spec Titles)</label>
                         <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-open-matrix-modal" data-group-index="{index}" title="批次設定本群組所有候選商品的規格維度標籤">
                             <i class="fas fa-th mr-1"></i>規格矩陣快速設定
                         </button>
                     </div>
                     <input type="text" class="form-control form-control-sm group-spec-titles" value="{specTitlesStr}" placeholder="例如：顏色, 尺寸 或 款式, 顏色, 尺寸">
-                    <small class="form-text text-muted">以逗號分隔層級，依序對應單品標籤 (#區隔) 之規格維度。</small>
-					<div class="matrix-dimension-alert small text-danger font-weight-bold mt-1" style="display:none;">
-	                    <i class="fas fa-exclamation-triangle mr-1"></i>棋盤格僅支援剛好 2 個規格選單（例如：顏色, 尺寸）。
+                    <div class="small text-danger mt-1 matrix-dimension-alert" style="display: none;">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>棋盤格僅支援剛好 2 個規格選單（例如：顏色, 尺寸）。
                     </div>
                 </div>
             </div>
@@ -1044,9 +1058,9 @@
                         <span class="small text-muted ml-2 cand-collapse-hint"></span>
                     </div>
                     <div class="d-flex align-items-center">
-                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-toggle-candidates" style="font-size: 0.78rem; line-height: 22px;">
-							<i class="fas fa-chevron-up toggle-icon mr-1"></i><span class="toggle-text">收合清單</span>
-				        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-2 btn-toggle-candidates" title="展開或收合候選商品清單">
+                            <i class="fas fa-chevron-up toggle-icon mr-1"></i><span class="toggle-text">收合清單</span>
+                        </button>
                     </div>
                 </div>
                 <div class="candidates-body">
@@ -1063,131 +1077,127 @@
 </script>
 
                 <script type="text/template" id="tpl-candidate">
-	<div class="candidate-item bg-white border rounded p-3 mb-2" data-item-id="{itemId}">
-		<!-- 1. Header Row: Drag Handle, Title & Meta Badges on Left; Reorder & Remove Actions on Right -->
-		<div class="d-flex align-items-start justify-content-between pb-2 mb-2 border-bottom">
-			<div class="d-flex align-items-start mr-2" style="min-width: 0;">
-				<div class="drag-handle mr-2 mt-1" style="padding: 2px 4px; color: #adb5bd; cursor: grab;" title="拖拉排序">
-					<i class="fas fa-grip-vertical"></i>
-				</div>
-				<div style="min-width: 0;">
-					<div class="d-flex align-items-center flex-wrap">
-						<span class="font-weight-bold text-dark mr-2" style="font-size: 1rem;">{originalTitle}</span>
+    <div class="candidate-item" data-item-id="{itemId}">
+        <!-- 1. Info Row: drag handle / title & meta / actions -->
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <div class="d-flex align-items-start flex-grow-1" style="min-width: 0;">
+                <span class="drag-handle text-muted px-2 mr-1" title="拖曳排序"><i class="fas fa-grip-vertical"></i></span>
+                <div class="flex-grow-1" style="min-width: 0;">
+                    <div class="d-flex align-items-center flex-wrap" style="gap: 6px;">
+                        <span class="font-weight-bold text-dark">{originalTitle}</span>
                         {customOptionBadge}
                     </div>
                     <div class="d-flex align-items-center flex-wrap small text-muted mt-1" style="gap: 6px 12px;">
-						<span>ID: <span class="candidate-item-id"></span></span>
-						<span class="badge badge-info candidate-stock"></span>
-						<span class="candidate-group-buy-id"></span>
+                        <span>ID: <span class="candidate-item-id"></span></span>
+                        <span class="candidate-stock"></span>
+                        <span class="candidate-group-buy-id"></span>
                         <span>單品售價: $<span class="candidate-price"></span></span>
                     </div>
                 </div>
             </div>
             <div class="candidate-actions d-flex align-items-center flex-shrink-0">
-                <button type="button" class="btn btn-link text-secondary btn-move-up p-1 mr-1" title="上移" style="font-size: 0.95rem; text-decoration: none;">
-					<i class="fas fa-arrow-up"></i>
-				</button>
-				<button type="button" class="btn btn-link text-secondary btn-move-down p-1 mr-2" title="下移" style="font-size: 0.95rem; text-decoration: none;">
-					<i class="fas fa-arrow-down"></i>
-				</button>
-				<button type="button" class="btn btn-link text-danger btn-remove-candidate p-1" title="移除" style="font-size: 0.95rem; text-decoration: none;">
-					<i class="fas fa-trash-alt"></i>
-				</button>
-			</div>
+                <button type="button" class="btn btn-link text-secondary btn-move-up p-1 mr-1" title="上移" style="font-size: 0.95rem;"><i class="fas fa-arrow-up"></i></button>
+                <button type="button" class="btn btn-link text-secondary btn-move-down p-1 mr-1" title="下移" style="font-size: 0.95rem;"><i class="fas fa-arrow-down"></i></button>
+                <button type="button" class="btn btn-remove-candidate" title="移除"><i class="fas fa-times"></i></button>
+            </div>
         </div>
 
         <!-- 2. Custom Name Row: Integrated Input Group with compact append button -->
         <div class="candidate-custom-name-row mb-2">
             <div class="input-group input-group-sm">
-				<div class="input-group-prepend">
-					<span class="input-group-text font-weight-bold" style="width: 80px; min-width: 80px; max-width: 80px; justify-content: center;">自訂名稱</span>
-				</div>
-				<input type="text" class="form-control item-name" value="{customName}" placeholder="使用原商品名稱（若欲自訂本組合呈現之名稱請在此輸入）">
-				<div class="input-group-append">
-					<button type="button" class="btn btn-outline-info btn-sync-single-name" title="推播同步此單品名稱至其他組合包" style="padding: 0px 4px; margin: 0; font-size: 0.75rem;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text justify-content-center" style="width: 80px;">自訂品名</span>
+                </div>
+                <input type="text" class="form-control item-name" value="{customName}" placeholder="{originalTitle}" title="留空則使用原商品名稱">
+                <div class="input-group-append">
+                    <button type="button" class="btn btn-outline-info btn-sync-single-name" title="將此商品的自訂品名同步至其他組合包">
                         <i class="fas fa-sync-alt mr-1"></i><span class="d-none d-sm-inline">同步至其他組合</span>
                     </button>
                 </div>
             </div>
         </div>
 
-        <!-- 2.5 Spec Tag Row: Dynamic Dimension Inputs for Outfit Builder (Hidden for List) -->
-		<div class="candidate-spec-tag-row mb-2" style="display: none;">
-			<div class="input-group input-group-sm">
-				<div class="input-group-prepend">
-					<span class="input-group-text font-weight-bold" style="width: 80px; min-width: 80px; max-width: 80px; justify-content: center;" data-toggle="tooltip" title="此單品之多階規格標籤，多層級以 # 連接，點擊右側按鈕可保存回原商品">規格標籤</span>
-				</div>
-				<div class="candidate-dim-inputs-wrapper d-flex align-items-center flex-grow-1 border rounded-right px-2 py-1 bg-white" style="gap: 6px; flex-wrap: wrap; min-height: 31px;">
-					<!-- Dynamically populated in JS based on group.specTitles -->
-			    </div>
+        <!-- 2.5 Spec Tag Row: per-dimension tag inputs (Outfit Builder / Matrix layouts) -->
+        <div class="candidate-spec-tag-row mb-2" style="display: none;">
+            <div class="input-group input-group-sm">
+                <div class="input-group-prepend">
+                    <span class="input-group-text justify-content-center" style="width: 80px;">規格標籤</span>
+                </div>
+                <div class="form-control h-auto d-flex flex-wrap align-items-center candidate-dim-inputs-wrapper" style="min-height: 31px; padding: 2px 8px;">
+                    <!-- Dimension inputs rendered by itemBundle.min.js -->
+                </div>
                 <div class="input-group-append">
-                    <button type="button" class="btn btn-outline-success btn-save-single-tag" title="立即將此規格標籤保存回原商品資料庫" style="padding: 0px 8px; margin: 0; font-size: 0.75rem;">
-						<i class="fas fa-save mr-1"></i><span class="d-none d-sm-inline">保存標籤</span>
-					</button>
-				</div>
-		    </div>
+                    <button type="button" class="btn btn-outline-success btn-save-single-tag" title="立即將此規格標籤保存回原商品資料庫" style="padding: 0px 10px;">
+                        <i class="fas fa-save mr-1"></i><span class="d-none d-sm-inline">保存標籤</span>
+                    </button>
+                </div>
+            </div>
         </div>
 
         <!-- 3. Config Fields Row: Neat flex row aligned with the input box above (indented by 80px) -->
         <div class="candidate-config-row d-flex align-items-center flex-wrap" style="gap: 8px;">
-			<!-- Default Qty (For FIXED/CONFIG) -->
-			<div class="input-group input-group-sm config-field field-default-qty" style="width: 125px; display:none;">
+            <!-- Default Qty (For FIXED / COUNTER) -->
+            <div class="input-group input-group-sm config-field field-default-qty" style="width: 120px;">
                 <div class="input-group-prepend">
-                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="預設數量：當消費者選購此組合商品時，該單品預設選取的初始數量（預設為 1）" style="cursor: help;">
-						<span style="border-bottom: 1px dotted #888;">數量</span>
-					</span>
-				</div>
-				<input type="number" class="form-control item-default-qty" value="{defaultQty}" min="1">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="預設數量：當消費者選購此組合商品時，該單品預設選取的初始數量（預設為 1）" style="cursor: help;">數量</span>
+                </div>
+                <input type="number" class="form-control item-default-qty" value="{defaultQty}" min="1">
             </div>
 
             <!-- Price Offset (For CONFIG/PICK) -->
-            <div class="input-group input-group-sm config-field field-price-offset" style="width: 125px; display:none;">
-				<div class="input-group-prepend"><span class="input-group-text">加價</span></div>
-				<input type="number" class="form-control item-price-offset" value="{priceOffset}">
+            <div class="input-group input-group-sm config-field field-price-offset" style="width: 130px; display: none;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="單品加價：消費者選擇此單品時，需在組合售價外額外加收的金額（預設為 0）" style="cursor: help;">加價</span>
+                </div>
+                <input type="number" class="form-control item-price-offset" value="{priceOffset}">
             </div>
 
             <!-- Item Points (For QUOTA) -->
-            <div class="input-group input-group-sm config-field field-item-points" style="width: 125px; display:none;">
-				<div class="input-group-prepend"><span class="input-group-text">點數</span></div>
-				<input type="number" class="form-control item-points" value="{itemPoints}" min="0">
-			</div>
+            <div class="input-group input-group-sm config-field field-item-points" style="width: 130px; display: none;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="點數：此單品在點數組合中所佔的點數" style="cursor: help;">點數</span>
+                </div>
+                <input type="number" class="form-control item-points" value="{itemPoints}" min="0">
+            </div>
 
-			<!-- Allocated Price (For ERP) -->
-			<div class="input-group input-group-sm config-field field-allocated-price" style="width: 140px; display:none;">
-				<div class="input-group-prepend"><span class="input-group-text">拆帳金</span></div>
-				<input type="number" class="form-control item-allocated-price" value="{allocatedPrice}" min="0">
-			</div>
+            <!-- Max Qty (For COUNTER groups) -->
+            <div class="input-group input-group-sm config-field field-max-qty" style="width: 130px; display: none;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="單品上限：消費者在此群組最多可選購此單品的數量（0 或空白為不限）" style="cursor: help;">上限</span>
+                </div>
+                <input type="number" class="form-control item-max-qty" value="{maxQty}" min="0" placeholder="不限">
+            </div>
 
-			<!-- Max Qty Limit (Optional for all) -->
-			<div class="input-group input-group-sm config-field field-max-qty" style="width: 125px; display:none;">
-				<div class="input-group-prepend"><span class="input-group-text">限購</span></div>
-				<input type="number" class="form-control item-max-qty" value="{maxQty}" min="0" placeholder="不限">
-			</div>
+            <!-- Allocated Price (報表價格均攤) -->
+            <div class="input-group input-group-sm config-field field-allocated-price" style="width: 140px; display: none;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="分攤價格：報表「價格均攤至子商品」時，此單品分配到的金額" style="cursor: help;">分攤價</span>
+                </div>
+                <input type="number" class="form-control item-allocated-price" value="{allocatedPrice}" min="0">
+            </div>
 
-			<!-- Safety Stock -->
-			<div class="input-group input-group-sm config-field" style="width: 165px;">
-				<div class="input-group-prepend">
-					<span class="input-group-text" data-toggle="tooltip" data-placement="top" title="現貨安全庫存：保留此數量的現貨不售，當作防超賣的緩衝水位（現貨剩下此數量時前台即自動顯示售完）" style="cursor: help;">
-						<span style="border-bottom: 1px dotted #888;">現貨安全庫存</span>
-					</span>
-				</div>
-				<input type="number" class="form-control item-safety-stock" value="{safetyStock}" min="0">
-			</div>
+            <!-- Safety Stock -->
+            <div class="input-group input-group-sm config-field field-safety-stock" style="width: 140px;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="安全庫存：保留此數量的現貨不售，當作防超賣的緩衝水位（現貨剩下此數量時前台即視為缺貨）" style="cursor: help;">安全庫存</span>
+                </div>
+                <input type="number" class="form-control item-safety-stock" value="{safetyStock}" min="0">
+            </div>
 
-			<!-- Safety Black Order Stock -->
-			<div class="input-group input-group-sm config-field" style="width: 165px;">
-				<div class="input-group-prepend">
-                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="預購安全庫存：保留此數量的預購不售，當作防超賣的緩衝水位（預購剩下此數量時前台即無法下單預購）" style="cursor: help;">
-						<span style="border-bottom: 1px dotted #888;">預購安全庫存</span>
-					</span>
-				</div>
-				<input type="number" class="form-control item-safety-black-order-stock" value="{safetyBlackOrderStock}" min="0">
+            <!-- Safety Black Order Stock -->
+            <div class="input-group input-group-sm config-field field-safety-black-order-stock" style="width: 140px;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="預購安全庫存：保留此數量的預購不售，當作防超賣的緩衝水位（預購剩下此數量時前台即無法下單預購）" style="cursor: help;">預購安全</span>
+                </div>
+                <input type="number" class="form-control item-safety-black-order-stock" value="{safetyBlackOrderStock}" min="0">
             </div>
 
             <!-- Weight (Blind only) -->
-            <div class="input-group input-group-sm config-field field-weight" style="width: 125px; display:none;">
-				<div class="input-group-prepend"><span class="input-group-text">權重</span></div>
-				<input type="number" class="form-control item-weight" value="{weight}" min="0">
+            <div class="input-group input-group-sm config-field field-weight" style="width: 120px; display: none;">
+                <div class="input-group-prepend">
+                    <span class="input-group-text" data-toggle="tooltip" data-placement="top" title="權重：盲盒隨機抽選時的相對機率，數值越大越容易被抽中" style="cursor: help;">權重</span>
+                </div>
+                <input type="number" class="form-control item-weight" value="{weight}" min="0">
             </div>
         </div>
     </div>
@@ -1202,10 +1212,9 @@
                     };
 
                     function handleBackNavigation() {
-						var listUrl = "/backend/ItemBundleV2/list?groupBuyId={{groupBuyId}}";
-						var refererUrl = {{json referer}};
+                        var referer = {{json referer}};
 
-		                // Scenario 1: Opened in a new tab/window (try to refresh parent)
+                        // Scenario 1: Opened in a new tab/window (try to refresh parent)
                         if (window.opener && !window.opener.closed) {
                             try {
                                 window.opener.location.reload();
@@ -1219,15 +1228,15 @@
 
                         // Scenario 2: Same tab navigation (Prevent caching issues by explicit redirect)
                         // If Valid Referer exists and is NOT self (create/edit), use it.
-                        if (refererUrl && refererUrl.trim() !== ""
-							&& refererUrl.indexOf("create") === -1
-							&& refererUrl.indexOf("edit") === -1) {
-							window.location.href = refererUrl;
-						} else {
-							window.location.href = listUrl;
-						}
-					}
-				</script>
+                        if (referer && referer.indexOf('/ItemBundleV2/create') < 0 && referer.indexOf('/ItemBundleV2/edit') < 0) {
+                            window.location.href = referer;
+                            return;
+                        }
+
+                        // Scenario 3: No usable referer -> back to the bundle list
+                        window.location.href = '/backend/ItemBundleV2/list?groupBuyId=' + encodeURIComponent(BundleConfig.groupBuyId);
+                    }
+                </script>
                 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
                 <script src="/public/scripts/itemBundle.min.js?v=261018"></script>
 

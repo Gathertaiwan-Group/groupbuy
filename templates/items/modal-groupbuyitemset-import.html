@@ -32,39 +32,31 @@ import_gbis_editor = new $.fn.dataTable.Editor( {
 	ajax: {
 		remove: {
 			type: 'POST',
-			url: '{{baseUrl}}/ajax/GroupBuyItemSet/cloneGroupBuyItemSets.do?groupBuyItemSetId=_id_',
-			data: function(d) {
-				d.groupBuyId = '{{groupBuyId}}';
-				d = appendData(d);
-				return d;
-			}
-		},
+			url: '{{baseUrl}}/ajax/GroupBuyItemSet/cloneGroupBuyItemSets.do?groupBuyItemSetId=_id_&groupBuyId={{groupBuyId}}',
+			data: appendData
+		}
 	},
 	table: import_gbis_table_name,
 	fields: [
-		DataTableConfig.field_input('品項名稱', 'itemSet.title'),
+		DataTableConfig.field_input('品項名稱', 'itemSet.title')
 	],
-	i18n:i18n,
+	i18n: i18n
 } );
 
 import_gbis_table = $(import_gbis_table_name).DataTable( {
+	dom: 'Brtip',
 	serverSide: true,
-	searching: false,
-	processing:true,
-	searchDelay: 1000,
-	lengthMenu: [10, 25, 50, 100],
-	scrollX: true,
-	dom: 'lBrtip',
+	processing: true,
+	pageLength: 10,
 	ajax: {
-		url:'{{baseUrl}}/ajax/GroupBuyItemSet/uniqueList.do',
-		type: "POST",
+		type: 'POST',
+		url: '{{baseUrl}}/ajax/GroupBuyItemSet/uniqueList.do',
 		data: function ( d ) {
-			d.expand = !$('#expand').length || $('#expand').prop("checked");
-			d.main = $('#main').prop("checked");
-			d.groupBuyTitle = $('#groupBuyTitle').val();
-			d.groupBuyId = $('#fromGroupBuyId').val();
-			d.month = $('#month').val();
-			d.sSearch = $('#sSearch').val();
+			d.expand = $('#expand').length == 0 || $('#expand').prop('checked') ? 1 : 0;
+			d.main = $('#main').prop('checked') ? 1 : 0;
+			d.groupBuyId = $('#fromGroupBuyId').val() || '';
+			d.month = $('#month').length ? $('#month').val() : 1;
+			d.sSearch = $('#sSearch').val() || '';
 			return d;
 		}
 	},
@@ -74,15 +66,15 @@ import_gbis_table = $(import_gbis_table_name).DataTable( {
 		{
 			data: 'itemSet.title',
 			render: function ( data, type, row ) {
-				if (!data.length) data = '<<無標題>>';
-				return data+'<p class="small text-muted">'+row.groupBuyTitle + '</p>';
+				if (!data.length) data = '(未命名品項)';
+				var html = $.fn.dataTable.render.text().display(data);
+				if (type == 'display' && row.groupBuyTitle) html += '<span class="small text-muted ml-2">' + $.fn.dataTable.render.text().display(row.groupBuyTitle) + '</span>';
+				return html;
 			}
-		},
+		}
 	],
-	select: {
-		style: 'multi' //'os'
-	},
-	"order": [[ 1, "desc" ]],
+	order: [[ 1, "desc" ]],
+	select: DataTableConfig.selectOptionsMulti,
 	buttons: [
 		{ extend: 'remove', text: '複製', editor: import_gbis_editor },
 		{
@@ -92,60 +84,52 @@ import_gbis_table = $(import_gbis_table_name).DataTable( {
 			action: function (e, dt, node, config) {
 				main = $('#main').prop("checked");
 				if (!main) {
-					if (!confirm('＊＊＊此品項非 [主表單] 品項，確定要共用庫存？')) return;
-				} else {
-					if (!confirm('確定操作?')) return;
+					alert('複製(共用庫存)只能用於主表單品項，請先勾選「主表單品項」再選擇要複製的品項');
+					return;
 				}
-				ids = joinIds('groupBuyItemSetId', dt, false);
-				var data = {
-					groupBuyItemSetId : ids
-				};
-				
-				data = appendData(data);
+				var count = dt.rows({ selected: true }).count();
+				if (!confirm('確定要以共用庫存方式複製這' + count + '個品項?（新品項與原品項共用同一批商品，庫存一起扣）')) return;
+				btnStartLoading(node);
 				$.ajax({
-					type:'POST',
-					url:'{{baseUrl}}/ajax/GroupBuyItemSet/cloneGroupBuyItemSets.do?groupBuyId={{groupBuyId}}&shareStock=true',
-					data: data,
-					async: false,
-					success: function (response) {
-						$('#myModal').modal('hide');
-						table.clear();
-						table.ajax.reload();
+					type: 'POST',
+					url: '{{baseUrl}}/ajax/GroupBuyItemSet/cloneGroupBuyItemSets.do?groupBuyId={{groupBuyId}}&shareStock=true',
+					data: appendData({ groupBuyItemSetId: joinIds('groupBuyItemSetId', dt, false) }),
+					success: function (json) {
+						btnStopLoading(node);
+						modalShowSuccess($('#myModalContent'), json.error || json.message || '複製完成');
+						dt.ajax.reload( null, false );
+						if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload( null, false );
+					},
+					error: function (xhr) {
+						btnStopLoading(node);
+						modalShowDanger($('#myModalContent'), (xhr.responseJSON && xhr.responseJSON.error) || '複製失敗');
 					}
-				})
+				});
 			}
-		},
+		}
 	]
 } );
+
 import_gbis_editor
 	.on( 'postRemove', function () {
 		// After create or edit, a number of other rows might have been effected -
 		// so we need to reload the table, keeping the paging in the current position
-		$('#myModal').modal('hide');
-		table.ajax.reload( null, false );
-	});
-import_gbis_table
-	.on ('preXhr', function(e, settings) {
-		$('#btn-search').html('<i class="fa-light fa-spinner glyphicon glyphicon-refresh glyphicon-refresh-animate"></i>');
-	})
-	.on ('xhr', function(e, settings) {
-		$('#btn-search').html('<i class="fa-light fa-search glyphicon glyphicon-search"></i>');
-	});
-injectDetailsControl(import_gbis_table_name, import_gbis_table);
+		import_gbis_table.ajax.reload( null, false );
+		if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload( null, false );
+	} )
+	.on( 'postSubmit', function ( e, json, data, action ) {
+		if (action == 'remove' && json && !json.error && json.message) modalShowSuccess($('#myModalContent'), json.message);
+	} );
 
-$(document).ready(function() {
-var filters = '<div class="ml-2 mt-2">'
+var import_gbis_filter_html = '<div class="mb-2" id="import_gbis_filters">'
+	+ '<div>'
 	+ '<input type="checkbox" id="expand" class="filters form-check-input" value="1" checked><label class="pl-4 mr-2" for="expand">分開顯示相同名稱品項</label>'
 	+ '<input type="checkbox" id="main" class="filters form-check-input" value="1"><label class="pl-4 mr-2" for="main">主表單品項</label>'
 	+ '</div>'
 	+ '<div class="input-group mt-2" id="groupBuyId-group">'
 	+ '<span class="input-group-text">篩選團購</span>'
 	+ '<select id="fromGroupBuyId" class="form-control w-auto"></select>'
-	+ '</div>'
-
-$('#import_gbis_table_wrapper').find(".dt-buttons").append(filters);
-var extraSection = '<div class="input-group mt-2">'
-	+ '<select id="month" class="form-control filters w-auto"><option value="-1" disabled>不限制期限</option><<option value="1">近1個月內品項</option><option value="3">近3個月內品項</option><option value="6">近半年內品項</option><option value="12">近1年內品項</option></select>'
+	+ '<select id="month" class="filters form-control w-auto"><option value="-1" disabled>不限制期限</option><<option value="1">近1個月內品項</option><option value="3">近3個月內品項</option><option value="6">近半年內品項</option><option value="12">近1年內品項</option></select>'
 	+ '<input type="text" id="sSearch" placeholder="輸入品項名稱" size=20 class="form-control filters w-auto"><button class="input-group-addon btn btn-flat" id="btn-search"><i class="fa-light fa-search"></i></button>'
 	+ '</div>'
 	+ '<div class="card mt-2">'
@@ -162,28 +146,23 @@ var extraSection = '<div class="input-group mt-2">'
 	+ '<input type="checkbox" id="replaceDisplayInfo" class=" form-check-input" value="1"><label class="pl-4 mr-2" for="replaceDisplayInfo">商品顯示資訊(名稱/敘述/圖片)</label>'
 	+ '<input type="checkbox" id="replacePrice" class=" form-check-input" value="1"><label class="pl-4 mr-2" for="replacePrice">商品金額</label>'
 	+ '<input type="checkbox" id="replaceOthers" class=" form-check-input" value="1"><label class="pl-4 mr-2" for="replaceOthers">其餘所有商品設定</label>'
-	+ '<input type="checkbox" id="replaceStock" class=" form-check-input" value="1" disabled><label class="pl-4 mr-2 text-grey" for="replaceStock">商品庫存(無法替換)</label>'
+	+ '<input type="checkbox" id="replaceStock" class=" form-check-input" value="1"><label class="pl-4 mr-2" for="replaceStock">商品庫存</label>'
 	+ '</div>'
-	+ '</div><!-- card-body -->'
-	+ '</div><!-- card -->'
-	;
-$('#import_gbis_table_wrapper').find(".dt-buttons").append(extraSection);
+	+ '</div>'
+	+ '</div>'
+	+ '</div>';
+$(import_gbis_filter_html).insertBefore(import_gbis_table_name + '_wrapper');
 
-$('#sameNameExists').on('change', function(){
+$('#sameNameExists').on('change', function() {
 	var v = $(this).val();
-	switch(v) {
-	case 'ignore':
-	case 'create':
+	if (v == 'replace') {
+		$('#replace-group').removeClass('d-none');
+	} else {
 		$('#replace-group').addClass('d-none');
 		$('#replaceOption').val('ignore').trigger('change');
-		break;
-	case 'replace':
-		$('#replace-group').removeClass('d-none');
-		break;
 	}
 });
-
-$('#replaceOption').on('change', function(){
+$('#replaceOption').on('change', function() {
 	var v = $(this).val();
 	switch(v) {
 	case 'ignore':
@@ -208,48 +187,50 @@ $('select.filters').on('change', function() {
 $('#btn-search').on('click', function() {
 	if ($('#btn-search i').hasClass('fa-refresh')) return;
 	import_gbis_table.clear().ajax.reload();
-	import_gbis_table.columns.adjust();
 });
-
-var enableAllItems = function(enable) {
-	var allDisabled = $('#month option[value=-1]').prop('disabled',true);
-	if (!enable) {
-		if (!allDisabled){
-			$('#month option[value=-1]').prop('disabled',true);
-			$('#month option[value=-1]').prop('selected', true);
-		}
-	} else {
-		if (allDisabled) {
-			$('#month option[value=-1]').prop('disabled',false);
-			$('#month option[value=-1]').prop('selected', true);
+$('#sSearch').on('keydown', function(e) {
+	if (e.keyCode == 13) {
+		e.preventDefault();
+		$('#btn-search').click();
+	}
+});
+import_gbis_table
+	.on('preXhr.dt', function() {
+		$('#btn-search i').removeClass('fa-search').addClass('fa-refresh fa-spin');
+	})
+	.on('xhr.dt', function() {
+		$('#btn-search i').removeClass('fa-refresh fa-spin').addClass('fa-search');
+	});
+$('#fromGroupBuyId').select2({
+	placeholder: '全部團購',
+	allowClear: true,
+	width: '260px',
+	dropdownParent: $('#myModal'),
+	language: GBF.language,
+	ajax: {
+		url: GBF.baseUrl + '/ajax/Lookup/groupBuy',
+		dataType: 'json',
+		delay: 250,
+		data: function(params) {
+			return { q: params.term || '', page: params.page || 1 };
 		}
 	}
-}
-
-$('#fromGroupBuyId').select2ForGroupBuy();
-$('#fromGroupBuyId').on('change.select2', function() {
-	var enable = $('#fromGroupBuyId').val() != null;
-	enableAllItems(enable);
+}).on('change', function() {
+	var selected = !!$(this).val();
+	$('#month option[value=-1]').prop('disabled', !selected);
+	if (selected) $('#month').val('-1');
+	else if ($('#month').val() == '-1') $('#month').val('1');
 	import_gbis_table.clear().ajax.reload();
-	import_gbis_table.columns.adjust();
 });
-/*
-$('input:text.filters')
-.keyup(delayInput(function (e) {
-	import_gbis_table.clear().ajax.reload();
-}, 500));
-*/
-
-})
 </script>
-
+{{!-- 推導：表頭依 ias_v5 messagebox() 的 modal-header 結構；modal-message 供複製結果訊息（modalShowSuccess）使用。 --}}
 <div class="modal-header">
-	<h5 class="modal-title">團購 &raquo; 複製品項</h5>
-	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	<h5 class="modal-title">複製其他團購品項</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
 </div>
 <div class="modal-body">
 	<div class="modal-message"></div>
-	<table id="import_gbis_table" class="table display" width="100%">
+	<table id="import_gbis_table" class="table table-striped display nowrap" width="100%">
 		<thead>
 			<tr>
 				<th></th>

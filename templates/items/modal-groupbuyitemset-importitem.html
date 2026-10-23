@@ -1,275 +1,294 @@
+{{!-- 複製其他品項商品（商品明細工具列「複製其他品項商品」→ GET /backend/GroupBuyItemSet/importItem.do?groupBuyId=&groupBuyItemSetId=）。原站此彈窗未擷取，全段推導：
+     - 資料：pages.ts 傳入 groupBuyId（目前團購）、groupBuyItemSetId（目的地＝目前開啟的團購品項；從「所有商品」開啟時為空 → 由「複製到品項」選擇）。
+     - 寫法比照同模組「複製其他團購品項」彈窗（spec/html/modal-groupbuyitemset-import.html 可見部分：Editor remove 協定的「複製」、
+       「複製(共用庫存)」需勾「主表單品項」、篩選團購／期限／名稱搜尋）。
+     - 列表 POST /ajax/Item/uniqueList（item.ts uniqueListItems：expand、main、sSearch、month、groupBuyId 篩選團購、groupBuyItemSetId 篩選來源品項），多選；
+       「全選」用原站 dataTable.config 的 selectAllTaggle（全選／取消全選切換）。
+     - 複製＝Editor remove → POST /ajax/Item/cloneItems?itemId=_id_（帶目的地 groupBuyItemSetId）→ { data:[], message }；
+       複製(共用庫存)＝POST /ajax/Item/cloneItems?shareStock=true（itemId=逗號清單、groupBuyItemSetId）→ { code:200, error:訊息 }。
+     - 表頭依 ias_v5 messagebox() 的 modal-header 結構；結果訊息與重新載入所在頁列表為推導（行為）。 --}}
 <style>
-#import_gbis_table_wrapper .dt-buttons.btn-group {top:0px;}
-#import_gbis_table_wrapper .buttons-remove span::before {content: '';}
-select#month {flex: none;}
+#import_item_table_wrapper .dt-buttons.btn-group {top:0px;}
+#import_item_table_wrapper .buttons-remove span::before {content: '';}
 </style>
+<div class="modal-header">
+	<h5 class="modal-title">複製其他品項商品</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="input-group mb-2" id="importItemTo-group">
+		<span class="input-group-text">複製到品項</span>
+		<select id="importItemToGroupBuyItemSetId" class="form-control w-auto"></select>
+	</div>
+	<div>
+		<input type="checkbox" id="importItemMain" class="form-check-input" value="1"><label class="pl-4 mr-2" for="importItemMain">主表單品項</label>
+	</div>
+	<div class="input-group mt-2" id="importItemFrom-group">
+		<span class="input-group-text">篩選團購</span>
+		<select id="importItemFromGroupBuyId" class="form-control w-auto"></select>
+		<select id="importItemFromGroupBuyItemSetId" class="form-control w-auto" disabled></select>
+	</div>
+	<div class="input-group mt-2">
+		<select id="importItemMonth" class="form-control w-auto">
+			<option value="-1" disabled>不限制期限</option>
+			<option value="0">近24小時內商品</option>
+			<option value="1" selected>近1個月內商品</option>
+			<option value="3">近3個月內商品</option>
+			<option value="6">近半年內商品</option>
+			<option value="12">近1年內商品</option>
+		</select>
+		<input type="text" id="importItemSSearch" placeholder="輸入商品名稱或商品代碼" size="24" class="form-control w-auto">
+		<button type="button" class="input-group-addon btn btn-flat" id="importItemBtnSearch"><i class="fa-light fa-search"></i></button>
+	</div>
+	<table id="import_item_table" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>商品名稱</th>
+				<th>商品代碼</th>
+				<th>品項／團購</th>
+				<th>團購價</th>
+				<th>原始現貨庫存</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>商品名稱</th>
+				<th>商品代碼</th>
+				<th>品項／團購</th>
+				<th>團購價</th>
+				<th>原始現貨庫存</th>
+			</tr>
+		</tfoot>
+	</table>
+</div> <!-- modal-body -->
 <script type="text/javascript">
-var import_gbis_editor;
-var import_gbis_table;
-
-var import_gbis_table_name = '#import_gbis_table';
-var i18n = DataTableConfig.i18n;
-i18n.remove = {
-	button: "複製",
-	title:"複製",
-	submit: "複製",
-	confirm: {
-		_: "確定要複製這%d個商品?",
-		1: "確定要複製這1個商品?",
-	}
- },
-import_gbis_editor = new $.fn.dataTable.Editor( {
-	idSrc:'itemId',
-	ajax: {
+var import_item_editor;
+var import_item_table;
+var import_item_table_name = '#import_item_table';
+(function() {
+	var esc = $.fn.dataTable.render.text().display;
+	var groupBuyId = {{json groupBuyId}};
+	var toGroupBuyItemSetId = {{json groupBuyItemSetId}};
+	var target = function() { return $('#importItemToGroupBuyItemSetId').val() || ''; };
+	var i18n = $.extend(true, {}, DataTableConfig.i18n, {
 		remove: {
-			type: 'POST',
-			url:'{{baseUrl}}/ajax/Item/cloneItems.do?itemId=_id_',
-			data:function(data) {
-				data.groupBuyItemSetId=$('#groupBuyItemSetId').val();
-				return data;
+			button: '複製',
+			title: '複製',
+			submit: '複製',
+			confirm: {
+				_: '確定要複製這%d個商品到所選品項?',
+				1: '確定要複製這1個商品到所選品項?'
+			}
+		}
+	});
+	var reloadHost = function() {
+		if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload( null, false );
+	};
+
+	import_item_editor = new $.fn.dataTable.Editor( {
+		idSrc: 'itemId',
+		ajax: {
+			remove: {
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/Item/cloneItems.do?itemId=_id_',
+				data: function ( d ) {
+					d.groupBuyItemSetId = target();
+					return d;
+				}
 			}
 		},
-	},
-	table: import_gbis_table_name,
-	fields: [
-		{
-			label: '名稱:',
-			name:'item.title'
-		},
-	],
-	i18n:i18n,
-} );
+		table: import_item_table_name,
+		fields: [
+			DataTableConfig.field_input('商品名稱', 'title')
+		],
+		i18n: i18n
+	} );
 
-import_gbis_table = $(import_gbis_table_name).DataTable( {
-	"serverSide": true,
-	"searching": false,
-	"pageLength":100,
-	processing:true,
-	searchDelay: 1000,
-	dom: 'Bfrtip',
-	ajax: {
-		url:'{{baseUrl}}/ajax/Item/uniqueList.do',
-		type: "POST",
-		data: function ( d ) {
-			d.expand = $('#expand').prop("checked");
-			d.main = $('#main').prop("checked");
-			d.sSearch = $('#sSearch').val();
-			d.month = $('#month').val();
-			d.groupBuyId = $('#groupBuyId').val();
-			d.groupBuyItemSetId = $('#fromGroupBuyItemSetId').val();
-		return d;
-		}
-	},
-	language:DataTableConfig.i18n,
-	columns: [
-		{
-			data: null,
-			defaultContent: '',
-			className: 'select-checkbox',
-			orderable: false
+	import_item_table = $(import_item_table_name).DataTable( {
+		dom: 'Brtip',
+		serverSide: true,
+		processing: true,
+		pageLength: 10,
+		ordering: false,
+		ajax: {
+			type: 'POST',
+			url: '{{baseUrl}}/ajax/Item/uniqueList.do',
+			data: function ( d ) {
+				d.expand = 1;
+				d.main = $('#importItemMain').prop('checked') ? 1 : 0;
+				d.groupBuyId = $('#importItemFromGroupBuyId').val() || '';
+				d.groupBuyItemSetId = $('#importItemFromGroupBuyItemSetId').val() || '';
+				d.month = $('#importItemMonth').val();
+				d.sSearch = $('#importItemSSearch').val() || '';
+				return d;
+			}
 		},
-		{ data: 'title',
-			render: function ( data, type, row ) {
-				var html = data;
-				var tag = '';
-				if (row.shareStockParent) {
-					tag = '<span class="ml-1 badge badge-warning badge-sm">共用庫存(主要)</span>';
-				} else if (row.shareStock) {
-					tag = '<span class="ml-1 badge badge-info badge-sm">共用庫存</span>';
+		language: DataTableConfig.i18n,
+		columns: [
+			DataTableConfig.data_select_checkbox,
+			{
+				data: 'title',
+				render: function ( data, type, row ) {
+					return esc(data || '');
 				}
-				html = data + '<span class="ml-1 text-success">$' + row.price +'</span>' +tag+ '<p class="small text-muted">'+row.itemSetTitle + '</p>';
-				if (row.groupBuyTitle != null) {
-					html += '<p class="small text-muted">'+row.groupBuyTitle + '</p>';
+			},
+			{
+				data: 'uid',
+				render: function ( data ) {
+					return esc(data || '');
 				}
-				return html;
-			} },
-	],
-	select: {
-		style: 'multi' //'os'
-	},
-	buttons: [
-		'selectAll',
-		'selectNone',
-		{ extend: 'remove' , editor: import_gbis_editor },
-		{
-			extend: "selected",
-			className:'btn-shareStock',
-			text: '複製(共用庫存)',
-			action: function (e, dt, node, config){
-				main = $('#main').prop("checked");
-				if (!main) {
-						alert('要打勾「主表單品項」後才能共用主表單商品庫存');
+			},
+			{
+				data: 'itemSetTitle',
+				render: function ( data, type, row ) {
+					var html = esc(data || '');
+					if (type == 'display' && row.groupBuyTitle) html += '<div class="small text-muted">' + esc(row.groupBuyTitle) + '</div>';
+					return html;
+				}
+			},
+			{ data: 'price' },
+			{ data: 'stock' }
+		],
+		select: DataTableConfig.selectOptionsMulti,
+		buttons: [
+			{ extend: 'selectAllTaggle' },
+			{
+				extend: 'remove',
+				text: '複製',
+				editor: import_item_editor,
+				action: function ( e, dt, node, config ) {
+					if (!target()) {
+						alert('請先選擇「複製到品項」');
 						return;
 					}
-				if (!confirm('確定操作?')) return;
-				var ajaxData = dt.rows( {selected: true}).data().toArray();
-				var dd = '';//'itemId=';
-				dt.rows( {selected: true}).data().each(function(obj,index) {
-					if (index == 0) {
-						dd += obj.itemId;
-					} else {
-					dd += "," + obj.itemId;
-					}
-				});
-				var data = {
-					itemId:dd,
-					groupBuyItemSetId:$('#groupBuyItemSetId').val()
-				};
-				$.ajax({
-					type: 'POST',
-					url:'{{baseUrl}}/ajax/Item/cloneItems.do?shareStock=true',
-						data: data,
-						async: false,
-						success: function (response) {
-							$('#myModal').modal('hide');
-							table.clear();
-							table.ajax.reload();
-				}})
-			}
-		},
-	]
-} );
-import_gbis_editor
-	.on( 'postRemove', function () {
-		// After create or edit, a number of other rows might have been effected -
-		// so we need to reload the table, keeping the paging in the current position
-		$('#myModal').modal('hide');
-		table.ajax.reload( null, false );
-	} )
-import_gbis_table
-.on ('preXhr', function(e, settings) {
-$('#btn-search').html('<i class="fa-light fa-spinner glyphicon-refresh-animate"></i>');
-})
-.on ('xhr', function(e, settings) {
-$('#btn-search').html('<i class="fa-light fa-search"></i>');
-})
-
-
-$(document).ready(function() {
-	var fetchGroupBuyItemSet = function(groupBuyId) {
-		jQuery.get(
-				'{{baseUrl}}/ajax/GroupBuyItemSet/list.do',
-				{
-					'groupBuyId':groupBuyId,
-					'iDisplayLength':500,
-					'iSortCol_0':'0',
-					'mDataProp_0':'t.seqString',
-					'sSortDir_0':'asc'
-				},
-				function(data) {
-					dataArray = data.data;
-					var html = '';
-					dataArray.forEach(function(c,i) {
-						html += '<option value="'+c.groupBuyItemSetId+'">'+c.seq + '.' + c.itemSet.title+'</option>';
-					});
-					$('#groupBuyItemSetId').html(html);
+					$.fn.dataTable.ext.buttons.remove.action.call(this, e, dt, node, config);
 				}
-				).fail(function(data) {
-					json = data.responseJSON;
-					modalShowDanger($('#myModal'), json.error);
-				});
-	}
-
-	var filter = '<div class="ml-2 mt-2">'
-	+ '<input type="checkbox" id="main" class="filters form-check-input" value="1"><label for="main" class="form-check-label mr-2">主表單品項</label>'
-	+ '</div>'
-	+ '<div class="input-group mt-2" id="groupBuyItemSetId-group">'
-	+ '<div class="input-group-prepend btn btn-default">目的地品項</div>'
-	+ '<select id="groupBuyItemSetId" class="form-control w-auto"></select>'
-	+ '</div>'
-	+ '<div class="input-group mt-2" id="groupBuyId-group">'
-	+ '<div class="input-group-prepend btn btn-default">篩選團購</div>'
-	+ '<select id="groupBuyId" class="form-control w-auto"></select>'
-	+ '<select id="month" class="form-control filters w-auto"><option value="1">近1個月內品項</option><option value="3">近3個月內品項</option><option value="6">近半年內品項</option><option value="12">近1年內品項</option><option value="0">當天新品項</option><option value="-1" disabled>全部商品</option></select>'
-	+ '</div>'
-	+ '<div class="input-group mt-2" id="fromGroupBuyItemSetId-group">'
-	+ '<div class="input-group-prepend btn btn-default">篩選品項</div>'
-	+ '<select id="fromGroupBuyItemSetId" class="form-control w-auto"></select>'
-	+ '</div>'
-	+ '<div class="input-group mt-2"><input type="text" id="sSearch" placeholder="輸入商品名稱" size=20 class="form-control filters w-auto"><div class="input-group-addon btn btn-default" id="btn-search"><i class="fa-light fa-search"></i></div></div>'
-	+ '</div>'
-	$('#import_gbis_table_wrapper').find(".dt-buttons").append(filter);
-
-	var gbisid = '{{groupBuyItemSetId}}';
-	if (!gbisid.length) {
-		fetchGroupBuyItemSet({{groupBuyId}});
-	} else {
-		$('#groupBuyItemSetId').html('<option value="' + gbisid + '"> </option>');
-		$('#groupBuyItemSetId-group').hide();
-	}
-
-	var enableAllItems = function(enable) {
-		if (!enable) {
-			$('#month option[value=-1]').prop('disabled',true);
-			$('#month option[value=1]').prop('selected', true);
-		} else {
-			$('#month option[value=-1]').prop('disabled',false);
-			//$('#month option[value=-1]').prop('selected', true);
-		}
-	}
-
-	$('.filters').on('change', function() {
-		if (this.type == 'text') return;
-		if ($(this).attr('id') == 'main') {
-			var checked = $(this).is(':checked');
-			enableAllItems(checked);
-			if (checked) {
-				$('#groupBuyId').data('featureTags', '2');
-			} else {
-				$('#groupBuyId').data('featureTags', '');
+			},
+			{
+				extend: 'selected',
+				className: 'btn-shareStock',
+				text: '複製(共用庫存)',
+				action: function ( e, dt, node, config ) {
+					var main = $('#importItemMain').prop('checked');
+					if (!main) {
+						alert('複製(共用庫存)只能用於主表單品項的商品，請先勾選「主表單品項」再選擇要複製的商品');
+						return;
+					}
+					if (!target()) {
+						alert('請先選擇「複製到品項」');
+						return;
+					}
+					var count = dt.rows({ selected: true }).count();
+					if (!confirm('確定要以共用庫存方式複製這' + count + '個商品?（複製出的商品與原商品共用庫存）')) return;
+					btnStartLoading(node);
+					$.ajax({
+						type: 'POST',
+						url: '{{baseUrl}}/ajax/Item/cloneItems.do?shareStock=true',
+						data: { itemId: joinIds('itemId', dt, false), groupBuyItemSetId: target() },
+						success: function ( json ) {
+							btnStopLoading(node);
+							modalShowSuccess($('#myModalContent'), json.error || json.message || '複製完成');
+							dt.rows().deselect();
+							reloadHost();
+						},
+						error: function ( xhr ) {
+							btnStopLoading(node);
+							modalShowDanger($('#myModalContent'), (xhr.responseJSON && xhr.responseJSON.error) || '複製失敗');
+						}
+					});
+				}
 			}
+		]
+	} );
+
+	import_item_editor
+	.on( 'postSubmit', function ( e, json, data, action ) {
+		if (action == 'remove' && json && !json.error && json.message) modalShowSuccess($('#myModalContent'), json.message);
+	} )
+	.on( 'postRemove', function () {
+		import_item_table.ajax.reload( null, false );
+		reloadHost();
+	} );
+
+	var reload = function() {
+		import_item_table.clear().ajax.reload();
+	};
+	$('#importItemMain, #importItemMonth, #importItemFromGroupBuyItemSetId').on('change', reload);
+	$('#importItemBtnSearch').on('click', function() {
+		if ($('#importItemBtnSearch i').hasClass('fa-refresh')) return;
+		reload();
+	});
+	$('#importItemSSearch').on('keydown', function(e) {
+		if (e.keyCode == 13) {
+			e.preventDefault();
+			reload();
 		}
-		import_gbis_table.clear().ajax.reload();
-		import_gbis_table.columns.adjust();
 	});
-	$('#btn-search').on('click', function() {
-		if ($('#btn-search i').hasClass('glyphicon-refresh')) return;
-		import_gbis_table.clear().ajax.reload();
-		import_gbis_table.columns.adjust();
-	});
+	import_item_table
+		.on('preXhr.dt', function() {
+			$('#importItemBtnSearch i').removeClass('fa-search').addClass('fa-refresh fa-spin');
+		})
+		.on('xhr.dt', function() {
+			$('#importItemBtnSearch i').removeClass('fa-refresh fa-spin').addClass('fa-search');
+		});
 
-	$('#groupBuyId').select2ForGroupBuy();
-	$('#fromGroupBuyItemSetId').select2ForGroupBuyItemSet(function() {
-		return $('#groupBuyId').val();
+	var select2Ajax = function(url) {
+		return {
+			url: url,
+			dataType: 'json',
+			delay: 250,
+			data: function(params) {
+				return { q: params.term || '', page: params.page || 1 };
+			}
+		};
+	};
+	$('#importItemToGroupBuyItemSetId').select2({
+		placeholder: '選擇目前團購的品項',
+		width: '320px',
+		dropdownParent: $('#myModal'),
+		language: GBF.language,
+		ajax: select2Ajax(GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet?groupBuyId=' + encodeURIComponent(groupBuyId))
 	});
-	$('#groupBuyId').on('change.select2', function() {
-		var enable = $('#groupBuyId').val() != null;
-		enableAllItems(enable);
-		$('#fromGroupBuyItemSetId').val(null).trigger('change');
-	//	import_gbis_table.clear().ajax.reload();
-	//	import_gbis_table.columns.adjust();
+	if (toGroupBuyItemSetId) {
+		$.getJSON(GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet', { initialValue: true, value: toGroupBuyItemSetId }, function(o) {
+			o = $.isArray(o) ? o[0] : o;
+			if (o && o.id) $('#importItemToGroupBuyItemSetId').append(new Option(o.text, o.id, true, true)).trigger('change');
+		});
+	}
+	$('#importItemFromGroupBuyItemSetId').select2({
+		placeholder: '全部品項',
+		allowClear: true,
+		width: '240px',
+		dropdownParent: $('#myModal'),
+		language: GBF.language,
+		ajax: select2Ajax(GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet')
 	});
-	$('#fromGroupBuyItemSetId').on('change.select2', function() {
-		import_gbis_table.clear().ajax.reload();
-		import_gbis_table.columns.adjust();
+	$('#importItemFromGroupBuyId').select2({
+		placeholder: '全部團購',
+		allowClear: true,
+		width: '260px',
+		dropdownParent: $('#myModal'),
+		language: GBF.language,
+		ajax: select2Ajax(GBF.baseUrl + '/ajax/Lookup/groupBuy')
+	}).on('change', function() {
+		var gb = $(this).val();
+		var $set = $('#importItemFromGroupBuyItemSetId');
+		$set.empty().prop('disabled', !gb);
+		$set.select2('destroy').select2({
+			placeholder: '全部品項',
+			allowClear: true,
+			width: '240px',
+			dropdownParent: $('#myModal'),
+			language: GBF.language,
+			ajax: select2Ajax(GBF.baseUrl + '/ajax/Lookup/groupBuyItemSet?groupBuyId=' + encodeURIComponent(gb || ''))
+		});
+		$('#importItemMonth option[value=-1]').prop('disabled', !gb);
+		if (gb) $('#importItemMonth').val('-1');
+		else if ($('#importItemMonth').val() == '-1') $('#importItemMonth').val('1');
+		reload();
 	});
-})
+})();
 </script>
-
-	<div class="modal-header">
-		 <h5 class="modal-title">團購 &raquo; 複製商品</h5>
-		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-	</div>
-	<div class="modal-body">
-	<div class="modal-message"></div>
-	<div class="form-group">
-
-			<table id="import_gbis_table" class="table table-striped display"
-				cellspacing="0" width="100%">
-				<thead>
-					<tr>
-						<th width="60px">選擇</th>
-						<th>名稱</th>
-					</tr>
-				</thead>
-				<tfoot>
-					<tr>
-						<th></th>
-						<th>名稱</th>
-					</tr>
-				</tfoot>
-			</table>
-
-		</div>
-	</div> <!-- modal-body -->
-

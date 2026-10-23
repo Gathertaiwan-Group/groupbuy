@@ -38,62 +38,50 @@
                     columns: [
                         DataTableConfig.data_select_checkbox,
                         {
-                    		data: 'title',
-							orderable: false,
-							render: function (data, type, row) {
-								return '<div style="min-width: 100px;max-width:320px;text-wrap: auto;display: block;">' + data + '</div>';
-                            }
-                        },
-                        {
-                            data: null,
-       					orderable: false,
-							render: function (data, type, row) {
-								var invoice = '列出子商品明細: ' + (row.invoiceShowDetail ? '是' : '否');
-								var breakdown = '列出子商品明細: ' + (row.showBreakdown ? '是' : '否');
-
-								var getDisplayModeStr = function (val) {
-									if (val === 'ROOT') return '僅顯示主商品';
-									if (val === 'CHILD') return '<span class="text-secondary">僅顯示子商品</span>';
-									if (val === 'BOTH') return '<span class="text-primary">主商品與子商品皆顯示</span>';
-									return val || '<span class="text-danger">N/A</span>';
-								};
-								var getPriceAllocationStr = function (val) {
-									if (val === 'ROOT') return '<span class="text-secondary">價格歸屬主商品</span>';
-									if (val === 'DISTRIBUTED') return '<span class="text-secondary">價格分配至子商品</span>';
-									return val || '<span class="text-danger">N/A</span>';
-								};
-
-								var html = '<div style="font-size: 0.9em; text-wrap: nowrap">';
-								html += '<strong>電子發票</strong><br><span class="text-muted ml-2 small">- ' + invoice + '</span><br>';
-								html += '<strong>顧客訂單明細</strong><br><span class="text-muted ml-2 small">- ' + breakdown + '</span><br>';
-								html += '<strong>ERP 報表</strong><br>';
-								html += '<span class="text-muted ml-2 small">- 顯示方式: ' + getDisplayModeStr(row.erpDisplayMode) + '</span><br>';
-								html += '<span class="text-muted ml-2 small">- 價格分配: ' + getPriceAllocationStr(row.erpPriceAllocation) + '</span><br>';
-								html += '<strong>出貨報表</strong><br>';
-								html += '<span class="text-muted ml-2 small">- 顯示方式: ' + getDisplayModeStr(row.pickingDisplayMode) + '</span><br>';
-								html += '<span class="text-muted ml-2 small">- 價格分配: ' + getPriceAllocationStr(row.pickingPriceAllocation) + '</span>';
-								html += '</div>';
-								  return html;
+                            data: 'title',
+                            orderable: false,
+                            render: function (data, type, row) {
+                                data = $('<div>').text(data == null ? '' : data).html();
+                                return '<div style="font-weight:500;min-width:180px;max-width:320px;text-wrap: auto;display: block;">' + data + '</div>';
                             }
                         },
                         {
                             data: null,
                             orderable: false,
-                			render: function (data, type, row) {
-								if (!row.bundleConfig || !row.bundleConfig.optionGroups) return '';
-								var html = '<ul class="pl-3 mb-0" style="font-size: 0.8em;">';
-								row.bundleConfig.optionGroups.forEach(function (group) {
-									html += '<li><strong>' + (group.groupTitle || '未命名群組') + '</strong><ul class="pl-3">';
-									if (group.candidates) {
-										group.candidates.forEach(function (candidate) {
-											html += '<li>' + (candidate.name || '未命名項目') + '</li>';
-										});
-									}
-									html += '</ul></li>';
-								});
-								html += '</ul>';
-								return html;
-							  }
+                            render: function (data, type, row) {
+                                var modeText = { ROOT: '僅顯示主商品', CHILD: '僅顯示子商品', BOTH: '顯示主商品 + 子商品' };
+                                var allocText = { ROOT: '價格歸屬主商品', DISTRIBUTED: '價格均攤至子商品' };
+                                var yesNo = function (v) {
+                                    return v ? '<span class="badge badge-success">是</span>' : '<span class="badge badge-secondary">否</span>';
+                                };
+                                var html = '<div class="small" style="min-width:240px;line-height:1.8;">';
+                                html += '<div>電子發票（列出子商品明細）：' + yesNo(row.invoiceShowDetail) + '</div>';
+                                html += '<div>顧客訂單明細（顯示子商品明細）：' + yesNo(row.showBreakdown) + '</div>';
+                                html += '<div>ERP 報表：' + (modeText[row.erpDisplayMode] || row.erpDisplayMode || '-') + '／' + (allocText[row.erpPriceAllocation] || row.erpPriceAllocation || '-') + '</div>';
+                                html += '<div>出貨報表：' + (modeText[row.pickingDisplayMode] || row.pickingDisplayMode || '-') + '／' + (allocText[row.pickingPriceAllocation] || row.pickingPriceAllocation || '-') + '</div>';
+                                html += '</div>';
+                                return html;
+                            }
+                        },
+                        {
+                            data: null,
+                            orderable: false,
+                            render: function (data, type, row) {
+                                var typeNames = { BUNDLE_FIXED: '成套組合', BUNDLE_PICK: '任選組合', BUNDLE_CONFIG: '配件組合', BUNDLE_BLIND: '盲盒/隨機', BUNDLE_CASCADE: '遞補/贈品', BUNDLE_ROUTER: '分流/路由' };
+                                var esc = function (s) { return $('<div>').text(s == null ? '' : s).html(); };
+                                var groups = (row.bundleConfig && row.bundleConfig.optionGroups) || [];
+                                var html = '<div class="small" style="min-width:260px;max-width:460px;white-space:normal;">';
+                                html += '<span class="badge badge-info mr-1">' + esc(typeNames[row.bundleType] || row.bundleType) + '</span>';
+                                html += '<span class="badge badge-light border">售價 $' + esc(row.price) + '</span>';
+                                groups.forEach(function (g) {
+                                    var cands = (g.candidates || []).map(function (c) {
+                                        return esc(c.name || c.originalTitle || ('#' + c.itemId)) + (c.defaultQty > 1 ? ' x' + c.defaultQty : '');
+                                    });
+                                    html += '<div class="mt-1"><strong>' + esc(g.groupTitle || '群組') + '</strong>（' + cands.length + ' 項）：' + (cands.length ? cands.join('、') : '<span class="text-muted">暫無商品</span>') + '</div>';
+                                });
+                                html += '</div>';
+                                return html;
+                            }
                         }
                     ],
                     keys: DataTableConfig.keysInlineTab,
@@ -112,15 +100,16 @@
                             extend: 'edit',
                             editor: editor,
                             text: '編輯',
-							action: function (e, dt, node, config) {
-								var rows = dt.rows({ selected: true }).indexes();
-								if (rows.length === 0) return;
-								var data = dt.row(rows[0]).data();
-								// Redirect to Edit Page
-								window.location.href = '/backend/ItemBundleV2/edit.do?itemId=' + data.itemId + '&groupBuyId={{groupBuyId}}';
-							}
-						},
-						//{ extend: 'remove', editor: editor, className: 'btn-danger' },
+                            action: function (e, dt, node, config) {
+                                var row = dt.row({ selected: true }).data();
+                                if (!row) {
+                                    return;
+                                }
+                                // Redirect to Edit Page
+                                window.location.href = '/backend/ItemBundleV2/edit?groupBuyId={{groupBuyId}}&itemBundleV2Id=' + row.itemBundleId;
+                            }
+                        },
+                        // { extend: 'remove', editor: editor, className: 'btn-danger' },
                     ],
                     initComplete: function () {
                         //DataTableConfig.initFooterSearch(this, [1, 2, 3], [10, 20, 10]);

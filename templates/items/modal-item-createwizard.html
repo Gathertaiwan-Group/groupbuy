@@ -1,274 +1,241 @@
-<link rel="stylesheet" href="/modules/items/createWizard.css">
-
+{{!-- 從網址新增商品（商品明細「新增」選單 → GET /backend/Item/createWizardModal.do?groupBuyId=&itemSetId=；data：groupBuyId、itemSetId（字串，可空）、tenantCode）。
+     原站彈窗 HTML 未擷取，全段依原站公開檔 /modules/items/createWizard.js、createWizard.css 推導：
+     - JS 讀寫的 id：createWizardModalTitle、createWizardItemSetWrap／ItemSetSelect／ItemSetError（未指定品項時顯示並以 select2 查 /ajax/Lookup/itemSet）、
+       createWizardStep0（選擇方式）、createWizardChoiceUrl／ChoiceManual、createWizardSteps（data-cw-step、data-cw-step-line="1"）、
+       createWizardStep1（createWizardBackBtn、createWizardInput、createWizardUploadBtn、createWizardError、createWizardSkeleton）、
+       createWizardStep2（createWizardResultLabel、createWizardResultCount、createWizardAddOptions、cwStep2OptionsClose、cwStep2UrlInput、cwStep2UrlBtn、
+       cwStep2Error、cwStep2ManualBtn、createWizardProductList、createWizardAddProductBtn、createWizardProgressFill、createWizardProgressNum、createWizardCreateBtn .cw-btn-label）、
+       cwImageLightbox（.cw-lightbox-close／.cw-lightbox-backdrop、cwLightboxImg）、cwHoverPreview（cwHoverPreviewImg）。
+     - JS clone 的 <template id="createWizardProductTpl">：.cw-product-card 內需有 .cw-product-thumb（img、.cw-thumb-edit-badge）、.cw-product-title／-price／-stock／-meta、
+       .cw-product-subline、.cw-status-pill、.cw-edit-toggle（.cw-edit-toggle-label）、.cw-delete-toggle、.cw-mini-field（label＋input）內的
+       .cw-title-input／.cw-price-input／.cw-stock-input／.cw-backorder-input／.cw-image-input、.cw-spec-zone、.cw-descr-zone（.cw-descr-image-wall、.cw-paste-zone）。
+       其餘 class（cw-steps／cw-choice-*／cw-url-row／cw-skeleton／cw-create-bar／cw-lightbox-* 等）依 createWizard.css 的選擇器與註解組版。
+     - window.CreateWizardConfig：groupBuyId、itemSetId、gba（租戶代碼）、i18n（各鍵中文為自行撰寫）。
+     - 「從網站新增」呼叫 /ajax/Item/uploadFromUrl（本系統回 501 未串接，訊息顯示在錯誤區）；「自行新增商品」經 /ajax/Item/save 建立。
+     - JS 建立完成會觸發 document 的 item:batchCreated → 重新載入所在頁的列表（推導（行為））。 --}}
+<link rel="stylesheet" href="/modules/items/createWizard.css?v={{assetVersion}}">
 <div class="modal-header">
-    <h5 class="modal-title" id="createWizardModalTitle">新增商品</h5>
-    <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	<h5 class="modal-title" id="createWizardModalTitle">新增商品</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
 </div>
 <div class="modal-body">
-    <div id="createWizardItemSetWrap" class="cw-itemset-wrap mb-3" style="display:none">
-    <label for="createWizardItemSetSelect" class="cw-itemset-label">
-        品項<span class="text-danger">*</span>
-    </label>
-    <select id="createWizardItemSetSelect" class="form-control" style="width: 100%;">
-        <option value=""></option>
-    </select>
-    <div id="createWizardItemSetError" class="cw-itemset-error text-danger small mt-1" style="display:none"></div>
-</div>
+	<div class="cw-itemset-wrap mb-3" id="createWizardItemSetWrap" style="display:none">
+		<label class="cw-itemset-label" for="createWizardItemSetSelect">新增到哪個品項</label>
+		<select id="createWizardItemSetSelect" class="form-control"></select>
+		<div class="small text-danger mt-1" id="createWizardItemSetError" style="display:none"></div>
+	</div>
 
-<div id="createWizardStep0">
-    <p class="text-muted small">請選擇新增商品的方式</p>
-    <div class="cw-choice-row">
-        <button type="button" class="cw-choice-card" id="createWizardChoiceManual">
-            <span class="cw-choice-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            </span>
-            <span class="cw-choice-title">自行新增商品</span>
-            <span class="cw-choice-descr">自行填寫商品名稱、售價、庫存等資訊</span>
-        </button>
-        <button type="button" class="cw-choice-card" id="createWizardChoiceUrl">
-            <span class="cw-choice-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.42-1.42"/></svg>
-            </span>
-            <span class="cw-choice-title">從網站新增</span>
-            <span class="cw-choice-descr">貼上商品網頁網址，自動解析商品資訊</span>
-        </button>
-    </div>
-</div>
+	<div id="createWizardStep0">
+		<div class="cw-choice-row">
+			<button type="button" class="cw-choice-card" id="createWizardChoiceUrl">
+				<span class="cw-choice-icon">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
+				</span>
+				<span class="cw-choice-title">從網站新增</span>
+				<span class="cw-choice-descr">貼上商品頁網址，自動帶入名稱、價格與圖片</span>
+			</button>
+			<button type="button" class="cw-choice-card" id="createWizardChoiceManual">
+				<span class="cw-choice-icon">
+					<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>
+				</span>
+				<span class="cw-choice-title">自行新增商品</span>
+				<span class="cw-choice-descr">手動輸入商品名稱、售價、庫存與規格</span>
+			</button>
+		</div>
+	</div>
 
-<div class="row no-gutters" id="createWizardSteps" style="display:none">
-    <div class="col-12 col-md-6 col-xl-4">
-        <div class="cw-steps">
-            <div class="cw-step is-active" data-cw-step="1">
-                <span class="cw-step-node">1</span>
-                <span class="cw-step-label">步驟一：輸入商品網頁網址</span>
-            </div>
-            <div class="cw-step-line" data-cw-step-line="1"></div>
-            <div class="cw-step" data-cw-step="2">
-                <span class="cw-step-node">2</span>
-                <span class="cw-step-label">步驟二：確認即將建立的商品資料</span>
-            </div>
-        </div>
-    </div>
-</div>
+	<div class="row justify-content-center">
+		<div class="col-md-9">
+			<div class="cw-steps" id="createWizardSteps" style="display:none">
+				<div class="cw-step is-active" data-cw-step="1"><span class="cw-step-node">1</span><span class="cw-step-label">貼上商品網址</span></div>
+				<div class="cw-step-line" data-cw-step-line="1"></div>
+				<div class="cw-step" data-cw-step="2"><span class="cw-step-node">2</span><span class="cw-step-label">確認並建立商品</span></div>
+			</div>
+		</div>
+	</div>
 
-<div id="createWizardStep1" style="display:none">
-    <button type="button" class="cw-back-link" id="createWizardBackBtn">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-        返回</button>
-    <p class="text-muted small">請輸入要解析的商品頁面網址，系統會自動讀取頁面中的商品資訊</p>
-    <div class="cw-url-row">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.42-1.42"/></svg>
-        <input type="text" id="createWizardInput" placeholder="https://" aria-label="步驟一：輸入商品網頁網址" />
-        <button id="createWizardUploadBtn" type="button" class="btn btn-primary">
-            <span class="cw-btn-label">上傳</span>
-        </button>
-    </div>
-    <div class="cw-skeleton" id="createWizardSkeleton">
-        <div class="cw-skel-row"><div class="cw-skel-thumb"></div><div class="cw-skel-lines"><div class="cw-skel-line"></div><div class="cw-skel-line short"></div></div></div>
-    </div>
-    <div id="createWizardError"></div>
-</div>
+	<div id="createWizardStep1" style="display:none">
+		<button type="button" class="cw-back-link" id="createWizardBackBtn">
+			<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+			重新選擇新增方式
+		</button>
+		<div class="cw-url-row">
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
+			<input type="text" id="createWizardInput" placeholder="貼上商品頁網址，例如 https://shop.example.com/product/123" autocomplete="off" aria-label="商品網址">
+			<button type="button" class="btn btn-primary btn-sm m-0" id="createWizardUploadBtn">抓取商品</button>
+		</div>
+		<div id="createWizardError"></div>
+		<div class="cw-skeleton" id="createWizardSkeleton">
+			<div class="cw-skel-row">
+				<div class="cw-skel-thumb"></div>
+				<div class="cw-skel-lines"><div class="cw-skel-line"></div><div class="cw-skel-line short"></div></div>
+			</div>
+			<div class="cw-skel-row">
+				<div class="cw-skel-thumb"></div>
+				<div class="cw-skel-lines"><div class="cw-skel-line"></div><div class="cw-skel-line short"></div></div>
+			</div>
+		</div>
+	</div>
 
-<div id="createWizardStep2" style="display:none">
-    <p class="text-muted small">以下是解析出來的商品資訊，確認無誤後即可建立商品</p>
+	<div id="createWizardStep2" style="display:none">
+		<div class="cw-result-summary d-flex justify-content-between align-items-center mb-2">
+			<div class="cw-count"><span id="createWizardResultLabel">抓取到的商品</span>：<b id="createWizardResultCount">共 0 個商品項目</b></div>
+		</div>
+		<div class="cw-add-product-zone">
+			<div class="cw-add-options" id="createWizardAddOptions" style="display:none">
+				<div class="d-flex justify-content-between align-items-center mb-2">
+					<div class="cw-add-options-header">再新增一項商品</div>
+					<button type="button" class="cw-add-options-close" id="cwStep2OptionsClose" aria-label="關閉">&times;</button>
+				</div>
+				<div class="cw-url-row">
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.66 0l3-3a4 4 0 0 0-5.66-5.66l-1 1"/><path d="M14 10a4 4 0 0 0-5.66 0l-3 3a4 4 0 0 0 5.66 5.66l1-1"/></svg>
+					<input type="text" id="cwStep2UrlInput" placeholder="貼上商品頁網址" autocomplete="off" aria-label="商品網址">
+					<button type="button" class="btn btn-primary btn-sm m-0" id="cwStep2UrlBtn">抓取</button>
+				</div>
+				<div class="cw-error" id="cwStep2Error" style="display:none"></div>
+				<div class="text-center mt-2">
+					<button type="button" class="btn btn-link btn-sm m-0" id="cwStep2ManualBtn">或自行新增商品</button>
+				</div>
+			</div>
+		</div>
+		<div class="cw-product-list" id="createWizardProductList"></div>
+		<button type="button" class="cw-btn-add-product w-100" id="createWizardAddProductBtn">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+			新增商品
+		</button>
+		<div class="cw-create-bar">
+			<div class="cw-progress-track"><div class="cw-progress-fill" id="createWizardProgressFill"></div></div>
+			<span class="cw-progress-num" id="createWizardProgressNum">0 / 0</span>
+			<button type="button" class="btn btn-warning m-0" id="createWizardCreateBtn"><span class="cw-btn-label">建立商品</span></button>
+		</div>
+	</div>
 
-    <div class="cw-result-summary d-flex align-items-baseline justify-content-between mb-3">
-        <span id="createWizardResultLabel">解析結果</span>
-        <span class="cw-count" id="createWizardResultCount">共 0 件商品，可繼續新增或刪除</span>
-    </div>
+	<template id="createWizardProductTpl">
+		<div class="cw-product-card">
+			<div class="cw-product-thumb">
+				<img alt="">
+				<svg class="cw-thumb-placeholder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 16l-5-5-8 8"/></svg>
+				<span class="cw-thumb-upload-label">上傳</span>
+				<span class="cw-check"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></span>
+				<span class="cw-fail-mark"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+				<button type="button" class="cw-thumb-edit-badge" title="編輯圖片網址" aria-label="編輯圖片網址">
+					<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>
+				</button>
+			</div>
+			<div class="cw-product-body">
+				<div class="cw-product-top">
+					<div class="cw-product-title"></div>
+					<div class="cw-product-price"></div>
+				</div>
+				<div class="cw-product-subline">
+					<span class="cw-product-meta"></span>
+					<span class="cw-product-stock"></span>
+					<span class="cw-status-pill pending">待建立</span>
+				</div>
+				<div class="cw-product-actions">
+					<button type="button" class="cw-btn-edit-toggle cw-edit-toggle">
+						<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/></svg>
+						<span class="cw-edit-toggle-label">編輯內容</span>
+					</button>
+				</div>
+				<div class="cw-edit-row">
+					<div class="cw-mini-field"><label>商品名稱</label><input type="text" class="cw-title-input" autocomplete="off"></div>
+					<div class="cw-field-row">
+						<div class="cw-mini-field"><label>售價</label><div class="cw-mini-field-prefix"><span>NT$</span><input type="text" class="cw-price-input" inputmode="decimal" autocomplete="off"></div></div>
+						<div class="cw-mini-field"><label>庫存</label><input type="text" class="cw-stock-input" inputmode="numeric" autocomplete="off"></div>
+						<div class="cw-mini-field"><label>預購庫存</label><input type="text" class="cw-backorder-input" inputmode="numeric" autocomplete="off"></div>
+					</div>
+					<div class="cw-mini-field"><label>圖片網址</label><input type="text" class="cw-image-input" placeholder="貼上圖片網址，或點左側縮圖上傳" autocomplete="off"></div>
+				</div>
+				<div class="cw-spec-zone"></div>
+				<div class="cw-descr-zone">
+					<div class="small font-weight-bold">產品說明圖</div>
+					<div class="cw-descr-image-wall"></div>
+					<div class="cw-paste-zone" tabindex="0">點一下這裡後貼上（Ctrl+V／⌘+V）商品頁的 HTML 內文或圖片，會自動擷取其中的圖片</div>
+				</div>
+			</div>
+			<button type="button" class="cw-icon-btn cw-card-delete cw-delete-toggle" title="刪除" aria-label="刪除">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>
+			</button>
+		</div>
+	</template>
 
-    <div class="cw-product-list" id="createWizardProductList"></div>
-
-    <div class="cw-add-product-zone mt-3">
-        <div id="createWizardAddOptions" class="cw-add-options" style="display:none">
-            <div class="cw-add-options-header d-flex align-items-center justify-content-between mb-2">
-                <span>新增商品</span>
-                <button type="button" class="close cw-add-options-close" id="cwStep2OptionsClose" aria-label="Close">&times;</button>
-            </div>
-            <div class="cw-add-options-body">
-                <div class="cw-url-row mb-2">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.5"/><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.42-1.42"/></svg>
-                    <input type="text" id="cwStep2UrlInput" placeholder="https://" aria-label="從網站新增" />
-                    <button id="cwStep2UrlBtn" type="button" class="btn btn-primary btn-sm">
-                        <span class="cw-btn-label">上傳</span>
-                    </button>
-                </div>
-                <div id="cwStep2Error" class="cw-error my-2" style="display:none"></div>
-                <div class="text-center text-muted small my-2">— or —</div>
-                <button type="button" id="cwStep2ManualBtn" class="btn btn-outline-secondary btn-block btn-sm">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-                    自行新增商品</button>
-            </div>
-        </div>
-
-        <button type="button" id="createWizardAddProductBtn" class="cw-btn-add-product w-100">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            新增商品</button>
-    </div>
-
-    <div class="cw-create-bar">
-        <div class="cw-progress-track"><div class="cw-progress-fill" id="createWizardProgressFill"></div></div>
-        <span class="cw-progress-num" id="createWizardProgressNum">0 / 0</span>
-        <button id="createWizardCreateBtn" type="button" class="btn btn-warning">
-            <span class="cw-btn-label">建立商品</span>
-        </button>
-    </div>
-</div>
-
-<template id="createWizardProductTpl">
-    <div class="cw-product-card">
-        <button class="cw-icon-btn cw-delete-toggle cw-card-delete" title="刪除商品" type="button">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16Z"/></svg>
-        </button>
-        <div class="cw-product-thumb">
-            <svg class="cw-thumb-placeholder" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-            <span class="cw-thumb-upload-label">上傳</span>
-            <img alt="">
-            <span class="cw-check">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
-            </span>
-            <span class="cw-fail-mark">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </span>
-            <button type="button" class="cw-thumb-edit-badge" title="編輯商品圖片">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7l1.5-3h5L16 7"/><circle cx="12" cy="13.5" r="3"/></svg>
-            </button>
-        </div>
-        <div class="cw-product-body">
-            <div class="cw-product-top">
-                <span class="cw-product-title"></span>
-                <span class="cw-product-price"></span>
-            </div>
-            <div class="cw-product-subline">
-                <span class="cw-product-meta"></span>
-                <span class="cw-product-stock"></span>
-            </div>
-            <div class="cw-product-actions">
-                <button class="cw-btn-edit-toggle cw-edit-toggle" title="編輯商品細項" type="button">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                    <span class="cw-edit-toggle-label">編輯商品細項</span>
-                </button>
-                <span class="cw-status-pill pending">待建立</span>
-            </div>
-            <div class="cw-edit-row">
-                <div class="cw-mini-field">
-                    <label>圖片網址</label>
-                    <input class="cw-image-input" type="text" placeholder="貼上圖片網址，或拖曳圖片至此" />
-                </div>
-                <div class="cw-mini-field">
-                    <label>商品名稱</label>
-                    <input class="cw-title-input" type="text" />
-                </div>
-                <div class="cw-field-row">
-                    <div class="cw-mini-field">
-                        <label>售價</label>
-                        <div class="cw-mini-field-prefix"><span>NT$</span><input class="cw-price-input" type="text" inputmode="numeric" /></div>
-                    </div>
-                    <div class="cw-mini-field">
-                        <label>現貨庫存</label>
-                        <input class="cw-stock-input" type="text" inputmode="numeric" />
-                    </div>
-                    <div class="cw-mini-field">
-                        <label>預購庫存</label>
-                        <input class="cw-backorder-input" type="text" inputmode="numeric" />
-                    </div>
-                </div>
-                <div class="cw-descr-zone">
-                    <div class="cw-mini-field">
-                        <label>商品說明圖 (可移除要發布的圖片)</label>
-                        <div class="cw-descr-image-wall"></div>
-                        <div class="cw-paste-zone" tabindex="0">
-                            <span>找不到圖片？ 請在原商品頁選取包含圖片的區域複製後，點此處貼上 (Ctrl+V)，系統將自動擷取所有圖片。</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="cw-spec-zone"></div>
-        </div>
-    </div>
-</template>
-
-<!-- Full Image Lightbox Modal for Product Description Images -->
-<div id="cwImageLightbox" class="cw-lightbox-overlay" aria-hidden="true">
-    <div class="cw-lightbox-backdrop"></div>
-    <div class="cw-lightbox-content">
-        <button type="button" class="cw-lightbox-close" title="關閉">&times;</button>
-        <div class="cw-lightbox-header">
-            <span class="cw-lightbox-title">商品說明圖 (可移除要發布的圖片)</span>
-            <span class="cw-lightbox-hint">（支援長圖垂直滾動）</span>
-        </div>
-        <div class="cw-lightbox-scroll">
-            <img id="cwLightboxImg" src="" alt="原圖預覽">
-        </div>
-    </div>
-</div>
-
-<!-- Hover Floating Preview Popover -->
-<div id="cwHoverPreview" class="cw-hover-preview-popover">
-    <div class="cw-hover-preview-header">快速圖檔預覽</div>
-    <div class="cw-hover-preview-body">
-        <img id="cwHoverPreviewImg" src="" alt="預覽">
-    </div>
-    <div class="cw-hover-preview-footer">點擊可開啟全螢幕長圖檢視</div>
-</div>
-</div>
-
+	<div class="cw-lightbox-overlay" id="cwImageLightbox" aria-hidden="true">
+		<div class="cw-lightbox-backdrop"></div>
+		<div class="cw-lightbox-content">
+			<div class="cw-lightbox-header">
+				<span class="cw-lightbox-title">產品說明圖</span>
+				<span class="cw-lightbox-hint">完整長圖預覽</span>
+			</div>
+			<button type="button" class="cw-lightbox-close" aria-label="關閉">&times;</button>
+			<div class="cw-lightbox-scroll"><img id="cwLightboxImg" alt=""></div>
+		</div>
+	</div>
+	<div class="cw-hover-preview-popover" id="cwHoverPreview">
+		<div class="cw-hover-preview-header">產品說明圖預覽</div>
+		<div class="cw-hover-preview-body"><img id="cwHoverPreviewImg" alt=""></div>
+		<div class="cw-hover-preview-footer">點擊圖片可檢視完整長圖</div>
+	</div>
+</div> <!-- modal-body -->
 <script type="text/javascript">
-    window.CreateWizardConfig = {
-        groupBuyId: {{json groupBuyId}},
-        itemSetId: {{json itemSetId}},
-        gba: {{json tenantCode}},
-        i18n: {
-            fieldImage: '圖片網址',
-            fieldTitle: '商品名稱',
-            fieldPrice: '售價',
-            fieldStock: '現貨庫存',
-            fieldBackorder: '預購庫存',
-            actionSell: '販售',
-            actionAddSpec: '新增規格',
-            actionAddSpecOptional: '規格（選填）',
-            actionAddSpecGroup: '新增規格群組',
-            actionRemoveSpec: '移除規格',
-            actionDelete: '刪除',
-            actionAllDoneSummary: '已完成 {0} / {1}',
-            actionPartialDoneSummary: '已建立 {0} / {1}，{2} 件失敗，可重新點擊',
-            missingSpec: '⚠ 未偵測到規格',
-            placeholderUntitled: '未命名商品',
-            placeholderNoPrice: '未填寫售價',
-            specLimitHint: '最多可新增 3 組規格（例如：尺寸、顏色、款式），會自動展開成對應的商品組合。',
-            specComboPreview: '組合預覽',
-            specNameFormat: '商品名稱格式',
-            specNameFormatHint: '用 <code>{title}</code> 代表商品名稱，<code>{0}</code>、<code>{1}</code> 代表各組規格值（依新增順序編號），不填則自動組合',
-            specTitlePlaceholder: '規格標題，例如：尺寸',
-            specChipHint: '輸入規格值後按 Enter，例如 S、M、L、XL',
-            specChipPlaceholderAdd: '再新增…',
-            specChipPlaceholderStart: '輸入後按 Enter，例如 S',
-            specComboSummary: '將建立 {0} 件規格商品',
-            specComboSummaryExcluded: '（已排除 {0} 件缺貨組合）',
-            resultSummary: '共 {0} 件商品，可繼續新增或刪除',
-            statusDone: '已建立',
-            statusFailed: '建立失敗',
-            stockCurrentLabel: '現貨',
-            stockBackorderLabel: '預購',
-            metaManual: '手動新增',
-            metaParsedSuffix: '・已從網頁擷取',
-            titleGeneric: '新增商品',
-            titleUrlMode: '從既有網頁新增商品',
-            resultManualLabel: '待建立商品',
-            uploadHint: '拖曳圖片到此或點擊上傳',
-            uploadPlaceholder: '貼上圖片網址，或拖曳圖片至此',
-            errorNotImage: '請選擇圖片檔案',
-            errorTooLarge: '圖片大小不能超過 2MB',
-            errorUploadFailed: '上傳失敗',
-            errorEmptyUrl: '請輸入網址',
-            descrImagesTitle: '商品說明圖 (可移除要發布的圖片)',
-            descrImagesPasteHint: '找不到圖片？ 請在原商品頁選取包含圖片的區域複製後，點此處貼上 (Ctrl+V)，系統將自動擷取所有圖片。',
-            selectItemSet: '品項',
-            errorRequireItemSet: '請先選擇品項',
-            actionEditItem: '編輯商品細項',
-            actionCollapseEdit: '收合編輯',
-            actionCreateItems: '建立商品'
-        }
-    };
+window.CreateWizardConfig = {
+	groupBuyId: {{json groupBuyId}},
+	itemSetId: {{json itemSetId}},
+	gba: {{json tenantCode}},
+	i18n: {
+		fieldImage: '圖片網址',
+		fieldTitle: '商品名稱',
+		fieldPrice: '售價',
+		fieldStock: '庫存',
+		fieldBackorder: '預購庫存',
+		actionSell: '販售',
+		actionAddSpec: '設定規格',
+		actionAddSpecOptional: '設定規格（選填）',
+		actionAddSpecGroup: '+ 加一組規格',
+		actionRemoveSpec: '移除這組規格',
+		actionDelete: '刪除',
+		actionAllDoneSummary: '全部 {0} 項商品都已建立',
+		actionPartialDoneSummary: '已建立 {0}/{1} 項商品，{2} 項失敗',
+		missingSpec: '尚未設定規格',
+		placeholderUntitled: '（尚未命名的商品）',
+		placeholderNoPrice: '尚未設定售價',
+		specLimitHint: '最多 3 組規格，例如：顏色、尺寸、款式。',
+		specComboPreview: '規格組合',
+		specNameFormat: '組合後的商品名稱',
+		specNameFormatHint: '<code>{title}</code> 是商品名稱，<code>{0}</code>、<code>{1}</code> 依序是各組規格的選項',
+		specTitlePlaceholder: '規格名稱，例如：顏色',
+		specChipHint: '輸入選項後按 Enter 或逗號加入',
+		specChipPlaceholderAdd: '再輸入一個選項',
+		specChipPlaceholderStart: '輸入選項，例如：紅色',
+		specComboSummary: '將建立 {0} 個商品',
+		specComboSummaryExcluded: '（不販售 {0} 個）',
+		resultSummary: '共 {0} 個商品項目',
+		statusDone: '已建立',
+		statusFailed: '建立失敗',
+		stockCurrentLabel: '庫存',
+		stockBackorderLabel: '預購',
+		metaManual: '自行新增',
+		metaParsedSuffix: '的商品',
+		titleGeneric: '新增商品',
+		titleUrlMode: '從網站新增商品',
+		resultManualLabel: '新增的商品',
+		uploadHint: '點一下選擇圖片，或把圖片拖曳到這裡上傳',
+		uploadPlaceholder: '貼上圖片網址或上傳圖片',
+		errorNotImage: '只能上傳圖片檔',
+		errorTooLarge: '圖片不可超過 2MB',
+		errorUploadFailed: '上傳失敗，請再試一次',
+		errorEmptyUrl: '請先貼上商品網址',
+		descrImagesTitle: '產品說明圖',
+		descrImagesPasteHint: '點一下這裡後貼上（Ctrl+V／⌘+V）商品頁的 HTML 內文或圖片，會自動擷取其中的圖片',
+		selectItemSet: '請選擇要新增到哪個品項',
+		errorRequireItemSet: '請先選擇品項',
+		actionEditItem: '編輯內容',
+		actionCollapseEdit: '收合',
+		actionCreateItems: '建立商品'
+	}
+};
+$(document).off('item:batchCreated.cwHost').on('item:batchCreated.cwHost', function() {
+	if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload(null, false);
+});
 </script>
-<script type="text/javascript" src="/modules/items/createWizard.js"></script>
+<script src="/modules/items/createWizard.js?v={{assetVersion}}"></script>
