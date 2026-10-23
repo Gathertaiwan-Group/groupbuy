@@ -7,8 +7,9 @@
 //   const coupon = code ? await findCouponByCode(db, tenantId, groupBuyId, code) : null;
 //   const result = evaluatePricing({ lines, salesRules: rules, couponOnlySalesRuleIds, coupon, customer, postcode, groupBuyId });
 //   const gifts = resolveGifts(result.gifts, await loadGiftCandidates(db, tenantId, groupBuyId, result.gifts.map((g) => g.giftTag)));
-import type { getServiceClient } from "@/lib/supabase/server";
-import type { PricingCartLine, PricingCoupon, PricingSalesRule, SalesRuleSettings } from "./pricing-rules";
+import { getServiceClient } from "@/lib/supabase/server";
+import type { AdminSession } from "@/lib/core/http/types";
+import type { PricingCartLine, PricingCoupon, PricingInput, PricingSalesRule, SalesRuleSettings } from "./pricing-rules";
 
 type Db = ReturnType<typeof getServiceClient>;
 type Row = Record<string, unknown>;
@@ -268,4 +269,73 @@ export async function syncCouponTotals(db: Db, tenantId: number, groupBuyCouponI
     .eq("id", groupBuyCouponId);
   if (error) throw new Error(`[pricing-loader] 更新優惠卷統計：${error.message}`);
   return { total, used, available };
+}
+
+/**
+ * orders 模組「重新計算優惠」用（lib/modules/orders/pricing.ts 以 require 選擇性載入）：由訂單組出 evaluatePricing 的輸入。
+ * - 明細：order_items（排除贈品、組合子商品、已取消），key＝order_items.id，單價用訂單上的 price（後台可能改過價）
+ * - 優惠條件：訂單所屬團購目前啟用中的優惠；期限／剩餘數量以「下單時間」判斷（now＝訂單建立時間）
+ * - 優惠卷：sales_order_coupons 的折扣碼；已使用次數扣掉本單（避免把自己算成已用完）
+ * - 會員方案：customers.royalty_program_id；郵遞區號：shipping_postcode
+ * - 隨機類（POINT_RANDOM、GIFT_LOTTERY）固定 random()=0，重算結果穩定
+ * 找不到訂單或訂單沒有團購時回 null。
+ */
+export async function loadPricingInputForOrder(session: AdminSession, salesOrderId: number): Promise<PricingInput | null> {
+  const db = getServiceClient();
+  const tenantId = session.tenantId;
+  const { data: order, error } = await db
+    .from("sales_orders")
+    .select("id, group_buy_id, customer_id, shipping_postcode, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("id", salesOrderId)
+    .maybeSingle();
+  if (error) throw new Error(`[pricing-loader] 讀取訂單：${error.message}`);
+  const o = order as { id: number; group_buy_id: number | null; customer_id: number | null; shipping_postcode: string | null; created_at: string } | null;
+  if (!o || !o.group_buy_id) return null;
+  const groupBuyId = Number(o.group_buy_id);
+  const items = await q<Row>(
+    db
+      .from("order_items")
+      .select("id, item_id, group_buy_item_set_id, price, total, back_order, gift, bundle_child, state")
+      .eq("tenant_id", tenantId)
+      .eq("sales_order_id", salesOrderId)
+      .order("seq"),
+    "讀取訂單商品",
+  );
+  const cart: CartItemInput[] = items
+    .filter((r) => r.item_id && !r.gift && !r.bundle_child && r.state !== "CANCELLED" && num(r.total) > 0)
+    .map((r) => ({
+      key: Number(r.id),
+      itemId: Number(r.item_id),
+      quantity: num(r.total),
+      backOrder: !!r.back_order,
+      groupBuyItemSetId: r.group_buy_item_set_id ? Number(r.group_buy_item_set_id) : null,
+      price: num(r.price),
+    }));
+  const [lines, rules, couponRows, customerRow] = await Promise.all([
+    loadCartLines(db, tenantId, groupBuyId, cart),
+    loadSalesRulesForGroupBuy(db, tenantId, groupBuyId),
+    q<{ coupon: string | null }>(db.from("sales_order_coupons").select("coupon").eq("tenant_id", tenantId).eq("sales_order_id", salesOrderId).limit(1), "讀取訂單優惠卷"),
+    o.customer_id
+      ? q<{ id: number; royalty_program_id: number | null }>(db.from("customers").select("id, royalty_program_id").eq("tenant_id", tenantId).eq("id", o.customer_id).limit(1), "讀取會員")
+      : Promise.resolve([] as { id: number; royalty_program_id: number | null }[]),
+  ]);
+  let coupon: PricingCoupon | null = null;
+  const code = couponRows[0]?.coupon;
+  if (code) {
+    coupon = await findCouponByCode(db, tenantId, groupBuyId, code);
+    if (coupon && coupon.usedCount) coupon = { ...coupon, usedCount: Math.max(0, num(coupon.usedCount) - 1) };
+  }
+  const c = customerRow[0];
+  return {
+    lines,
+    salesRules: rules.rules,
+    couponOnlySalesRuleIds: rules.couponOnlySalesRuleIds,
+    coupon,
+    customer: c ? { customerId: Number(c.id), royaltyProgramId: c.royalty_program_id == null ? null : Number(c.royalty_program_id) } : null,
+    postcode: o.shipping_postcode,
+    groupBuyId,
+    now: o.created_at,
+    random: () => 0,
+  };
 }
