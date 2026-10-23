@@ -66,7 +66,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --jar <已
 - **金流對帳檢核**：未串接金流後台，改比對本系統 `sales_order_transactions`（成功收款、退款）與訂單已付金額，交易結果文字附「未串接金流後台」。原站頁面沒有 `#merp_select`，`merp` 參數不會送出。
 - **退款單據（整頁）**：狀態 radio 篩選（全部／待審核／已核准／已駁回／已退款／已取消）、欄位、Editor（訂單編號、退款金額、退款方式、退款原因、銀行代碼/名稱/帳號/戶名、備註）、核准／駁回／已退款／取消；可退金額＝訂單已付 − 其他佔用中的退款單；「已退款」寫一筆 `sales_order_transactions`（REFUND），**不改訂單金額**。狀態與退款方式代碼沿用 datamodel 推定值。
 - **電子發票**：開立＝建立「發送電子發票[預約中]」紀錄（品項由訂單商品＋運費／手續費／折扣推導，稅額以 5% 內含計算）；作廢：預約中→已取消發送、已開立→作廢發票（勾「只記錄」→發票已作廢）；折讓：開立折讓（勾「只記錄」→折讓已開立）。**不改訂單 status**。四個彈窗的 HTML 依原站 modal 表單樣式與 `invoice.js`／`invoice_v2.min.js` 所需元素 id 補完。原站頁面另有一段複製自點數頁、未被呼叫的 `getSummary`（PointTransaction）程式，本系統未搬。
-- **月結單明細頁**：帳單摘要＋每個團購的訂單數／營收／費率／費用；`details` 沒存資料時依計費方式（團購截止日／開始日落在期間、或期間內訂單）即時計算。方案的儲值／折抵額度（credit…）本系統方案表沒有欄位 → 回 null，方案區只在有月費時顯示（與原站判斷相同）。
+- **月結單明細頁**：帳單摘要＋每個團購的訂單數／營收／費率／費用；`details` 沒存資料時依計費方式（團購截止日／開始日落在期間、或期間內訂單）即時計算；期間內算不出任何團購時（例：示範月結單的摘要為虛構值）改列一列「（月結單摘要）」，避免明細與帳單不一致。方案的儲值／折抵額度（credit…）本系統方案表沒有欄位 → 回 null，方案區只在有月費時顯示（與原站判斷相同）。
 
 ## 已知缺口
 
@@ -76,5 +76,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --jar <已
 - `/ajax/pos/Invoice/print`（POS 列印發票）未實作（訂單頁 POS 功能，原站需 posEnabled）。
 
 ## 給 core 的問題
+
+- Editor shim：`editor.field('select欄').val(x)` 不會觸發 change，所以 `dependent()` 不會跟著執行（原版 Editor 1.9 的 select/checkbox/radio `set` 會觸發 change）。使用者在畫面上操作時正常，只影響以 API 設值的程式。
 
 - `lib/core/entity/crud.ts` 的 `dtQuery` 在有欄位篩選時另跑一次 `select('*', {head:true})` 計算 recordsTotal，且 `where` 會套到這個查詢上 → 模組若在 `where` 用嵌入資源篩選（`sales_orders.uuid`）會失敗；本模組改為先查出訂單 id 再 `in()`。建議文件註明 `where` 不可使用嵌入資源欄位。

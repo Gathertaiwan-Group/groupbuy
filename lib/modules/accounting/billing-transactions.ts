@@ -145,6 +145,20 @@ async function billRecords(session: AdminSession, bill: BillRow): Promise<Row[]>
       fee: Math.round((revenue * rate) / 100),
     });
   }
+  // 期間內找不到可計算的團購（例：示範月結單的摘要是虛構值）→ 以月結單本身的摘要列出一列，避免明細與帳單不一致
+  const s = bill.summary ?? {};
+  if (out.length === 0 && Number(s.groupBuyRevenue ?? 0) > 0) {
+    out.push({
+      groupBuyId: null,
+      groupBuyTitle: `（月結單摘要）共 ${Number(s.groupBuys ?? 0)} 個團購`,
+      dateStartString: bill.period_start ?? "",
+      dateEndString: bill.period_end ?? "",
+      orders: Number(s.orders ?? 0),
+      groupBuyRevenue: Number(s.groupBuyRevenue ?? 0),
+      rate,
+      fee: Number(s.fee ?? 0) || Number(bill.grand_total ?? 0),
+    });
+  }
   return out;
 }
 
