@@ -316,6 +316,26 @@ export const routes = [
 
 照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，47 項全部 ✔ 才算正常；改到 shim 相關行為時自己也可以跑）。
 
+原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
+
+| 型別 | 原站欄位數 | 實作 |
+|---|---|---|
+| text | 281 | `editor-shim.js` fieldTypes.text |
+| select | 101 | fieldTypes.select（placeholder/multiple/separator/update） |
+| checkbox | 101 | fieldTypes.checkbox（field_checkbox_bool：separator `" "`、unselectedValue 0） |
+| textarea | 36 | fieldTypes.textarea |
+| datetime | 23 | fieldTypes.datetime（flatpickr） |
+| select2 | 22 | fieldTypes.select2（取代原站 editor.select2 外掛，含 initialValue） |
+| upload | 21 | fieldTypes.upload＋`Editor.upload`（上傳到 `/json/uploadImage/*`） |
+| ckeditor（CK4） | 10 | fieldTypes.ckeditor（取代 Editor 的 editor.ckeditor.js） |
+| hidden | 9 | fieldTypes.hidden |
+| radio | 8 | fieldTypes.radio |
+| ckeditorClassic（CK5） | 8 | 原站 `editor.ckeditor5.min.js` 自行註冊（shim 提供 fieldTypes/safeId 掛點） |
+| checkbox_tree | 4 | 頁面 inline 自行註冊（`_fieldTypes.checkbox_tree`） |
+| customColorPicker | 3 | 原站 `editor.colorPicker.min.js` 自行註冊 |
+| password / readonly / uploadMany | 程式碼內 | fieldTypes.password / readonly / uploadMany |
+| radioImage、gridRadioIcon、colorPicker、fontType、fontAlign、button | WebEditor | 原站 `dataTable.api.editor.min.js` 自行註冊 |
+
 | 類別 | 支援 |
 |---|---|
 | 建構選項 | `ajax`（字串 / `{create,edit,remove}` 各自 `{type,url,data}` / jQuery 選項物件；URL `_id_` → 逗號串 id，create 為 `null`；`data` 函式可回傳新物件）、`idSrc`、`table`、`fields`、`template`（`<editor-field name>`、`data-editor-template`）、`i18n`、`formOptions`（main/inline/bubble：`submit`、`onBlur`、`onReturn`/`submitOnReturn`、`onEsc`、`onBackground`、`onComplete`、`drawType`、`focus`、`buttons`、`title`、`message`） |
