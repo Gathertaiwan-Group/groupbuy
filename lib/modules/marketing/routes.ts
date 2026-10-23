@@ -5,5 +5,17 @@ import type { RouteDef } from "@/lib/core/http/types";
 import { salesRuleRoutes } from "./sales-rule";
 import { salesRuleWizardRoutes } from "./sales-rule-wizard";
 import { salesRuleBindingRoutes } from "./sales-rule-binding";
+import { couponRoutes } from "./coupon";
+import { couponTemplateRoutes } from "./coupon-template";
+import { lotteryRoutes } from "./lottery";
+import { itemTagRoutes } from "./item-tags";
 
-export const routes: RouteDef[] = [...salesRuleRoutes, ...salesRuleWizardRoutes, ...salesRuleBindingRoutes];
+export const routes: RouteDef[] = [
+  ...salesRuleRoutes,
+  ...salesRuleWizardRoutes,
+  ...salesRuleBindingRoutes,
+  ...couponRoutes,
+  ...couponTemplateRoutes,
+  ...lotteryRoutes,
+  ...itemTagRoutes,
+];

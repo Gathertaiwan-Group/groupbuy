@@ -1,0 +1,83 @@
+{{!-- 標籤的商品（/backend/ItemCrmTag/list?groupBuyId=&groupBuyItemCrmTagId=、/backend/ItemSysTag/list?groupBuyId=&groupBuyItemSysTagId=）
+     推導：原站兩個「商品」按鈕開的頁面未擷取，依「商品銷售標籤」列表頁風格補完：列出本團商品，勾選後「加入標籤」/「移除標籤」。 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var tableName = '#itemTagTable';
+		var tagParam = {{json idParam}};
+		var tagId = {{json tagId}};
+		var setTag = function (dt, add, btn) {
+			var ids = dt.rows({ selected: true }).data().map(function (r) { return r.itemId; }).toArray();
+			if (!ids.length) { toastr.warning('請先勾選商品'); return; }
+			var data = { groupBuyId: {{json groupBuyId}}, itemId: ids.join(','), add: add ? 1 : 0 };
+			data[tagParam] = tagId;
+			$(btn).prop('disabled', true);
+			$.ajax({
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/{{endpoint}}/set.do',
+				data: data,
+				success: function (res) { $(btn).prop('disabled', false); toastr.success(res.error || res.message || '已更新'); dt.ajax.reload(null, false); },
+				error: function (xhr) { $(btn).prop('disabled', false); toastr.error((xhr.responseJSON || {}).error || '更新失敗'); }
+			});
+		};
+		var table = $(tableName).DataTable( {
+			dom: 'lBfrtip',
+			scrollX:true,
+			pageLength: 50,
+			"lengthMenu": [25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/{{endpoint}}/list.do?groupBuyId={{groupBuyId}}&{{idParam}}={{tagId}}',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				{ data: 'itemSetTitle' },
+				{ data: 'title' },
+				{ data: 'uid' },
+				{ data: 'price' },
+				{ data: 'tagged', render: function (data, type) {
+					if (type !== 'display') return data ? 1 : 0;
+					return data ? '<i class="fa fa-check text-success"></i>' : '';
+				} },
+			],
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ text: '加入標籤', className: 'btn-primary', action: function (e, dt, node) { setTag(dt, true, node); } },
+				{ text: '移除標籤', className: 'btn-danger', action: function (e, dt, node) { setTag(dt, false, node); } },
+			],
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item">{{groupBuy.title}}</li>
+		<li class="breadcrumb-item"><a href="{{listHref}}">{{listTitle}}</a></li>
+		<li class="breadcrumb-item active" aria-current="page">{{tagLabel}}</li>
+	</ol>
+</nav>
+	<div class="card mt-4">
+<div class="card-header">{{listTitle}}：{{tagLabel}}</div>
+<div class="card-body">
+	<table id="itemTagTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>品項名稱</th>
+				<th>商品名稱</th>
+				<th>商品代碼</th>
+				<th>價格</th>
+				<th>已標記</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>
