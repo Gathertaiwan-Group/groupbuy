@@ -204,7 +204,7 @@
         <script>
         $(document).ready(function() {
             // 從URL獲取團購ID
-            const groupBuyId = {{groupBuyId}}
+            const groupBuyId = {{json groupBuyId}}
 
             if (!groupBuyId) {
                 showError('缺少團購ID參數');

@@ -536,7 +536,7 @@ export const preorderToStockRoutes: RouteDef[] = [
   post("/ajax/PreorderToStock/stockToCache", stockToCache),
   fragment("/ajax/PreorderToStock/displayPrepareToStock", {
     template: "orders/preordertostock-prepare.html",
-    // 原站把參數原樣放進 `const orderId = '…'`；這裡只保留數字，避免注入
+    // 原站把參數原樣放進 `const orderId = '…'`；這裡只保留數字，模板以 {{json salesOrderId}} 輸出（避免注入）
     data: async (ctx) => ({ salesOrderId: String((await ctx.param("salesOrderId")) ?? "").replace(/[^0-9]/g, "") }),
   }),
   any("/ajax/PreorderToStock/fetchOrder", fetchOrder),

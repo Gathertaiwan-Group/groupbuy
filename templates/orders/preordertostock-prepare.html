@@ -93,7 +93,7 @@
 <script>
 $(document).ready(function() {
     // 從頁面獲取訂單ID
-    const orderId = '{{salesOrderId}}';
+    const orderId = {{json salesOrderId}};
 
     // 初始化預購轉現貨管理器
     PreorderToStockManager.init({
