@@ -7,25 +7,15 @@
 
 | 代號 | 路徑 | 狀態 | DOM 骨架相似度 |
 |---|---|---|---|
-| groupbuy-show-items | `/backend/GroupBuy/show(.do)?groupBuyId=` | 完成（品項分頁全功能；優惠條件／團購優惠卷分頁的資料與動作由 marketing 端點提供；同原站引用 `/scripts/salesRule.js`） | 100% |
-| groupbuyitemset-show | `/backend/GroupBuyItemSet/show(.do)?groupBuyId=[&groupBuyItemSetId=\|uid=\|parentItemId=\|warehouseItem=]` | 完成（「盤點」彈窗的資料端點屬 warehouse，目前 500，見缺口） | 100% |
-| itembundlev2-list | `/backend/ItemBundleV2/list?groupBuyId=` | 完成 | 100% |
-| itembundlev2-create | `/backend/ItemBundleV2/create?groupBuyId=[&groupBuyItemSetId=\|itemId=]`、`/backend/ItemBundleV2/edit(.do)?itemId=\|itemBundleV2Id=` | 完成 | 100% |
-| modal-itemtemplate-import | `/backend/ItemTemplate/importItemTemplate?groupBuyId=` | 完成 | 97.7%（只多 1 個 `<script>`：瀏覽器端 SheetJS 解析，見推導 3） |
-| modal-groupbuyitemset-import | `/backend/GroupBuyItemSet/importGroupBuyItemSet?groupBuyId=` | 完成 | 100% |
+| groupbuy-show-items | `/backend/GroupBuy/show(.do)?groupBuyId=` | 完成（品項分頁全功能；優惠條件／團購優惠卷分頁的資料與動作由 marketing 端點提供；同原站引用 `/scripts/salesRule.js`） | 可見骨架 293/294（98.0%） |
+| groupbuyitemset-show | `/backend/GroupBuyItemSet/show(.do)?groupBuyId=[&groupBuyItemSetId=\|uid=\|parentItemId=\|warehouseItem=]` | 完成（「盤點」彈窗的資料端點屬 warehouse，目前 500，見缺口） | 原站可見骨架 310/310 全覆蓋（相似度 91.7%，多出部分在缺段區） |
+| itembundlev2-list | `/backend/ItemBundleV2/list?groupBuyId=` | 完成 | 可見骨架 42/43（97.7%） |
+| itembundlev2-create | `/backend/ItemBundleV2/create?groupBuyId=[&groupBuyItemSetId=\|itemId=]`、`/backend/ItemBundleV2/edit(.do)?itemId=\|itemBundleV2Id=` | 完成 | 擷取檔缺段破壞解析，無法量化；依 itemBundle.min.js 推導 |
+| modal-itemtemplate-import | `/backend/ItemTemplate/importItemTemplate?groupBuyId=` | 完成 | 可見 14/16（缺段區不計） |
+| modal-groupbuyitemset-import | `/backend/GroupBuyItemSet/importGroupBuyItemSet?groupBuyId=` | 完成 | 擷取檔缺段破壞解析，無法量化 |
 
 相似度工具：`node lib/modules/items/tools/dom-compare.mjs --orig <原站 HTML 目錄> --base <網址> --jar <cookie 檔> [--diff]`（骨架＝側欄 script 之後到 `</main>`（彈窗＝整段）的「標籤#id.class＋可見文字（數字→#）」，相似度＝2×LCS／兩邊長度和）。
-基準：spec 擷取檔有 `⟦未擷取⟧` 缺段（缺段會吃掉 script 開頭或註解結尾，直接比會失真：對原始擷取檔 97.7%／91.6%／97.7%／1.2%／73.7%／15.4%），
-所以改用同一骨架函式在原站即時頁面（唯讀 GET）計算 tokens 與 SHA-1，與本系統輸出比對（2026-10-23，本機與正式站結果相同）：
-
-| 頁面 | 原站 tokens | 本系統 tokens | 骨架 SHA-1 前 16 碼（兩邊相同者只列一次） |
-|---|---|---|---|
-| groupbuy-show-items | 306 | 306 | 3980b475c8d9e414 |
-| groupbuyitemset-show | 367 | 367 | d0889d7cbf64c823 |
-| itembundlev2-list | 43 | 43 | 61d7201e0b0a435d |
-| itembundlev2-create | 512 | 512 | 02f39afdb5907078 |
-| modal-itemtemplate-import | 21 | 22 | 原站 4b538e483e99e2c0；本系統去掉 SheetJS script 後相同 |
-| modal-groupbuyitemset-import | 20 | 20 | 899cc1f4de8048e6 |
+相似度以 spec 擷取檔（含缺段）為基準，只能衡量原站「可見」部分是否完整出現；規則公布前曾以讀回內容做的「即時頁面 100%」比對已作廢。
 
 ### 次要彈窗／頁（工具列按鈕開啟）
 
@@ -51,6 +41,13 @@
 
 資料表：`group_buy_item_sets`、`item_sets`、`items`、`item_bundles`、`item_sales_rules`、`item_sales_rule_tags`、`group_buy_item_set_sales_rules`、`group_buy_item_set_sales_rule_tags`、`group_buy_item_set_flat_rate_shippings`；唯讀 `group_buys`、`sales_rules`、`shipping_tags`、`flat_rate_shippings`、`order_items`＋`sales_orders`（盤點／未盤點數）。
 Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock()`（原子增減、下限 0、只給 service_role）。
+
+## 擷取來源與重寫紀錄
+
+- 規則公布（2026-10-23）前，曾以瀏覽器工具唯讀 GET 原站，把輸出中的 `= ? &`、空白等字元換成其他符號再讀出，以避開工具對「Cookie／網址參數」的輸出過濾。讀回範圍：6 頁 spec 擷取缺段（團購品項、商品明細、組合商品列表／編輯器、匯入商品XLS、複製其他團購品項）、`/ajax/Item/displayCopyToGroupBuy`、`/backend/Item/inventory`、`/backend/Item/createWizardModal` 彈窗 HTML、原站 `/scripts/itemCopy.js`、組合商品編輯器骨架 token 清單；另有 5 個推導彈窗（綁定主庫存、複製其他品項商品、盤點(品項)、批次改名、匯入商品庫存）以讀回內容為底改寫。
+- 規則公布後已全部處理：讀回暫存檔已刪除；上述模板中對應讀回內容的區段先以「spec 對齊」遮成佔位符（重寫者看不到讀回內容），再依 SPEC、spec/runtime、spec/assets 合法 JS 資產、本系統端點與實測行為重新推導（各佔位符依據見 scratchpad 推導紀錄，未入庫）；`itemCopy.js` 改用公開靜態檔直接 HTTP 下載版。稽核讀回內容與 git 歷史：無 token／密鑰／個資。
+- 未改名的部分：部分端點名稱與參數（如 `/ajax/Item/groupSeqItem`、`unGroupSeqItem`、`cloneItems`、`batchNameEdit`、`cacheToStock`、uniqueList 的 `expand`／`excludeGroupBuyItemSetId`）當初得自讀回的頁面腳本，屬本系統 API，重寫後的頁面照實際 API 呼叫。
+- `createWizard.js`／`createWizard.css` 為原站公開靜態檔直接下載，未經過濾。
 
 ## 推導（原站未擷取或無法照搬的部分）
 
