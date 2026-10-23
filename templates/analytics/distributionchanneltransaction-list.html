@@ -1,0 +1,53 @@
+{{!-- 推導頁：原站「通路商結算」(/backend/erp/DistributionChannelTransaction/list.do) 未擷取，沿用銷售通路面板「待審查月結」的表格與編輯器 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+{{> analytics/partials/erp-dc-transaction-js.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+		var distributionChannelId = {{json distributionChannelId}};
+		var tableName = '#distributionChannelTransactionTable';
+		var dctEditor = createDistributionChannelTransactionEditor(distributionChannelId,tableName);
+		createDistributionChannelTransactionTable(distributionChannelId,null,tableName,dctEditor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/erp/DistributionChannel/list">銷售通路</a></li>
+		<li class="breadcrumb-item active" aria-current="page">通路商結算 - {{channelName}}</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-header">通路商結算 - {{channelName}}</div>
+<div class="card-body">
+	<table id="distributionChannelTransactionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>結算日期</th>
+				<th>團購</th>
+				<th>狀態</th>
+				<th>稅率(%)</th>
+				<th>稅額</th>
+				<th>結算金額</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>結算日期</th>
+				<th>團購</th>
+				<th>狀態</th>
+				<th>稅率(%)</th>
+				<th>稅額</th>
+				<th>結算金額</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

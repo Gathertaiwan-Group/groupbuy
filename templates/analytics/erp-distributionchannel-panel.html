@@ -1,0 +1,100 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+{{> analytics/partials/erp-dc-transaction-js.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+
+		//var dcgbEditor = createDistributionChannelGroupBuyEditor(null,'#distributionChannelGroupBuyTable');
+		//createDistributionChannelGroupBuyTable(null,'#distributionChannelGroupBuyTable',dcgbEditor);
+
+		var distributionChannelGroupBuyId = null;
+		var distributionChannelTransactionId = null;
+		var tableName = '#distributionChannelGroupBuyTransactionTable';
+		var dcgbtEditor = createDistributionChannelGroupBuyTransactionEditor(distributionChannelGroupBuyId, null, tableName);
+		createDistributionChannelGroupBuyTransactionTable(distributionChannelGroupBuyId,distributionChannelTransactionId,tableName,dcgbtEditor);
+
+		var distributionChannelId = null;
+		tableName = '#distributionChannelTransactionTable';
+		var dctEditor = createDistributionChannelTransactionEditor(distributionChannelId,tableName);
+		createDistributionChannelTransactionTable(distributionChannelId,null,tableName,dctEditor);
+
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item active" aria-current="page">銷售通路</li>
+	</ol>
+</nav>
+
+<ul class="list-group">
+	<li class="list-group-item">
+	<a target="_blank" class="list-group-item list-group-item-action" href="/backend/erp/DistributionChannel/list">
+		<i class="fa-light fa-cog mr-1"></i><span>銷售通路設定</span>
+	</a>
+	<a target="_blank" class="list-group-item list-group-item-action" href="/backend/erp/DistributionChannelGroupBuy/list">
+		<i class="fa-light fa-cog mr-1"></i><span>銷售通路團購</span>
+	</a>
+	</li>
+</ul>
+<div class="card mt-4">
+<div class="card-header">待審查明細</div>
+<div class="card-body">
+	<table id="distributionChannelGroupBuyTransactionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>結算日期</th>
+				<th>團購</th>
+				<th>狀態</th>
+				<th>營業額</th>
+				<th>訂單數量</th>
+				<th>結算金額</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>結算日期</th>
+				<th>團購</th>
+				<th>狀態</th>
+				<th>營業額</th>
+				<th>訂單數量</th>
+				<th>結算金額</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div><div class="card mt-4">
+<div class="card-header">待審查月結</div>
+<div class="card-body">
+	<table id="distributionChannelTransactionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>結算日期</th>
+				<th>團購</th>
+				<th>狀態</th>
+				<th>稅率(%)</th>
+				<th>稅額</th>
+				<th>結算金額</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>結算日期</th>
+				<th>團購</th>
+				<th>狀態</th>
+				<th>稅率(%)</th>
+				<th>稅額</th>
+				<th>結算金額</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div></div>

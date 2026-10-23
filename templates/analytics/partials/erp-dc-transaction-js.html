@@ -1,0 +1,419 @@
+<script>
+var createDistributionChannelGroupBuyTransactionEditor = function(distributionChannelGroupBuyId, distributionChannelId, tableName) {
+
+	var conf = {
+		ajax: {
+			create: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/save.do?distributionChannelGroupBuyId='+distributionChannelGroupBuyId
+			},
+			edit: {
+				type: 'POST',
+				url:  GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/update.do?distributionChannelGroupBuyTransactionId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/delete.do?distributionChannelGroupBuyTransactionId=_id_'
+			}
+		},
+		idSrc: 'distributionChannelGroupBuyTransactionId',
+		fields: [
+			DataTableConfig.field_select2('選擇通路結算單據','distributionChannelTransactionId','','選擇', GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/lookup?distributionChannelId='+distributionChannelId,false,undefined,'將此結算紀錄加入既有通路結算單據。一個通路結算單據裡面可包含有多團結算內容'),
+			DataTableConfig.field_checkbox_bool('使用新的通路結算單據','newDCT'),
+			DataTableConfig.field_datetime('結算日期','dateTransactionString','YYYY-MM-DD'),
+			DataTableConfig.field_checkbox_bool('自動帶出數據資料','getStatistics'),
+			//DataTableConfig.field_select('階段','state'),
+			//DataTableConfig.field_select('狀態','status'),
+			DataTableConfig.field_input('營業額','gmv', 0),
+			DataTableConfig.field_input('訂單數量','orderTotal', 0),
+			//DataTableConfig.field_input('分潤金額','revenue', 0),
+			//DataTableConfig.field_input('稅率(%)','taxRate', 0),
+			//DataTableConfig.field_checkbox_bool('依稅率更新稅額及結算金額','updateFee'),
+			//DataTableConfig.field_input('稅額','taxFee', 0),
+			DataTableConfig.field_input('結算金額','amount', 0),
+			DataTableConfig.field_textarea('備註', 'note','', 10),
+		],
+		//template: '#custom_rp_form',
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	}
+
+	if (typeof tableName != 'undefined') {
+		conf.table = tableName;
+	}
+
+	var editor = new $.fn.dataTable.Editor(conf)
+	.on( 'open', function (e,mode,action) {
+		var isCreate = (action == 'create');
+		DataTableHelper.showHideAllColumns(editor, true);
+		if (isCreate) {
+			editor.enable('distributionChannelTransactionId');
+			//editor.hide('state', false);
+			//editor.hide('status', false);
+		} else {
+			editor.disable('distributionChannelTransactionId');
+			editor.hide('newDCT', false);
+		}
+	})
+	.dependent('getStatistics', function(val, data, callback) {
+		if (val == 1) {
+			if (data.row && data.row.distributionChannelGroupBuyId) {
+				loadStatistics(data.row.distributionChannelGroupBuyId, callback);
+			} else {
+				loadStatistics(distributionChannelGroupBuyId, callback);
+			}
+		} else {
+			return {};
+		}
+	})
+	.dependent('newDCT', function(val, data, callback) {
+		if (val == 1) {
+			return {
+				hide:['distributionChannelTransactionId'],
+				values:{
+					'distributionChannelTransactionId':''
+				}
+			}
+		} else {
+			return {
+				show:['distributionChannelTransactionId']
+			};
+		}
+	})
+	/*
+	.dependent('updateFee', function(val, data, callback) {
+		var revenue = editor.field('revenue').val();
+		var taxRate = editor.field('taxRate').val();
+		var taxFee = Math.round(revenue * taxRate / 100);
+		return {
+			values: {
+				'taxFee':taxFee,
+				'amount':revenue+taxFee
+			}
+		}
+	})
+	*/
+
+	var loadStatistics = function(distributionChannelGroupBuyId, callback) {
+		btnStartLoading($('.DTE_Form_Buttons button'));
+		jQuery.get(
+			GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/getStatistics',
+			{
+				'distributionChannelGroupBuyId':distributionChannelGroupBuyId
+			},
+			function(data) {
+				$('#DTE_Field_category').val(data.category);
+				btnStopLoading($('.DTE_Form_Buttons button'));
+				var json = {
+						values: {
+							'gmv':data.groupBuyStatistics.paidTotalWithoutShipping,
+							'orderTotal':data.groupBuyStatistics.paidOrders,
+							'amount':data.groupBuyStatistics.bloggerShareTotal
+						}
+				}
+
+				callback(json);
+			}
+			).fail(function(data) {
+				var json = data.responseJSON;
+				$('.DTE_Form_Error').html(json ? json.error : '');
+				btnStopLoading($('.DTE_Form_Buttons button'));
+			});
+	}
+	return editor;
+}
+
+</script><script>
+var actionButtonStatus = function(id, action,label, status, className) {
+	return '<button class="pull-right btn '
+	+className+' text-nowrap my-0" data-action="'+action
+	+'" data-status="'+status
+	+'" data-id="'+id
+	+'">'+label+'</button>';
+}
+var distributionChannelGroupBuyTransactionTable;
+var createDistributionChannelGroupBuyTransactionTable = function(distributionChannelGroupBuyId, distributionChannelTransactionId, tableName, editor) {
+	var tableName = tableName || '#distributionChannelGroupBuyTransactionTable';
+	var buttons = [
+		{ extend: 'edit',   editor: editor },
+		{ extend: 'refresh'},
+		{ extend: 'remove', editor: editor, className:'btn-danger' },
+	];
+	if (distributionChannelGroupBuyId) {
+		buttons.unshift({ extend: 'create', editor: editor });
+	}
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		"lengthMenu": [10, 25, 50, 100, 250],
+		ajax: {
+			url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/list.do',
+			type: "POST",
+			data: {
+				distributionChannelGroupBuyId:distributionChannelGroupBuyId,
+				distributionChannelTransactionId:distributionChannelTransactionId,
+			},
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('dateTransactionString'),
+			DataTableConfig.data_input('groupBuyTitle'),
+			{ data: 'status',
+				render: function ( data, type, row, meta ) {
+					var extra = '';
+					var id = row.distributionChannelGroupBuyTransactionId;
+					switch (data) {
+					case 'SETTLING':
+					case 'DECLINED':
+						extra += actionButtonStatus(id, 'updateStatus', '要求查核', 'REVIEWING', 'btn-default');
+						break;
+					case 'REVIEWING':
+						extra += actionButtonStatus(id, 'updateStatus', '駁回', 'DECLINED', 'btn-warning');
+						extra += actionButtonStatus(id, 'updateStatus', '核可', 'REVIEWED', 'btn-success');
+						break;
+					}
+
+					data = renderOption(meta, data, 'status') + extra;
+					return data;
+				}
+			},
+			DataTableConfig.data_input('gmv'),
+			DataTableConfig.data_input('orderTotal'),
+			//DataTableConfig.data_input('revenue'),
+			DataTableConfig.data_input('amount'),
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 1, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: buttons,
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [],[]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	//DataTableHelper.initEditorOnCallback(table,editor);
+	//DataTableHelper.inlineModePlugin(table);
+	//DataTableHelper.injectInline(table,editor);
+	distributionChannelGroupBuyTransactionTable = table;
+
+	$(tableName +' tbody').on('click', 'button[data-action]', function (e) {
+		e.stopPropagation();
+		var $this = $(this);
+		var id = $this.data('id');
+		var action = $this.data('action');
+		switch (action) {
+		case 'updateStatus':
+			var status = $(this).data('status');
+			updateStatus(id, status, $this);
+			break;
+		}
+	});
+
+	var updateStatus = function(id, status, $btn) {
+		btnStartLoading($btn);
+		$.ajax({
+			url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuyTransaction/updateStatus',
+			type: 'POST',
+			data: {
+				'distributionChannelGroupBuyTransactionId':id,
+				'status':status
+			},
+			dataType: 'json',
+			success: function(json) {
+				table.ajax.reload( null, false );
+				if (typeof distributionChannelTransactionTable !== 'undefined' && distributionChannelTransactionTable) {
+					distributionChannelTransactionTable.ajax.reload( null, false );
+				}
+				btnStopLoading($btn);
+			},
+			error: function (xhr, ajaxOptions, thrownError) {
+				if (xhr.responseJSON) {
+					messagebox('',xhr.responseJSON.error, GBFi18n.act_close)
+				} else {
+					alert(xhr.status + " "+ thrownError);
+				}
+				btnStopLoading($btn);
+			}
+		});
+	}
+	return table;
+}
+</script><script>
+var createDistributionChannelTransactionEditor = function(
+		distributionChannelId,
+		tableName) {
+	var conf = {
+		ajax: {
+			create: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/save.do?distributionChannelId='+distributionChannelId
+			},
+			edit: {
+				type: 'POST',
+				url:  GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/update.do?distributionChannelTransactionId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/delete.do?distributionChannelTransactionId=_id_'
+			}
+		},
+		idSrc: 'distributionChannelTransactionId',
+		fields: [
+			DataTableConfig.field_select('狀態','status'),
+			DataTableConfig.field_datetime('結算日期','dateTransactionString','YYYY-MM-DD'),
+			DataTableConfig.field_input('稅率(%)','taxRate'),
+			DataTableConfig.field_input('稅額','taxFee'),
+			DataTableConfig.field_input('結算金額','amount'),
+			DataTableConfig.field_textarea('備註', 'note','', 10),
+		],
+		//template: '#custom_rp_form',
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	}
+
+	if (typeof tableName != 'undefined') {
+		conf.table = tableName;
+	}
+
+	var editor = new $.fn.dataTable.Editor(conf)
+	.on( 'open', function (e,mode,action) {
+		var isCreate = (action == 'create');
+		DataTableHelper.showHideAllColumns(editor, true);
+		if (isCreate) {
+			editor.field('status').val('SETTLING');
+		}
+	});
+	return editor;
+}
+</script><script>
+var distributionChannelTransactionTable;
+var createDistributionChannelTransactionTable = function(
+		distributionChannelId,
+		distributionChannelTransactionId,
+		tableName,
+		editor) {
+	var tableName = tableName || '#distributionChannelTransactionTable';
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		"lengthMenu": [10, 25, 50, 100, 250],
+		ajax: {
+			url:GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/list.do',
+			type: "POST",
+			data: {
+				distributionChannelId:distributionChannelId,
+				distributionChannelTransactionId:distributionChannelTransactionId,
+			},
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_details,
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('dateTransactionString'),
+			DataTableConfig.data_input('title'),
+			{ data: 'status',
+				render: function ( data, type, row, meta ) {
+					var extra = '';
+					var id = row.distributionChannelTransactionId;
+					switch (data) {
+					case 'SETTLING':
+					case 'DECLINED':
+						extra += actionButtonStatus(id, 'updateStatus', '要求查核', 'REVIEWING', 'btn-default');
+						break;
+					case 'REVIEWING':
+						extra += actionButtonStatus(id, 'updateStatus', '駁回', 'DECLINED', 'btn-warning');
+						extra += actionButtonStatus(id, 'updateStatus', '核可', 'REVIEWED', 'btn-success');
+						break;
+					}
+					data = renderOption(meta, data, 'status') + extra;
+					return data;
+				}
+			},
+			DataTableConfig.data_input('taxRate'),
+			DataTableConfig.data_input('taxFee'),
+			DataTableConfig.data_input('amount'),
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 2, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+		],
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [],[]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	//DataTableHelper.initEditorOnCallback(table,editor);
+	distributionChannelTransactionTable = table;
+
+	// 展開：此結算單據包含的各團結算紀錄
+	var format = function(d) {
+		var id = d.distributionChannelTransactionId;
+		var tn = 'dctgbt_' + id;
+		setTimeout(function() {
+			var ed = createDistributionChannelGroupBuyTransactionEditor(null, d.distributionChannelId, '#' + tn);
+			createDistributionChannelGroupBuyTransactionTable(null, id, '#' + tn, ed);
+		}, 0);
+		return '<div class="child-row p-2"><table id="' + tn + '" class="table table-striped display nowrap" width="100%">'
+			+ '<thead><tr><th></th><th>結算日期</th><th>團購</th><th>狀態</th><th>營業額</th><th>訂單數量</th><th>結算金額</th></tr></thead>'
+			+ '</table></div>';
+	};
+	injectDetailsControl(tableName, table, format);
+
+	$(tableName +' tbody').on('click', 'button[data-action]', function (e) {
+		e.stopPropagation();
+		var $this = $(this);
+		var id = $this.data('id');
+		var action = $this.data('action');
+		switch (action) {
+		case 'updateStatus':
+			var status = $(this).data('status');
+			updateStatus(id, status, $this);
+			break;
+		}
+	});
+
+	var updateStatus = function(id, status, $btn) {
+		btnStartLoading($btn);
+		$.ajax({
+			url: GBF.baseUrl + '/ajax/erp/DistributionChannelTransaction/updateStatus',
+			type: 'POST',
+			data: {
+				'distributionChannelTransactionId':id,
+				'status':status
+			},
+			dataType: 'json',
+			success: function(json) {
+				distributionChannelTransactionTable.ajax.reload( null, false );
+				if (typeof distributionChannelGroupBuyTransactionTable !== 'undefined' && distributionChannelGroupBuyTransactionTable) {
+					distributionChannelGroupBuyTransactionTable.ajax.reload( null, false );
+				}
+				btnStopLoading($btn);
+			},
+			error: function (xhr, ajaxOptions, thrownError) {
+				if (xhr.responseJSON) {
+					messagebox('',xhr.responseJSON.error, GBFi18n.act_close)
+				} else {
+					alert(xhr.status + " "+ thrownError);
+				}
+				btnStopLoading($btn);
+			}
+		});
+	}
+	return table;
+}
+</script>

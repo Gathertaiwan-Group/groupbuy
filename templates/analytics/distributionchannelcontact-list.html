@@ -1,0 +1,130 @@
+{{!-- 推導頁：原站「通路聯絡資訊」(/backend/erp/DistributionChannelContact/list.do) 未擷取，依銷售通路列表的版型與 Editor 慣例補完 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+
+		var distributionChannelId = {{json distributionChannelId}};
+		var tableName = '#distributionChannelContactTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/erp/DistributionChannelContact/save.do?distributionChannelId=' + distributionChannelId
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/erp/DistributionChannelContact/update.do?distributionChannelContactId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/erp/DistributionChannelContact/delete.do?distributionChannelContactId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'distributionChannelContactId',
+			fields: [
+					DataTableConfig.field_select('聯絡人類型','contactType'),
+					DataTableConfig.field_input('姓名','name'),
+					DataTableConfig.field_input('職稱','title'),
+					DataTableConfig.field_input('電話','telephone'),
+					DataTableConfig.field_input('手機','mobile'),
+					DataTableConfig.field_input('電子信箱','email'),
+					DataTableConfig.field_input('地址','address'),
+					DataTableConfig.field_textarea('備註', 'note','', 10),
+			],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/erp/DistributionChannelContact/list.do',
+				type: "POST",
+				data: function ( d ) {
+					d.distributionChannelId = distributionChannelId;
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_select('contactType'),
+				DataTableConfig.data_input('name'),
+				DataTableConfig.data_input('title'),
+				DataTableConfig.data_input('telephone'),
+				DataTableConfig.data_input('mobile'),
+				DataTableConfig.data_input('email'),
+				DataTableConfig.data_input('address'),
+				DataTableConfig.data_input('note'),
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [],[]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/erp/DistributionChannel/list">銷售通路</a></li>
+		<li class="breadcrumb-item active" aria-current="page">聯絡資訊 - {{channelName}}</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-header">聯絡資訊 - {{channelName}}</div>
+<div class="card-body">
+	<table id="distributionChannelContactTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>聯絡人類型</th>
+				<th>姓名</th>
+				<th>職稱</th>
+				<th>電話</th>
+				<th>手機</th>
+				<th>電子信箱</th>
+				<th>地址</th>
+				<th>備註</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>聯絡人類型</th>
+				<th>姓名</th>
+				<th>職稱</th>
+				<th>電話</th>
+				<th>手機</th>
+				<th>電子信箱</th>
+				<th>地址</th>
+				<th>備註</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

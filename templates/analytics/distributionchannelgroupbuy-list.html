@@ -1,0 +1,315 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script>
+var createDistributionChannelGroupBuyEditor = function(distributionChannelId, tableName) {
+	var conf = {
+		ajax: {
+			create: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/save.do?distributionChannelId='+distributionChannelId
+			},
+			edit: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/update.do?distributionChannelGroupBuyId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/delete.do?distributionChannelGroupBuyId=_id_'
+			}
+		},
+		idSrc: 'distributionChannelGroupBuyId',
+		fields: [
+				DataTableConfig.field_select('階段','state'),
+				//DataTableConfig.field_input('狀態','status'),
+				//DataTableConfig.field_input('???DistributionChannelGroupBuy.frequency???','frequency'),
+				DataTableConfig.field_select2('團購:','groupBuyId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/groupBuy?rc=true&distributionChannelId=' + distributionChannelId, true),
+		],
+		//template: '#custom_rp_form',
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	}
+
+	if (typeof tableName != 'undefined') {
+		conf.table = tableName;
+	}
+
+	var editor = new $.fn.dataTable.Editor(conf)
+	.on( 'open', function (e,mode,action) {
+		var isCreate = (action == 'create');
+		if (isCreate) {
+			DataTableHelper.showHideAllColumns(editor, false);
+			editor.show('groupBuyId');
+		} else {
+			editor.hide('groupBuyId', false);
+			editor.show('state');
+		}
+	});
+	return editor;
+}
+</script>
+{{> analytics/partials/erp-dc-transaction-js.html}}
+<script>
+var actionButtonState = function(id, action, label, state, className) {
+	return '<button class="pull-right btn '
+	+className+' text-nowrap my-0" data-action="'+action
+	+'" data-state="'+state
+	+'" data-id="'+id
+	+'">'+label+'</button>';
+}
+var distributionChannelGroupBuyTable;
+var createDistributionChannelGroupBuyTable = function(
+		distributionChannelId,
+		tableName,
+		editor) {
+
+	var buttonUpdateStateAuto = DataTableConfig.actionButton({
+			className:'btn-updateState-auto btn-warning',
+			text:'自動更新階段',
+			confirm:'系統將自動判斷將「已結團」「未結案」更新為以下階段：<br>「可結案」- 當已結團且有銷售且沒有未出貨訂單<br>「已結案未銷售」- 已結團但沒有任何銷售',
+			url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateStateAuto' + (distributionChannelId ? '?distributionChannelId=' + distributionChannelId : ''),
+	});
+	var buttonUpdateState = {
+		extend: "collectionSelect",
+		text: '更新階段',
+		buttons:[
+			DataTableConfig.actionButton({
+				text:'未結案',
+				confirm:'會將該通路商團購設為「可結案」',
+				url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateState?state=OPEN',
+			}),
+			DataTableConfig.actionButton({
+				text:'可結案',
+				confirm:'會將該通路商團購設為「可結案」',
+				url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateState?state=CLOSABLE',
+			}),
+			DataTableConfig.actionButton({
+				text:'完整結案',
+				confirm:'會將該通路商團購設為「完整結案」',
+				url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateState?state=CLOSED',
+			}),
+			DataTableConfig.actionButton({
+				text:'完整結案(未銷售)',
+				confirm:'會將該通路商團購設為「完整結案未銷售」',
+				url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateState?state=CLOSED_NO_SALES',
+			})
+		]
+	}
+
+	var buttons;
+	if (!distributionChannelId) {
+		buttons = [
+			{ extend: 'refresh'},
+			buttonUpdateStateAuto,
+			buttonUpdateState
+		];
+	} else {
+		buttons = [
+			{ extend: 'create', editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+			{ extend: 'refresh'},
+			buttonUpdateStateAuto,
+			buttonUpdateState
+		];
+	}
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		"lengthMenu": [10, 25, 50],
+		ajax: {
+			url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/list.do',
+			type: "POST",
+			data: function ( d ) {
+				d.distributionChannelId = distributionChannelId;
+				d.stateOPEN = $('#stateOPEN').prop('checked');
+				d.stateCLOSABLE = $('#stateCLOSABLE').prop('checked');
+				d.stateCLOSING = $('#stateCLOSING').prop('checked');
+				d.stateCLOSED = $('#stateCLOSED').prop('checked');
+				d.stateCLOSED_NO_SALES = $('#stateCLOSED_NO_SALES').prop('checked');
+				d.statusEnded = $('#statusEnded').prop('checked');
+				d.statistics = $('#statistics').prop('checked');
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_details,
+			//DataTableConfig.data_details_control,
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('distributionChannel.name'),
+			{ data: 'groupBuy.title',
+				render: function ( data, type, row, meta ) {
+					var date = '<span class="badge badge-default mr-1">'
+					+ moment(new Date(row.groupBuy.dateEnd)).format('YYMMDD')
+					+ '</span>';
+					var html = date + data;
+					if (row.status == 'ENDED') {
+						html += '<span class="badge badge-warning">'
+						+ renderOption(meta, row.status, 'status')
+						+'</span>';
+					}
+					if (row.groupBuyStatistics) {
+						html += '<br>'
+							+ '<span class="badge badge-default mt-1">訂單 '+row.groupBuyStatistics.orders+'</span>'
+							+ '<span class="badge badge-default ml-1">未處理 '+row.groupBuyStatistics.unprocessedOrders+'</span>'
+							+ '<span class="badge badge-default ml-1">未出貨 '+row.groupBuyStatistics.unshippedOrders+'</span>'
+							+ '<span class="badge badge-default ml-1">預購未出貨 '+row.groupBuyStatistics.unshippedBackOrders+'</span>'
+							+ '<br>'
+							+ '<span class="badge badge-default mt-1">已收金額 '+row.groupBuyStatistics.paidTotal+'</span>'
+							+ '<span class="badge badge-default ml-1">已收金額(不含運) '+row.groupBuyStatistics.paidTotalWithoutShipping+'</span>'
+							+ '<span class="badge badge-default ml-1">分潤 '+row.groupBuyStatistics.bloggerShareTotal+'</span>';
+					}
+					return html;
+				}
+			},
+			{ data: 'state',
+				render: function ( data, type, row, meta ) {
+					var id = row.distributionChannelGroupBuyId;
+					var html = renderOption(meta, data, 'state');
+					{{!-- 推導：顯示銷售數據後才出現的結案選項（原站此段被擷取過濾） --}}
+					if (row.groupBuyStatistics) {
+						var s = row.groupBuyStatistics;
+						switch (data) {
+						case 'OPEN':
+							if (row.status == 'ENDED' || row.status == 'SHIPPABLE') {
+								if (s.orders > 0 && s.unshippedOrders == 0) {
+									html += actionButtonState(id, 'updateState', '可結案', 'CLOSABLE', 'btn-primary');
+								}
+								if (s.orders == 0) {
+									html += actionButtonState(id, 'updateState', '完整結案(未銷售)', 'CLOSED_NO_SALES', 'btn-default');
+								}
+							}
+							break;
+						case 'CLOSABLE':
+							html += actionButtonState(id, 'updateState', '部分結案', 'CLOSING', 'btn-default');
+							html += actionButtonState(id, 'updateState', '完整結案', 'CLOSED', 'btn-success');
+							break;
+						case 'CLOSING':
+							html += actionButtonState(id, 'updateState', '完整結案', 'CLOSED', 'btn-success');
+							break;
+						}
+					}
+					return html;
+				}
+			},
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 2, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: buttons,
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [2,3],[16,16]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+	distributionChannelGroupBuyTable = table;
+
+	// 展開：此通路商團購的結算紀錄
+	var format = function(d) {
+		var id = d.distributionChannelGroupBuyId;
+		var tn = 'dcgbt_' + id;
+		setTimeout(function() {
+			var ed = createDistributionChannelGroupBuyTransactionEditor(id, d.distributionChannelId, '#' + tn);
+			createDistributionChannelGroupBuyTransactionTable(id, null, '#' + tn, ed);
+		}, 0);
+		return '<div class="child-row p-2"><table id="' + tn + '" class="table table-striped display nowrap" width="100%">'
+			+ '<thead><tr><th></th><th>結算日期</th><th>團購</th><th>狀態</th><th>營業額</th><th>訂單數量</th><th>結算金額</th></tr></thead>'
+			+ '</table></div>';
+	};
+	injectDetailsControl(tableName, table, format);
+	injectOpenEditor(tableName, editor, false);
+	DataTableHelper.injectButtonEnableOnSelected(table);
+	$('.filters').on('change', function() {
+		table.clear().ajax.reload();
+	});
+
+	$(tableName +' tbody').on('click', 'button[data-action=updateState]', function (e) {
+		e.stopPropagation();
+		var $this = $(this);
+		updateState($this.data('id'), $this.data('state'), $this);
+	});
+
+	var updateState = function(id, state, $btn) {
+		btnStartLoading($btn);
+		$.ajax({
+			url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateState',
+			type: 'POST',
+			data: {
+				'distributionChannelGroupBuyId':id,
+				'state':state
+			},
+			dataType: 'json',
+			success: function(json) {
+				distributionChannelGroupBuyTable.ajax.reload( null, false );
+				btnStopLoading($btn);
+			},
+			error: function (xhr, ajaxOptions, thrownError) {
+				if (xhr.responseJSON) {
+					messagebox('',xhr.responseJSON.error, GBFi18n.act_close)
+				} else {
+					alert(xhr.status + " "+ thrownError);
+				}
+				btnStopLoading($btn);
+			}
+		});
+	}
+	return table;
+}
+</script>
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var distributionChannelId = {{json distributionChannelId}};
+		var tableName = '#distributionChannelGroupBuyTable';
+		var dcgbEditor = createDistributionChannelGroupBuyEditor(distributionChannelId, tableName);
+		createDistributionChannelGroupBuyTable(distributionChannelId, tableName, dcgbEditor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/erp/DistributionChannel/list">銷售通路</a></li>
+		<li class="breadcrumb-item active" aria-current="page">通路商團購 - {{channelName}}</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-header">通路商團購 - {{channelName}}</div>
+<div class="card-footer">
+	<input type="checkbox" name="state" id="stateOPEN" class="filters form-check-input" value="1" checked><label for="stateOPEN" class="pl-4 mr-2">未結案</label>
+	<input type="checkbox" name="state" id="stateCLOSABLE" class="filters form-check-input" value="1" ><label for="stateCLOSABLE" class="pl-4 mr-2">可結案</label>
+	<input type="checkbox" name="state" id="stateCLOSING" class="filters form-check-input" value="1" ><label for="stateCLOSING" class="pl-4 mr-2">部分結案</label>
+	<input type="checkbox" name="state" id="stateCLOSED" class="filters form-check-input" value="1"><label for="stateCLOSED" class="pl-4 mr-2">完整結案</label>
+	<input type="checkbox" name="state" id="stateCLOSED_NO_SALES" class="filters form-check-input" value="1"><label for="stateCLOSED_NO_SALES" class="pl-4 mr-2">完整結案(未銷售)</label>
+</div>
+<div class="card-footer">
+	<input type="checkbox" id="statistics" class="filters form-check-input" value="1" ><label for="statistics" class="pl-4 mr-2">顯示銷售數據</label>
+	<input type="checkbox" id="statusEnded" class="filters form-check-input" value="1" checked><label for="statusEnded" class="pl-4 mr-2">已結團</label>
+	<p class="text-info">顯示銷售數據後，會顯示更多結案選項</p>
+</div>
+<div class="card-body">
+	<table id="distributionChannelGroupBuyTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>銷售通路</th>
+				<th>團購</th>
+				<th>階段</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>銷售通路</th>
+				<th>團購</th>
+				<th>階段</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div></div>

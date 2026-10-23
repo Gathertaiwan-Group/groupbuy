@@ -1,0 +1,145 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+
+		var tableName = '#distributionChannelTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/erp/DistributionChannel/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/erp/DistributionChannel/update.do?distributionChannelId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/erp/DistributionChannel/delete.do?distributionChannelId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'distributionChannelId',
+			fields: [
+					DataTableConfig.field_select('通路類型','channelType'),
+					DataTableConfig.field_input('名稱','name'),
+					DataTableConfig.field_input('別名','nameAlias'),
+					DataTableConfig.field_input('簡稱','nameShort'),
+					DataTableConfig.field_input('公司名稱','companyName'),
+					DataTableConfig.field_input('公司別名','companyNameAlias'),
+					DataTableConfig.field_input('統一編號','companyVatId'),
+					DataTableConfig.field_input('標籤','tag'),
+					DataTableConfig.field_textarea('備註', 'note','', 10),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/erp/DistributionChannel/list.do',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_details_control,
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('name'),
+				DataTableConfig.data_select('channelType'),
+				DataTableConfig.data_input('nameAlias'),
+				DataTableConfig.data_input('nameShort'),
+				DataTableConfig.data_input('companyName'),
+				DataTableConfig.data_input('companyNameAlias'),
+				DataTableConfig.data_input('companyVatId'),
+				DataTableConfig.data_input('tag'),
+			],
+			columnDefs: [
+				{ "width": "56px", "targets": 0 },
+				{ "width": "78px", "targets": 1 }
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [2,3],[16,0]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+
+		function format ( d ) {
+			var id = d.distributionChannelId;
+			return '<div class="btn-toolbar btn-group btn-group-one-line">'
+			+ '<a target="_blank" class="btn btn-default btn-sm" href="/backend/erp/DistributionChannelContact/list.do?distributionChannelId='+id+'">聯絡資訊</a>'
+			+ '<a target="_blank" class="btn btn-default btn-sm" href="/backend/erp/DistributionChannelGroupBuy/list.do?distributionChannelId='+id+'">通路商團購</a>'
+			+ '<a target="_blank" class="btn btn-default btn-sm" href="/backend/erp/DistributionChannelTransaction/list.do?distributionChannelId='+id+'">通路商結算</a>'
+			+ '</div>'
+			;
+		};
+
+		injectDetailsControl(tableName, table, format);
+		injectOpenEditor(tableName, editor, false);
+
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item active" aria-current="page">銷售通路</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-header">銷售通路</div>
+<div class="card-body">
+	<table id="distributionChannelTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>名稱</th>
+				<th>通路類型</th>
+				<th>別名</th>
+				<th>簡稱</th>
+				<th>公司名稱</th>
+				<th>公司別名</th>
+				<th>統一編號</th>
+				<th>標籤</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>名稱</th>
+				<th>通路類型</th>
+				<th>別名</th>
+				<th>簡稱</th>
+				<th>公司名稱</th>
+				<th>公司別名</th>
+				<th>統一編號</th>
+				<th>標籤</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

@@ -5,5 +5,15 @@ import type { RouteDef } from "@/lib/core/http/types";
 import { dailyStatisticsRoutes } from "./daily-statistics";
 import { monthlyStatisticsRoutes } from "./monthly-statistics";
 import { salesAnalysisRoutes } from "./sales-analysis";
+import { erpReportRoutes } from "./erp-report";
+import { exportRoutes } from "./exports";
+import { distributionRoutes } from "./distribution";
 
-export const routes: RouteDef[] = [...dailyStatisticsRoutes, ...monthlyStatisticsRoutes, ...salesAnalysisRoutes];
+export const routes: RouteDef[] = [
+  ...dailyStatisticsRoutes,
+  ...monthlyStatisticsRoutes,
+  ...salesAnalysisRoutes,
+  ...erpReportRoutes,
+  ...exportRoutes,
+  ...distributionRoutes,
+];

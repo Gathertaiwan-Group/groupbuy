@@ -1,0 +1,186 @@
+<form name="GroupBuyForm" method="post" action="/backend/GroupBuy/exportMonthlyReport.do" class="form-horizontal" id="exportMonthlyReportForm"><div class="modal-header">
+	<h3 class="modal-title">匯出團購月報表</h3>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<p>請選擇依照團購開始或結束時間月份產生報表</p>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label" for="featureTag">包含標籤</label>
+		<div class="col-sm-8">
+<input type="checkbox" name="featureTag" id="emr_featureTag_UNCLOSED" class="filters form-check-input" value="16" ><label for="emr_featureTag_UNCLOSED" class="pl-4 mr-2">未結案</label>
+<input type="checkbox" name="featureTag" id="emr_featureTag_CLOSED" class="filters form-check-input" value="32" ><label for="emr_featureTag_CLOSED" class="pl-4 mr-2">已結案</label>
+<input type="checkbox" name="featureTag" id="emr_featureTag_CLOSING" class="filters form-check-input" value="64" ><label for="emr_featureTag_CLOSING" class="pl-4 mr-2">結案中</label>
+<input type="checkbox" name="featureTag" id="emr_featureTag_UNSHIPPING" class="filters form-check-input" value="128" ><label for="emr_featureTag_UNSHIPPING" class="pl-4 mr-2">未出貨</label>
+<input type="checkbox" name="featureTag" id="emr_featureTag_SHIPPING" class="filters form-check-input" value="256" ><label for="emr_featureTag_SHIPPING" class="pl-4 mr-2">出貨中</label>
+<input type="checkbox" name="featureTag" id="emr_featureTag_SHIPPED" class="filters form-check-input" value="512" ><label for="emr_featureTag_SHIPPED" class="pl-4 mr-2">出完貨</label>
+</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label" for="excludedFeatureTag">排除標籤</label>
+		<div class="col-sm-8">
+<input type="checkbox" name="excludedFeatureTag" id="emr_excludedFeatureTag_UNCLOSED" class="filters form-check-input" value="16" ><label for="emr_excludedFeatureTag_UNCLOSED" class="pl-4 mr-2">未結案</label>
+<input type="checkbox" name="excludedFeatureTag" id="emr_excludedFeatureTag_CLOSED" class="filters form-check-input" value="32" ><label for="emr_excludedFeatureTag_CLOSED" class="pl-4 mr-2">已結案</label>
+<input type="checkbox" name="excludedFeatureTag" id="emr_excludedFeatureTag_CLOSING" class="filters form-check-input" value="64" ><label for="emr_excludedFeatureTag_CLOSING" class="pl-4 mr-2">結案中</label>
+<input type="checkbox" name="excludedFeatureTag" id="emr_excludedFeatureTag_UNSHIPPING" class="filters form-check-input" value="128" ><label for="emr_excludedFeatureTag_UNSHIPPING" class="pl-4 mr-2">未出貨</label>
+<input type="checkbox" name="excludedFeatureTag" id="emr_excludedFeatureTag_SHIPPING" class="filters form-check-input" value="256" ><label for="emr_excludedFeatureTag_SHIPPING" class="pl-4 mr-2">出貨中</label>
+<input type="checkbox" name="excludedFeatureTag" id="emr_excludedFeatureTag_SHIPPED" class="filters form-check-input" value="512" ><label for="emr_excludedFeatureTag_SHIPPED" class="pl-4 mr-2">出完貨</label>
+</div>
+	</div>
+	<div class="form-group row form-group-daysToShipped">
+		<label class="col-sm-4 control-label" for="daysToShipped">已出貨超過天數</label>
+		<div class="col-sm-8">
+			<input type="text" name="daysToShipped" class=" form-control" id="daysToShipped" placeholder="天數">
+			<div class="field-info small">最後一筆訂單出貨日超過天數</div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label">顯示分潤金額</label>
+		<div class="col-sm-8">
+			<input type="checkbox" name="commission" class="nocount form-check-input" id="commission">
+			<label class="control-label" for="commission">顯示</label>
+			<div class="field-info small">僅顯示於有標籤為「結案中」「已結案」之表單。匯出將花費較多時間</div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label">標註結案中</label>
+		<div class="col-sm-8">
+			<input type="checkbox" name="closing" value="1" class="nocount form-check-input" id="closing">
+			<label class="control-label" for="closing">將匯出表單標註為「結案中」</label>
+			<div class="field-info"></div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label" for="purpose">日期條件(*)</label>
+		<div class="col-sm-8">
+			<input type="radio" name="purpose" class="form-check-input" id="purposeStart" value="start" required>
+			<label class="form-check-label" for="purposeStart">團購開始月份</label>
+			<input type="radio" name="purpose" class="form-check-input" id="purposeEnd" value="end" required>
+			<label class="form-check-label" for="purposeEnd">團購結束月份</label>
+		</div>
+	</div>
+	<div class="form-group row form-group-start">
+		<label class="col-sm-4 control-label" for="dateStartString">起</label>
+		<div class="col-sm-8">
+			<input type="text" name="dateStartString" maxlength="255" autocomplete="off" value="" type="text" id="dateStartString" class="form-control" required></div>
+	</div>
+	<div class="form-group row form-group-end">
+		<label class="col-sm-4 control-label" for="dateEndString">迄</label>
+		<div class="col-sm-8">
+			<input type="text" name="dateEndString" maxlength="255" autocomplete="off" value="" type="text" id="dateEndString" class="form-control" required></div>
+	</div>
+	</div> <!-- modal-body -->
+
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<div class="text-right help-block with-errors"></div>
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+</form><script>
+$(function () {
+	$('.form-group-daysToShipped').hide();
+	$('.form-group-start').hide();
+	$('.form-group-end').hide();
+	$('#submitButton').hide();
+	var form = 'exportMonthlyReportForm';
+	$('#'+form).validate();
+	$('input[name=purpose]').change(function() {
+		if ($('input[name=purpose]:checked').val() == 'start') {
+			$('.form-group-start').show();
+			$('.form-group-end').show();
+			//$('#dateEndString').val('');
+		} else {
+			$('.form-group-start').show();
+			$('.form-group-end').show();
+		//	$('#dateEndString').val('');
+		}
+	});
+	$('input[name=featureTag][value=512]').change(function(v) {
+		var show = $(this).prop('checked');
+		if (show) {
+			$('.form-group-daysToShipped').show();
+		} else {
+			$('.form-group-daysToShipped').hide();
+			$('#daysToShipped').val('');
+		}
+	});
+
+	//$('#'+form).submit(function(){
+	$('#submitButton').click(function() {
+		if ($('#'+form).valid()) {
+			var $btn = $('#'+form).find('input[type=submit]');
+			$btn.val('送出中...');
+			{{!-- 推導：原站以一般表單 POST 下載檔案；檔案下載後頁面不換頁，數秒後還原按鈕 --}}
+			setTimeout(function() { $btn.val('送出'); }, 3000);
+			$('#'+form).submit();
+		} else {
+			return false;
+		}
+	});
+
+	var loading = false;
+	var ajaxurl = '{{baseUrl}}/ajax/GroupBuy/countMonthlyReport.do';
+	var getCount = function() {
+		if ($('#dateStartString').val() == '' || $('#dateEndString').val() == '' || !$('input[name=purpose]:checked').length) {
+			return;
+		}
+		if (loading) return;
+		loading = true;
+		var featureTag = $('input[name=featureTag]:checked')
+		.map(function(){return this.value;})
+		.get()
+		.reduce(function(p,c) {return p|c}, 0)
+		var excludedFeatureTag = $('input[name=excludedFeatureTag]:checked')
+		.map(function(){return this.value;})
+		.get()
+		.reduce(function(p,c) {return p|c}, 0)
+
+		jQuery.post( ajaxurl,
+					{
+					'purpose':$('input[name="purpose"]:checked').val(),
+					'featureTag':featureTag,
+					'excludedFeatureTag':excludedFeatureTag,
+					'dateStartString':$('input[name="dateStartString"]').val(),
+					'dateEndString':$('input[name="dateEndString"]').val(),
+					'daysToShipped':$('input[name="daysToShipped"]').val(),
+				},
+				function(data) {
+					loading = false;
+					var cnt = data.data;
+					if (cnt > 0) {
+						$('#submitButton').show();
+					} else {
+						$('#submitButton').hide();
+					}
+					$('.help-block.with-errors').html('符合結果:' + cnt);
+				}
+		).fail(function() { loading = false; });
+	};
+
+	$('#exportMonthlyReportForm :input').on('change', function() {
+		if (!$(this).hasClass('nocount')) {
+			getCount();
+		}
+	});
+
+	initDatetimePicker('#dateStartString', 'YYYY-MM-DD', 'months', function(date, obj) {
+		var maxDate = moment(date).add('1', 'years').format('YYYY-MM-DD');
+		$('#dateEndString').data("DateTimePicker").minDate(date);
+		$('#dateEndString').data("DateTimePicker").maxDate(maxDate);
+		$('#dateEndString').data("DateTimePicker").defaultDate('');
+		$('#dateEndString').show();
+		getCount();
+	});
+	initDatetimePicker('#dateEndString', 'YYYY-MM-DD', 'months', function(date, obj) {
+		getCount();
+	});
+	$('#dateEndString').on("dp.hide", function () {
+		if ($('#dateStartString').val() != '' && $('#dateEndString').val() != '') {
+			getCount();
+		}
+	});
+});
+</script>
