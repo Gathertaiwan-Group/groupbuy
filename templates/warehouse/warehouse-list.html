@@ -1,0 +1,337 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var warehouseTable;
+	$(document).ready(function() {
+
+		var tableName = '#warehouseTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/Warehouse/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/Warehouse/update.do?warehouseId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/Warehouse/delete.do?warehouseId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'warehouseId',
+			template: '#warehouseForm',
+			fields: [
+
+				DataTableConfig.field_input('外部編碼','externalId'),
+				DataTableConfig.field_input('倉庫簡稱','shortName'),
+				DataTableConfig.field_input('倉庫名稱','name'),
+				DataTableConfig.field_input('倉庫分類','category'),
+				DataTableConfig.field_select('倉庫類型','type'),
+				DataTableConfig.field_upload('倉庫圖片','image'),
+				DataTableConfig.field_input('倉庫圖片網址','imageUrl'),
+				DataTableConfig.field_input('聯絡人','contactPerson'),
+				DataTableConfig.field_input('市內電話','telephone'),
+				DataTableConfig.field_input('行動電話','mobile'),
+				DataTableConfig.field_input('Email','email'),
+				DataTableConfig.field_select('國別','country','TW'),
+				DataTableConfig.field_input('郵遞區號','postcode'),
+				DataTableConfig.field_input('城市','city'),
+				DataTableConfig.field_input('鄉/鎮/市/區','district'),
+				DataTableConfig.field_input('街/路/地址','street'),
+				DataTableConfig.field_input('面積(坪)','area'),
+				DataTableConfig.field_input('租金','rent'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/wms/Warehouse/list.do',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				//DataTableConfig.data_input('name'),
+				{
+					data:'name',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var id = row.groupBuy ? row.groupBuy.groupBuyId + '' : '未綁定';
+						return $.fn.dataTable.render.text().display(data) + '<br><span class="badge badge-default mt-2 mr-1">表單ID:' + id + '</span>';
+					}
+				},
+				DataTableConfig.data_select('type'),
+				{
+					data:null,
+					'class':'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var html = '';
+						if (row.groupBuy != null) {
+							html += '<button class="btn btn-default text-nowrap" data-action="binded">已綁定</button>'
+							+ '<button class="btn btn-default text-nowrap" data-action="itemSet">品項</button>'
+							+ '<button class="btn btn-default text-nowrap" data-action="allItems">全部商品</button>'
+							+ '<button class="btn btn-default text-nowrap" data-action="salesOrder">訂單</button>'
+						} else {
+							html += '<button class="btn btn-default text-nowrap" data-action="bind">啟用</button>'
+						}
+						return html;
+					}
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+				{
+					extend: "create",
+					text: '調撥單',
+					action: function ( e, dt, node, config ) {
+						window.location = '/backend/WarehouseRequisition/list';
+					}
+				}
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [1,2],[16,0]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+		DataTableHelper.injectImageChange(editor, 'image', 'imageUrl');
+		warehouseTable = table;
+
+		{{!-- 推導：原站此段（列按鈕動作、啟用精靈）因擷取過濾不可得，依按鈕 data-action 與單一團購選單網址補寫 --}}
+		$(tableName +' tbody').on('click', 'button', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var d = row.data();
+			var action = $(this).attr('data-action');
+			if (action == null || d == null) return;
+			var groupBuyId = d.groupBuy ? d.groupBuy.groupBuyId : null;
+			switch (action) {
+			case 'binded':
+				messagebox('倉儲設定', '已綁定表單：' + $('<div>').text(d.groupBuy.title).html() + '（表單ID:' + groupBuyId + '）', 'OK');
+				break;
+			case 'itemSet':
+				window.location = '/backend/GroupBuy/show?groupBuyId=' + groupBuyId;
+				break;
+			case 'allItems':
+				window.location = '/backend/GroupBuyItemSet/show?groupBuyId=' + groupBuyId;
+				break;
+			case 'salesOrder':
+				window.location = '/backend/SalesOrder/list?groupBuyId=' + groupBuyId;
+				break;
+			case 'bind':
+				var $modal = $('#bindGroupBuyModal');
+				$modal.data('warehouseId', d.warehouseId);
+				$modal.data('mode', '');
+				$modal.find( '.step.active' ).removeClass('active');
+				$modal.find( '.step.step-1' ).addClass('active');
+				$modal.find( '.step-2__choose-1' ).remove();
+				$modal.find( '.btn-step-prev' ).hide();
+				$modal.find( '.btn-step-confirm' ).hide();
+				$modal.modal('show');
+				break;
+			}
+		});
+
+		var $modal = $('#bindGroupBuyModal');
+		$modal.find( '.btn-step-prev' ).hide();
+		$modal.find( '.btn-step-confirm' ).hide();
+		$( '.js-go-choose-1' ).on( 'click', function (event) {
+			$modal.data('mode', 'existing');
+			$modal.find( '.step-2__choose-1' ).remove();
+			var $step = $('<div class="step step-2 step-2__choose-1"><p>從既有團購中選擇：(僅能選擇[主表單]團購)</p><select id="bindGroupBuyId" class="form-control" data-feature-tags="MAIN" data-months="0"></select></div>');
+			$modal.find( '.step-wrapper' ).append($step);
+			$('#bindGroupBuyId').select2ForGroupBuy({width:'100%'});
+			$modal.find( '.step.step-1.active' ).removeClass('active');
+			$step.addClass('active');
+			$modal.find( '.btn-step-prev' ).show('fast');
+			$modal.find( '.btn-step-confirm' ).show('fast');
+		} );
+		$( '.js-go-choose-2' ).on( 'click', function (event) {
+			$modal.data('mode', 'new');
+			$modal.find( '.step.step-1.active' ).removeClass('active');
+			$modal.find( '.step.step-2.step-2__choose-2' ).addClass('active');
+			$modal.find( '.btn-step-prev' ).show('fast');
+			$modal.find( '.btn-step-confirm' ).show('fast');
+		} );
+		$( '.btn-step-prev' ).on( 'click', function (event) {
+			$modal.data('mode', '');
+			$modal.find( '.step.step-1' ).addClass('active');
+			$modal.find( '.step-2__choose-1' ).remove();
+			$modal.find( '.step.step-2.step-2__choose-2.active' ).removeClass('active');
+			$modal.find( '.btn-step-prev' ).hide('fast');
+			$modal.find( '.btn-step-confirm' ).hide('fast');
+		} );
+		$( '.btn-step-confirm' ).on( 'click', function (event) {
+			var $btn = $(this);
+			var mode = $modal.data('mode');
+			var data = { warehouseId: $modal.data('warehouseId'), mode: mode };
+			if (mode == 'existing') {
+				data.groupBuyId = $('#bindGroupBuyId').val();
+				if (!data.groupBuyId) {
+					modalShowDanger($modal, '請選擇團購');
+					return;
+				}
+			}
+			btnStartLoading($btn);
+			jQuery.post( GBF.baseUrl + '/ajax/wms/Warehouse/bind', data, function( json ) {
+				$modal.modal('hide');
+				displayAlertSuccess(json.error || '倉儲已啟用');
+				table.ajax.reload( null, false );
+			}).fail(function(xhr) {
+				var json = xhr.responseJSON || {};
+				modalShowDanger($modal, json.error || '啟用失敗');
+			}).always(function() {
+				btnStopLoading($btn);
+			});
+		} );
+	} ); // end ready
+</script>
+<style>
+.step {display: none;}
+.step.active {display: block;}
+.next-step-indicator {
+	position: absolute;
+    right: 0;
+    top: 50%;
+    margin-top: -11px;
+}
+</style>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">倉儲</div>
+<div class="card-body">
+	<table id="warehouseTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>倉庫名稱</th>
+				<th>倉庫類型</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>倉庫名稱</th>
+				<th>倉庫類型</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+
+<div style="display:none">
+<div id="warehouseForm" class="dtForm row">
+	<div class="col-sm-6">
+	<fieldset id="warehouseForm1">
+		<legend>基本資料</legend>
+		<editor-field name="name"></editor-field>
+		<editor-field name="shortName"></editor-field>
+		<editor-field name="externalId"></editor-field>
+		<editor-field name="category"></editor-field>
+		<editor-field name="type"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6">
+	<fieldset>
+		<legend>圖片</legend>
+		<editor-field name="image"></editor-field>
+		<editor-field name="imageUrl"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6">
+	<fieldset id="warehouseForm2">
+		<legend>聯絡資訊</legend>
+		<editor-field name="contactPerson"></editor-field>
+		<editor-field name="telephone"></editor-field>
+		<editor-field name="mobile"></editor-field>
+		<editor-field name="email"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6">
+	<fieldset>
+		<legend>地址資訊</legend>
+		<editor-field name="country"></editor-field>
+		<editor-field name="postcode"></editor-field>
+		<editor-field name="city"></editor-field>
+		<editor-field name="district"></editor-field>
+		<editor-field name="street"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6">
+	<fieldset id="warehouseForm3">
+		<legend>其他</legend>
+		<editor-field name="area"></editor-field>
+		<editor-field name="rent"></editor-field>
+	</fieldset>
+	</div>
+</div>
+</div>
+</div>
+<!--#foot-->
+<div class="modal" id="bindGroupBuyModal" aria-labelledby="bindGroupBuyModalLabel" aria-hidden="true" tabindex="-1">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">倉儲設定</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+					<span aria-hidden="true">×</span>
+				</button>
+			</div>
+			<div class="modal-body">
+
+				<div class="step-wrapper">
+					<div class="step step-1 active">
+						<div class="d-flex flex-column">
+							<button class="btn btn-outline-primary js-go-choose-1">
+								<div class="position-relative">
+									<h5>將既有團購改作倉儲</h5>
+									<p class="mb-0">從既有團購中選擇：</p>
+									<p class="mb-0">(僅能選擇[主表單]團購)</p>
+									<span class="next-step-indicator"><i class="fas fa-angle-double-right"></i></span>
+								</div>
+							</button>
+							<button class="btn btn-outline-primary js-go-choose-2">
+								<div class="position-relative">
+									<h5>全新倉儲</h5>
+									<span class="next-step-indicator"><i class="fas fa-angle-double-right"></i></span>
+								</div>
+							</button>
+						</div>
+					</div>
+					<div class="step step-2 step-2__choose-2">
+						<p>系統會同時新增一個與此倉儲同名的表單做關聯</p>
+					</div>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-primary btn-step-prev">返回</button>
+				<button type="button" class="btn btn-secondary" data-dismiss="modal">關閉</button>
+				<button type="button" class="btn btn-primary btn-step-confirm">確定操作?</button>
+			</div>
+		</div>
+	</div>
+</div>

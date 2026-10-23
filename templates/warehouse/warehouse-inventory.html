@@ -1,0 +1,179 @@
+<!--#head-->
+<style>
+.btn-input-check {min-width:72px !important;}
+.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;}
+.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
+span.input-group-text.md-addon {min-width: 152px;}
+.input-group-inventory .item-stock {width:200px !important; flex:0}
+.input-group-inventory .input-error {width:180px !important; flex:0}
+.input-group-inventory .input-group-text {
+	display: -webkit-box;
+	white-space: normal;
+	-webkit-line-clamp: 1;
+	-webkit-box-orient: vertical;
+	flex: 1 1;
+	text-align: left;
+	overflow:hidden;
+}
+.input-group-inventory .input-group-prepend {flex:1}
+span.col-uid,
+span.stockAvailable{
+    display: block;
+    font-size: 0.8rem;
+    color: green;
+}
+span.col-title{max-width: calc(50vw);display: block;}
+span.stockDiff{display: block;font-size: 0.8rem;}
+.btn-showUnacrhivedOrder {padding: 4px 8px;margin: 0;border: 0;}
+//.btn-group {float: right;}
+.btn-cancelOrder {padding: 4px 8px;}
+</style>
+<script src="/scripts/inventory.js?v=1"></script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4">
+<div class="card-header">加入盤點商品</div>
+<div class="card-body">
+	<div class="input-group py-2">
+		<div class="input-group-prepend">
+			<span class="input-group-text md-addon" style="min-width:100px">商品代碼</span>
+		</div>
+		<select name="fromUid" id="fromUid" class="form-control"></select>
+		<div class="input-group-append">
+			<button type="button" id="addItemUid" class="btn btn-primary m-0">加入</button>
+		</div>
+	</div>
+	<div class="input-group py-2">
+		<div class="input-group-prepend">
+			<span class="input-group-text md-addon" style="min-width:100px">名稱</span>
+		</div>
+		<select name="fromTitle" id="fromTitle" class="form-control required"></select>
+		<div class="input-group-append">
+			<button type="button" id="addItemTitle" class="btn btn-primary m-0">加入</button>
+		</div>
+	</div>
+	<div class="input-group py-2">
+		<button type="button" class="btn btn-primary m-0" onclick="inventoryManager.showUplaodEditor()">匯入檔案</button>
+	</div>
+</div>
+</div>
+<div class="card mt-4" id="ItemForm">
+<div class="card-header">盤點</div>
+<div class="card-body">
+	<div class="blue-grey lighten-5 small p-2">
+	***僅供倉儲商品使用
+	<br>盤點後，所有已出貨訂單商品將被標註為「已盤點」將不在列入庫存計算內
+	<br>商品原始庫存以及可售庫存將會被調整為：
+	<br><span class="font-weight-500">原始庫存=可售庫存+商品未出貨數量</span>
+	<br>*****按下[確認]後即對當前商品進行盤點
+	</div>
+</div>
+<div class="card-body">
+	<button type="button" id="cleanItem" class="btn btn-warning m-0">重設所選盤點商品</button>
+</div>
+<!--
+<div class="card-body p-0">
+	<table id="invTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>原始現貨庫存</th>
+				<th>可售現貨數量</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>原始現貨庫存</th>
+				<th>可售現貨數量</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+ -->
+<div class="card-body py-0">
+	<table id="invTableUpload" class="table table-striped display" width="100%">
+		<thead>
+			<tr>
+				<th>名稱</th>
+				<th>匯入總數</th>
+				<th>當前庫存</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>名稱</th>
+				<th>匯入總數</th>
+				<th>當前庫存</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+<form id="downloadForm" method="post" action="{{baseUrl}}/ajax/wms/WarehouseInventory/download">
+<input type="hidden" name="uids">
+</form>
+<script type="text/javascript">
+$(function () {
+	{{!-- 推導：原站此處片段因擷取過濾不可得（.form-detail 顯示）；select2 與按鈕事件依可見片段補寫 --}}
+	$('#ItemForm').on('shown.bs.collapse', function () {
+		$('.form-detail').show();
+	});
+
+	inventoryManager.init('');
+
+	$.fn.extend({
+		select2ForWarehouseItem:function(type, multiple) {
+			$(this).select2({
+				width: 'auto',
+				allowClear:true,
+				inputClass:'input-large',
+				placeholder:GBFi18n.select,
+				dropdownAuthWidth:true,
+				language:GBF.language,
+				multiple:multiple,
+				closeOnSelect:false,
+				ajax: {
+					delay:350,
+					url: function() {
+						return GBF.baseUrl + '/ajax/wms/WarehouseInventory/lookup';
+					},
+					dataType: 'json',
+					data: function(data) {
+						data = {
+							iColumns:1,
+							mDataProp_0:type,
+							sSearch_0:data.term,
+						}
+						return data;
+					}
+				}
+			});
+		}
+	});
+	$('#fromUid').select2ForWarehouseItem('uid', false);
+	$('#fromTitle').select2ForWarehouseItem('title', true);
+
+	$('#addItemUid').on('click', function () {
+		var uid = $('#fromUid').val();
+		if (!uid) return;
+		inventoryManager.addToTable(uid);
+		$('#fromUid').val(null).trigger('change');
+	});
+	$('#addItemTitle').on('click', function () {
+		var uids = $('#fromTitle').val();
+		if (!uids || !uids.length) return;
+		inventoryManager.addToTable(uids);
+		$('#fromTitle').val(null).trigger('change');
+	});
+	$('#cleanItem').on('click', function () {
+		inventoryManager.clean();
+	});
+});
+</script>
+</div>

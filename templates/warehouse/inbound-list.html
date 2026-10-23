@@ -1,0 +1,317 @@
+<!--#head-->
+<script type="text/javascript" class="init">
+var inboundTable;
+var inboundEditor;
+	var editorOpts = $.extend(true, {}, DataTableConfig.formOptions);
+	$(document).ready(function() {
+		var tableName = '#inboundTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/Inbound/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/Inbound/update.do?inboundId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/Inbound/delete.do?inboundId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'inboundId',
+			template: '#customInboundForm',
+			fields: [
+				DataTableConfig.field_datetime('單據日期','dateRequiredString','YYYY-MM-DD'),
+			],
+			formOptions:editorOpts,
+			i18n:DataTableConfig.i18n,
+		} );
+		inboundEditor = editor;
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/wms/Inbound/list.do',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('dateRequiredString'),
+				{
+					data:'inboundId',
+					render: function ( data, type, row ) {
+						return row.inboundId;
+					}
+				},
+				DataTableConfig.data_select('status'),
+				DataTableConfig.data_select('requester'),
+				{
+					data:'warehouseId',
+					render: function ( data, type, row ) {
+						return row.warehouse.name;
+					}
+				},
+				{
+					data:null,
+					class:'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var html = '';
+						if (row.status == 'OPEN') {
+							html += '<button class="btn btn-info btn-sm px-2" data-action="item">調整商品</button>'
+								+ '<button class="btn btn-secondary btn-sm px-2" data-action="edit">編輯</button>'
+						} else {
+							html += '<button class="btn btn-default btn-sm px-2" data-action="view">檢視</button>'
+						}
+						return html;
+					}
+				},
+			],
+			buttons: [
+				{ extend: 'remove', editor: editor}
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "desc" ]],
+			select: {
+				style: 'single'
+			},
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [1,2,3,4],[16,0,0,0]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+		inboundTable = table;
+		DataTableHelper.initEditorOnCallback(table,editor);
+
+		$(tableName +' tbody').on('click', 'button', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var inboundId = row.data().inboundId;
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+
+			switch (action) {
+				case 'item':
+				case 'view':
+					openFormF(GBF.ctx + '/backend/Inbound/update', 'inboundId=' + inboundId + '&action=' + action);
+					$('#myModal').one('shown.bs.modal', function () {
+						inboundItemTable.columns.adjust();
+					})
+					return;
+				case 'edit':
+					inboundEditor.edit(row, {
+						title: '編輯',
+						buttons: '編輯'
+					} );
+					return;
+				default:{
+					jQuery.post(
+						GBF.baseUrl + '/ajax/wms/Inbound/' + action,
+						{
+							'inboundId':inboundId,
+						},
+						function( json ) {
+							displayAlertSuccess(json.error);
+							inboundTable.ajax.reload();
+						}
+					).fail(function(data) {
+						if (data.responseJSON) {
+							displayAlertWarning(data.responseJSON.error);
+						}
+					})
+				}
+			}
+		} );
+	} ); // end ready
+
+	var importItemsFromSalesOrder = function (inboundId, onImported) {
+		var importEditor = new $.fn.dataTable.Editor( {
+			ajax: GBF.baseUrl + '/ajax/wms/InboundItem/importItemsFromSalesOrder.do?inboundId=' + inboundId,
+			fields: [
+				DataTableConfig.field_input('訂單編號:','salesOrderUUID'),
+			],
+			i18n: DataTableConfig.i18n,
+			formOptions: {
+				onComplete: 'none',
+				main: {
+					onBackground: 'none'
+				},
+			}
+		} )
+		.buttons([
+			{
+				label: '確認上傳',
+				className: 'btn-primary',
+				tabIndex: 0,
+				action: function() {
+					this.submit();
+				}
+			},
+			{
+				label: '關閉',
+				className: 'btn-default',
+				tabIndex: 1,
+				action: function() {
+					this.close();
+				}
+			},
+		])
+		.on('submitSuccess', function (e, json) {
+			this.error('已匯入，入庫商品共 ' + (json.data ? json.data.length : 0) + ' 項');
+			this.field('salesOrderUUID').val('');
+			if (onImported) onImported(json);
+		});
+		importEditor.title('由訂單匯入商品').create();
+		return importEditor;
+	}
+</script>
+<!--#body--><div class="container-fluid ">
+<form id="ibCreateForm">
+	<div class="card mt-4">
+		<div class="card-header card-header bg-info white-text">建立入庫單</div>
+		<div class="card-body">
+			<div class="input-group py-2">
+				<div class="input-group-prepend">
+					<label class="input-group-text md-addon" for="dateRequiredString" style="min-width:100px">單據日期</label>
+				</div>
+				<input type="date" name="dateRequiredString" id="dateRequiredString" class="form-control required" required>
+			</div>
+			<div class="input-group py-2">
+				<div class="input-group-prepend">
+					<label class="input-group-text md-addon" for="warehouseId" style="min-width:100px">入庫倉</label>
+				</div>
+				<select name="warehouseId" id="warehouseId" class="form-control required"></select>
+			</div>
+		</div>
+		<div class="card-footer">
+			<button type="submit" class="btn btn-secondary btn-submit pull-right"><i class="fa fa-plus mr-1"></i>新增</button>
+		</div>
+	</div>
+</form>
+
+<script>
+	const warehouseAjax = {
+		query: function () {
+			return $.ajax({
+				method: 'get',
+				url: GBF.baseUrl + '/ajax/wms/Warehouse/query',
+				dataType: 'json',
+				async: false,
+				global: false
+			});
+		},
+		getInfo: function (warehouseId) {
+			return $.ajax({
+				method: 'get',
+				url: GBF.baseUrl + '/ajax/wms/Warehouse/getInfo',
+				data: {warehouseId: warehouseId},
+				dataType: 'json',
+				async: false,
+				global: false
+			});
+		}
+	};
+	{{!-- 推導：原站本段（入庫倉選單、表單送出）部分因擷取過濾不可得，依可見片段補寫 --}}
+	$(function () {
+		const $ibCreateForm = $('#ibCreateForm');
+		const $warehouseId = $('#warehouseId');
+		$warehouseId.append('<option value="">選擇</option>');
+		const json = warehouseAjax.query().responseJSON || {};
+		(json.data || []).forEach(function (w) {
+			$warehouseId.append($('<option></option>').attr('value', w.warehouseId).text(w.name));
+		});
+		$('#dateRequiredString').val(moment().format('YYYY-MM-DD'));
+
+		$ibCreateForm.on('submit', function (e) {
+			e.preventDefault();
+			const $btn = $ibCreateForm.find('.btn-submit');
+			const data = {};
+			let valid = true;
+			$ibCreateForm.find('.required').each(function () {
+				if (!$(this).val()) valid = false;
+				data[this.name] = $(this).val();
+			});
+			if (!valid) {
+				displayAlertWarning('請填寫單據日期並選擇入庫倉');
+				return false;
+			}
+			const dataJson = JSON.stringify(data);
+			btnStartLoading($btn);
+
+		$.ajax({
+			method: 'post',
+			url: GBF.baseUrl + '/ajax/wms/Inbound/save',
+			data: {data:dataJson},
+			dataType: 'json',
+			async: true,
+			success: function(json) {
+				const $ibCreateFormSelect = $ibCreateForm.find('select');
+				$ibCreateFormSelect.val('');
+				$('#dateRequiredString').val(moment().format('YYYY-MM-DD'));
+				displayAlertSuccess(json.error);
+				inboundTable.ajax.reload();
+			},
+			error: function(xhr) {
+				const json = xhr.responseJSON || {};
+				displayAlertWarning(json.error || '新增失敗');
+			},
+			complete: function() {
+				btnStopLoading($btn);
+			}
+		});
+			return false;
+		});
+	});
+</script>
+
+	<div class="card mt-4">
+		<div class="card-header">入庫單</div>
+		<div class="card-body">
+			<table id="inboundTable" class="table table-striped display nowrap" width="100%">
+				<thead>
+				<tr>
+					<th></th>
+					<th>單據日期</th>
+					<th>入庫單號</th>
+					<th>單據狀態</th>
+					<th>入庫發起者</th>
+					<th>入庫倉</th>
+					<th></th>
+				</tr>
+				</thead>
+				<tfoot>
+				<tr>
+					<th></th>
+					<th>單據日期</th>
+					<th>入庫單號</th>
+					<th>單據狀態</th>
+					<th>入庫發起者</th>
+					<th>入庫倉</th>
+					<th></th>
+				</tr>
+				</tfoot>
+			</table>
+		</div>
+	</div>
+
+	<div style="display:none">
+		<div id="customInboundForm" class="dtForm row">
+			<div class="col-12">
+				<fieldset>
+					<editor-field name="dateRequiredString"></editor-field>
+				</fieldset>
+			</div>
+		</div>
+	</div>
+
+</div>

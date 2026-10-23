@@ -1,0 +1,184 @@
+{{!-- 推導：原站 /backend/Inbound/update（openFormF 全螢幕彈窗，全域變數 inboundItemTable）未擷取（本帳號 0 筆入庫單），依入庫單列表與原站彈窗樣式補完。 --}}
+<div class="modal-header">
+	<h5 class="modal-title">入庫單 {{inbound.inboundId}}－{{actionTitle}}
+		<span class="badge badge-default ml-2">{{statusLabel}}</span>
+	</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
+</div>
+<div class="modal-body" id="inboundUpdate">
+	<div class="modal-message"></div>
+	<table class="table table-sm small mb-2">
+		<tr>
+			<th style="width:120px">入庫倉</th><td>{{inbound.warehouse.name}}</td>
+			<th style="width:120px">單據日期</th><td>{{inbound.dateRequiredString}}</td>
+		</tr>
+		<tr>
+			<th>入庫發起者</th><td>{{inbound.requester}}</td>
+			<th>入庫日期</th><td>{{inbound.dateReceivedString}}</td>
+		</tr>
+	</table>
+	{{#if isItem}}
+	<div class="input-group py-2">
+		<div class="input-group-prepend">
+			<span class="input-group-text md-addon" style="min-width:100px">入庫商品</span>
+		</div>
+		<select id="ibItemId" class="form-control"></select>
+		<input type="text" id="ibItemQuantity" class="form-control" placeholder="數量" autocomplete="off" style="max-width:120px">
+		<input type="text" id="ibItemUnitPrice" class="form-control" placeholder="單價(可空白)" autocomplete="off" style="max-width:140px">
+		<div class="input-group-append">
+			<button type="button" id="ibAddItem" class="btn btn-primary m-0">加入</button>
+			<button type="button" id="ibImportSalesOrder" class="btn btn-secondary m-0">由訂單匯入</button>
+		</div>
+	</div>
+	<div class="blue-grey lighten-5 small p-2 mb-2">按下[確認入庫]後，所有入庫商品會加入入庫倉庫存與商品可售庫存，並寫入入庫紀錄（不可再修改）。</div>
+	{{/if}}
+	<table id="inboundItemTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>商品代碼</th>
+				<th>名稱</th>
+				<th>入庫數量</th>
+				<th>單價</th>
+				<th>小計</th>
+				<th></th>
+			</tr>
+		</thead>
+	</table>
+</div>
+<div class="modal-footer">
+	{{#if isItem}}
+	<button type="button" class="btn btn-primary" id="ibReceive">確認入庫</button>
+	{{/if}}
+	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>
+<script>
+var inboundItemTable;
+(function () {
+	var inboundId = {{json inbound.inboundId}};
+	var editable = {{json isItem}};
+	var $modal = $('#myModal');
+
+	var itemEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: { type: 'POST', url: GBF.baseUrl + '/ajax/wms/InboundItem/save.do?inboundId=' + inboundId },
+			edit: { type: 'POST', url: GBF.baseUrl + '/ajax/wms/InboundItem/update.do?inboundItemId=_id_' },
+			remove: { type: 'POST', url: GBF.baseUrl + '/ajax/wms/InboundItem/delete.do?inboundItemId=_id_' }
+		},
+		table: '#inboundItemTable',
+		idSrc: 'inboundItemId',
+		fields: [
+			DataTableConfig.field_hidden('itemId'),
+			DataTableConfig.field_input('入庫數量','quantity'),
+			DataTableConfig.field_input('單價','unitPrice'),
+		],
+		formOptions:DataTableConfig.formOptionsInline,
+		i18n:DataTableConfig.i18n,
+	} );
+
+	inboundItemTable = $('#inboundItemTable').DataTable( {
+		dom: 'rtip',
+		scrollX:true,
+		pageLength: 100,
+		ajax: {
+			url: GBF.baseUrl + '/ajax/wms/InboundItem/list.do',
+			type: 'POST',
+			data: function (d) { d.inboundId = inboundId; return d; }
+		},
+		language:DataTableConfig.i18n,
+		columns: [
+			DataTableConfig.data_input('uid'),
+			DataTableConfig.data_input('title'),
+			DataTableConfig.data_input('quantity', editable),
+			DataTableConfig.data_input('unitPrice', editable),
+			DataTableConfig.data_input('subtotal'),
+			{
+				data:null,
+				'class':'inline-disabled',
+				orderable:false,
+				render: function ( data, type, row ) {
+					return editable ? '<button type="button" class="btn btn-danger btn-sm px-2" data-action="remove">刪除</button>' : '';
+				}
+			}
+		],
+		order: [],
+		select: false,
+	} );
+	window.inboundItemTable = inboundItemTable;
+
+	if (editable) {
+		$('#inboundItemTable').on('click', 'tbody td:not(.inline-disabled)', function () {
+			var idx = inboundItemTable.cell(this).index();
+			if (!idx) return;
+			var col = inboundItemTable.settings()[0].aoColumns[idx.column].data;
+			if (col == 'quantity' || col == 'unitPrice') itemEditor.inline(this, col, { onBlur: 'submit' });
+		});
+		itemEditor.on('submitSuccess', function () { inboundItemTable.ajax.reload(null, false); });
+		$('#inboundItemTable').on('click', 'button[data-action=remove]', function () {
+			var row = inboundItemTable.row($(this).closest('tr'));
+			itemEditor.remove(row, {
+				title: '刪除',
+				message: '確定刪除「' + $('<div>').text(row.data().title).html() + '」？',
+				buttons: [{ label: '刪除', className: 'btn-danger', action: function () { this.submit(); } }]
+			});
+		});
+		$('#ibItemId').select2({
+			width: 'auto',
+			allowClear: true,
+			placeholder: '輸入商品代碼或名稱（倉儲商品）',
+			dropdownParent: $modal,
+			language: GBF.language,
+			ajax: {
+				delay: 350,
+				url: GBF.baseUrl + '/ajax/wms/WarehouseItem/lookup',
+				dataType: 'json',
+				data: function (p) { return { q: p.term, page: p.page || 1 }; }
+			}
+		});
+		$('#ibAddItem').on('click', function () {
+			var itemId = $('#ibItemId').val();
+			var quantity = $('#ibItemQuantity').val();
+			if (!itemId) { modalShowDanger($modal, '請選擇商品'); return; }
+			if (!/^\d+$/.test(quantity) || parseInt(quantity) <= 0) { modalShowDanger($modal, '數量需大於 0'); return; }
+			var $btn = $(this);
+			btnStartLoading($btn);
+			$.post(GBF.baseUrl + '/ajax/wms/InboundItem/save.do?inboundId=' + inboundId, {
+				action: 'create',
+				'data[0][itemId]': itemId,
+				'data[0][quantity]': quantity,
+				'data[0][unitPrice]': $('#ibItemUnitPrice').val()
+			}, function (json) {
+				if (json.fieldErrors && json.fieldErrors.length) {
+					modalShowDanger($modal, json.fieldErrors.map(function (f) { return f.status; }).join('<br>'));
+					return;
+				}
+				$('#ibItemId').val(null).trigger('change');
+				$('#ibItemQuantity').val('');
+				$('#ibItemUnitPrice').val('');
+				$modal.find('.modal-message').hide();
+				inboundItemTable.ajax.reload(null, false);
+			}).fail(function (xhr) {
+				modalShowDanger($modal, (xhr.responseJSON && xhr.responseJSON.error) || '加入失敗');
+			}).always(function () { btnStopLoading($btn); });
+		});
+		$('#ibImportSalesOrder').on('click', function () {
+			importItemsFromSalesOrder(inboundId, function () { inboundItemTable.ajax.reload(null, false); });
+		});
+		$('#ibReceive').on('click', function () {
+			var $btn = $(this);
+			if (!inboundItemTable.data().count()) { modalShowDanger($modal, '請先加入入庫商品'); return; }
+			if (!confirm('確認入庫？入庫後庫存會增加，且不可再修改入庫商品。')) return;
+			btnStartLoading($btn);
+			$.post(GBF.baseUrl + '/ajax/wms/Inbound/received', { inboundId: inboundId }, function (json) {
+				$modal.modal('hide');
+				displayAlertSuccess(json.error);
+			}).fail(function (xhr) {
+				modalShowDanger($modal, (xhr.responseJSON && xhr.responseJSON.error) || '入庫失敗');
+			}).always(function () { btnStopLoading($btn); });
+		});
+	}
+
+	$modal.one('hidden.bs.modal', function () {
+		if (typeof inboundTable !== 'undefined' && inboundTable) inboundTable.ajax.reload(null, false);
+	});
+})();
+</script>

@@ -1,0 +1,249 @@
+{{!-- 推導：原站 /backend/WarehouseRequisition/update（openFormF 全螢幕彈窗）未擷取（本帳號 0 筆調撥單），依調撥單列表欄位與原站彈窗樣式補完。 --}}
+<div class="modal-header">
+	<h5 class="modal-title">調撥單 {{req.warehouseRequisitionId}}－{{actionTitle}}
+		<span class="badge badge-default ml-2">{{statusLabel}}</span>
+		<span class="badge badge-default ml-1">{{transferStatusLabel}}</span>
+	</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
+</div>
+<div class="modal-body" id="warehouseRequisitionUpdate">
+	<div class="modal-message"></div>
+	<div class="row small">
+		<div class="col-md-6">
+			<table class="table table-sm mb-2">
+				<tr><th style="width:120px">來源倉</th><td>{{req.fromWarehouse.name}}</td></tr>
+				<tr><th>調出倉聯絡人</th><td>{{req.fromName}}</td></tr>
+				<tr><th>調出倉聯絡電話</th><td>{{req.fromTelephone}}</td></tr>
+				<tr><th>調出倉地址</th><td>{{req.fromAddress}}</td></tr>
+			</table>
+		</div>
+		<div class="col-md-6">
+			<table class="table table-sm mb-2">
+				<tr><th style="width:120px">目標倉</th><td>{{req.toWarehouse.name}}</td></tr>
+				<tr><th>調入倉聯絡人</th><td>{{req.toName}}</td></tr>
+				<tr><th>調入倉聯絡電話</th><td>{{req.toTelephone}}</td></tr>
+				<tr><th>調入倉地址</th><td>{{req.toAddress}}</td></tr>
+			</table>
+		</div>
+		<div class="col-md-12">
+			<table class="table table-sm mb-2">
+				<tr>
+					<th style="width:120px">單據日期</th><td>{{req.dateRequiredString}}</td>
+					<th style="width:120px">調撥類型</th><td>{{typeLabel}}</td>
+					<th style="width:120px">物流方式</th><td>{{logisticLabel}}</td>
+				</tr>
+				<tr>
+					<th>調撥發起者</th><td>{{req.requester}}</td>
+					<th>調撥同意者</th><td>{{req.approver}}</td>
+					<th>確認日期</th><td>{{req.dateConfirmedString}}</td>
+				</tr>
+				<tr>
+					<th>調撥日期</th><td>{{req.dateTransferredString}}</td>
+					<th>調撥商品總數量</th><td>{{req.totalAmount}}</td>
+					<th>調撥商品成本總額</th><td>{{req.totalCost}}</td>
+				</tr>
+				<tr><th>調撥備註</th><td colspan="5" style="white-space:pre-wrap">{{req.note}}</td></tr>
+			</table>
+		</div>
+	</div>
+	{{#if isItem}}
+	<div class="input-group py-2">
+		<div class="input-group-prepend">
+			<span class="input-group-text md-addon" style="min-width:100px">調撥商品</span>
+		</div>
+		<select id="wrItemId" class="form-control"></select>
+		<input type="text" id="wrItemQuantity" class="form-control" placeholder="數量" autocomplete="off" style="max-width:120px">
+		<input type="text" id="wrItemCost" class="form-control" placeholder="成本(可空白)" autocomplete="off" style="max-width:140px">
+		<div class="input-group-append">
+			<button type="button" id="wrAddItem" class="btn btn-primary m-0">加入</button>
+		</div>
+	</div>
+	{{/if}}
+	{{#if isTransfer}}
+	<div class="blue-grey lighten-5 small p-2 mb-2">輸入本次轉移數量後按下[確認轉移庫存]，系統會從來源倉扣除並加入目標倉（同一交易完成）。</div>
+	{{/if}}
+	<table id="warehouseRequisitionItemTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>商品代碼</th>
+				<th>名稱</th>
+				<th>來源倉庫存</th>
+				<th>目標倉庫存</th>
+				<th>調撥數量</th>
+				<th>已調撥數量</th>
+				<th>成本</th>
+				<th></th>
+			</tr>
+		</thead>
+	</table>
+</div>
+<div class="modal-footer">
+	{{#if isItem}}
+	<button type="button" class="btn btn-danger" data-wr-action="cancel">取消調撥單</button>
+	<button type="button" class="btn btn-primary" data-wr-action="submit">送出審核</button>
+	{{/if}}
+	{{#if isReview}}
+	<button type="button" class="btn btn-danger" data-wr-action="reject">駁回</button>
+	<button type="button" class="btn btn-success" data-wr-action="approve">批准</button>
+	{{/if}}
+	{{#if isTransfer}}
+	<button type="button" class="btn btn-warning" data-wr-action="transfer">確認轉移庫存</button>
+	{{/if}}
+	{{#if isReceived}}
+	<button type="button" class="btn btn-primary" data-wr-action="received">確認收貨</button>
+	{{/if}}
+	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>
+<script>
+(function () {
+	var warehouseRequisitionId = {{json req.warehouseRequisitionId}};
+	var fromWarehouseId = {{json req.fromWarehouseId}};
+	var action = {{json action}};
+	var editable = action == 'item';
+	var transfer = action == 'transfer';
+	var $modal = $('#myModal');
+	var changed = false;
+
+	var itemEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: { type: 'POST', url: GBF.baseUrl + '/ajax/wms/WarehouseRequisitionItem/save.do?warehouseRequisitionId=' + warehouseRequisitionId },
+			edit: { type: 'POST', url: GBF.baseUrl + '/ajax/wms/WarehouseRequisitionItem/update.do?warehouseRequisitionItemId=_id_' },
+			remove: { type: 'POST', url: GBF.baseUrl + '/ajax/wms/WarehouseRequisitionItem/delete.do?warehouseRequisitionItemId=_id_' }
+		},
+		table: '#warehouseRequisitionItemTable',
+		idSrc: 'warehouseRequisitionItemId',
+		fields: [
+			DataTableConfig.field_hidden('itemId'),
+			DataTableConfig.field_input('調撥數量','quantity'),
+			DataTableConfig.field_input('成本','cost'),
+		],
+		formOptions:DataTableConfig.formOptionsInline,
+		i18n:DataTableConfig.i18n,
+	} );
+	itemEditor.on('submitSuccess', function () { changed = true; });
+
+	var columns = [
+		DataTableConfig.data_input('uid'),
+		DataTableConfig.data_input('title'),
+		DataTableConfig.data_input('fromStock'),
+		DataTableConfig.data_input('toStock'),
+		DataTableConfig.data_input('quantity', editable),
+		DataTableConfig.data_input('transferredQuantity'),
+		DataTableConfig.data_input('cost', editable),
+		{
+			data:null,
+			'class':'inline-disabled',
+			orderable:false,
+			render: function ( data, type, row ) {
+				if (editable) return '<button type="button" class="btn btn-danger btn-sm px-2" data-action="remove">刪除</button>';
+				if (transfer) {
+					return '<div class="input-group input-group-sm" style="min-width:160px"><div class="input-group-prepend"><span class="input-group-text">本次轉移</span></div>'
+						+ '<input type="text" class="form-control wr-transfer-qty" data-id="' + row.warehouseRequisitionItemId + '" value="' + row.remainingQuantity + '" autocomplete="off"></div>';
+				}
+				return '';
+			}
+		}
+	];
+
+	window.warehouseRequisitionItemTable = $('#warehouseRequisitionItemTable').DataTable( {
+		dom: 'rtip',
+		scrollX:true,
+		pageLength: 100,
+		ajax: {
+			url: GBF.baseUrl + '/ajax/wms/WarehouseRequisitionItem/list.do',
+			type: 'POST',
+			data: function (d) { d.warehouseRequisitionId = warehouseRequisitionId; return d; }
+		},
+		language:DataTableConfig.i18n,
+		columns: columns,
+		order: [],
+		select: false,
+	} );
+	var itemTable = window.warehouseRequisitionItemTable;
+
+	if (editable) {
+		$('#warehouseRequisitionItemTable').on('click', 'tbody td:not(.inline-disabled)', function () {
+			var idx = itemTable.cell(this).index();
+			if (!idx) return;
+			var col = itemTable.settings()[0].aoColumns[idx.column].data;
+			if (col == 'quantity' || col == 'cost') itemEditor.inline(this, col, { onBlur: 'submit' });
+		});
+		$('#warehouseRequisitionItemTable').on('click', 'button[data-action=remove]', function () {
+			var row = itemTable.row($(this).closest('tr'));
+			itemEditor.remove(row, {
+				title: '刪除',
+				message: '確定刪除「' + $('<div>').text(row.data().title).html() + '」？',
+				buttons: [{ label: '刪除', className: 'btn-danger', action: function () { this.submit(); } }]
+			});
+		});
+		$('#wrItemId').select2({
+			width: 'auto',
+			allowClear: true,
+			placeholder: '輸入商品代碼或名稱（來源倉現有庫存）',
+			dropdownParent: $modal,
+			language: GBF.language,
+			ajax: {
+				delay: 350,
+				url: GBF.baseUrl + '/ajax/wms/WarehouseStock/lookup',
+				dataType: 'json',
+				data: function (p) { return { q: p.term, page: p.page || 1, warehouseId: fromWarehouseId }; }
+			}
+		});
+		$('#wrAddItem').on('click', function () {
+			var itemId = $('#wrItemId').val();
+			var quantity = $('#wrItemQuantity').val();
+			if (!itemId) { modalShowDanger($modal, '請選擇商品'); return; }
+			if (!/^\d+$/.test(quantity) || parseInt(quantity) <= 0) { modalShowDanger($modal, '數量需大於 0'); return; }
+			var $btn = $(this);
+			btnStartLoading($btn);
+			$.post(GBF.baseUrl + '/ajax/wms/WarehouseRequisitionItem/save.do?warehouseRequisitionId=' + warehouseRequisitionId, {
+				action: 'create',
+				'data[0][itemId]': itemId,
+				'data[0][quantity]': quantity,
+				'data[0][cost]': $('#wrItemCost').val()
+			}, function (json) {
+				if (json.fieldErrors && json.fieldErrors.length) {
+					modalShowDanger($modal, json.fieldErrors.map(function (f) { return f.status; }).join('<br>'));
+					return;
+				}
+				changed = true;
+				$('#wrItemId').val(null).trigger('change');
+				$('#wrItemQuantity').val('');
+				$('#wrItemCost').val('');
+				$modal.find('.modal-message').hide();
+				itemTable.ajax.reload(null, false);
+			}).fail(function (xhr) {
+				modalShowDanger($modal, (xhr.responseJSON && xhr.responseJSON.error) || '加入失敗');
+			}).always(function () { btnStopLoading($btn); });
+		});
+	}
+
+	$modal.find('[data-wr-action]').on('click', function () {
+		var $btn = $(this);
+		var act = $btn.attr('data-wr-action');
+		var data = { warehouseRequisitionId: warehouseRequisitionId };
+		if (act == 'transfer') {
+			var ok = true;
+			$('#warehouseRequisitionItemTable .wr-transfer-qty').each(function () {
+				var v = $(this).val();
+				if (!/^\d+$/.test(v)) ok = false;
+				data['quantities[' + $(this).attr('data-id') + ']'] = v;
+			});
+			if (!ok) { modalShowDanger($modal, '轉移數量需為 0 以上的整數'); return; }
+		}
+		if ((act == 'cancel' || act == 'reject') && !confirm(act == 'cancel' ? '確定取消此調撥單？' : '確定駁回此調撥單？')) return;
+		btnStartLoading($btn);
+		$.post(GBF.baseUrl + '/ajax/wms/WarehouseRequisition/' + act, data, function (json) {
+			changed = true;
+			$modal.modal('hide');
+			displayAlertSuccess(json.error);
+		}).fail(function (xhr) {
+			modalShowDanger($modal, (xhr.responseJSON && xhr.responseJSON.error) || '操作失敗');
+		}).always(function () { btnStopLoading($btn); });
+	});
+
+	$modal.one('hidden.bs.modal', function () {
+		if (typeof warehouseRequisitionTable !== 'undefined' && warehouseRequisitionTable) warehouseRequisitionTable.ajax.reload(null, false);
+	});
+})();
+</script>

@@ -1,0 +1,159 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var inboundRecordTable;
+	$(document).ready(function() {
+
+		var tableName = '#inboundRecordTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/InboundRecord/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/InboundRecord/update.do?inboundRecordId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/InboundRecord/delete.do?inboundRecordId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'inboundRecordId',
+			fields: [
+					DataTableConfig.field_input('名稱','title'),
+					DataTableConfig.field_input('商品代碼','uid'),
+					DataTableConfig.field_datetime('入庫日期','dateInboundString','YYYY-MM-DD HH:mm'),
+					DataTableConfig.field_datetime('最後銷售日期','dateLastSaleString','YYYY-MM-DD HH:mm'),
+					DataTableConfig.field_input('上次銷售至今天數','daysSinceLastSale'),
+					DataTableConfig.field_input('單價','unitPrice'),
+					DataTableConfig.field_input('入庫數量','quantity'),
+					DataTableConfig.field_input('剩餘數量','quantityRemaining'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/InboundRecord/list.do',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				//DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('title'),
+				DataTableConfig.data_input('uid'),
+				DataTableConfig.data_input('dateInboundString'),
+				{ data: 'daysSinceLastSale', render: function ( data, type, row ) {
+						if (row.quantity == row.quantityRemaining) return "NA";
+						return row.dateLastSaleString
+					}
+				},
+			//	DataTableConfig.data_input('dateLastSaleString'),
+			//	DataTableConfig.data_input('daysSinceLastSale'),
+				{ data: 'daysSinceLastSale', render: function ( data, type, row ) {
+						if (row.quantity == row.quantityRemaining) return "NA";
+						return data
+					}
+				},
+				DataTableConfig.data_input('quantity'),
+				DataTableConfig.data_input('quantityRemaining'),
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 3, "asc" ]],
+			columnDefs: [
+				{ orderable: false, targets: [0,1,4,5] }
+			],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				//{ extend: 'create', editor: editor },
+				//{ extend: 'edit',   editor: editor },
+				//{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [],[]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+	//	DataTableHelper.initEditorOnCallback(table,editor);
+	//	DataTableHelper.inlineModePlugin(table);
+	//	DataTableHelper.injectInline(table,editor);
+		inboundRecordTable = table;
+		{{!-- 推導：原站篩選送出方式因擷取過濾不可得；以 preXhr 附加篩選值、#queryForm 的 query 同步目前條件 --}}
+		table.on('preXhr.dt', function ( e, settings, data ) {
+			data.daysSinceLastSaleGreater = $('#daysSinceLastSaleGreater').val();
+			data.quantityRemainingGreater = $('#quantityRemainingGreater').val();
+			$('#query').val(JSON.stringify({
+				daysSinceLastSaleGreater: data.daysSinceLastSaleGreater,
+				quantityRemainingGreater: data.quantityRemainingGreater
+			}));
+		});
+		$('.filters').on('change', function() {
+			table.clear().ajax.reload();
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">入庫紀錄</div>
+<div class="card-body">
+	<form id="queryForm" method="POST" action="/backend/InboundRecord/download">
+		<input type="hidden" name="query" value="" id='query'>
+		<div class="row">
+			<div class="input-group py-2 col-lg-6">
+				<div class="input-group-prepend"><span class="input-group-text md-addon">入庫天數</span></div>
+				<input type="text" class="filters input-sm form-control" name="daysSinceLastSaleGreater" id="daysSinceLastSaleGreater" placeholder="天數超過" size=12>
+			</div>
+			<div class="input-group py-2 col-lg-6">
+				<div class="input-group-prepend"><span class="input-group-text md-addon">剩餘庫存</span></div>
+				<input type="text" class="filters input-sm form-control" name="quantityRemainingGreater" id="quantityRemainingGreater" placeholder="庫存超過" size=12>
+			</div>
+		</div>
+	</form>
+</div>
+<div class="card-body">
+	<div class="blue-grey lighten-5 small p-2">
+	<p>剩餘數量僅供參考，系統於商品出貨後自動將減少最早入庫商品數量</p>
+	<p>退換貨不予以加減</p>
+	</div>
+</div>
+<div class="card-body">
+	<table id="inboundRecordTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>入庫日期</th>
+				<th>最後銷售日期</th>
+				<th>上次銷售至今天數</th>
+				<th>入庫數量</th>
+				<th>剩餘數量</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>入庫日期</th>
+				<th>最後銷售日期</th>
+				<th>上次銷售至今天數</th>
+				<th>入庫數量</th>
+				<th>剩餘數量</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

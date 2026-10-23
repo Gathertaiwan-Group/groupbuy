@@ -1,0 +1,557 @@
+<!--#head-->
+<style>
+#DTE_Field_sameNameItemSet_0,
+#DTE_Field_sameNameItemSet_1 {
+	position: static;
+    opacity: 1;
+    pointer-events: auto;
+}
+#DTE_Field_sameNameItemSet_0 + label,
+#DTE_Field_sameNameItemSet_1 + label {
+	padding-left: 4px;
+}
+</style>
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var warehouseRequisitionTable;
+var warehouseRequisitionEditor;
+var reverseEditor;
+	$(document).ready(function() {
+
+		var tableName = '#warehouseRequisitionTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/WarehouseRequisition/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/WarehouseRequisition/update.do?warehouseRequisitionId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/wms/WarehouseRequisition/delete.do?warehouseRequisitionId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'warehouseRequisitionId',
+			template: '#customWarehouseRequisitionForm',
+			fields: [
+				//DataTableConfig.field_select('來源倉','fromWarehouseId','','請選擇(必填)'),
+				//DataTableConfig.field_select('目標倉','toWarehouseId','','請選擇(必填)'),
+				DataTableConfig.field_datetime('單據日期','dateRequiredString','YYYY-MM-DD'),
+				DataTableConfig.field_datetime('確認日期','dateConfirmedString','YYYY-MM-DD'),
+				DataTableConfig.field_datetime('調撥日期','dateTransferredString','YYYY-MM-DD'),
+				DataTableConfig.field_select('調撥類型','type'),
+				DataTableConfig.field_input('調撥商品總數量','totalAmount'),
+				DataTableConfig.field_input('調撥商品成本總額','totalCost'),
+				DataTableConfig.field_textarea('調撥備註', 'note','', 10),
+				DataTableConfig.field_input('調出倉聯絡人','fromName'),
+				DataTableConfig.field_input('調出倉聯絡電話','fromTelephone'),
+				DataTableConfig.field_input('調出倉地址','fromAddress'),
+				DataTableConfig.field_input('調入倉聯絡人','toName'),
+				DataTableConfig.field_input('調入倉聯絡電話','toTelephone'),
+				DataTableConfig.field_input('調入倉地址','toAddress'),
+				DataTableConfig.field_select('物流方式','logisticType'),
+				DataTableConfig.field_input('單據狀態','requisitionStatus'),
+				DataTableConfig.field_input('調撥狀態','transferStatus'),
+				DataTableConfig.field_input('調撥同意者','approver'),
+				DataTableConfig.field_input('調撥發起者','requester'),
+			],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+		warehouseRequisitionEditor = editor;
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/wms/WarehouseRequisition/list.do',
+				type:"POST",
+				data:function ( d ) {
+					d.filter_fromWarehouseId = $('#filter_fromWarehouseId').val();
+					d.filter_toWarehouseId = $('#filter_toWarehouseId').val();
+					d.itemUid = $('#itemUid').val();
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('dateRequiredString'),
+				{
+					data:'warehouseRequisitionId',
+					render: function ( data, type, row ) {
+						return row.warehouseRequisitionId;
+					}
+				},
+				DataTableConfig.data_select('requisitionStatus'),
+				DataTableConfig.data_select('transferStatus'),
+				DataTableConfig.data_select('type'),
+				DataTableConfig.data_select('requester'),
+				{
+					data:'fromWarehouseId',
+					render: function ( data, type, row ) {
+						return row.fromWarehouse.name;
+					}
+				},
+				{
+					data:'toWarehouseId',
+					visible:false,
+					render: function ( data, type, row ) {
+						return row.toWarehouse.name;
+					}
+				},
+				{
+					data:'warehouseRequisitionItem',
+					render: function ( data, type, row ) {
+						var html = '<div class="small" style="min-width:240px">';
+						row.warehouseRequisitionItems.forEach((o,i)=>{
+								html += '<span>'+$('<div>').text(o.title).html() + ':' + o.totalRequired + '</span><br>'
+							});
+						html += '</div>';
+						return html;
+					}
+				},
+				{
+					data:null,
+					class:'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var html = '';
+						if (row.requisitionStatus == 'OPEN') {
+							html += '<button class="btn btn-info btn-sm px-2" data-action="item">調整商品</button>'
+								+ '<button class="btn btn-secondary btn-sm px-2" data-action="edit">編輯</button>'
+						} else if (row.requisitionStatus == 'PENDING') {
+							html += '<button class="btn btn-success btn-sm px-2" data-action="review">審核</button>'
+						} else if (row.transferable) {
+							html += '<button class="btn btn-warning btn-sm px-2" data-action="transfer">轉移庫存</button>'
+						} else if (row.receivable) {
+							html += '<button class="btn btn-primary btn-sm px-2" data-action="received">收貨</button>'
+						} else {
+							html += '<button class="btn btn-default btn-sm px-2" data-action="view">檢視</button>'
+						}
+						if (row.requisitionStatus === 'RECEIVED') {
+							html += '<button class="btn btn-info btn-sm px-2" data-action="reverse">逆向調撥</button>'
+						}
+						return html;
+					}
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "desc" ]],
+			select: {
+				style: 'single'
+			},
+			buttons: [
+				/*
+				{ extend: 'edit', editor: editor },
+				//{ extend: 'remove', editor: editor, className:'btn-danger' },
+				DataTableConfig.actionButton({
+					className:'btn-danger',
+					text:'刪除',
+					confirm:'確定刪除',
+					url:'{{baseUrl}}/ajax/wms/WarehouseRequisition/delete',
+				}),
+				*/
+				{ extend: 'remove', editor: editor}
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [2,3,4,5,6],[16,0,0,0,0]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		//DataTableHelper.inlineModePlugin(table);
+		//DataTableHelper.injectInline(table,editor);
+		warehouseRequisitionTable = table;
+		$('.filters').on('change', function() {
+			table.clear().ajax.reload();
+		});
+
+		$(tableName +' tbody').on('click', 'button', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var warehouseRequisitionId = row.data().warehouseRequisitionId;
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+
+			switch (action) {
+			case 'item':
+			case 'transfer':
+			case 'received':
+			case 'view':
+			case 'review':
+				openFormF('/backend/WarehouseRequisition/update', 'warehouseRequisitionId=' + warehouseRequisitionId + '&action=' + action);
+				$('#myModal').one('shown.bs.modal', function (e) {
+					$('#warehouseRequisitionItemTable').DataTable().columns.adjust();
+				});
+				return;
+			case 'edit':
+				warehouseRequisitionEditor.edit(row, {
+					title: '編輯',
+					buttons: '編輯'
+				} );
+				return;
+			case 'reverse':
+				reqReverse( row.data() );
+				return;
+			default:{
+				var ajaxurl = '{{baseUrl}}/ajax/wms/WarehouseRequisition/' + action;
+				jQuery.post(
+					ajaxurl,
+					{
+						'warehouseRequisitionId':warehouseRequisitionId,
+					},
+					function( json ) {
+						warehouseRequisitionTable.ajax.reload( null, false );
+						displayAlertSuccess(json.error);
+					}
+				).fail(function(data) {
+					if (data.responseJSON) {
+						displayAlertWarning(data.responseJSON.error);
+					}
+				});
+			}
+			}
+		});
+
+		reverseEditor = new $.fn.dataTable.Editor( {
+			ajax: '{{baseUrl}}/ajax/wms/WarehouseRequisition/reverse',
+			fields: [
+				DataTableConfig.field_hidden('warehouseRequisitionId', ''),
+				{
+					label: '單據日期',
+					name: 'dateRequiredString',
+					type: 'datetime',
+					format: 'YYYY-MM-DD',
+					attr: {autocomplete:'off'},
+					def: function () { return new Date(); }
+				}
+			],
+			i18n:DataTableConfig.i18n,
+		} )
+		.on( 'submitComplete', function ( e, json, data, action ) {
+			reverseEditor.close();
+			warehouseRequisitionTable.clear().ajax.reload();
+		} );
+
+		function reqReverse( d ) {
+			reverseEditor
+			.message('選擇好日期後，會自動建立逆向調撥單')
+			.create({
+				title: '逆向調撥',
+				buttons: '編輯'
+			})
+			.set('warehouseRequisitionId', d.warehouseRequisitionId)
+			;
+		}
+	} ); // end ready
+</script><style>
+td {min-width:60px;max-width: 200px;white-space:normal !important;}
+</style>
+<!--#body--><div class="container-fluid ">
+	<form action="{{baseUrl}}/ajax/wms/WarehouseRequisition/save" method="POST" id="wrCreateForm">
+	<div class="card mt-4">
+		<div class="card-header card-header bg-info white-text">新增調撥單</div>
+		<div class="card-body">
+			<div class="input-group py-2">
+				<div class="input-group-prepend">
+					<span class="input-group-text md-addon" style="min-width:100px">來源倉</span>
+				</div>
+				<select name="fromWarehouseId" id="fromWarehouseId" class="form-control required"></select>
+				<!--<select name="fromWarehouseId" id="fromWarehouseId" class="form-control required"></select>-->
+			</div>
+			<div id="input-group-from" class="row d-none">
+				<div class="col-6">
+					<div class="md-form">
+						<input type="text" name="fromName" value="" type="text" id="fromName" class="form-control"><label for="fromName">調出倉聯絡人</label>
+					</div>
+				</div>
+				<div class="col-6">
+					<div class="md-form">
+						<input type="text" name="fromTelephone" value="" type="text" id="fromTelephone" class="form-control"><label for="fromTelephone">調出倉聯絡電話</label>
+					</div>
+				</div>
+				<div class="col-12">
+					<div class="md-form">
+						<input type="text" name="fromAddress" value="" type="text" id="fromAddress" class="form-control"><label for="fromAddress">調出倉地址</label>
+					</div>
+				</div>
+			</div>
+			<div class="input-group py-2">
+				<div class="input-group-prepend">
+					<span class="input-group-text md-addon" style="min-width:100px">單據日期</span>
+				</div>
+				<input type="text" name="dateRequiredString" value="" type="text" id="dateRequiredString" class="form-control required"></div>
+			<div class="input-group py-2">
+				<div class="input-group-prepend">
+					<span class="input-group-text md-addon" style="min-width:100px">目標倉</span>
+				</div>
+				<select name="toWarehouseId" id="toWarehouseId" class="form-control required"></select>
+				<!--<select name="toWarehouseId" id="toWarehouseId" class="form-control required"></select>-->
+			</div>
+			<div id="input-group-to" class="row d-none">
+			<div class="col-6">
+				<div class="md-form">
+						<input type="text" name="toName" value="" type="text" id="toName" class="form-control"><label for="toName">調入倉聯絡人</label>
+					</div>
+				</div>
+				<div class="col-6">
+					<div class="md-form">
+						<input type="text" name="toTelephone" value="" type="text" id="toTelephone" class="form-control"><label for="toTelephone">調入倉聯絡電話</label>
+					</div>
+				</div>
+				<div class="col-12">
+					<div class="md-form">
+						<input type="text" name="toAddress" value="" type="text" id="toAddress" class="form-control"><label for="toAddress">調入倉地址</label>
+					</div>
+				</div>
+				<div class="input-group col-6 py-2">
+					<div class="input-group-prepend">
+						<span class="input-group-text md-addon" style="min-width:100px">調撥類型</span>
+					</div>
+					<select name="type" id="type" class="form-control"><option value="REPLENISHMENT">補貨</option>
+<option value="INITIAL">初始</option>
+<option value="BORROW">借貨</option>
+<option value="BACKORDER">預購</option>
+<option value="OTHER">其他</option></select></div>
+				<div class="input-group col-6 py-2">
+					<div class="input-group-prepend">
+						<span class="input-group-text md-addon" style="min-width:100px">物流方式</span>
+					</div>
+					<select name="logisticType" id="logisticType" class="form-control"><option value="TRUCKING">貨運</option>
+<option value="HOME_DELIVERY">宅配</option>
+<option value="SELF_PICK">自取</option>
+<option value="EXPRESS">快遞</option>
+<option value="POSTAL">郵局</option>
+<option value="AIRWAYS">空運</option>
+<option value="WATERWAYS">海運</option></select></div>
+				<div class="col-12">
+					<div class="md-form">
+						<textarea name="note" rows="3" id="note" class="form-control"></textarea><label for="note">調撥備註</label>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="card-footer">
+			<button type="submit" class="btn btn-secondary btn-submit pull-right"><i class="fa-light fa-plus mr-1"></i>新增</button>
+		</div>
+	</div>
+</form>
+
+<div class="card mt-4">
+<div class="card-header">調撥單</div>
+<div class="card-body">
+	<p>額外搜尋條件</p>
+		<div class="input-group py-2">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon" style="min-width:100px">來源倉</span>
+			</div>
+			<select name="filter_fromWarehouseId" id="filter_fromWarehouseId" class="filters form-control"></select>
+		</div>
+		<div class="input-group py-2">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon" style="min-width:100px">目標倉</span>
+			</div>
+			<select name="filter_toWarehouseId" id="filter_toWarehouseId" class="filters form-control"></select>
+		</div>
+	<input type="text" class="filters input-sm form-control w-auto d-inline" name="itemUid" id="itemUid" placeholder="完整商品代碼(包含)" size=25>
+</div>
+<div class="card-body">
+	<table id="warehouseRequisitionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>單據日期</th>
+				<th>調撥單號</th>
+				<th>單據狀態</th>
+				<th>調撥狀態</th>
+				<th>調撥類型</th>
+				<th>調撥發起者</th>
+				<th>來源倉</th>
+				<th>目標倉</th>
+				<th>調撥商品</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>單據日期</th>
+				<th>調撥單號</th>
+				<th>單據狀態</th>
+				<th>調撥狀態</th>
+				<th>調撥類型</th>
+				<th>調撥發起者</th>
+				<th>來源倉</th>
+				<th>目標倉</th>
+				<th>調撥商品</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+
+<div style="display:none">
+<div id="customWarehouseRequisitionForm" class="dtForm row">
+	<div class="col-12">
+	<fieldset>
+		<editor-field name="type"></editor-field>
+		<editor-field name="dateRequiredString"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6">
+	<fieldset id="customWarehouseRequisitionForm1">
+		<legend>來源倉</legend>
+		<editor-field name="fromWarehouseId"></editor-field>
+		<editor-field name="fromName"></editor-field>
+		<editor-field name="fromTelephone"></editor-field>
+		<editor-field name="fromAddress"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6">
+	<fieldset>
+		<legend>目標倉</legend>
+		<editor-field name="toWarehouseId"></editor-field>
+		<editor-field name="toName"></editor-field>
+		<editor-field name="toTelephone"></editor-field>
+		<editor-field name="toAddress"></editor-field>
+		<editor-field name="logisticType"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-12">
+	<fieldset id="customWarehouseRequisitionForm2">
+		<editor-field name="note"></editor-field>
+	</fieldset>
+	</div>
+</div>
+</div>
+<script>
+{{!-- 推導：原站本段（倉庫聯絡資訊帶入、select2 初始化、建立表單送出）部分因擷取過濾不可得，依可見片段補寫 --}}
+var warehouseInfo = function (toFrom, warehouseId) {
+	if (!warehouseId) {
+		$('#input-group-' + toFrom).addClass('d-none');
+		return;
+	}
+	$.ajax({
+		method: 'get',
+		url: GBF.baseUrl + '/ajax/wms/Warehouse/getInfo',
+		data: {warehouseId: warehouseId},
+		dataType: 'json',
+		success: function(json) {
+			var warehouse = json.data;
+			$('#input-group-' + toFrom).removeClass('d-none');
+			$('#'+toFrom+'Name').val(warehouse.contactPerson);
+			$('#'+toFrom+'Telephone').val(warehouse.telephone);
+			$('#'+toFrom+'Address').val(warehouse.address);
+			activeInputLabel($('#'+toFrom+'Name'));
+			activeInputLabel($('#'+toFrom+'Telephone'));
+			activeInputLabel($('#'+toFrom+'Address'));
+		}
+	});
+}
+var activeInputLabel = window.activeInputLabel || function ($input) {
+	var $label = $input.nextAll('label');
+	if (!$label.length) return;
+	if ($input.val() == null || $input.val() == '') $label.removeClass('active');
+	else $label.addClass('active');
+};
+
+$(document).ready(function() {
+	var initWarehouseSelect = function (selectorId) {
+		$(selectorId).select2({
+			width: 'auto',
+			allowClear: true,
+			placeholder: '請選擇(必填)',
+			dropdownAutoWidth: true,
+			language:'zh-TW',
+			ajax: {
+				delay:350,
+				url: '{{baseUrl}}/ajax/wms/Warehouse/lookup',
+				dataType: 'json'
+			}
+		});
+		$(selectorId).on('select2:select', function (e) {
+			 $(this).change();
+		});
+	};
+	initWarehouseSelect('#fromWarehouseId');
+	initWarehouseSelect('#toWarehouseId');
+	initWarehouseSelect('#filter_fromWarehouseId');
+	initWarehouseSelect('#filter_toWarehouseId');
+	$('#filter_fromWarehouseId, #filter_toWarehouseId').on('select2:clear', function () { $(this).change(); });
+	$('#filter_fromWarehouseId').data('select2').$container.find('.select2-selection__placeholder').text('來源倉');
+	$('#filter_toWarehouseId').data('select2').$container.find('.select2-selection__placeholder').text('目標倉');
+
+	$('#dateRequiredString').flatpickr({ dateFormat: 'Y-m-d', allowInput: true, locale: 'zh_tw', defaultDate: new Date() });
+
+	var onSuccess = function (result) {
+		var $wrCreateForm = $('#wrCreateForm');
+		$wrCreateForm[0].reset();
+		$('#fromWarehouseId, #toWarehouseId').val(null).trigger('change.select2');
+		$('#input-group-from, #input-group-to').addClass('d-none');
+		$('#dateRequiredString').val(moment().format('YYYY-MM-DD'));
+		displayAlertSuccess(result.error);
+		warehouseRequisitionTable.ajax.reload();
+	};
+
+	$('#wrCreateForm').on('submit', function () {
+		var $form = $(this);
+		var $btn = $form.find('.btn-submit');
+		var missing = [];
+		$form.find('.required').each(function () {
+			if (!$(this).val()) missing.push($(this).closest('.input-group').find('.input-group-text').text());
+		});
+		if (missing.length) {
+			displayAlertWarning('請填寫：' + missing.join('、'));
+			return false;
+		}
+		if ($('#fromWarehouseId').val() == $('#toWarehouseId').val()) {
+			displayAlertWarning('來源倉與目標倉不可相同');
+			return false;
+		}
+		var data = {};
+		$.each($form.serializeArray(), function (i, o) { data[o.name] = o.value; });
+		var dataJson = JSON.stringify(data);
+		btnStartLoading($btn);
+		$.ajax({
+			method: 'post',
+			url: $form.attr('action'),
+			data:{data:dataJson},
+			dataType: 'json',
+			async: true,
+			success: function(result) {
+				onSuccess(result);
+			},
+			error: function(xhr) {
+				var json = xhr.responseJSON || {};
+				displayAlertWarning(json.error || '新增失敗');
+			},
+			complete: function() {
+				btnStopLoading($btn);
+			}
+		});
+		return false;
+	});
+
+	$('#fromWarehouseId').on('change', function() {
+		var warehouseId = $(this).val();
+		warehouseInfo('from', warehouseId);
+	});
+	$('#toWarehouseId').on('change', function() {
+		var warehouseId = $(this).val();
+		warehouseInfo('to', warehouseId);
+	});
+});
+</script>
+</div>
