@@ -1,0 +1,181 @@
+{{!-- 原站 spec/html/modal-groupbuy-clone.html；⟦未擷取⟧缺段（樣式結尾、modal-header、onSuccess、選項記憶、精靈切換）依原站實測行為重建（推導） --}}
+<style>
+.breadcrumb-item {cursor: pointer;}
+/*.wizard-body {min-height:678px;}*/
+.card-wizard.card {border:1px solid #dee2e6;text-align:center;letter-spacing: 2px;transform: scale(1);transition-duration: 0.3s;margin-bottom: 16px;}
+.card-wizard.card:hover {border: solid 1px #7f8c98;transform: scale(1.05);transition-duration: 0.3s;}
+.card-wizard .card-header {font-size: 16pt;font-weight: 400;}
+.card-wizard .card-body {display: flex;justify-content: center;min-height: 158px;align-items: center;flex-wrap: wrap;font-size: 14px;text-align:left;}
+.wizard-step1 .card-wizard .card-body {min-height: 232px;}
+
+.card-wizard span {display:inline-block;}
+.wizard-stepfinal .modal-footer {position: absolute;bottom: 0px;width: 100%;}
+.btn-input-check,.btn-input-check:hover,.btn-input-check.active {min-width:72px !important;background-color: #fff!important;color: black;border: 1px solid #ced4da;}
+.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;color:#10ad1d}
+.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
+label.error {display: flex;justify-content: center;align-items: center;height: 38px;}
+.wizard-step1 .card-wizard {cursor: pointer;}
+</style>
+<form name="GroupBuyForm" method="post" action="/ajax/GroupBuy/clone.do" class="form-horizontal" id="GroupBuyCloneForm"><input type="hidden" name="groupBuyId" value="{{groupBuy.groupBuyId}}" id="groupBuyId"><div class="modal-header">
+	<h5>團購 » 複製成新團 » {{groupBuy.title}}</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	
+	<div class="wizard-body">
+		<div class="wizard-step wizard-step1" id="wizard-step1-all" >
+		<div class="row">
+			<div class="col-12">
+			<div class="card card-wizard" data-type="new">
+				<div class="card-header">複製新團</div>
+				<div class="card-body">使用既有表單複製成一個新的表單</div>
+			</div></div>
+			<div class="col-12">
+			<div class="card card-wizard" data-type="alias">
+				<div class="card-header">複製替身</div>
+				<div class="card-body">
+				<p>
+				替身不會有自己的商品，優惠條件等設定
+				<br>替身能編輯基本及進階設定
+				</p>
+				使用場景：
+				<br>每個替身表單的商品內容，金額及優惠條件與來源表單相同
+				<br>無需客製化表單銷售細節，也不需要控管每個表單商品的可銷售量
+				<br>適合簡易開團使用
+				</div>
+			</div></div>
+		</div>
+		</div>
+	</div>
+	<input type="hidden" id="alias" name="alias">
+	<div class="step-2 step-2-1">
+		<div class="form-group" id="title-group">
+			<label class="form-label" for="title">新標題名稱</label>
+			<input type="text" id="title" name="title" 
+			value="##{{groupBuy.title}}"
+			class="form-control" placeholder="未填寫將沿用##原表單名稱">
+		</div>
+	</div>
+	<div class="step-2">
+		<div class="form-group" id="cloneWithoutItems-group">
+			<input type="checkbox" id="cloneWithoutItems" name="cloneWithoutItems" class="form-check-input">
+			<label class="form-check-label" for="cloneWithoutItems">只複製團購設定及內容</label>
+			<span class="text-warning">品項/優惠條件將不會被複製</span> 
+		</div>
+		<div class="form-group" id="shareStock-group">
+			<input type="checkbox" name="shareStock" value="on" id="shareStock" class=" form-check-input"><label class="control-label" for="shareStock">共用庫存</label>
+			<div class="field-info">結團時間兩個月後，共用關聯將會被移除</div>
+		</div>
+		<!-- 
+		<div class="form-group" id="keepShortUrl-group">
+			<input type="checkbox" id="keepShortUrl" name="keepShortUrl" class=" form-check-input" />
+			<label class="control-label text-danger" for="keepShortUrl">沿用網址</label>
+			<div class="field-info text-danger">新團沿用原團網址(短五碼:{{groupBuy.shortUrl}})，原團使用新網址(系統自動產生新短五碼)</div>
+		</div> -->
+	<div class="form-group" id="resetStockOption-group">
+			<label class="control-label" for="resetStockOption">庫存設定方式</label>
+			<select name="resetStockOption" id="resetStockOption" class=" form-control"><option value="RESET_STOCK_TO_AVAILABLE" selected="selected">延續銷售</option>
+<option value="RESET_AVAILABLE_TO_STOCK">庫存回補</option>
+<option value="RESET_TO_ZERO">庫存歸零</option>
+<option value="RESET_TO_MAX">不限制庫存</option></select></div>
+		<div class="form-group" id="keepSalesRule-group">
+			<input type="checkbox" name="keepSalesRule" value="on" checked="checked" id="keepSalesRule" class=" form-check-input"><label class="form-check-label text-warning" for="keepSalesRule">保留優惠條件設定</label>
+		</div>
+		<div class="form-group" id="keepCoupon-group">
+			<input type="checkbox" name="keepCoupon" value="on" id="keepCoupon" class=" form-check-input"><label class="form-check-label text-warning" for="keepCoupon">保留折扣碼設定</label>
+		</div>
+		<div class="form-group" id="ignoreOffline-group">
+			<input type="checkbox" name="ignoreOffline" value="on" checked="checked" id="ignoreOffline" class=" form-check-input"><label class="form-check-label text-warning" for="ignoreOffline">不複製下架品項及商品</label>
+		</div>
+	</div>
+
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+	<div class="alert alert-info m-2 p-2 step-2">
+		<h5>庫存設定方式說明</h5>
+		<p><mark>延續銷售</mark>使用原團剩餘庫存繼續販售，會將新團的原始庫存設成與剩餘庫存相同</p>
+		<p><mark>庫存回補</mark>會將新團的剩餘庫存重置成原始庫存數目相同</p>
+		<p><mark>庫存歸零</mark>會將新團的庫存重置為0</p>
+		<p><mark>不限制庫存</mark>會將新團的原始及可售庫存重置為99999</p>
+		<!-- <p><mark>使用主庫存量</mark>在有共用庫存時可使用。新團的庫存數字設定成與主庫存原始庫存數字相同</p> -->
+	</div>
+	
+	</div><!-- modal-body -->
+</form><script>
+
+var onSuccess = function (json) {
+	saveCloneOptions();
+	$('#GroupBuyCloneForm .wizard-body, #GroupBuyCloneForm .step-2, #GroupBuyCloneForm .step-2-1').hide();
+	$('#GroupBuyCloneForm .modal-message').html('<div class="alert alert-success">' + json.error + '</div>');
+	$('#GroupBuyCloneForm #submitButton').hide();
+	if ($('#example').length && $.fn.dataTable.isDataTable('#example')) {
+		$('#example').DataTable().ajax.reload(null, false);
+	}
+}
+
+var saveCloneOptions = function () {
+	var opts = {
+		cloneWithoutItems:$('#GroupBuyCloneForm input[name=cloneWithoutItems]').prop('checked'),
+		shareStock:$('#GroupBuyCloneForm input[name=shareStock]').prop('checked'),
+		invoiceDisabled:$('#GroupBuyCloneForm input[name=invoiceDisabled]').prop('checked'),
+		resetStockOption:$('#GroupBuyCloneForm :input[name=resetStockOption]').val(),
+		keepSalesRule:$('#GroupBuyCloneForm input[name=keepSalesRule]').prop('checked'),
+		ignoreOffline:$('#GroupBuyCloneForm input[name=ignoreOffline]').prop('checked'),
+	}
+	Cookies.set('clone_gb_opts',JSON.stringify(opts));
+}
+
+$(document).ready(function() {
+	var opts = null;
+	try { opts = JSON.parse(Cookies.get('clone_gb_opts') || 'null'); } catch (e) { opts = null; }
+	if (opts != null) {
+		$.each(['cloneWithoutItems', 'shareStock', 'keepSalesRule', 'keepCoupon', 'ignoreOffline'], function (i, name) {
+			if (opts[name] != null) $('#GroupBuyCloneForm input[name=' + name + ']').prop('checked', opts[name]);
+		});
+		if (opts.resetStockOption) $('#GroupBuyCloneForm :input[name=resetStockOption]').val(opts.resetStockOption);
+	}
+	$('#GroupBuyCloneForm .step-2, #GroupBuyCloneForm .step-2-1').hide();
+	initAjaxForm('GroupBuyCloneForm', onSuccess);
+
+	$('#cloneWithoutItems').on('change', function () {
+		var c = $(this).prop('checked');
+		if (!c) {
+			$('#shareStock-group').show();
+			$('#resetStockOption-group').show();
+			$('#keepSalesRule-group').show();
+			$('#keepCoupon-group').show();
+			$('#ignoreOffline-group').show();
+		} else {
+			$('#shareStock-group').hide();
+			$('#resetStockOption-group').hide();
+			$('#keepSalesRule-group').hide();
+			$('#keepCoupon-group').hide();
+			$('#ignoreOffline-group').hide();
+		}
+	});
+	$('#cloneWithoutItems').trigger('change');
+
+	$('#GroupBuyCloneForm .card-wizard').on('click', function () {
+		var type = $(this).attr('data-type');
+		$('#GroupBuyCloneForm .wizard-step').hide();
+		switch (type) {
+			case 'new':
+				$('#alias').val('');
+				$('#GroupBuyCloneForm .step-2-1, #GroupBuyCloneForm .step-2').show();
+				$('#cloneWithoutItems').trigger('change');
+				break;
+			case 'alias':
+				$('#alias').val('true');
+				$('#GroupBuyCloneForm .step-2-1').show();
+				$('#GroupBuyCloneForm .step-2').hide();
+				break;
+		}
+	});
+});
+</script>

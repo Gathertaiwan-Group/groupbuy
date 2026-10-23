@@ -1,0 +1,55 @@
+{{!-- 原站 spec/html/modal-influencer-displayconfirm.html；原站送到外部 KOL 平台（kol.gbf.tw）＝未串接，改送本站 /ajax/Influencer/bind 寫入 influencers。缺段依原站風格補（推導） --}}
+<div class="modal-header">
+	<h5 class="modal-title">添加合作網紅 KOL 代碼</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+</div>
+<div class="modal-body modal-body-scrollable">
+    <div class="mb-4">請輸入 KOL 代碼，添加合作的網紅</div>
+    <div class="mb-2">
+    已添加名單<br>
+    {{#each influencers}}<span class="badge badge-default mt-1 mr-1">{{refCode}}</span>{{/each}}
+    </div>
+    <form name="KolForm" method="post" action="{{baseUrl}}/ajax/Influencer/bind" class="form-horizontal" id="kolRefCodeForm">
+    	<input type="hidden" name="groupBuyId" value="{{groupBuy.groupBuyId}}">
+    	<input type="hidden" name="hash" value="{{hash}}">
+        <div class="form-group row">
+            <label class="col-lg-4" for="refCode">KOL 代碼</label>
+            <div class="col-lg-8">
+                <input type="text" name="refCode" maxlength="8" value="" id="refCode" class="form-control" required="">
+            </div>
+        </div>
+        <div id="successMessage" class="alert alert-success mt-3" style="display:none;">KOL 代碼已提交成功！</div>
+        <div id="errorMessage" class="alert alert-danger mt-3" style="display:none;"></div>
+  </form>
+</div>
+<div class="progress">
+    <div class="progress-bar bg-primary" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+</div>
+<div class="modal-footer">
+    <button class="btn btn-secondary" data-dismiss="modal">關閉</button>
+    <input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="提交">
+</div>
+
+<script>
+$(document).ready(function() {
+    $('#kolRefCodeForm').initAjaxForm(
+            // Success callback
+            function(response) {
+                if (response && response.success) {
+                    $('#successMessage').show();
+                    // Optional: auto-close modal after successful submission
+                    setTimeout(function() {
+                        $('#myModal').modal('hide');
+                    }, 3000);
+                } else {
+                    $('#errorMessage').text(response.message || '操作失敗，請稍後再試').show();
+                }
+            },
+            // Error callback
+            function(xhr) {
+                var res = xhr && xhr.responseJSON;
+                $('#errorMessage').text((res && (res.message || res.error)) || '操作失敗，請稍後再試').show();
+            }
+    );
+});
+</script>

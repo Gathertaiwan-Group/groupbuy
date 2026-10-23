@@ -1,0 +1,1027 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+{{!-- 推導：本段為原站擷取缺段（syncStock、appendExtra、markAsClosed 等），依原站執行期實測行為（參數名、端點、對話框內容）重建 --}}
+function syncStock(groupBuyId) {
+	if (!confirm('確定操作?'))
+		return;
+	$.ajax({
+		url: GBF.baseUrl + '/ajax/GroupBuy/syncStock.do',
+		type: 'post',
+		data: {groupBuyId: groupBuyId},
+		dataType: 'json',
+	})
+	.done(function (json) {
+		displayAlertSuccess(json.error);
+	})
+	.fail(function (xhr) {
+		if (xhr.responseJSON != null)
+			displayAlertWarning(xhr.responseJSON.error);
+	});
+}
+
+var tagManager = null;
+
+var appendExtra = function (d) {
+	d.statusV2 = {{json statusV2}};
+	return d;
+}
+
+$.extend( true, $.fn.dataTable.defaults, {
+	"searching": true,
+	"pageLength":15,
+} );
+
+$(document).ready(function() {
+	var tableName = '#example';
+
+	var groupBuyManager = {
+		markAsClosed: function (dt) {
+			var ids = $.map(dt.rows({selected: true}).data().toArray(), function (d) { return d.groupBuyId; });
+			new DynamicEditor({
+				title: '更新為「已結案」',
+				message: '確定將這些團購標籤為「已結案」？',
+				ajaxUrl: GBF.baseUrl + '/ajax/GroupBuy/markAsClosed',
+				fields: [
+					{name: 'groupBuyIds', label: '團購ID', type: 'textarea', def: ids.join('\n'), className: 'full block', fieldInfo: '可自行帶入額外團購ID,換行多筆'}
+				],
+				dataProcessor: function (d) {
+					d.groupBuyId = ids.join(',');
+					return d;
+				},
+				onSuccess: function () {
+					dt.ajax.reload(null, false);
+				}
+			}).show({
+				buttons: [{text: '送出', className: 'btn btn-primary', action: function () { this.submit(); }}]
+			});
+		}
+	};
+
+	var editorFeatureTag = new $.fn.dataTable.Editor( {
+		idSrc:'groupBuyId',
+		ajax: {
+
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/GroupBuy/update.do?groupBuyId=_id_',
+			},
+
+		},
+		table: tableName,
+		message:'以下標籤只作為篩選用途並無實際功能',
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+		fields: [
+			DataTableConfig.field_checkbox('特殊標籤','featureTag[]'),
+		]
+	})
+	.on( 'open', function () {
+		$('#DTE_Field_featureTag\\[\\]_0').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_1').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_2').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_3').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_10').parent().hide();
+	});
+
+	var editor = new $.fn.dataTable.Editor( {
+		idSrc:'groupBuyId',
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/GroupBuy/save.do?groupBuyId='
+			},
+			
+
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/GroupBuy/update.do?groupBuyId=_id_',
+				data:function(d) {
+					if (table.ajax.json().dateModified != null) {
+						d.dateModified = table.ajax.json().dateModified;
+					}
+					return d;
+				}
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/GroupBuy/delete.do?groupBuyId=_id_'
+			}
+		},
+		table: tableName,
+		template: '#customForm',
+		fields: [
+			DataTableConfig.field_input_f('團購名稱','title','團購名稱/標題'),
+			DataTableConfig.field_input_f('副標題','groupBuySettings.subtitle','表單畫面。副標題顯示於團購標題下方。'),
+			DataTableConfig.field_input_f('團購短名稱(可不填)','shortTitle','多用於匯出/簡訊/Email時。未填寫時會用團購名稱替代。'),
+			DataTableConfig.field_select('發布樣式','render'),
+			DataTableConfig.field_upload('置頂橫幅圖片:', 'image'),
+			DataTableConfig.field_datetime('開始時間','dateStartString','YYYY-MM-DD HH:mm','當尚未到開始時間，表單會顯示尚未開始的畫面（登入後台狀態時無法看到此畫面）'),
+			DataTableConfig.field_datetime('結束時間','dateEndString','YYYY-MM-DD HH:mm','當時間已結束，表單會顯示已結束的畫面（登入後台狀態時無法看到此畫面）'),
+			DataTableConfig.field_ckeditor('團購敘述','descr'),
+			DataTableConfig.field_ckeditor('訂購須知','descrBilling'),
+			DataTableConfig.field_ckeditor('Footer敘述','descrFooter'),
+			DataTableConfig.field_ckeditor('結束敘述','descrClose'),
+			//DataTableConfig.field_ckeditor('訂單確認信內容(可不填)','emailSalesOrderBody'),
+			//DataTableConfig.field_ckeditor('出貨信內容(可不填)','emailShippingBody'),
+			//DataTableConfig.field_input_s('團購邀請碼(可用 | 區隔設置多組邀請碼)','groupBuyPassword',50),
+			DataTableConfig.field_input_s('團購報表密碼','password',50),
+			DataTableConfig.field_checkbox('付款方式','paymentMethod[]'),
+			DataTableConfig.field_checkbox('特殊標籤','featureTag[]'),
+			DataTableConfig.field_input('部落客分潤(%)','bloggerShare'),
+			DataTableConfig.field_input('商品外加稅率%','taxRate'),
+			DataTableConfig.field_select2('團購運費規則:','groupBuyFlatRateShippings[].flatRateShippingId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/flatRateShipping', true),
+			DataTableConfig.field_select('貨運標籤','shippingTag'),
+			DataTableConfig.field_select('付款有效日期依照','paymentValidDaysType'),
+			DataTableConfig.field_input('銀行轉帳/虛擬帳號/等其他付款方式有效日期天數','paymentValidDays', 7),
+			DataTableConfig.field_input('信用卡付款有效日期天數','paymentValidDaysCc', 7),
+			DataTableConfig.field_checkbox_bool('允許結帳時合併*未結帳*訂單','allowJoinSalesOrder',0),
+			DataTableConfig.field_checkbox_bool('自動取消逾期訂單','autoCancelExpired',0),
+			DataTableConfig.field_checkbox_bool('關閉發票','invoiceDisabled',0),
+			DataTableConfig.field_checkbox_bool('不寄送外島','islandDisabled',0),
+			DataTableConfig.field_checkbox_bool('不寄送海外','overseaDisabled',1),
+			DataTableConfig.field_select('臉書暱稱:','optionFbNickname', 'O'),
+			DataTableConfig.field_select('地址:','optionAddress', 'M'),
+			DataTableConfig.field_select('電子郵件:','optionEmail', 'M'),
+			DataTableConfig.field_select('電話:','optionTelephone', 'M'),
+			DataTableConfig.field_select('付款方式:','optionPaymentMethod', 'M'),
+			DataTableConfig.field_select('收件人資訊:','optionSectionShippingAddress', 'M'),
+			DataTableConfig.field_select('備註:','optionNote', 'O'),
+			DataTableConfig.field_select('收件時間:','optionDeliverTime', 'O'),
+			DataTableConfig.field_upload('LOGO:', 'groupBuySettings.logo'),
+			DataTableConfig.field_upload('跑馬燈圖片1:', 'carousel1'),
+			DataTableConfig.field_upload('跑馬燈圖片2:', 'carousel2'),
+			DataTableConfig.field_upload('跑馬燈圖片3:', 'carousel3'),
+			DataTableConfig.field_upload('跑馬燈圖片4:', 'carousel4'),
+			DataTableConfig.field_input('客服信箱:','emailSupport', {{json defaultEmailSupport}}),
+			DataTableConfig.field_input('佈景主題-文字-團購價:','priceLabel', ''),
+			DataTableConfig.field_select('貨幣別:','currency', 'NTD','','','僅paypal/strip 支援不同幣別付款,其餘付款方式僅支援TWD'),
+			DataTableConfig.field_checkbox('分期期數(請洽銀行開啟分期及可使用期數並先測試下單):','groupBuySettings.installments[]'),
+			DataTableConfig.field_input('分期訂單最小金額:','groupBuySettings.installmentMinAmount', '0'),
+			DataTableConfig.field_input('分3期利率(%):','groupBuySettings.installmentFee3', '0'),
+			DataTableConfig.field_input('分6期利率(%):','groupBuySettings.installmentFee6', '0'),
+			DataTableConfig.field_input('分12期利率(%):','groupBuySettings.installmentFee12', '0'),
+			DataTableConfig.field_input('臉書像素:','groupBuySettings.facebookPixel', '','Ex: 11141230212'),
+			DataTableConfig.field_input('GTM:','groupBuySettings.gtm', '','Ex: GTM-123456'),
+			DataTableConfig.field_input('Google分析編號(GA):','groupBuySettings.gaCode', '','Ex: GA-123456'),
+			DataTableConfig.field_input('LineID:','groupBuySettings.line', '','Ex: @groupbuyforms'),
+			DataTableConfig.field_input('facebookID:','groupBuySettings.facebook', ''),
+			DataTableConfig.field_input('instagramID:','groupBuySettings.instagram'),
+			DataTableConfig.field_ckeditor('列印備註:','groupBuySettings.printNote'),
+			DataTableConfig.field_checkbox_bool('三聯式電子發票不自動開立:','groupBuySettings.einvoice3CopiesDisabled', 0),
+			DataTableConfig.field_checkbox_bool('關閉FB快速登入:','groupBuySettings.fbLoginDisabled', 0),
+			//DataTableConfig.field_checkbox_bool('開啟訂閱通知:','groupBuySettings.newsletterEnabled', 0),
+			DataTableConfig.field_hidden('dateModified'),
+			//DataTableConfig.field_datetime('指定期望配達日期(起):','groupBuySettings.dateExpectedShippingStart', 'YYYY-MM-DD', '可填寫指定日期，或是數字 (代表下單當天+N天開始)。註：週日固定不收'),
+			//DataTableConfig.field_datetime('指定期望配達日期(迄):','groupBuySettings.dateExpectedShippingEnd'),
+			//DataTableConfig.field_input_f('指定期望配達除外日:','groupBuySettings.dateExpectedShippingExceptDates', '多日期請用#號隔開，格式範例：2018-01-02#2018-01-10'),
+			DataTableConfig.field_select('生日:','groupBuySettings.optionBirthday', 'H'),
+			//DataTableConfig.field_select('期望配達日:','groupBuySettings.optionDateExpectedShipping', 'H'),
+			DataTableConfig.field_select('臉書留言:','groupBuySettings.optionFbComment', 'O'),
+			DataTableConfig.field_textarea('無有效運費規則時敘述:','groupBuySettings.noFlatRateShipping'),
+			DataTableConfig.field_input('自定義付款方式名稱:','groupBuySettings.customPaymentMethod'),
+			//DataTableConfig.field_select('課稅類別:','groupBuySettings.taxType'),
+			//DataTableConfig.field_checkbox_bool('允許多個運費規則:','groupBuySettings.multiFlatRateShipping',0),
+			DataTableConfig.field_checkbox_bool('下單後需簡訊驗證電話號碼 (需額外簡訊費用):','groupBuySettings.smsVerificationEnabled',0),
+			DataTableConfig.field_checkbox_bool('團購報表隱藏部分個資:','groupBuySettings.reportPrivacyEnabled',0),
+			DataTableConfig.field_checkbox_bool('允許客人取消「訂單成功通知」訂單:','groupBuySettings.cancelUnpaidEnabled',0),
+			DataTableConfig.field_checkbox_bool('允許客人取消「付款成功通知」訂單:','groupBuySettings.cancelPaidEnabled',0),
+			DataTableConfig.field_checkbox_bool('貨到付款不可包含預購商品:','groupBuySettings.backOrderCodDisabled',0),
+			DataTableConfig.field_checkbox_bool('看表單需先登入:','groupBuySettings.viewForMember',0),
+			DataTableConfig.field_checkbox_bool('封鎖Google搜尋:','groupBuySettings.noIndex',0),
+			DataTableConfig.field_input('電子發票開立備註:','groupBuySettings.einvoiceNote'),
+
+			//DataTableConfig.field_textarea('自定義格式化備註(限樣式3):','groupBuySettings.customNote', '#文字標題#name1#text#O#標題1說明\n#多選標題#name2#checkbox[選項1,選項2,選項3]#O\n#單選標題#name3#radio[選項1,選項2,選項3]#O\n#下拉標題#name4#select[選項1,選項2,選項3]#O\n#日期標題#name5#date[YYYY-MM-DD,days]#O#標題5說明\n#日期標題(先選年份)#name6#date[YYYY-MM-DD,years]#O#標題6說明\n#多行文字標題#name7#textarea#O#標題7說明\n\n＊name只能為文字及數字，不能帶符號＊', 6),
+			DataTableConfig.field_checkbox_bool('開啟會員點數功能:','groupBuySettings.ptEnabled',0),
+			DataTableConfig.field_input('倒數計時器開始顯示天數:','groupBuySettings.countdownDays', '7'),
+			DataTableConfig.field_input('信用卡付款有效日期小時數:','groupBuySettings.paymentValidHoursCc', '0', '', '', '欲想讓信用卡訂單有效時間小於1小時：有效天數設0，有效小時數設0.5之類的小數。代表30分鐘內有效'),
+			DataTableConfig.field_select('本國:','groupBuySettings.country', 'TW'),
+			DataTableConfig.field_select('取消訂單現貨庫存回補機制:','groupBuySettings.restoreStockStrategy', 'STOCK'),
+			DataTableConfig.field_select('信用卡下單後流程:','groupBuySettings.checkoutFlow', '', '選擇', '', '信用卡下單後流程預設會進入刷卡頁面'),
+			DataTableConfig.field_input('標籤:','tag'),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} )
+	.dependent('render', function(val, data, callback) {
+		/* input[checkbox] requires a special class */
+		/*
+		if (this.renderOptions == null) {
+			this.renderOptions = table.ajax.json().options['paymentMethod[]']
+		}
+		var options = {'paymentMethod[]': this.renderOptions};
+		callback({options: options});
+		*/
+		return {};
+	})
+	.dependent('paymentMethod[]', function(val, data, callback) {
+		var cc_a = [
+			'paymentValidDaysCc', 
+			'groupBuySettings.paymentValidHoursCc',
+			'groupBuySettings.checkoutFlow',
+			'groupBuySettings.installments[]',
+		];
+		var cc = $.inArray('ALLPAY_CREDITCARD', val) != -1 || $.inArray('PERIOD', val) != -1;
+		var show = [], hide = [];
+		(cc ? show : hide).push.apply(cc ? show : hide, cc_a);
+		($.inArray('CUSTOM', val) != -1 ? show : hide).push('groupBuySettings.customPaymentMethod');
+		($.inArray('PAY_ON_DELIVERY', val) != -1 ? show : hide).push('groupBuySettings.backOrderCodDisabled');
+		if (!cc) {
+			hide.push('groupBuySettings.installmentMinAmount', 'groupBuySettings.installmentFee3', 'groupBuySettings.installmentFee6', 'groupBuySettings.installmentFee12');
+		}
+		return {show: show, hide: hide};
+	})
+	.dependent('groupBuySettings.installments[]', function(val, data, callback) {
+		var periods = {'THREE':'groupBuySettings.installmentFee3', 'SIX':'groupBuySettings.installmentFee6', 'TWELVE':'groupBuySettings.installmentFee12'};
+		var cc = $.inArray('ALLPAY_CREDITCARD', editor.field('paymentMethod[]').val()) != -1 || $.inArray('PERIOD', editor.field('paymentMethod[]').val()) != -1;
+		var show = [], hide = [];
+		$.each(periods, function(k, name) {
+			(cc && $.inArray(k, val) != -1 ? show : hide).push(name);
+		});
+		(cc && val != null && val.length > 0 ? show : hide).push('groupBuySettings.installmentMinAmount');
+		return {show: show, hide: hide};
+	});
+
+	var table = $(tableName).DataTable( {
+		dom: 'Bfrtip<"pagejump">',
+		serverSide: true,
+		processing: true,
+		pagingType: 'full_numbers_no_ellipses',
+		scrollX: true,
+		searchDelay: 600,
+		ajax: {
+			url:'{{baseUrl}}/ajax/GroupBuy/list',
+			type: "GET",
+			data: function ( d ) {
+				appendExtra(d);
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns:
+		[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_details_control,
+			{data:'title',
+				render: function ( data, type, row ) {
+					if (type == 'display') {
+						var html = '<div class="text-wrap"><button class="btn btn-link border-0" data-action="showSysTag" data-id="'+row.groupBuyId+'"><i class="fa-light fa-tag"></i></button>'+row.title+'</div>'
+						var ex = '<div class="btn-toolbar">'
+						ex += '<span class="badge badge-default mt-2 mr-1">ID:'+row.groupBuyId+'</span>'
+					ex += '<span class="badge badge-default mt-2 mr-1">'+row.shortUrl+'</span>'
+					if (row.aliasId) {
+						ex += '<span class="badge badge-default mt-2 mr-1"><i class="fa-light fa-balloons">:</i>'+row.aliasId+'</span>'
+					}
+					if ( row.processing) {
+						ex += '<span class="badge badge-primary mt-2 mr-1">活動中</span>'
+					} else if ( row.notStarted) {
+						ex += '<span class="badge badge-success mt-2 mr-1">未開始</span>'
+					} else {
+						ex += '<span class="badge badge-danger mt-2 mr-1">已結束</span>'
+					}
+		if (row.featureTag != null && row.featureTag.length > 0) {
+						var json = table.ajax.json();
+						var featureTagOptions = (json != null && json.options != null) ? json.options['featureTag[]'] : null;
+						$.each(row.featureTag, function(i, tag) {
+							var label = tag;
+							if (featureTagOptions != null) {
+								$.each(featureTagOptions, function(j, o) {
+									if (o.value == tag) label = o.label;
+								});
+							}
+							ex += '<span class="badge badge-primary mt-2 mr-1"><i class="fa-light fa-tag"></i>'+label+'</span>'
+						});
+					}
+					if (row.tag != null && row.tag.length > 0) {
+						ex += '<span class="badge badge-info mt-2 mr-1">標籤: '+row.tag+'</span>'
+					}
+					ex += '</div>'
+					return html + ex;
+				}
+				return data;
+			}},
+			DataTableConfig.data_input('dateStartString'),
+			DataTableConfig.data_input('dateEndString'),
+			//DataTableConfig.data_image('置頂橫幅圖片:', 'image'),
+		],
+		keys: DataTableConfig.keysInlineTab,
+		select: DataTableConfig.selectOptionsMulti,
+		"order": [[ 3, "desc" ]],
+		buttons: [
+
+			{ extend: 'create', editor: editor },
+
+			{ extend: 'edit',	editor: editor },
+			/*
+			{
+				extend: "edit",
+				text: '更新標籤',
+				action: function ( e, dt, node, config ) {
+					//editor.editMode = 'updateFeatureTag'
+					editorFeatureTag.edit(table.rows( { selected: true } ).indexes()).title('').buttons(['確認'])
+				}
+			},
+			*/
+
+			{ extend: 'remove', editor: editor },
+
+			{
+				text:'標籤為已結案',
+				action: function ( e, dt, node, config ) {
+					groupBuyManager.markAsClosed(dt);
+				}
+			},
+			DataTableConfig.actionButton({
+				extend: '',
+				text:'重新整理出完貨標籤',
+				confirm:'將最近一個月內已全部出貨的結團表單設為出完貨',
+				url:'/ajax/GroupBuy/syncFeatureTagForShipping',
+			}),
+			{
+				text:'匯出貨運清單',
+				action: function ( e, dt, node, config ) {
+					var ids = $.map(dt.rows({selected: true}).data().toArray(), function(d) { return d.groupBuyId; });
+					openFormF('/backend/ShippingCSV/exportShippingCSV', 'groupBuyId=' + ids.join(','));
+				}
+			},
+		],
+		rowCallback: function( row, data ) {
+			if (data.groupBuyStatistics == null)
+				return;
+			$('td:eq(0)', row).removeClass('border-left-1 border-left-2 border-left-3');
+			if (data.groupBuyStatistics.revenue > 1000000 || data.groupBuyStatistics.orders > 5000)
+				$('td:eq(0)', row).addClass('border-left-3');
+			else if (data.groupBuyStatistics.revenue > 100000)
+				$('td:eq(0)', row).addClass('border-left-2');
+			else if (data.groupBuyStatistics.revenue > 1000)
+				$('td:eq(0)', row).addClass('border-left-1');
+			else {
+				$('td:eq(0)', row).removeClass('border-left-1');
+				$('td:eq(0)', row).removeClass('border-left-2');
+				$('td:eq(0)', row).removeClass('border-left-3');
+			}
+				
+			/*
+			if ( data.processing) {
+				$('td:eq(0)', row).find('button.btn-row-details').removeClass('btn-default');
+				$('td:eq(0)', row).find('button.btn-row-details').addClass('btn-primary');
+			} else if ( data.notStarted) {
+				$('td:eq(0)', row).find('button.btn-row-details').removeClass('btn-default');
+				$('td:eq(0)', row).find('button.btn-row-details').addClass('btn-success');
+			} else {
+				$('td:eq(0)', row).find('button.btn-row-details').addClass('btn-default');
+				$('td:eq(0)', row).find('button.btn-row-details').removeClass('btn-primary');
+			}
+			*/
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		},
+	} );
+
+	var format = function ( d ) {
+		var id = d.groupBuyId;
+		var homeTypeButtons = '';
+		var fbTypeButtons = '';
+		var posTypeButtons = '';
+		var shippingButtons = '';
+		var financeButtons = '';
+		var buttons = '';
+		var cloneButton = '';
+		var cardDetail = '<div class="card-body card-body-statistics">';
+		if (d.render != 'HOME') {
+			cloneButton = '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openForm(\'/backend/GroupBuy/clone.do\', \'groupBuyId='+id+'\')">複製成新團</a>'
+		}
+		if (d.render == 'HOME') {
+			homeTypeButtons = '<div class="btn-toolbar btn-group btn-group-home">'
+			+ '<a target="_blank" class="btn btn-primary btn-home" href="/backend/HomeView/list.do?groupBuyId='+id+'">HomeView編輯器</a>'
+			//+ '<a class="btn btn-home" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF(\'{{baseUrl}}/ajax/MenuTree/displayMenuTree.do\', \'groupBuyId='+id+'\')">階層選單編輯器</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/WebMenu/list.do?groupBuyId='+id+'">選單[新版]</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/News/list.do?tag=NEWS&groupBuyId='+id+'">最新消息</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/News/list.do?tag=FAQ&groupBuyId='+id+'">常見問題</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/Lookbook/list.do?category=BANNER&groupBuyId='+id+'">橫幅</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/Lookbook/list.do?category=SMALL&groupBuyId='+id+'">小圖</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/Lookbook/list.do?category=LOOKBOOK&groupBuyId='+id+'">Lookbook</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/Post/list.do?groupBuyId='+id+'">文章</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/GroupBuyItemSysTag/list.do?groupBuyId='+id+'">商品系統標籤</a>'
+			+ '<a target="_blank" class="btn btn-home" href="/backend/GroupBuyItemCrmTag/list.do?groupBuyId='+id+'">商品銷售標籤</a>'
+			+ '<a class="btn btn-home" href="javascript: void(0)" onclick="editActivitySettings('+id+')">彈出活動</a>'
+			//+ '<a target="_blank" class="btn btn-home" href="/backend/WebEditor/footer.do?groupBuyId='+id+'">Footer編輯器</a>'
+			+ '<a class="btn btn-warning" href="javascript: void(0)" onclick="GBAPI.refreshHome(\''+id+'\')">更新首頁暫存</a>'
+			+ '<a id="refreshFooterBtn" class="btn btn-warning" href="javascript: void(0)" onclick="refreshFooter(\''+id+'\')">更新Footer暫存</a>'
+			+ '</div>'
+			
+		} else if (d.render == 'FB') {
+			fbTypeButtons = '<a target="_blank" class="btn btn-primary" href="/backend/FbGroup/show.do?groupBuyId='+id+'">臉書社團</a>'
+		} else if (d.render == 'POS') {
+			posTypeButtons = '<a target="_blank" class="btn btn-default" href="/'+d.shortUrl+'/pos">POS</a>'
+		}
+		if (d.render != 'ALIAS') {
+			if (d.groupBuyStatistics == null) {
+				cardDetail += '<div class="row mb-2">'
+				+ '<div class="col-12 text-center"><button type="button" class="btn btn-small btn-default my-0 btn-statistics">取得資訊</button></div>'
+				+ '</div>'
+
+			}
+		}
+		cardDetail += renderStatistics(d.groupBuyStatistics) + '</div>'
+		var publishButtons = ''
+			+ '<a class="btn btn-primary" href="javascript: void(0)" onclick="GBAPI.showShortUrl(\''+d.shortUrl+'\','+d.groupBuyId+',\''+d.publishUrl+'\')">賣場網址</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/'+d.shortUrl+'?preview=true">預覽前台</a>'
+
+			+ '<a class="btn btn-secondary" href="javascript: void(0)" onclick="GBAPI.showReportUrl(\''+d.uuid+'\',\''+d.password+'\')">業績報表</a>'
+
+			+ posTypeButtons
+
+
+		var settingButtons = ''
+
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuyPreference/list.do?groupBuyId='+id+'">進階設定</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuy/shipping.do?groupBuyId='+id+'">運費設定</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openForm(\'/ajax/Influencer/displayConfirm\', \'groupBuyId='+id+'\')">設定KOL代碼</a>'
+			+ '<button class="btn btn-default" data-action="switchShortUrl" data-id="'+id+'">對調表單短網址</button>'
+		settingButtons = '<div class="btn-toolbar btn-group btn-group-setting">' + settingButtons + '</div>'
+		if (d.render == 'ALIAS') {
+			buttons = ''
+
+			+ '<a target="_blank" class="btn btn-primary" href="/backend/SalesOrder/list.do?groupBuyId='+id+'">訂單</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/PreorderToStock/list.do?groupBuyId='+id+'">預購轉現貨</a>'
+
+			+ '<a target="_blank" class="btn btn-default" href="/backend/ShippingRecord/export?groupBuyId='+id+'">匯出貨運清單</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormL(\'/backend/ShippingCSV/importShippingCSV\', \'groupBuyId='+id+'\')">匯入貨運清單</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF(\'/backend/SplitSalesOrder/split\', \'groupBuyId='+id+'\')">拆單</a>'
+
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuy/importBankTransactionCSV.do?groupBuyId='+id+'">銀行對帳</a>'
+
+		//+'<a target="_blank" class="btn btn-default" href="/backend/FbFeed/list.do?groupBuyId='+id+'">臉書商品</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/Lottery/lottery.do?groupBuyId='+id+'">抽獎</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openForm(\'{{baseUrl}}/ajax/GroupBuy/displaySMS.do\', \'groupBuyId='+id+'\')">發送簡訊</a>'
+
+			financeButtons = ''
+
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuy/analytics.do?groupBuyId='+id+'">銷售分析</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuyDailyStatistics/list.do?groupBuyId='+id+'">每日銷售</a>'
+			+ '<a class="btn btn-default" href="javascript:void(0)" onclick="GroupBuyExportModal.open(' + id + ', \'\')"><i class="fa fa-download text-muted mr-1"></i>匯出商品報表</a>'
+
+		} else {
+			shippingButtons = ''
+
+			+ '<div class="btn-toolbar btn-group btn-group-shipping">'
+		//	+ '<a target="_blank" class="btn btn-default" href="/backend/SalesOrder/printPrepareShipping.do?groupBuyId='+id+'">列印(準備出貨中)A4訂單</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/ShippingRecord/export?groupBuyId='+id+'">匯出貨運清單</a>'
+		//	+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF(\'/backend/ShippingCSV/exportShippingCSV\', \'groupBuyId='+id+'\')">匯出貨運清單</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormL(\'/backend/ShippingCSV/importShippingCSV\', \'groupBuyId='+id+'\')">匯入貨運清單</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF(\'/backend/SplitSalesOrder/split\', \'groupBuyId='+id+'\')">拆單</a>'
+			+ '</div>'
+
+			
+			financeButtons = ''
+
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuy/analytics.do?groupBuyId='+id+'">銷售分析</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuyDailyStatistics/list.do?groupBuyId='+id+'">每日銷售</a>'
+			+ '<a class="btn btn-default" href="javascript:void(0)" onclick="GroupBuyExportModal.open(' + id + ', \'\')"><i class="fa fa-download text-muted mr-1"></i>匯出商品報表</a>'
+
+			
+			buttons = ''	
+
+			+ '<a target="_blank" class="btn btn-primary" href="/backend/GroupBuy/show.do?groupBuyId='+id+'">品項/商品管理</a>'
+			+ '<a target="_blank" class="btn" href="/backend/GroupBuyItemSet/show.do?groupBuyId='+id+'">檢視所有商品</a>'
+			+ fbTypeButtons
+
+			+ '<a target="_blank" class="btn btn-primary" href="/backend/SalesOrder/list.do?groupBuyId='+id+'">訂單</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/PreorderToStock/list.do?groupBuyId='+id+'">預購轉現貨</a>'
+
+			// +'<a class="btn btn-default" href="/backend/SalesReturnRecord/exportDaily.do?groupBuyId='+id+'">匯出昨日銷退報表</a>'					
+			+ cloneButton
+			+ '<a class="btn btn-default" href="javascript: void(0)"  onclick="syncStock('+id+')">同步銷售原始庫存</a>'
+
+		//+'<a target="_blank" class="btn btn-default" href="/backend/FbFeed/list.do?groupBuyId='+id+'">臉書商品</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/backend/Lottery/lottery.do?groupBuyId='+id+'">抽獎</a>'
+			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openForm(\'{{baseUrl}}/ajax/GroupBuy/displaySMS.do\', \'groupBuyId='+id+'\')">發送簡訊</a>'
+
+	// +'<a class="btn btn-default" href="/backend/GroupBuy/generateDummyOrders.do?groupBuyId='+id+'">產生測試訂單</a>'
+		}
+		financeButtons += '<a target="_blank" class="btn btn-default" href="/backend/GroupBuy/importBankTransactionCSV.do?groupBuyId='+id+'">銀行對帳</a>'
+
+		var html = '<div class="card-detail-td"><div class="card card-detail">'
+		+ cardDetail
+		+ '<div class="card-body card-body-toolbar">'
+		+ '<div class="btn-toolbar btn-group btn-group-publish">'
+		+ publishButtons
+		+ '</div>'
+		+ settingButtons
+		+ shippingButtons
+		+ '<div class="btn-toolbar btn-group btn-group-edit">' + buttons + '</div>'
+		+ '<div class="btn-toolbar btn-group btn-group-finance">' + financeButtons + '</div>'
+		+ homeTypeButtons
+		+ '</div>'
+		+ '</div></div>'
+		return html;
+	}
+
+	injectDetailsControl(tableName, table, format);
+		DataTableHelper.initEditorOnCallback(table,editor);
+	DataTableHelper.initEditorOnCallback(table,editorFeatureTag);
+	DataTableHelper.initEditConfirmation(editor);
+	var checkCustomPaymentMethod = function() {
+		var val = editor.field('paymentMethod[]').val();
+		if ($.isArray(val) && $.inArray('CUSTOM', val) != -1) {
+			editor.show('groupBuySettings.customPaymentMethod', true);
+		} else {
+			editor.hide('groupBuySettings.customPaymentMethod', true);
+		}
+	}
+	
+	editor
+	.on( 'open', function () {
+		if (this.editMode && this.editMode == 'updateFeatureTag') {
+			return;
+		}
+		checkCustomPaymentMethod();
+		$('#DTE_Field_paymentMethod\\[\\]_8').on('change', checkCustomPaymentMethod);
+		$('#DTE_Field_paymentMethod\\[\\]_11').parent().hide();
+
+		var $lock = $('#lockFlatRateShipping');
+		var $frs = $(editor.field('groupBuyFlatRateShippings[].flatRateShippingId').node()).find('select');
+		if (editor.mode() == 'create') {
+			$lock.prop('checked', false);
+			$lock.closest('.DTE_Field').hide();
+			$frs.prop('disabled', false);
+		} else {
+			$lock.prop('checked', true);
+			$lock.closest('.DTE_Field').show();
+			$frs.prop('disabled', true);
+		}
+		$lock.on('change', function () {
+			$frs.prop('disabled', $(this).prop('checked'));
+		});
+
+		$('#DTE_Field_featureTag\\[\\]_4').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_5').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_6').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_7').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_8').parent().hide();
+		$('#DTE_Field_featureTag\\[\\]_9').parent().hide();
+	})
+	.on( 'preSubmit', function (e, data, action) {
+		// 鎖住運費規則時不送出運費規則欄位（推導：避免覆寫既有綁定）
+		if (action == 'edit' && $('#lockFlatRateShipping').prop('checked')) {
+			$.each(data.data, function (id, row) {
+				delete row['groupBuyFlatRateShippings'];
+			});
+		}
+	})
+	.on( 'close', function () {
+		$('#DTE_Field_paymentMethod\\[\\]_8').unbind('change');
+			$('#lockFlatRateShipping').unbind('change');
+	});
+
+
+	DataTableHelper.injectInline(table, editor);
+	DataTableHelper.injectXhrForJsonDefault(table, {
+		image:'',descrFooter:'',groupBuyPassword:'',tag:'',
+		carousel1:'',carousel2:'',carousel3:'',carousel4:'',
+		shippingTag:'',
+	});
+	injectOpenEditor(tableName, editor);
+	DataTableHelper.injectQuickMenu(editor, 'customForm');
+
+	$('.card').on('change', '.filters', function() {
+		table.clear().ajax.reload();
+		if ($(this).attr('type') == 'checkbox') {
+			$(this).blur();
+		}
+	});
+
+	$('.js-create-first-group-buy').on('click', function (e) {
+		editor
+		.title('新增')
+		.buttons({label:'新增', className:'btn-primary', action: function () {this.submit();}})
+		.create();
+	});
+	
+	registerStatistics();
+
+	$('#example').paginationJump(table);
+
+	$(tableName + ' tbody').on('click', 'button[data-action=showSysTag]', function (e) {
+		e.stopPropagation();
+		var tr = $(this).closest('tr');
+		var row = table.row(tr).data();
+		editorFeatureTag.editMode = 'updateFeatureTag';
+		editorFeatureTag
+		.title(row.title)
+		.buttons({label:'編輯', className:'btn-primary', action: function () {this.submit();}})
+		.edit(tr);
+	});
+
+	//$('#example_filter').append('<input type="search" id="shortUrlFilter" class="form-control form-control-sm filters" placeholder="短五碼" aria-controls="example">')
+
+	table.on('init', function( e, settings, json ) {
+		$('#example_filter input[type=search]').first().attr('placeholder', '名稱');
+		var $searchButton = $('<button type="button" class="btn btn-flat btn-search my-0"><i class="fa fa-regular fa-search"></i></button>')
+	               .click(function() {
+	            	   btnStartLoading($searchButton)
+		   table.ajax.reload();
+		               });
+		var $searchId = $('<input type="search" id="groupBuyIdFilter" class="form-control form-control-sm" placeholder="ID" aria-controls="example">')
+		var $searchCode = $('<input type="search" id="shortUrlFilter" class="form-control form-control-sm" placeholder="短五碼" aria-controls="example">')
+
+		$('.dataTables_filter').append($searchId, $searchCode, $searchButton);
+	})
+	.on( 'xhr', function (e, settings, json, xhr) {
+		btnStopLoading($('.btn-search'));
+		
+		if (!json.inited) {
+			$('#starterGroupBuyBlock').show();
+		$('#groupBuyBlock').hide();
+		} else {
+			$('#starterGroupBuyBlock').hide();
+			$('#groupBuyBlock').show();
+		}
+	});
+
+	$(tableName + ' tbody').on('click', 'button[data-action=switchShortUrl]', function (e) {
+		e.stopPropagation();
+		var action = $(this).attr('data-action');
+		var id = $(this).attr('data-id');
+		var data = null;
+		table.rows().every(function () {
+			if (this.data().groupBuyId == id) data = this.data();
+		});
+		if (data == null) return;
+		var msg = '<p>此功能用於對調兩個表單的短五碼短網址)。<br>用途場景：廣告可沿用原先網址，使用原先網址開啟新表單</p>'
+			+ '<p>來源表單: ' + data.title + '<br>來源短五碼: ' + data.shortUrl + '<br>將與以下表單對調短五碼網址:</p>'
+		switch (action) {
+			case 'switchShortUrl':
+				new DynamicEditor({
+					title: '對調表單短五碼網址',
+					message: msg,
+					ajaxUrl: '{{baseUrl}}/ajax/GroupBuy/switchShortUrl.do',
+					payloadFormat: 'form',
+					fields: [
+						DynamicEditor.FieldBuilder.hidden('shortUrl1', data.shortUrl),
+						DynamicEditor.FieldBuilder.text('shortUrl2', '目標短五碼', '', true)
+					],
+					onSuccess: function () {
+							table.ajax.reload(null, false);
+						}
+					}).show();
+					break;
+			}
+	});
+});
+
+function registerStatistics() {
+	$('#example tbody').on('click', 'button.btn-statistics', function (e) {
+		e.stopPropagation();
+		var $btn = $(this);
+		var tr = $btn.closest('tr').prev('tr');
+		var row = $('#example').DataTable().row(tr).data();
+		if (row == null) return;
+		btnStartLoading($btn);
+		fetchStatistics(row.groupBuyId, function (groupBuyStatistics) {
+			$btn.closest('.card-body-statistics').html(renderStatistics(groupBuyStatistics));
+		});
+	});
+}
+
+function fetchStatistics(groupBuyId, callback) {
+	return $.ajax({
+		url: GBF.baseUrl + '/ajax/GroupBuy/statistics.do?groupBuyId=' + groupBuyId,
+		dataType: 'json',
+	})
+	.done(function (json) {
+		if (typeof callback == 'function') callback(json.data);
+	});
+}
+
+function renderStatistics(groupBuyStatistics) {
+	if (groupBuyStatistics == null)
+		return '';
+	var a = ''
+	if (groupBuyStatistics.revenue != null) {
+		a = '<div class="row mb-4">'
+		+ '<div class="col-4 col-lg-3"><span class="span-digit">'+groupBuyStatistics.revenue+'</span><span class="span-label">銷售金額</span></div>'
+		+ '<div class="col-4 col-lg-3"><span class="span-digit">'+groupBuyStatistics.paidTotal+'</span><span class="span-label">已收付款金額</span></div>'
+		+ '<div class="col-4 col-lg-3"><span class="span-digit">'+groupBuyStatistics.paidTotalWithoutShipping+'</span><span class="span-label">已收付款金額(扣除運費)</span></div>'
+		+ '</div>'
+	}
+
+	var b = '<div class="row">'
+		+ '<div class="col-3"><span class="span-digit">'+groupBuyStatistics.orders+'</span><span class="span-label">訂單數量</span></div>'
+		+ '<div class="col-3"><span class="span-digit">'+groupBuyStatistics.unprocessedOrders+'</span><span class="span-label">未處理數量</span></div>'
+		+ '<div class="col-3"><span class="span-digit">'+groupBuyStatistics.unshippedOrders+'</span><span class="span-label">未出貨數量</span></div>'
+		+ '<div class="col-3"><span class="span-digit">'+groupBuyStatistics.unshippedBackOrders+'</span><span class="span-label">預購未出貨數量</span></div>'
+		+ '</div>'
+	return a + b;
+}
+
+function refreshFooter(groupBuyId) {
+	btnStartLoading($('#refreshFooterBtn'));
+	$.ajax({
+		url: GBF.baseUrl + '/ajax/HomeViewCache/queryReleaseFooter.do?groupBuyId=' + groupBuyId,
+		type: 'post',
+		data: {},
+		success: function (json) {
+			var homeViewId = (json != null && json.data != null) ? json.data.homeViewId : null;
+			openDummyEditor(groupBuyId, homeViewId);
+		},
+		dataType: 'json'
+	}).fail(function(){
+		displayAlertWarning('FOOTER 更新失敗');
+	}).always(function(){
+		$('#dummy-footer-editor').remove();
+		btnStopLoading($('#refreshFooterBtn'));
+	});
+}
+
+function openDummyEditor(groupBuyId, homeViewId) {
+	//
+	// create a dummy editor
+	//
+	var emptyEditor = `
+		<div id='dummy-footer-editor' style="display:none"
+			data-editor="editor"
+			data-config="cfg"
+			data-group-buy-id="${groupBuyId}"
+			data-home-view-id="${homeViewId}">
+		</div>
+	`;
+	$('main').append(emptyEditor);
+	updateDummyEditor(groupBuyId, homeViewId);
+}
+
+function updateDummyEditor(groupBuyId, homeViewId) {
+	//
+	// 推導：原站以 WebEditor 在隱藏編輯器產生 Footer HTML 後送出；本系統改由伺服器端依 HomeView 設定重新產生暫存
+	//
+	$.ajax({
+		url: GBF.baseUrl + '/ajax/HomeViewCache/refresh.do',
+		type: 'post',
+		async: false,
+		data: {groupBuyId: groupBuyId, homeViewId: homeViewId},
+		dataType: 'json'
+	}).done(function (json) {
+		displayAlertSuccess('FOOTER 更新成功');
+	}).fail(function () {
+		displayAlertWarning('FOOTER 更新失敗');
+	});
+}
+
+var cfg = {};
+
+$.fn.paginationJump = function (table) {
+	var $pagejump = $(this).closest('.dataTables_wrapper').find('.pagejump');
+	var html = '<div class="card-footer"><div class="row"><div class="col-md-6 col-lg-8"></div><div class="col-md-6 col-lg-4"><div class="input-group"><div class="input-group-prepend"><span class="input-group-text">總頁數<span class="jump_page_total"></span></span></div><input name="jump_page_number" class="jump_page_number form-control" placeholder="輸入頁數" type="text"><div class="input-group-append"><button class="m-0 btn btn-default btn_jump_page">確認</button></div></div></div></div></div>';
+	$pagejump.html(html);
+	var update = function () {
+		var info = table.page.info();
+		$pagejump.find('.jump_page_total').text(info.pages);
+	};
+	var jump = function () {
+		var info = table.page.info();
+		var n = parseInt($pagejump.find('.jump_page_number').val(), 10);
+		if (isNaN(n)) return;
+		n = Math.max(1, Math.min(info.pages, n));
+		table.page(n - 1).draw('page');
+	};
+	table.on('draw', update);
+	update();
+	$pagejump.on('click', '.btn_jump_page', jump);
+	$pagejump.on('keypress', '.jump_page_number', function (e) {
+		if (e.which == 13) jump();
+	});
+	return this;
+};
+
+function initTagManager() {
+	tagManager = new TagManager({
+		filterTagsContainer: '#tagFilterContainer',
+		api: {
+			fieldName: 'tag',
+			url: {
+				save: '{{baseUrl}}/ajax/GroupBuySysTag/addTag?groupBuyId=_id_',
+				delete: '{{baseUrl}}/ajax/GroupBuySysTag/removeTag?groupBuyId=_id_',
+				getRecentlyUsedTags: '{{baseUrl}}/ajax/GroupBuySysTag/getRecentlyUsedTags',
+				updateTagFilterUsage: '{{baseUrl}}/ajax/GroupBuySysTag/updateTagFilterUsage',
+			},
+		},
+		labels: {
+			button: '加入篩選標籤',
+		},
+		icons: {
+			button: 'fa fa-plus',
+			remove: 'fa-regular fa-times',
+		},
+		tableName: 'example',
+		onTagAdded: function(rowId, tag) {
+			console.log('onTagAdded', tag);
+		},
+		onTagRemoved: function(rowId, tag) {
+			// Reload table after removing tag since it may affect filter results
+			table.ajax.reload(null, false);
+			console.log('onTagRemoved', tag);
+		},
+		onFilterTagAdded: function(tag) {
+			table.ajax.reload(null, false);
+			console.log('onFilterTagAdded', tag);
+		},
+		onFilterTagRemoved: function(tag) {
+			table.ajax.reload(null, false);
+			console.log('onFilterTagRemoved', tag);
+		},
+		onFilterTypeChanged: function (allMatch) {
+			table.ajax.reload(null, false);
+			console.log('onFilterTypeChanged', allMatch);
+		},
+		onRecentlyUsedTagClick: function (tag) {
+			console.log('onRecentlyUsedTagClick', tag);
+		}
+	});
+}
+</script>
+<!--#body--><div class="container-fluid ">
+<div style="display:none">
+<div id="customForm">
+<div class="col-12">
+	<fieldset id="customForm1">
+	<legend>基本</legend>
+	<editor-field name="title"></editor-field>
+	<editor-field name="groupBuySettings.subtitle"></editor-field>
+	<editor-field name="shortTitle"></editor-field>
+	<editor-field name="render"></editor-field>
+	<editor-field name="dateStartString"></editor-field>
+	<editor-field name="dateEndString"></editor-field>
+	<div class="DTE_Field">
+	<input type="checkbox" id="lockFlatRateShipping" checked>
+	<label for="lockFlatRateShipping">鎖住運費規則</label>
+	</div>
+	<editor-field name="groupBuySettings.multiFlatRateShipping"></editor-field>
+	<editor-field name="groupBuyFlatRateShippings[].flatRateShippingId"></editor-field>
+	</fieldset>
+</div>
+<div class="col-12">
+	<fieldset id="customForm2">
+	<legend>金流</legend>
+	<div class="row">
+		<div class="col-md-6">
+			<editor-field name="paymentMethod[]"></editor-field>
+			<editor-field name="groupBuySettings.customPaymentMethod"></editor-field>
+			<editor-field name="paymentValidDaysType"></editor-field>
+			<editor-field name="paymentValidDays"></editor-field>
+			<editor-field name="paymentValidDaysCc"></editor-field>
+			<editor-field name="groupBuySettings.paymentValidHoursCc"></editor-field>
+			<editor-field name="groupBuySettings.checkoutFlow"></editor-field>
+		</div>
+		<div class="col-md-6">
+			<editor-field name="currency"></editor-field>
+			<editor-field name="groupBuySettings.country"></editor-field>
+			<editor-field name="groupBuySettings.installments[]"></editor-field>
+			<editor-field name="groupBuySettings.installmentFee3"></editor-field>
+			<editor-field name="groupBuySettings.installmentFee6"></editor-field>
+			<editor-field name="groupBuySettings.installmentFee12"></editor-field>
+			<editor-field name="groupBuySettings.installmentMinAmount"></editor-field>
+			<editor-field name="groupBuySettings.backOrderCodDisabled"></editor-field>
+		</div>
+	</div>
+	</fieldset>
+</div>
+<div class="col-12">
+	<fieldset id="customForm3">
+	<legend>圖片</legend>
+	<editor-field name="groupBuySettings.logo"></editor-field>
+	<editor-field name="image"></editor-field>
+	<editor-field name="carousel1"></editor-field>
+	<editor-field name="carousel2"></editor-field>
+	<editor-field name="carousel3"></editor-field>
+	<editor-field name="carousel4"></editor-field>
+	</fieldset>
+</div>
+<div class="col-12">
+	<fieldset id="customForm4">
+	<legend>進階</legend>
+	<editor-field name="password"></editor-field>
+	<editor-field name="groupBuySettings.reportPrivacyEnabled"></editor-field>
+	<editor-field name="groupBuyPassword"></editor-field>
+	<editor-field name="emailSupport"></editor-field>
+	<editor-field name="bloggerShare"></editor-field>
+	<!--  <editor-field name="taxRate"></editor-field>-->
+	<editor-field name="allowJoinSalesOrder"></editor-field>
+	<editor-field name="autoCancelExpired"></editor-field>
+	<editor-field name="groupBuySettings.cancelUnpaidEnabled"></editor-field>
+	<editor-field name="groupBuySettings.restoreStockStrategy"></editor-field>
+	<!-- <editor-field name="groupBuySettings.cancelPaidEnabled"></editor-field> -->
+	<editor-field name="groupBuySettings.facebookPixel"></editor-field>
+	<editor-field name="groupBuySettings.line"></editor-field>
+	<editor-field name="groupBuySettings.facebook"></editor-field>
+	<editor-field name="groupBuySettings.instagram"></editor-field>
+	<editor-field name="groupBuySettings.gaCode"></editor-field>
+	<editor-field name="groupBuySettings.gtm"></editor-field>
+	<editor-field name="groupBuySettings.noIndex"></editor-field>
+	<editor-field name="groupBuySettings.smsVerificationEnabled"></editor-field>
+	<editor-field name="groupBuySettings.viewForMember"></editor-field>
+	<editor-field name="featureTag[]"></editor-field>
+	<editor-field name="tag"></editor-field>
+	<editor-field name="groupBuySettings.newsletterEnabled"></editor-field>
+</fieldset>
+</div>
+
+<div class="col-12">
+	<fieldset id="customForm5">
+	<legend>貨運</legend>
+	<editor-field name="shippingTag"></editor-field>
+	<editor-field name="islandDisabled"></editor-field>
+	<editor-field name="overseaDisabled"></editor-field>
+	<editor-field name="groupBuySettings.dateExpectedShippingStart"></editor-field>
+	<editor-field name="groupBuySettings.dateExpectedShippingEnd"></editor-field>
+	<editor-field name="groupBuySettings.dateExpectedShippingExceptDates"></editor-field>
+	<editor-field name="groupBuySettings.noFlatRateShipping"></editor-field>
+	</fieldset>
+</div>
+<div class="col-12">
+	<fieldset id="customForm6">
+	<legend>發票</legend>
+	<editor-field name="invoiceDisabled"></editor-field>
+	<editor-field name="groupBuySettings.einvoice3CopiesDisabled"></editor-field>
+	<editor-field name="groupBuySettings.sellerCode"></editor-field>
+	<editor-field name="groupBuySettings.einvoiceNote"></editor-field>
+	<editor-field name="groupBuySettings.taxType"></editor-field>
+	</fieldset>
+</div>
+<div class="col-12">
+	<fieldset id="customForm7">
+	<legend>選項</legend>
+	<div class="row">
+		<div class="col-12 col-md-6">
+			<editor-field name="groupBuySettings.fbLoginDisabled"></editor-field>
+			<editor-field name="optionFbNickname"></editor-field>
+			<editor-field name="optionAddress"></editor-field>
+			<editor-field name="optionEmail"></editor-field>
+			<editor-field name="optionTelephone"></editor-field>
+			<editor-field name="optionPaymentMethod"></editor-field>
+			<editor-field name="optionSectionShippingAddress"></editor-field>
+		</div>
+		<div class="col-12 col-md-6">
+			<editor-field name="optionNote"></editor-field>
+			<editor-field name="optionDeliverTime"></editor-field>
+			<editor-field name="groupBuySettings.optionBirthday"></editor-field>
+			<editor-field name="groupBuySettings.optionDateExpectedShipping"></editor-field>
+			<editor-field name="groupBuySettings.optionFbComment"></editor-field>
+			<editor-field name="priceLabel"></editor-field>
+			<editor-field name="groupBuySettings.countdownDays"></editor-field>
+		</div>
+	</div>
+	</fieldset>
+</div>
+<div class="col-12">
+		<fieldset id="customForm8">
+		<legend>內容</legend>
+		<editor-field name="descr"></editor-field>
+		<editor-field name="descrBilling"></editor-field>
+		<editor-field name="descrFooter"></editor-field>
+		<editor-field name="descrClose"></editor-field>
+		<editor-field name="emailSalesOrderBody"></editor-field>
+		<editor-field name="emailShippingBody"></editor-field>
+		<editor-field name="groupBuySettings.printNote"></editor-field>
+		<editor-field name="groupBuySettings.customNote"></editor-field>
+		</fieldset>
+</div>
+</div>
+</div>
+<div class="card-body">
+	<table id="example" class="table table-striped nowrap display w-100">
+		<thead>
+			<tr>
+				<th width=40px></th>
+				<th width=20px></th>
+				<th>團購名稱</th>
+				<th width=90px>開始時間</th>
+				<th width=90px>結束時間</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th></th>
+				<th>團購名稱</th>
+				<th>開始時間</th>
+				<th>結束時間</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+<!-- card-body -->
+
+</div>
+<!--#foot-->
+<script src="/scripts/web.editor.cols.js?v=1"></script>
+<script src="/scripts/web.editor.deps.js?v=1"></script>
+<script src="/scripts/web.editor.template.js?v=1"></script>
+<script src="/scripts/web.editor.options.js?v=1"></script>
+<script src="/scripts/web.editor.fields.js?v=1"></script>
+<script src="/scripts/web.editor.js?v=1"></script>
+<script src="/scripts/gbutil.js?v=1"></script>
+<script src="/public/scripts/backend/groupBuyExportModal.min.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.css" rel="stylesheet" type="text/css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.js"></script>
+<script src="/modules/groupbuy/preference/activity-popup.js?v={{assetVersion}}"></script>

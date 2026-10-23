@@ -1,0 +1,65 @@
+{{!-- 原站 spec/html/modal-groupbuy-displaysms.html；缺段（modal-header、簡訊內容欄、送出回呼）依原站風格補（推導）。簡訊未串接：只寫 sms_messages 紀錄 --}}
+<form name="GroupBuyForm" method="post" action="{{baseUrl}}/ajax/GroupBuy/sendSMS.do" class="form-horizontal" id="GroupBuyForm"><input type="hidden" name="groupBuyId" value="{{groupBuy.groupBuyId}}" id="groupBuyId"><div class="modal-header">
+	<h5>發送簡訊</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+</div>
+<div class="modal-body">
+    <div class="modal-message"></div>
+    
+    <div class="form-group row">
+        <label class="col-4" for="telephone">簡訊密碼:</label>
+        <div class="col-8">
+        <input type="text" name="password" id="password" class="form-control" required/>
+        </div>
+    </div>
+    <div class="form-group row">
+        <label class="col-12" for="telephone">電話號碼(最多250筆，每行一筆號碼）:</label>
+        <div class="col-12">
+        <textarea name="telephone" id="telephone" class="form-control" rows="10" required></textarea>
+        </div>
+    </div>
+    <div class="form-group row">
+        <label class="col-12" for="body">簡訊內容(70個字(母)內扣1點,超過70字,每67字扣1點):</label>
+        <div class="col-12">
+        <p>簡訊訊息請勿包含以下關鍵字以免被電信公司阻擋：<span class="text-danger ml-1">LINE</span>,<span class="text-danger ml-1">銀行</span></p>
+        <p>依國家通訊傳播委員會(NCC)要求，發送帶有網址(網域)的簡訊，皆需符合為企業申請專屬的網址或網域，否則將無法發送
+        <br>目前只能包含以下開頭網址：<span class="text-danger ml-1">https://gbf.tw</span></p>
+        </div>
+        <div class="col-12">
+        <textarea name="body" id="body" class="form-control" rows="5" maxlength="670" required></textarea>
+        <small class="form-text text-muted">已輸入 <span id="smsBodyLength">0</span> 字，每則約扣 <span id="smsBodyPoints">0</span> 點</small>
+        </div>
+    </div>
+    
+    </div> <!-- modal-body -->
+    
+    <div class="progress">
+        <div class="progress-bar" role="progressbar"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-default" data-dismiss="modal">關閉</button>
+        <input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+    </div>  
+</form><script>
+function smsPoints(text) {
+	var n = (text || '').length;
+	if (n == 0) return 0;
+	return n <= 70 ? 1 : Math.ceil(n / 67);
+}
+
+$('#GroupBuyForm #body').on('input', function () {
+	var v = $(this).val();
+	$('#smsBodyLength').text(v.length);
+	$('#smsBodyPoints').text(smsPoints(v));
+});
+
+function success(json) {
+	modalShowSuccess($('#GroupBuyForm'), json.error);
+}
+
+function failure(json) {
+	modalShowDanger($('#GroupBuyForm'), json.error);
+}
+
+initAjaxForm('GroupBuyForm', success, failure);
+</script>
