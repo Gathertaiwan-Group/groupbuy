@@ -1,4 +1,6 @@
 <!--#head-->
+{{!-- 原站本頁在 </html> 後引用 /scripts/salesRule.js（只定義 salesRuleManager，優惠條件分頁「複製組合」用到）；放 head 不影響主內容區結構 --}}
+<script src="/scripts/salesRule.js"></script>
 {{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
 	var table; // gbis table
 	var editor; // use a global for the submit and return data rendering in the examples
@@ -1312,12 +1314,16 @@ groupBuyCouponEditor
 		}
 	})
 	.dependent('category', function(val, data, callback) {
-		if (!data.values.couponTemplateId 
+		if (!data.values.couponTemplateId
 			&& data.values.useTemplate == '1'
 			&& !data.row
 		) {
 			return {};
-		} 
+		}
+		{{!-- 同 marketing groupbuy-coupon 頁：選項更新（每次列表重整）時 Editor 會對下拉觸發 change，此時可能沒有選中的類型；原站在下方 couponMeta[val] 會丟例外而中止，這裡直接略過（結果相同） --}}
+		if (!couponMeta[val]) {
+			return {};
+		}
 		var show = [
 			'title',
 			'category',
