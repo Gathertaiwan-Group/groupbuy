@@ -1,0 +1,10 @@
+{{!-- 未串接 Google reCAPTCHA：原站載入 https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit。
+     原站 sitekey 綁原站網域，本系統改用相容樁：render 後立即回呼（顯示送出鈕），防濫用改由伺服器端限流負責。 --}}
+<script>
+var grecaptcha = window.grecaptcha || {
+	render: function(id, o) { if (o && typeof o.callback === 'function') { setTimeout(function() { o.callback(''); }, 0); } return 0; },
+	reset: function() {},
+	getResponse: function() { return ''; }
+};
+$(function() { if (typeof onloadCallback === 'function') { onloadCallback(); } });
+</script>

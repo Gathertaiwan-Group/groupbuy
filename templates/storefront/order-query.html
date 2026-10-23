@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script>var baseUrl = {{json gbfBaseUrl}};</script>
+<meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="format-detection" content="telephone=no">
+<link rel="shortcut icon" href="/upload/images/unsort/favicon.png"/>
+<!-- Font Awesome -->
+<!-- 授權政策：原站 Font Awesome Pro 6 → Font Awesome Free 6（cdnjs）＋相容層 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link rel="stylesheet" href="/compat/fa-pro-compat.css?v={{assetVersion}}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css" >
+<!-- Latest compiled and minified CSS -->
+<!-- 授權政策：原站 MDB PRO 4.8.8 → MDB Free 4.8.8（cdnjs）＋PRO 元件補丁 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css">
+<link rel="stylesheet" href="/compat/mdb-pro-compat.css?v={{assetVersion}}">
+<link rel="stylesheet" href="/modules/storefront/fe-compat.css?v={{assetVersion}}">
+<!-- Optional theme -->
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.compat.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css">
+
+<link rel="stylesheet" href="/public/css/jquery.numpad.min.css">
+
+<!-- Generic page styles -->
+<link rel="stylesheet" href="/public/css/style_v4.min.css?260906">
+<link rel="stylesheet" href="/public/css/gb-theme.min.css?260906">
+<link rel="stylesheet" href="/public/css/gb-theme-japandi.min.css?260906">
+<!-- 
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/blueimp-file-upload/9.5.7/css/jquery.fileupload-ui.min.css">
+ -->
+ 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.2/jquery.validate.min.js" type="text/javascript"></script>
+
+<!-- date picker -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.3/moment-with-locales.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.4.0/moment-timezone-with-data-2010-2020.min.js"></script>
+<link href="/public/css/bootstrap-datetimepicker.min.css" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fancyapps-ui/5.0.22/fancybox/fancybox.umd.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancyapps-ui/5.0.22/fancybox/fancybox.min.css"/>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css" integrity="sha512-MQXduO8IQnJVq1qmySpN87QQkiR1bZHtorbJBD0tzy7/0U9+YIC93QWHeGTEoojMVHWWNkoCp8V6OzVSYrX0oQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+{{> storefront/partials/theme-style.html}}
+<script>
+if (typeof GBF  == 'undefined') {
+	GBF = {};
+}
+GBF.ctx = '';
+GBF.shortUrl = {{json gbfShortUrl}};
+GBF.baseUrl = {{json gbfBaseUrl}};
+GBF.language = 'zh-TW';
+</script><base href="/web/SalesOrder/show.jsp"><title>訂單</title>
+	<meta name="robots" content="noindex">
+	<meta name="googlebot" content="noindex">
+</head>
+<body class="gb-theme">
+    {{> storefront/partials/tracking.html}}
+
+{{> storefront/partials/navbar.html}}<!-- main -->
+    <main> 
+    {{> storefront/partials/messagebox.html}}{{#if queryMessage}}<div class="container"><div class="alert alert-warning">{{queryMessage}}</div></div>{{/if}}<div class="container sales-order-detail">
+<div class="row justify-content-center">
+	<div class="col-12 col-md-8 py-3">
+		{{!-- 個資保護：原站以 GET 送出（電話會出現在網址）；本系統改 POST，查到後以短效授權 cookie 轉到只帶訂單編號的網址 --}}<form name="SalesOrderForm" method="POST" action="{{gbfBaseUrl}}/SalesOrder/show.do" class="form-horizontal" id="salesOrderForm"><div class="card">
+				<div class="card-header">訂單進度查詢</div>
+				<div class="card-body px-5">
+					<div class="md-form mt-0">
+							<label for="uuid">訂單編號</label>
+							<input type="text" name="uuid" maxlength="255" value="{{prefillUuid}}" type="text" id="uuid" class="mb-0 form-control" required></div>
+					<div class="md-form">
+						<label for="customerTelephone">顧客電話</label>
+						<input type="text" name="customerTelephone" maxlength="255" value="" type="text" id="customerTelephone" class="mb-0 form-control" required></div>
+					<div class="md-form mt-0">
+						<div id="show_recaptcha" class="text-center"></div>
+					</div>
+				</div><!-- card-body -->
+				<div class="card-footer">
+					<div class="d-flex justify-content-center">
+						<input name="submitButton" type="submit" class="btn btn-primary px-3" value="送出" />
+<div class="fb-login-button" data-max-rows="1" data-size="medium"
+						data-button-type="login_with" data-show-faces="false"
+						data-auto-logout-link="false" data-use-continue-as="false"
+						scope="email,public_profile" onlogin="fbCustomerLogin('{{gbfBaseUrl}}');"></div>
+</div>
+				</div>
+			</div> <!-- card -->
+		</form></div>
+	<div class="col-12 col-md-8 py-3">
+		<form name="SalesOrderForm" method="post" action="/{{tenantCode}}/ajax/web/SalesOrder/queryUuid.do" class="form-horizontal" id="queryForm"><div class="card ">
+				<div class="card-header">忘記訂單號碼？</div>
+				<div class="card-body px-5">
+					<div class="md-form mt-0">
+						<label for="customerFirstname">顧客姓名</label>
+						<input type="text" name="customerFirstname" maxlength="255" value="" type="text" id="customerFirstname" class="mb-0 form-control" required></div>
+					<div class="md-form mt-0">
+						<label for="customerEmail">顧客Email</label>
+						<input type="text" name="customerEmail" maxlength="255" value="" type="text" id="customerEmail" class="mb-0 form-control" required></div>
+					<div class="md-form mt-0">
+						<div id="queryUuid_recaptcha" class="text-center"></div>
+					</div>
+				</div><!-- card-body -->
+				<div class="card-footer text-center">
+					<input name="submitButton" type="submit" class="btn btn-primary" value="取得近期3個月內訂單號碼" />
+					<div id='result'></div>
+				</div>
+			</div> <!-- card -->
+		</form></div>
+</div>
+
+{{> storefront/partials/recaptcha-stub.html}}
+<script> 
+var queryUuid_recaptcha;
+var show_recaptcha;
+var onloadCallback = function() {
+	queryUuid_recaptcha = grecaptcha.render('queryUuid_recaptcha', {
+	'sitekey' : '6LfAkd4UAAAAACSnhbUSVDsB7v_xmk4spmtsXkF-',
+	'theme' : 'light',
+	'callback' : function(response) {
+		$('#queryForm input[type=submit]').show();
+	}
+	});
+	show_recaptcha = grecaptcha.render('show_recaptcha', {
+	'sitekey' : '6LfAkd4UAAAAACSnhbUSVDsB7v_xmk4spmtsXkF-',
+	'theme' : 'light',
+	'callback' : function(response) {
+		$('#salesOrderForm input[type=submit]').show();
+	}
+	});
+	$('#queryUuid_recaptcha div').css('width', 'auto');
+	$('#show_recaptcha div').css('width', 'auto');
+	var options = {
+			success: showResponse,
+			error:showError
+			};
+
+	$('#queryForm').validate();
+	$('#queryForm').ajaxForm(options);
+	$('#salesOrderForm').validate();
+};
+
+
+$('#salesOrderForm input[type=submit]').hide();
+$('#queryForm input[type=submit]').hide();
+$(document).ready(function() { 
+
+
+}); 
+
+function addUuid(uuid) {
+	$('input[name="uuid"]').val(uuid);
+	$('input[name="uuid"]').parent().find('label').addClass('active');
+	jumpToAnchor('#salesOrderForm');
+ }
+ function showResponse(responseText, statusText, xhr, $form)  { 
+	var data = responseText.data;
+	// console.log('xxx = %o', data);
+	if (data != null && data.length > 0) {
+		$('input[name=uuid]').val(data[0]);
+		$('input[name="uuid"]').parent().find('label').addClass('active');
+		var msg = "";
+		$.each( data, function( key, value ) {
+			msg += '<a class="btn btn-default ls-2 p-2" onclick=addUuid(\"'+value+'\")>' + value + '</a>';
+			});
+		$('#result').html('<p>訂單號碼：(點擊可直接貼上)</p>' + msg);
+	} else {
+		$('#result').html('沒有訂單資料');
+	}
+	grecaptcha.reset(queryUuid_recaptcha);
+	$('#queryUuid_recaptcha div').css('width', 'auto');
+}
+ function showError(responseText, statusText, xhr, $form)  { 
+	var json = responseText.responseJSON;
+	if (json != null) {
+		$('#result').html(json.error);
+	}
+	grecaptcha.reset(queryUuid_recaptcha);
+	$('#queryUuid_recaptcha div').css('width', 'auto');
+}
+</script>
+</div>
+</main> 
+    <!--  main -->
+	{{> storefront/partials/footer.html}}
+<!-- 
+<script src="/public/js/vendor/jquery.ui.widget.js"></script>
+<script src="/public/js/tmpl.min.js"></script>
+<script src="/public/js/load-image.min.js"></script>
+<script src="/public/js/canvas-to-blob.min.js"></script>
+
+<script src="/scripts/bootstrap-lightbox.min.js"></script>
+ -->
+
+<!-- Latest compiled and minified JavaScript -->
+<script src="//cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.min.js" ></script>
+<!-- 授權政策：原站 MDB PRO JS → MDB Free 4.8.8 JS＋PRO 元件補丁 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/js/mdb.min.js"></script>
+<script src="/compat/mdb-pro-compat.js?v={{assetVersion}}"></script>
+<script src="/modules/storefront/fe-compat.js?v={{assetVersion}}"></script>
+<script src="/public/js/bootstrap-datetimepicker.min.js"></script>
+<script src="/public/js/jquery.numpad.js?v=2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/core-js/3.16.4/minified.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.form/4.2.2/jquery.form.min.js"></script>
+<script src="/public/js/jquery.twzipcode-1.7.9.1.js?v=1"></script>
+<script src="/public/js/mailcheck.min.js"></script>
+<script src="/public/js/taiwan-id-validator.js"></script>
+<!-- <script id="facebook-jssdk" src="https://connect.facebook.net/zh_TW/sdk.js#xfbml=1&amp;version=v2.12"></script> -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-autohidingnavbar/4.0.0/jquery.bootstrap-autohidingnavbar.min.js" type="text/javascript"></script>
+<script src="/public/scripts/jquery.countdown.min.js?v=2.2.0" type="text/javascript"></script>
+<script src="/public/js/jquery-simple-plugin.js?v=1" type="text/javascript"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lazysizes/5.3.0/lazysizes.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/2.2.1/js.cookie.min.js"></script>
+<script src="/public/scripts/locale/i18n.country.js?v=1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js" integrity="sha512-K/oyQtMXpxI4+K0W7H25UopjM8pzq0yrVdFdG21Fh5dBe91I40pDd9A4lzNlHPHBIP2cwZuoxaUSX0GJSObvGA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.16.4/i18next.min.js" integrity="sha512-nU8gAqIe6O5vtOf4OCB4H9rZnHyp4s/ioafd2hcjagY2ALuwLu8t7EGmzUmEjULi9qf1TaMRNVHBYF+fK/xF1A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/zh-tw.min.js"></script>
+<script src="/public/scripts/locale/i18n.zh-tw.js?v=9"></script>
+<script src="/public/scripts/ias_v5.min.js?v=251109"></script>
+<script src="/public/scripts/gbfmain.min.js?v=1"></script>
+<script src="/public/scripts/ep.widget.min.js?v=250908"></script>
+<script src="/public/scripts/gbs_v5.min.js?v=260908"></script>
+
+<!-- footer -->
+    <!-- Modal -->
+    <div id="myModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-scrollable"" role="document">
+			<div class="modal-content" id="myModalContent"></div>
+			</div>
+	</div>
+    <!-- Modal -->
+</body>
+
+</html>	

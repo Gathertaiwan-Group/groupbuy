@@ -1,0 +1,29 @@
+{{!-- 原站此處載入平台的 Facebook Pixel / Google Analytics（原站自己的追蹤碼）。
+     本系統不把訪客資料送到原站的追蹤帳號：只有團購自己設定了 facebookPixel / gaCode 時才載入（推導：團購層級追蹤碼）。 --}}
+<!-- Facebook Pixel Code -->
+<script>
+{{#if tracking.facebookPixel}}
+  !function(f,b,e,v,n,t,s)
+  {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+  n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+  if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+  n.queue=[];t=b.createElement(e);t.async=!0;
+  t.src=v;s=b.getElementsByTagName(e)[0];
+  s.parentNode.insertBefore(t,s)}(window, document,'script',
+  'https://connect.facebook.net/en_US/fbevents.js');
+  fbq('init', {{json tracking.facebookPixel}});
+
+  fbq('track', 'PageView');
+{{/if}}
+</script>
+<noscript>{{#if tracking.facebookPixel}}<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id={{tracking.facebookPixel}}&ev=PageView&noscript=1"/>{{/if}}
+</noscript><!-- End Facebook Pixel Code -->
+{{#if tracking.gaCode}}<script async src="https://www.googletagmanager.com/gtag/js?id={{tracking.gaCode}}"></script>{{else}}<script></script>{{/if}}
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+{{#if tracking.gaCode}}
+  gtag('js', new Date());
+  gtag('config', {{json tracking.gaCode}});
+{{/if}}
+</script>

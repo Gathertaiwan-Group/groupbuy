@@ -1,0 +1,37 @@
+<nav class="navbar navbar-expand-md navbar-custom fixed-top scrolling-navbar ">
+	<div class="container">
+<a class="navbar-brand mr-0" href="javascript:void(0)"><img src="{{logoUrl}}"></a>
+<ul class="navbar-nav d-md-none d-sm-block ml-auto">
+				<li class="nav-item nav-item-shopping-cart "></li>
+		</ul>
+		<button class="navbar-toggler custom-toggler collapsed " type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+			<span class="icon-bar"></span>
+			<span class="icon-bar"></span>
+			<span class="icon-bar"></span>
+		</button>
+		<div class="collapse navbar-collapse justify-content-between" id="navbarSupportedContent">
+			<!-- Links -->
+			<div></div>
+			<ul class="navbar-nav">
+				<li class="nav-item"><a class="nav-link " href="/{{navShortUrl}}/order"><i class="fa-light fa-list mr-1"></i>訂單進度查詢</a></li>
+<li class="nav-item"><a class="nav-link " href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/OnlineHelp/show.do', 'v=4&uuid={{onlineHelpUuid}}')"><i class="fa-light fa-comments mr-1"></i>我想問問題</a></li>
+</ul>
+			<!-- Links -->
+			<!-- Social Icon  -->
+			<ul class="navbar-nav nav-flex-icons">
+				<li class="nav-item nav-item-shopping-cart d-none d-lg-block "></li>
+{{#if customer}}{{{customerMenuHtml}}}{{else}}<li class="nav-item" id="nav-user-menu"><a class="nav-link " href="javascript: void(0)" onClick="openForm('{{gbfBaseUrl}}/ajax/web/Customer/showLoginForm')"><i class="fa-light fa-right-to-bracket mr-1"></i>登入/註冊</a></li>
+{{/if}}</ul>
+		</div>
+		<!-- Collapsible content -->
+	</div>
+</nav>
+<style>
+.signin-modal .close{color:#fff}
+/*.nav-tabs-signin {margin: 0rem 0.5rem 0rem 0.5rem;background-color: transparent;padding: 0;width: 100%;}*/
+</style>
+<script>
+$(document).ready(function() { 
+	/* 未串接 Facebook：原站在此呼叫 epFbAsyncInit(app id) 載入 FB SDK（快速登入），本系統不載入 */
+});
+</script>
