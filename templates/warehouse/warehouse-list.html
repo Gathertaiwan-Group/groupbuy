@@ -67,8 +67,10 @@ var warehouseTable;
 					data:'name',
 					orderable:false,
 					render: function ( data, type, row ) {
-						var id = row.groupBuy ? row.groupBuy.groupBuyId + '' : '未綁定';
-						return $.fn.dataTable.render.text().display(data) + '<br><span class="badge badge-default mt-2 mr-1">表單ID:' + id + '</span>';
+						{{!-- 推導：依原站列表實際畫面（倉庫名稱下方「表單ID:」徽章，未綁定表單時顯示「未綁定」）與本系統列表 JSON 的 groupBuy 物件撰寫 --}}
+						var bound = row.groupBuy || null;
+						var formIdLabel = (bound && bound.groupBuyId) ? String(bound.groupBuyId) : '未綁定';
+						return $.fn.dataTable.render.text().display(data) + '<br><span class="badge badge-default mt-2 mr-1">表單ID:' + formIdLabel + '</span>';
 					}
 				},
 				DataTableConfig.data_select('type'),
