@@ -1,0 +1,447 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+var homeViewTable;
+
+var isFooter = function(cate) {
+	if (cate == 'FOOTER_RELEASE' || cate == 'FOOTER_DRAFT' || cate == 'FOOTER_CUSTOM')
+		return true;
+	return false;
+}
+
+var isCustom = function(cate) {
+	if (cate == 'CUSTOM')
+		return true;
+	return false;
+}
+
+var isRelease = function(cate) {
+	return cate === 'RELEASE';
+}
+
+var GROUP_BUY_ID = '{{groupBuyId}}';
+
+$(document).ready(function() {
+
+	var tableName = '#homeViewTable';
+	editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeView/save.do?groupBuyId={{groupBuyId}}'
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeView/update.do?groupBuyId={{groupBuyId}}&homeViewId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeView/delete.do?groupBuyId={{groupBuyId}}&homeViewId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'homeViewId',
+		fields: [
+			DataTableConfig.field_select('類別', 'category'),
+			DataTableConfig.field_input('標題', 'title'),
+			DataTableConfig.field_input('標籤', 'tag'),
+			DataTableConfig.field_select('導覽列', 'homeViewConfig.navStyle'),
+			DataTableConfig.field_select('導覽列選單樣式', 'homeViewConfig.navMenuStyle'),
+			DataTableConfig.field_checkbox_bool('導覽列滿版', 'homeViewConfig.fluidNav'),
+			DataTableConfig.field_textarea('快訊', 'homeViewConfig.marquee', '格式：快訊內容#連結'),
+			DataTableConfig.field_textarea('搜尋關鍵字', 'homeViewConfig.searchKeywords', '格式：搜尋關鍵字#連結', 3, '', '可用逗號或是用換行分隔，例：衣服,襪子,襯衫'),
+			DataTableConfig.field_select('版型樣式', 'homeViewConfig.customStyle'),
+			DataTableConfig.field_select2('頁尾設定', 'homeViewConfig.footerId', -1, {id:'-1', text:'顯示預設頁尾'}, GBF.baseUrl + '/ajax/Lookup/homeViewFooter?groupBuyId=' + GROUP_BUY_ID),
+			DataTableConfig.field_select2('上方選單', 'homeViewConfig.topWebMenuId', -1, {id:'-1', text:'使用預設選單'}, GBF.baseUrl + '/ajax/Lookup/homeViewWebMenu?groupBuyId=' + GROUP_BUY_ID),
+			DataTableConfig.field_select2('側面選單', 'homeViewConfig.sideWebMenuId', -1, {id:'-1', text:'使用預設選單'}, GBF.baseUrl + '/ajax/Lookup/homeViewWebMenu?groupBuyId=' + GROUP_BUY_ID),
+		],
+		formOptions:{
+			main: {
+				submit: 'all', //for activate
+				submitOnReturn : false,
+			}
+		},
+		i18n:DataTableConfig.i18n,
+		template: '#homeViewEditor',
+	} );
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/HomeView/list.do?groupBuyId={{groupBuyId}}',
+			type: "POST",
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_details_control,
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_select('category', null, true),
+			DataTableConfig.data_input('title', true),
+			DataTableConfig.data_input('tag', true),
+			DataTableConfig.data_select('homeViewConfig.navStyle', null, true),
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 0, "desc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			'selectNone',
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit', editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+			DataTableConfig.actionButton({
+				extend: 'selectedSingle',
+				className:'btn-info btn-clone-dt',
+				text:'複製',
+				confirm:'確定要複製嗎?',
+				url:'{{baseUrl}}/ajax/HomeView/clone.do?groupBuyId='+{{groupBuyId}}+'',
+			}),
+		],
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [2,3],[0,16]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	function format ( d ) {
+		var html = '';
+		if (!isFooter(d.category)) {
+			var url = GBF.ctx + '/backend/HomeViewSection/list.do?groupBuyId='+GROUP_BUY_ID+'&homeViewId=' + d.homeViewId;
+			html += '<a class="btn btn-default text-nowrap m-1" type="button" href="' + url + '" target="_blank" rel="noopener noreferrer">內容區塊</a>';
+			html += '<a class="btn btn-default text-nowrap m-1" data-action="seo" type="button" data-home-view-id="'+d.homeViewId+'">SEO</a>';
+		}
+		if (isFooter(d.category)) {
+			var url = GBF.ctx + '/backend/WebEditor/footerV2.do?groupBuyId='+GROUP_BUY_ID+'&homeViewId=' + d.homeViewId;
+			html += '<a class="btn btn-default text-nowrap m-1" type="button" href="' + url + '" target="_blank" rel="noopener noreferrer">預覽&編輯</a>';
+		} else {
+			var url = GBF.ctx + '/{{groupBuy.shortUrl}}?preview=true&homeViewId=' + d.homeViewId + '&v2=1';
+			html += '<a class="btn btn-default text-nowrap m-1" type="button" href="' + url + '" target="_blank" rel="noopener noreferrer">預覽&編輯</a>';
+		}
+		if (isCustom(d.category)) {
+			//html += '<a class="btn btn-default text-nowrap m-1" type="button" data-gb-id="' + GROUP_BUY_ID + '" data-hv-id="' + d.homeViewId + '" onclick="refreshCustomWeb()">更新網頁</a>';
+			html += '<a class="btn btn-default text-nowrap m-1" type="button" onclick="showCustomPageUrl(\'' + d.publishUrl + '\')">取得發布網址</a>';
+		}
+		if (isRelease(d.category) || isCustom(d.category)) {
+			html += '<a class="btn btn-warning text-nowrap m-1" type="button" data-gb-id="' + GROUP_BUY_ID + '" data-hv-id="' + d.homeViewId + '" onclick="refreshCache()">更新暫存</a>';
+		}
+		return html;
+	}
+
+	homeViewTable = table;
+
+	injectOpenEditor(tableName, editor);
+	DataTableHelper.injectInline(table, editor, true);
+	injectDetailsControl(tableName, table, format);
+
+	$('#cloneHomeViewV1').click(function() {
+		var $this = $(this);
+		btnStartLoading($this);
+		$.ajax({
+			url: '{{baseUrl}}/ajax/HomeView/cloneFromV1',
+			data: { groupBuyId: {{groupBuyId}} },
+			dataType: 'json',
+		})
+		.fail(function(jqXHR, textStatus, errorThrown) {
+			var json = jqXHR.responseJSON;
+			toastr.warning(json.error);
+		})
+		.then(function(json) {
+			toastr.success('成功複製');
+			$('#cloneHomeViewV1').remove();
+			homeViewTable.ajax.reload(null, false);
+		})
+		.always(function(jqXHR, textStatus, errorThrown) {
+			btnStopLoading($this);
+		});
+	});
+
+	editor.dependent('homeViewConfig.navStyle', function (val, data, callback) {
+		const navStyle = val;
+		if (navStyle === 'STYLE_5') {
+			return {
+				show: ['homeViewConfig.marquee', 'homeViewConfig.searchKeywords'],
+				hide: ['homeViewConfig.fluidNav'],
+				values: { 'homeViewConfig.fluidNav': false }
+			};
+		} else if (navStyle === 'STYLE_4') {
+			return {
+				show: ['homeViewConfig.marquee'],
+				hide: ['homeViewConfig.fluidNav', 'homeViewConfig.searchKeywords'],
+				values: { 'homeViewConfig.fluidNav': false }
+			};
+		} else if (navStyle === 'STYLE_6') {
+			return {
+				hide: ['homeViewConfig.marquee', 'homeViewConfig.searchKeywords'],
+			};
+		} else {
+			return {
+				show: ['homeViewConfig.marquee', 'homeViewConfig.fluidNav'],
+				hide: ['homeViewConfig.searchKeywords']
+			};
+		}
+	})
+	.dependent('category', function (val, data, callback) {
+		updateNavStyleSettingLayout(val, this.val('homeViewConfig.customStyle'));
+		if (val === 'DRAFT' || val === 'RELEASE') {
+			return {
+				show: ['homeViewConfig.footerId', 'homeViewConfig.topWebMenuId', 'homeViewConfig.sideWebMenuId'],
+				hide: ['homeViewConfig.customStyle'],
+			}
+		} else if  (val === 'CUSTOM') {
+			return {
+				show: ['homeViewConfig.customStyle', 'homeViewConfig.footerId', 'homeViewConfig.topWebMenuId', 'homeViewConfig.sideWebMenuId'],
+			}
+		} else { // FOOTER_RELEASE, FOOTER_DRAFT, FOOTER_CUSTOM
+			return {
+				hide: ['homeViewConfig.customStyle', 'homeViewConfig.footerId', 'homeViewConfig.topWebMenuId', 'homeViewConfig.sideWebMenuId'],
+			}
+		}
+	})
+	.dependent('homeViewConfig.customStyle', function (val, data, callback) {
+		updateNavStyleSettingLayout(this.val('category'), val);
+		return {};
+	})
+	;
+
+	editor.on('open', function (e,mode,action) {
+		$('#DTE_Field_category').on('change', function(){
+			if (isFooter($(this).val())) {
+				$('#navStyleSetting').prop('hidden', true);
+			}
+			else {
+				$('#navStyleSetting').prop('hidden', false);
+			}
+		});
+	}).on('close', function (e,mode,action) {
+		$('#DTE_Field_category').unbind('change');
+	});
+
+	var seoEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeView/updateSEO.do?groupBuyId={{groupBuyId}}&homeViewId=_id_'
+			},
+		},
+		table: tableName,
+		idSrc: 'homeViewId',
+		fields: [
+			DataTableConfig.field_input('SEO標題','homeViewConfig.seoTitle'),
+			DataTableConfig.field_textarea('SEO敘述','homeViewConfig.seoDescr'),
+			DataTableConfig.field_upload('SEO圖片','homeViewConfig.seoImage'),
+			DataTableConfig.field_input('SEO圖片URL','homeViewConfig.seoImageUrl'),
+			DataTableConfig.field_checkbox_bool('是否禁止搜尋引擎搜尋與追蹤？', 'homeViewConfig.robots'),
+		],
+		formOptions:{
+			main: {
+				submit: 'all', //for activate
+				submitOnReturn : false,
+			}
+		},
+		i18n:DataTableConfig.i18n,
+		//template: '#homeViewEditor',
+	} );
+
+	$('#cloneFooterV1').click(function() {
+		var $this = $(this);
+		btnStartLoading($this);
+		$.ajax({
+			url: '{{baseUrl}}/ajax/HomeViewCache/cloneFooterV1',
+			data: {
+				groupBuyId: {{groupBuyId}}
+			},
+			dataType: 'json',
+		})
+		.fail(function(jqXHR, textStatus, errorThrown) {
+			var json = jqXHR.responseJSON;
+			toastr.warning(json.error);
+		})
+		.then(function(json) {
+			toastr.success('成功複製');
+			$('#cloneFooterV1').remove();
+			homeViewTable.ajax.reload(null, false);
+		})
+		.always(function(jqXHR, textStatus, errorThrown) {
+			btnStopLoading($this);
+		});
+	});
+
+	$(tableName +' tbody').on('click', 'a', function () {
+		var tr = $(this).closest('tr');
+		var row = table.row( tr );
+		if (!row.data()) {
+			// button is in the expanded row
+			tr = tr.prev();
+			row = table.row( tr );
+		}
+		const homeViewId = row.data().homeViewId;
+		const action = $(this).attr('data-action');
+		if (action == null) return;
+
+		switch (action) {
+		case 'seo':
+			seoEditor.edit(row, {
+				title: '編輯',
+				buttons: '編輯'
+			} );
+			return;
+		default: return;
+		}
+	} );
+} ); // end ready
+
+function refreshCustomWeb(gbId, homeViewId) {
+	if (typeof gbId === 'undefined')
+		gbId = event.currentTarget.dataset.gbId;
+	if (typeof homeViewId === 'undefined')
+		homeViewId = event.currentTarget.dataset.hvId;
+
+	var btn = $('#refreshCustom-' + homeViewId);
+	btnStartLoading(btn);
+	$.ajax({
+		url: GBF.baseUrl + '/ajax/HomeViewCache/refreshCustomWeb',
+		data: {
+			groupBuyId: gbId,
+			homeViewId: homeViewId
+		},
+		dataType: 'json',
+	})
+	.fail(function(jqXHR, textStatus, errorThrown) {
+		toastr.warning('更新網頁失敗');
+	})
+	.then(function(json) {
+		toastr.success('更新網頁成功');
+	})
+	.always(function(jqXHR, textStatus, errorThrown) {
+		btnStopLoading(btn);
+	});
+}
+
+function refreshCache() {
+	const gbId = event.currentTarget.dataset.gbId;
+	const homeViewId = event.currentTarget.dataset.hvId;
+	const button = event.currentTarget;
+
+	btnStartLoading( $( button ) );
+
+	$.ajax({
+		url: GBF.baseUrl + '/ajax/HomeViewCache/refresh.do',
+		data: {
+			groupBuyId: gbId,
+			homeViewId: homeViewId
+		},
+		dataType: 'json',
+	})
+	.fail(function(jqXHR, textStatus, errorThrown) {
+		toastr.warning('更新網頁失敗');
+	})
+	.then(function(json) {
+		toastr.success('更新網頁成功');
+	})
+	.always(function(jqXHR, textStatus, errorThrown) {
+		btnStopLoading( $( button ) );
+	});
+}
+
+function showCustomPageUrl(shortUrl) {
+	const html = ''
+		+ '<div class="form-group">'
+		+ '<label for="clUrl">專屬網址</label>'
+		+ '<input id="clUrl" type="url" class="form-control" value="' + shortUrl + '" size="27"/>'
+		+ '<button class="btn btn-default mx-0" type="button" onClick="copyClipboard(this, \'#clUrl\')">複製網址</button>'
+		+ '<a class="btn btn-default" href="' + shortUrl + '" target="_blank">開啟</a>'
+		+ '</div>'
+		;
+	messagebox('發布網址', html, '關閉');
+}
+
+function copyClipboard(a, selector) {
+	$(selector)
+		.focus()
+		.select();
+	document.execCommand('copy');
+	$(a)
+		.html("已複製至剪貼簿")
+		.attr('class', 'btn btn-primary');
+}
+
+function updateNavStyleSettingLayout(category='', customStyle='') {
+	const isEDM = category === 'CUSTOM' && customStyle === 'EDM';
+	if (isEDM) {
+		$('#navStyleSetting').hide();
+		$('#navStyleSetting').siblings().removeClass('col-md-6');
+	} else {
+		$('#navStyleSetting').show();
+		$('#navStyleSetting').siblings().addClass('col-md-6');
+	}
+}
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">官網</div>
+<div class="card-body">
+{{!-- 推導：原站 JSP 只在符合條件時才輸出 #cloneHomeViewV1 / #cloneFooterV1（示範帳號擷取時沒有輸出，按鈕外觀與條件無從得知）。
+      這裡在「官網型團購尚無網頁頁面／尚無 FOOTER，且有舊版內容可複製」時才顯示；處理程式沿用原站頁面腳本。 --}}
+{{#if showCloneHomeViewV1}}	<button type="button" id="cloneHomeViewV1" class="btn btn-info">從舊版複製首頁</button>
+{{/if}}{{#if showCloneFooterV1}}	<button type="button" id="cloneFooterV1" class="btn btn-info">從舊版複製FOOTER</button>
+{{/if}}	<table id="homeViewTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th width=20px></th>
+				<th width=40px>選擇</th>
+				<th width=80px>類別</th>
+				<th>標題</th>
+				<th>標籤</th>
+				<th>導覽列</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th width=20px></th>
+				<th width=40px>選擇</th>
+				<th width=80px>類別</th>
+				<th>標題</th>
+				<th>標籤</th>
+				<th>導覽列</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
+<!--#foot-->
+{{!-- 原站把 Editor 表單模板輸出在 <!DOCTYPE> 之前（瀏覽器會把它放進 body 開頭）；版面殼的 doctype 由 core 輸出，
+      這裡改放在 </body> 前。Editor 初始化時會把 #homeViewEditor 從文件中取出，位置不影響行為。 --}}
+<div style="display: none;">
+<div class="dtForm row" id="homeViewEditor">
+	<div class="col-12 col-md-6">
+		<fieldset>
+			<legend>基本設定</legend>
+			<editor-field name="category"></editor-field>
+			<editor-field name="homeViewConfig.customStyle"></editor-field>
+			<editor-field name="title"></editor-field>
+			<editor-field name="tag"></editor-field>
+			<editor-field name="homeViewConfig.robots"></editor-field>
+			<editor-field name="homeViewConfig.footerId"></editor-field>
+			<editor-field name="homeViewConfig.topWebMenuId"></editor-field>
+			<editor-field name="homeViewConfig.sideWebMenuId"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12 col-md-6" id="navStyleSetting">
+		<fieldset>
+			<legend>導覽列設定</legend>
+			<editor-field name="homeViewConfig.navStyle"></editor-field>
+			<editor-field name="homeViewConfig.navMenuStyle"></editor-field>
+			<editor-field name="homeViewConfig.fluidNav"></editor-field>
+			<editor-field name="homeViewConfig.marquee"></editor-field>
+			<editor-field name="homeViewConfig.searchKeywords"></editor-field>
+		</fieldset>
+	</div>
+</div>
+</div>

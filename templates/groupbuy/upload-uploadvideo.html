@@ -1,0 +1,571 @@
+<!--#head-->
+{{!-- 原站 spec/html/upload-uploadvideo.html；36 段缺段（樣式後半、說明區、上傳區、頁面 JS）已由原站頁面（唯讀）補齊。
+      與原站唯一差異：上傳改走 Supabase Storage 簽名直傳（Vercel 4.5MB 上限），見頁面 JS 的 uploadFile()；
+      影片網址前綴 https://cdn.groupbuyforms.com/upload/videos/ → 本站 /upload/videos/（轉址到 Storage）。 --}}
+<style>
+	.file-upload {
+		width: 100%;
+		border: 1px solid #ccc;
+		border-radius: 10px;
+	}
+	.file-upload__block {
+		position: relative;
+		width: 100%;
+		height: 250px;
+	}
+	.file-upload__indicator {
+		position: absolute;
+		width: 100%;
+		height: 100%;
+		top: 0;
+		left: 0;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		flex-direction: column;
+	}
+	.file-upload__mask {
+		pointer-events: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 100%;
+		opacity: 0;
+		background-color: #000;
+		transition: .2s all;
+	}
+	.file-upload__errors {
+		position: absolute;
+		top: 0;
+		left: 0;
+		display: none;
+		opacity: 0;
+		width: 100%;
+		height: 100%;
+		background: rgba(243, 65, 65, .8);
+		justify-content: center;
+		flex-direction: column;
+		transition: .2s all;
+	}
+	.file-upload__input {
+		z-index: 1;
+		width: 100%;
+		height: 100%;
+		position: absolute;
+		top: 0;
+		left: 0;
+		opacity: 0;
+		cursor: pointer;
+	}
+	.file-upload__previews {
+		display: flex;
+		width: 100%;
+		height: 100%;
+	}
+
+	/* highlight */
+	.file-upload.highlight {
+		border-color: #007bff;
+		background-color: rgba(0, 123, 255, 0.1);
+	}
+	.file-upload.highlight .file-upload-cloud-icon,
+	.file-upload.highlight .file-upload-default-message {
+		color: #007bff;
+	}
+
+	/* Error Messages */
+	.file-upload__errors li {
+		color: #ff0000;
+		font-size: 14px;
+		margin-top: 10px;
+		margin-bottom: 5px;
+	}
+	.file-upload__errors {
+		list-style-type: none;
+		padding: 0;
+	}
+
+	.video-link-container {
+		border: 1px solid #ddd;
+		padding: 15px;
+		border-radius: 5px;
+	}
+	.video-link-container input[type="text"] {
+		margin-bottom: 10px;
+	}
+	.video-link-container button {
+		margin-bottom: 10px;
+	}
+	.form-check {
+		margin-bottom: 5px;
+	}
+
+	.error-message {
+		color: #dc3545;
+		font-weight: bold;
+	}
+
+	.spinner-container {
+		display: none;
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(255,255,255,0.8);
+		justify-content: center;
+		align-items: center;
+		flex-direction: column;
+	}
+	.spinner-border {
+		width: 3rem;
+		height: 3rem;
+	}
+
+    .main-content {
+        background-color: #fff;
+        border-radius: 8px;
+        padding: 24px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+        color: #2c3e50;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+
+    .highlight {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin: 15px 0;
+    }
+
+    .warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 15px 0;
+    }
+
+    .tools {
+        background-color: #e9ecef;
+        padding: 15px;
+        border-radius: 4px;
+        margin: 15px 0;
+    }
+
+    .tools a {
+        color: #007bff;
+        text-decoration: none;
+    }
+
+    .tools a:hover {
+        text-decoration: underline;
+    }
+
+    .code-block {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 4px;
+        font-family: monospace;
+        margin: 15px 0;
+        overflow-x: auto;
+    }
+    .param-section {
+        margin-bottom: 20px;
+    }
+    .param-section:last-child {
+        margin-bottom: 0;
+    }
+    .param-section h4 {
+        margin: 0 0 10px 0;
+        color: #2c3e50;
+    }
+    .param-syntax {
+        margin: 8px 0;
+    }
+    .param-syntax code {
+        background-color: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: monospace;
+    }
+    .param-options {
+        margin-top: 8px;
+    }
+    .param-options ul {
+        margin: 8px 0;
+        padding-left: 20px;
+    }
+    .param-options li {
+        margin: 4px 0;
+    }
+    .param-options code {
+        background-color: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: monospace;
+    }
+    .param-description {
+        color: #666;
+        margin-top: 8px;
+    }
+</style>
+{{!-- 本系統新增：簽名直傳小工具（GBVideoUpload.ajax，介面同 $.ajax 選項） --}}
+<script src="/modules/groupbuy/upload/video-direct-upload.js?v={{assetVersion}}"></script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+		<ol class="breadcrumb">
+			<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+			<li class="breadcrumb-item active" aria-current="page">上傳影片</li>
+		</ol>
+	</nav>
+	<div class="row">
+	<div class="col-md-6">
+
+<div class="main-content">
+        <h1>影片上傳說明</h1>
+
+        <div class="highlight">
+            使用影片取代gif檔案可大幅減少網頁流量<br>
+            僅供商品說明介紹使用<br>
+            可將上傳產生的網址複製貼上至商品說明文字編輯器內
+        </div>
+
+        <div class="warning">
+            <strong>注意事項：</strong><br>
+            ＊檔案大小限制: 4MB<br>
+            ＊不支援gif上傳
+        </div>
+
+        <div class="tools">
+            <h3>gif轉mp4工具</h3>
+            <p>線下工具：<a href="https://handbrake.fr/downloads.php" target="_blank">https://handbrake.fr/downloads.php</a></p>
+            <p>線上工具：<a href="https://cloudconvert.com" target="_blank">https://cloudconvert.com</a></p>
+        </div>
+
+        <h3>影片網址參數設定</h3>
+        <div class="highlight">
+            <div class="param-section">
+                <h4>顯示比例 (ratio)</h4>
+                <div class="param-syntax">參數格式：<code>&amp;ratio={ratio}</code></div>
+                <div class="param-options">
+                    可選值：
+                    <ul>
+                        <li><code>16by9</code> - 橫向顯示（預設）</li>
+                        <li><code>4by3</code> - 傳統顯示比例</li>
+                        <li><code>1by1</code> - 正方形顯示</li>
+                        <li><code>9by16</code> - 直向顯示（直屏）</li>
+                        <li><code>3by4</code> - 直向顯示（直屏）</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="param-section">
+                <h4>群組顯示 (group)</h4>
+                <div class="param-syntax">參數格式：<code>&amp;group={group}</code></div>
+                <div class="param-description">設定相同群組值的影片將會在同一行顯示</div>
+            </div>
+        </div>
+
+        <h3>範例：</h3>
+        <div class="code-block">
+            https://domain.com/video1.mp4?autoplay=true&amp;ratio=9by16&amp;group=A<br>
+            https://domain.com/video2.mp4?autoplay=true&amp;ratio=9by16&amp;group=A
+        </div>
+    </div>
+	</div>
+	<div class="col-md-6">
+		<div class="file-upload" id="dropArea">
+			<div class="file-upload__block" style="position: relative;">
+				<div class="file-upload__indicator">
+					<i class="fa-regular fa-cloud-arrow-up"></i>
+					<p class="file-upload__message">將影片拖放到此處或點擊選擇檔案</p>
+					<p class="file-upload__main-error"></p>
+				</div>
+				<div class="file-upload__mask"></div>
+				<ul class="file-upload__errors"></ul>
+				<input type="file" id="inputFile" class="file-upload__input" data-ep-file-upload-init accept="">
+				<div id="uploadSpinner" class="spinner-container" style="display: none;">
+					<div class="spinner-border text-primary" role="status">
+						<span class="sr-only">上傳中...</span>
+					</div>
+					<span class="ml-2">正在上傳,請稍候...</span>
+				</div>
+			</div>
+		</div>
+	</div>
+	</div>
+<script>
+	const CopyLinkButton = (function() {
+		function create($linkInput) {
+			const $button = $('<button>')
+				.text('複製連結')
+				.addClass('btn btn-primary mt-0')
+				.on('click', () => handleClick($button, $linkInput));
+			return $button;
+		}
+
+		function handleClick($button, $linkInput) {
+			copyToClipboard($linkInput.val())
+				.then(() => showCopySuccess($button))
+				.catch(() => {
+					$linkInput.select();
+					document.execCommand('copy');
+					showCopySuccess($button);
+				});
+		}
+
+		function copyToClipboard(text) {
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				return navigator.clipboard.writeText(text);
+			}
+			return Promise.reject('Clipboard API 不可用');
+		}
+
+		function showCopySuccess($button) {
+			$button.text('已複製!').prop('disabled', true);
+			setTimeout(() => {
+				$button.text('複製連結').prop('disabled', false);
+			}, 2000);
+		}
+
+		return { create };
+	})();
+
+	const UploadFileNameStorage = (function() {
+		const STORAGE_KEY = 'uploadedFileNames';
+
+		function get() {
+			return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+		}
+
+		function save(fileNames) {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(fileNames));
+		}
+
+		function add(fileName) {
+			const fileNames = get();
+			if (fileNames.includes(fileName)) {
+				return;
+			}
+			fileNames.push(fileName);
+			save(fileNames);
+		}
+
+		function has(fileName) {
+			return get().includes(fileName);
+		}
+
+		return { add, has };
+	})();
+
+	const Spinner = (function() {
+		function show() {
+			$('#uploadSpinner').css('display', 'flex');
+		}
+		function hide() {
+			$('#uploadSpinner').hide();
+		}
+		return { show, hide };
+	})();
+
+	$(document).ready(function() {
+		const fileUpload = document.querySelector('.file-upload');
+		const fileInput = document.getElementById('inputFile');
+		const defaultMessage = document.querySelector('.file-upload__message');
+		const errorList = document.querySelector('.file-upload__errors');
+		const mainError = document.querySelector('.file-upload__main-error');
+
+		// Avoid default behavior on document body
+		$(document).on('dragenter dragover dragleave drop', function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+		});
+
+		$(fileUpload).on({
+			'dragenter dragover': function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				$(this).addClass('highlight');
+			},
+			'dragleave drop': function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				$(this).removeClass('highlight');
+			},
+			'drop': handleDrop,
+			'click': function(e) {
+				if (e.target !== fileInput) {
+					e.preventDefault();
+					e.stopPropagation();
+					fileInput.click();
+				}
+			}
+		})
+
+		fileInput.addEventListener('change', handleFiles, false);
+
+		function handleDrop(e) {
+			const dt = e.originalEvent.dataTransfer;
+			const files = dt.files;
+			handleFiles({ target: { files: files } });
+		}
+
+		function handleFiles(e) {
+			const files = e.target.files;
+			if (files.length > 0) {
+				const file = files[0];
+				if (file.type.startsWith('video/')) {
+					if (UploadFileNameStorage.has(file.name)) {
+						displayError('已上傳過的檔案');
+					} else {
+						uploadFile(file);
+					}
+				} else {
+					displayError('僅限影片(m4v,mp4)檔案');
+				}
+			}
+		}
+
+		function displayError(message) {
+			clearErrors();
+			const li = document.createElement('li');
+			li.textContent = message;
+			li.style.color = '#dc3545';
+			li.style.fontWeight = 'bold';
+			errorList.appendChild(li);
+
+			mainError.textContent = message;
+			mainError.style.color = '#dc3545';
+			mainError.style.fontWeight = 'bold';
+		}
+
+		function clearErrors() {
+			errorList.innerHTML = '';
+			mainError.textContent = '';
+			$('.alert-success').remove();
+		}
+
+		function uploadFile(file) {
+			clearErrors();
+
+			const formData = new FormData();
+			formData.append('upload', file);
+
+			{{!-- 原站：'https://groupbuyforms.com/json/uploadImage/vcf'（外部主機一次上傳）→ 本系統：簽名直傳（1 取得網址 → 2 PUT Storage → 3 寫紀錄） --}}
+			const uploadUrl = '{{baseUrl}}/ajax/Upload/signVideoUpload.do';
+
+			Spinner.show();
+
+			GBVideoUpload.ajax({
+				url: uploadUrl,
+				completeUrl: '{{baseUrl}}/ajax/Upload/saveVideoUpload.do',
+				type: 'POST',
+				data: formData,
+				processData: false,
+				contentType: false,
+				success: function(json) {
+					Spinner.hide();
+					if (json.error) {
+						displayError('檔案上傳失敗: ' + json.error);
+						toastr.error('檔案上傳失敗: ' + json.error);
+						console.error('檔案上傳失敗:', json.error);
+					} else if (json.upload && json.upload.id) {
+						displaySuccess('檔案上傳成功！');
+						toastr.success('檔案上傳成功！');
+						console.log('檔案上傳成功:', json);
+						displayVideoLink(json.upload.id, file.name);
+						UploadFileNameStorage.add(file.name);
+					}
+				},
+				error: function(xhr, status, error) {
+					Spinner.hide();
+					toastr.error('上傳失敗: ' + error);
+					displayError('上傳失敗: ' + error);
+					console.error('上傳錯誤:', error);
+				}
+			});
+		}
+
+		function displaySuccess(message) {
+			clearErrors();
+			const successMessage = $('<div>')
+				.addClass('alert alert-success')
+				.text(message);
+			$(fileUpload).after(successMessage);
+			setTimeout(() => successMessage.fadeOut('slow', function() { $(this).remove(); }), 3000);
+		}
+
+		function displayVideoLink(uploadId, fileName) {
+			const baseUrl = generateBaseUrl();
+			let fullUrl = generateVideoUrl(baseUrl, uploadId, {autoplay: true, loop: true});
+
+			const $linkContainer = $('<div>').addClass('video-link-container mt-3');
+
+			const $fileNameDisplay = $('<p>').text('檔案名稱: ' + fileName).addClass('mb-2');
+			$linkContainer.append($fileNameDisplay);
+
+			const $inputGroup = $('<div>').addClass('input-group mb-3');
+
+			const $linkInput = $('<input>').attr({
+				type: 'text',
+				value: fullUrl,
+				readonly: true
+			}).addClass('form-control');
+
+			const $copyButton = CopyLinkButton.create($linkInput);
+
+			$inputGroup.append($linkInput, $copyButton);
+
+			const $autoplayCheck = createCheckbox('自動播放', 'autoplay', true);
+			const $loopCheck = createCheckbox('循環播放', 'loop', true);
+
+			$linkContainer.append($inputGroup, $autoplayCheck, $loopCheck);
+			$(fileUpload).after($linkContainer);
+
+			function updateUrl() {
+				let params = {};
+				if ($autoplayCheck.find('input').prop('checked')) params['autoplay'] = true;
+				if ($loopCheck.find('input').prop('checked')) params['loop'] = true ;
+				fullUrl = generateVideoUrl(baseUrl, uploadId, params);
+				$linkInput.val(fullUrl);
+			}
+
+			$autoplayCheck.add($loopCheck).find('input').on('change', updateUrl);
+
+			function createCheckbox(label, name, checked) {
+				return $('<div>').addClass('form-check').append(
+					$('<input>').attr({
+						type: 'checkbox',
+						id: name + '_' + uploadId,
+						name: name,
+						checked: checked
+					}).addClass('form-check-input'),
+					$('<label>').attr('for', name + '_' + uploadId).text(label).addClass('form-check-label')
+				);
+			}
+
+			function generateBaseUrl() {
+				//const randomNumber = Math.floor(Math.random() * 4) + 1;
+				//const index = randomNumber == 1 ? '' : randomNumber;
+				//return 'https://cdn' + index + '.groupbuyforms.tw/upload/videos/';
+				{{!-- 原站：return 'https://cdn.groupbuyforms.com/upload/videos/'; → 本站 /upload/videos/<id>（轉址到 Storage 公開網址） --}}
+				return location.origin + '/upload/videos/';
+			}
+
+			function generateVideoUrl(baseUrl, uploadId, params) {
+				const queryString = $.param(params);
+				return baseUrl + uploadId + (queryString ? '?' + queryString : '');
+			}
+		}
+	});
+
+</script>
+</div>

@@ -1,0 +1,262 @@
+<!--#head-->
+{{!-- 原站 spec/html/facebookauthgroupbuy-list.html；頁面 JS 的 27 段缺段已由原站頁面（唯讀）補齊，邏輯原封不動。
+      動態值：租戶前綴 → {{baseUrl}}；網址參數 facebookAuthId / groupBuyId → 伺服器只輸出數字。 --}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+
+	var facebookAuthGroupBuyTable;
+	$(document).ready(function() {
+
+		var facebookAuthId = '{{facebookAuthId}}';
+		var groupBuyId = '{{filterGroupBuyId}}';
+
+		var groupColumn = -1;
+
+		if (facebookAuthId) {
+			groupColumn = 2;
+		} else if (groupBuyId) {
+			groupColumn = 1;
+		} else {
+			$('#showStatusPending').prop('checked', true);
+		}
+
+		var dataTableFilter = null;
+
+		var appendExtra = function (d) {
+			if (dataTableFilter) {
+	 			const f = dataTableFilter.getFilterPropertyAccessors();
+				f.keys().forEach(k=>{
+					d[k] = f.get(k).join();
+				});
+			}
+			d.showStatusPending = $('#showStatusPending').prop('checked');
+			//d.facebookAuthId = facebookAuthId;
+			//d.groupBuyId = groupBuyId;
+			return d;
+		}
+
+		var tableName = '#facebookAuthGroupBuyTable';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/FacebookAuthGroupBuy/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/FacebookAuthGroupBuy/update.do?facebookAuthGroupBuyId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/FacebookAuthGroupBuy/action.do?facebookAuthGroupBuyId=_id_',
+					data: function(data) {
+						data.batchAction = editor._action;
+						return data;
+					}
+				}
+			},
+			table: tableName,
+			idSrc: 'facebookAuthGroupBuyId',
+			fields: [
+					DataTableConfig.field_input('授權狀態','status'),
+					DataTableConfig.field_input('???FacebookAuthGroupBuy.groupBuyId???','groupBuyId'),
+					DataTableConfig.field_input('???FacebookAuthGroupBuy.groupBuyAccountId???','groupBuyAccountId'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/FacebookAuthGroupBuy/list.do',
+				type: "POST",
+				data:function ( d ) {
+					appendExtra(d);
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				//DataTableConfig.data_input('groupBuyTitle'),
+				{ data: 'groupBuyTitle', render: function ( data, type, row ) {
+						var html = '';
+						var link2 = '<a target="_blank" href="/backend/FacebookAuthGroupBuy/list?groupBuyId=' + row.groupBuyId + '"><i class="fa-light fa-arrow-up-right-from-square ml-1"></i></a>'
+						var link = '<i class="fa-light fa-magnifying-glass-plus ml-1" data-dt-filter-add data-dt-filter-label="'+data+'" data-dt-filter-key="groupBuyId" data-dt-filter-value="'+row.groupBuyId+'"></i>'
+							html = '<span class="text-nowrap ml-1">' + data + html + link + '</span>'
+						return html;
+					}
+				},
+				{ data: 'facebookAuth.name', render: function ( data, type, row ) {
+						var url = row.facebookAuth.pictureUrl;
+						var html = '';
+						if (url) {
+							html = '<img class="d-inline" style="width:24px" src="'+url+'">';
+						}
+						var roleTag = '';
+						if (row.roleKol) {
+							roleTag = '<span class="badge badge-default">KOL</span>'
+						}
+						var link2 = '<a target="_blank" href="/backend/FacebookAuthGroupBuy/list?facebookAuthId=' + row.facebookAuthId + '"><i class="fa-light fa-arrow-up-right-from-square ml-1"></i></a>'
+						var link = '<i class="fa-light fa-magnifying-glass-plus ml-1" data-dt-filter-add data-dt-filter-label="'+data+'" data-dt-filter-key="facebookAuthId" data-dt-filter-value="'+row.facebookAuthId+'"></i>'
+						html = '<span class="text-nowrap ml-1">' + data + html + roleTag + link + '</span>'
+
+ 						if (!row.roleKol) {
+							html += '<button class="btn btn-default text-nowrap" data-action="markAsKOL">標註為KOL/團主</button>'
+						}
+
+						return html;
+					}
+				},
+				//DataTableConfig.data_input('facebookAuth.name'),
+				DataTableConfig.data_select('status'),
+				{
+					data:null,
+					'class':'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var html = '';
+
+						switch (row.status) {
+							case 'APPROVED':
+								html += '<button class="btn btn-warning text-nowrap" data-action="reject">拒絕授權</button>'
+								break;
+							case 'REJECTED':
+								html += '<button class="btn btn-default text-nowrap" data-action="approve">允許授權</button>'
+								break;
+							default:
+								html += '<button class="btn btn-default text-nowrap" data-action="approve">允許授權</button>'
+								html += '<button class="btn btn-warning text-nowrap" data-action="reject">拒絕授權</button>'
+								break;
+						}
+
+						return '<div class="d-block">'+html+'</div>';
+					}
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 3, "asc" ]],
+			columnDefs: [
+				{ orderable: false, targets: [0,1,2] }
+			],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				//{ extend: 'create', editor: editor },
+				//{ extend: 'edit',   editor: editor },
+				//{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [3],[0]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+
+				if (groupColumn != -1) {
+					var api = this.api();
+					var rows = api.rows( {page:'current'} ).nodes();
+					var last=null;
+					var data = api.column(groupColumn, {page:'current'} ).data();
+					api.column(groupColumn, {page:'current'} )
+						.data()
+						.each( function ( group, i ) {
+							if ( last !== group ) {
+
+								$(rows).eq( i ).before(
+									'<tr class="group"><td colspan="4">'+group+'</td></tr>'
+								);
+								last = group;
+							}
+						});
+				}
+			}
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		injectDetailsControl(tableName, table);
+		facebookAuthGroupBuyTable = table;
+
+		$('.filters').on('change', function() {
+			table.clear().ajax.reload();
+		});
+
+	 	if (facebookAuthId) {
+			table.column(2).visible(false);
+		} else if (groupBuyId) {
+			table.column(1).visible(false);
+		}
+
+		$(tableName +' tbody').on('click', 'button', function (e) {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var id = row.data().salesOrderId;
+			var action = $(this).attr('data-action');
+			if (action == null) return true;
+
+			e.stopPropagation();
+			var msg = '';
+
+			switch (action) {
+			case 'approved':
+				approved(row, tr);
+				return false;
+			};
+
+			editor._action = action;
+			editor
+			.remove(tr, false).submit();
+			return false;
+		} );
+
+		dataTableFilter = new DataTableFilter(
+				tableName,
+				'webMenuTableFilter',
+				function(tableName, filters) {
+					table.clear().ajax.reload();
+				},
+				function(tableName, filters) {
+					table.clear().ajax.reload();
+				}
+		);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">報表授權名單</div>
+<div class="card-footer pb-0">
+	<p>額外搜尋條件</p>
+	<div class="d-inline-blok mt-2">
+	<input type="checkbox" id="showStatusPending" class="filters form-check-input" value="1"><label for="showStatusPending" class="pl-4 mr-2">只顯示等待授權名單 </label>
+	</div>
+</div>
+<div class="card-body" id="webMenuTableFilter"></div>
+<div class="card-body">
+	<table id="facebookAuthGroupBuyTable" class="table table-striped display" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>團購名稱</th>
+				<th>臉書暱稱</th>
+				<th>授權狀態</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>團購名稱</th>
+				<th>臉書暱稱</th>
+				<th>授權狀態</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
