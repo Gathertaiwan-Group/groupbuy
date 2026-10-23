@@ -2156,6 +2156,9 @@
       this.s.editFields = editFields;
       this.s.mode = 'main';
       this.dom.form.style.display = 'none';
+      // 刪除／確認框（DataTableConfig.actionButton 用 remove(editor, true)）只顯示訊息與按鈕：
+      // 欄位與自訂 template 一律先移出表單（同原版不渲染），之後 create/edit 會由 _displayReorder 放回
+      $(this.dom.formContent).children().detach();
       this._actionClass();
       this._event('initRemove', [_pluck(editFields, 'node'), _pluck(editFields, 'data'), items], function () {
         that._event('initMultiRemove', [editFields, items], function () {

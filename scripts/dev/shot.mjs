@@ -51,8 +51,15 @@ if (args.login) {
   await sleep(3500);
   const acc = JSON.stringify(process.env.GB_ACC || ''), pw = JSON.stringify(process.env.GB_PW || '');
   const r = await evaluate(`(async()=>{ for(let i=0;i<40 && !$('#btn-submit').is(':visible');i++) await new Promise(r=>setTimeout(r,250)); $('#username').val(${acc}); $('#password').val(${pw}); $('#AdminUserForm').submit(); return 'submitted:' + $('#btn-submit').is(':visible'); })()`);
-  logs.push('[login] ' + r);
-  await sleep(3500);
+  // 等登入請求真的完成（出現 GBSID cookie），正式站／冷啟動可能超過數秒；最多 45 秒
+  let ok = false;
+  for (let i = 0; i < 90 && !ok; i++) {
+    await sleep(500);
+    const c = await send('Network.getCookies', { urls: [args.login + '/'] });
+    ok = (c.result?.cookies || []).some((k) => k.name === 'GBSID');
+  }
+  logs.push('[login] ' + r + (ok ? ' session:ok' : ' session:未取得（帳密錯誤、被鎖定或逾時）'));
+  await sleep(1500); // 登入頁的 JS 會 reload，等它跑完再導頁
   inLogin = false;
 }
 if (args.url) { await send('Page.navigate', { url: args.url }); await sleep(wait); }

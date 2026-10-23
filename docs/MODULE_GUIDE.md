@@ -340,7 +340,7 @@ export const routes = [
 
 ### 8.1 DataTables Editor 相容 shim（`public/compat/editor-shim.js`）
 
-照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，54 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
+照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，56 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
 
 原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
 

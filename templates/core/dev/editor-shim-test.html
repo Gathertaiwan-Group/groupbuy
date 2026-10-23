@@ -354,6 +354,38 @@ $(document).ready(async function () {
 		return f.find('fieldset legend').length === 2 && f.find('fieldset').eq(1).find('.DTE_Field_Name_tb').length === 1;
 	});
 
+	// DataTableConfig.actionButton 的確認框（remove(editor, true)）：有自訂 template、先做過多列編輯，也只顯示訊息與按鈕
+	var aTpl = $('<div id="shimActTpl"><fieldset><legend>基本設定</legend><editor-field name="name"></editor-field><editor-field name="qty"></editor-field></fieldset></div>').appendTo('body');
+	var aEd = new E({ table: '#shimTable', idSrc: 'rid', template: '#shimActTpl', fields: [DataTableConfig.field_input('名稱', 'name'), DataTableConfig.field_input('數量', 'qty')] });
+	aEd.edit(table.rows().indexes());
+	await wait(700);
+	var aMultiShown = $(aEd.field('name').node()).find('div.multi-value').is(':visible');
+	aEd.close();
+	await wait(600);
+	aEd.title('停用').message('確定停用 2 筆？').buttons([{ text: '確定', className: 'btn btn-danger', action: function () {} }, { text: '關閉', className: 'btn btn-default', action: function () { this.close(); } }]).remove(aEd, true);
+	await wait(800);
+	T('actionButton 確認框（remove(editor,true)＋自訂 template）：只顯示訊息與按鈕，不顯示欄位／template／多個數值', function () {
+		var m = $(aEd.dom.wrapper);
+		var r = {
+			multiBefore: aMultiShown,
+			visible: m.is(':visible'),
+			fields: m.find('div.DTE_Field:visible').length,
+			tpl: m.find('legend:visible').length,
+			multi: m.find('div.multi-value:visible').length,
+			msg: m.find('div.DTE_Form_Info').text().trim(),
+			buttons: m.find('div.DTE_Form_Buttons button').length
+		};
+		return (r.visible && r.fields === 0 && r.tpl === 0 && r.multi === 0 && r.msg === '確定停用 2 筆？' && r.buttons === 2) || JSON.stringify(r);
+	});
+	aEd.close();
+	await wait(600);
+	aEd.create(false);
+	T('actionButton 確認框之後再新增：template 與欄位回到表單', function () {
+		return $(aEd.dom.formContent).find('legend').length === 1 && $(aEd.dom.formContent).find('div.DTE_Field').length === 2 && aEd.dom.form.style.display !== 'none';
+	});
+	aEd.destroy();
+	aTpl.remove();
+
 	// className: 'block'：標籤在上、輸入佔整列（原版 bootstrap4 樣式 div.DTE_Field.block）
 	var blkEd = new E({ fields: [{ name: 'blk', label: '整列', className: 'block' }, { name: 'nb', label: '一般' }] });
 	blkEd.create();
