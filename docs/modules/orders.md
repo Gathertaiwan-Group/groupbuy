@@ -65,7 +65,7 @@ DB 函式（migration）：
 - 建立日期：1/3/6 個月、自訂區間；「完整符合」搜尋訂單號碼/姓名/電話/Email、批量訂單號、指定顧客/訂單時不限建立日期。表尾訂單號碼/電話由左至右比對、`?` 開頭比對末幾碼。
 - 可預購轉現貨（列表篩選＋`b2sTotal`）：新訂單/處理中訂單內有「預購、未出貨」商品，且該商品（共用庫存取主商品）保留現貨或可售現貨 ≥ 數量（`b2s.ts`，與 3040 扣庫存規則一致）。
 
-**金額慣例與重算**（`pricing.ts`）：計價一律呼叫 storefront 的 `priceCart()`（只讀依賴，與前台結帳同一套運費／優惠計算）。`order_items.amount = price×total − discount`；`discount_amount`＝優惠條件＋優惠卷；`shipping_amount`＝運費＋貨到付款手續費；`grand_total`＝Σ(非贈品 price×total) − discount_amount ＋ shipping_amount ＋ 稅（團購 tax_rate%）＋ extra_fee。「重新計算總額跟運費」只重算運費、「重新計算優惠」重新套用優惠條件與優惠卷並重新分攤到商品；兩者都不勾時（優惠卷增刪、搬移商品）折扣以差額調整。
+**金額慣例與重算**（`pricing.ts`）：只讀依賴其他模組的正式計算——優惠用 marketing 的 `loadPricingInputForOrder()`＋`evaluatePricing()`（以訂單建立時間判斷優惠期限、亂數固定 0）、運費用 shipping 的 `loadGroupBuyShipping()`＋`cartLineFromItem()`＋`calculateShippingFee()`（含品項運費、單件運費、貨到付款費；門檻金額扣除訂單折扣）。`order_items.amount = price×total − discount`（商品層級折扣）；`discount_amount`＝優惠條件＋優惠卷；`shipping_amount`＝運費＋貨到付款手續費；`grand_total`＝Σ(非贈品 price×total) − discount_amount ＋ shipping_amount ＋ 稅（團購 tax_rate%）＋ extra_fee。「重新計算總額跟運費」只重算運費（訂單的運費規則不在團購設定中或不可用時維持原運費並提示）、「重新計算優惠」重新套用優惠條件與優惠卷並把商品層級折扣寫回（贈品資格不自動增刪，提示自行調整；優惠卷免運時運費歸 0）；兩者都不勾時（優惠卷增刪、搬移商品）折扣以差額調整。
 
 **批次操作行為**：
 - 取消：只對未取消/未合併/未拆單訂單；未出貨商品數量補回可售現貨/預購可售；員工備註附加。還原：重新扣庫存（任一商品不足則該單不還原並列出原因）、階段改處理中、重算運費。
