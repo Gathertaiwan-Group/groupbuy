@@ -1,0 +1,654 @@
+<!--#head-->
+{{!-- 保留單（/backend/SalesOrderReservation/list）：由 spec/html/salesorderreservation-list.html 清理；
+      spec 的 ⟦未擷取⟧ 缺段已依原站 p4 同頁完整 HTML 補齊（2026-10-23 唯讀擷取）。 --}}
+<script type="text/javascript" class="init">
+
+$(document).ready(function() {
+	$('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+		var id = $(e.target).attr('data-table');
+		$('#' + id).DataTable().ajax.reload();
+		document.title = $(this).text();
+	})
+} ); // end ready
+</script>
+{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+
+var salesOrderReservationTable;
+var table;
+$(document).ready(function() {
+
+	var appendExtra = function (d) {
+		d.hideDone = $('#hideDone').prop("checked");
+		d.days = $('#days').val();
+		d.uid = $('#sorOrderForm input[name=uid]').val();
+		d.dateCreatedBegin = $('#dateCreatedBegin').val();
+		d.dateCreatedEnd = $('#dateCreatedEnd').val();
+		return d;
+	}
+
+		var tableName = '#salesOrderReservationTable';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/SalesOrderReservation/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/SalesOrderReservation/update.do?relationId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/SalesOrderReservation/action.do?relationId=_id_',
+					data: function(data) {
+						data.action = editor._action;
+						return data;
+					}
+				}
+			},
+			table: tableName,
+			idSrc: 'relationId',
+			fields: [
+					DataTableConfig.field_select2('團購:','groupBuyId','','選擇(表單ID)', GBF.baseUrl + '/ajax/Lookup/groupBuy?months=1', false),
+					DataTableConfig.field_input('業務名稱/ID','salesName'),
+					DataTableConfig.field_input('保留對象','targetName'),
+					DataTableConfig.field_datetime('保留期限','datePaymentDueString', 'YYYY-MM-DD HH:mm'),
+					DataTableConfig.field_textarea('員工備註', 'staffNote','', 5),
+					DataTableConfig.data_input('mode','mode'),
+					DataTableConfig.field_input('訂單編號','uuid'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/SalesOrderReservation/list.do',
+				type: "POST",
+				data: function(data) {
+					appendExtra(data);
+					return data;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				//DataTableConfig.data_input('uuid'),
+				{ data: 'uuid',
+					render: function ( data, type, row, meta ) {
+						var html = data;
+						if (row.status != 'RESERVATION') {
+							html += '<br><span class="badge badge-danger mt-1">' + renderOption(meta, row.status, 'status') + '</span>';
+						}
+						return html;
+					}
+				},
+				{ data: 'dateCreatedString',
+					render: function ( data, type, row, meta ) {
+						var dued = row.datePaymentDue < new Date().getTime();
+						var html = data;
+						var css = dued ? 'danger' : 'default';
+						html += '<br><span class="badge badge-'+css+' mt-1">保留期限:' + row.datePaymentDueString + '</span>';
+						return html;
+					}
+				},
+				//DataTableConfig.data_input('dateCreatedString'),
+				//DataTableConfig.data_input('datePaymentDueString'),
+				//DataTableConfig.data_select('state'),
+				//DataTableConfig.data_select('status'),
+				DataTableConfig.data_input('salesName'),
+				DataTableConfig.data_input('targetName'),
+				{ data: 'groupBuyId',
+					render: function ( data, type, row ) {
+						return data + '<br><span class="badge badge-default small text-eclipse">' + row.groupBuyTitle + '</span>';
+					}
+				},
+				{
+					data:null,
+					'class':'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var html = '';
+						//	html += '<button class="btn btn-default text-nowrap" data-action="item">商品</button>';
+						if (row.state == 'CANCELED') {
+
+						} else {
+							switch (row.status) {
+							case 'RESERVATION':
+								html += '<button class="btn btn-default text-nowrap" data-action="returnAndRefund">加退換商品</button>'
+										+ '<button class="btn btn-default text-nowrap" data-action="returnAndRefund2">加退換商品2</button>'
+										+ '<button class="btn btn-warning text-nowrap" data-action="unbind">轉銷售</button>'
+										+ '<button class="btn btn-danger text-nowrap" data-action="cancel">釋放保留</button>'
+								break;
+							}
+						}
+						return '<div class="d-block">'+html+'</div>';
+					}
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "desc" ]],
+			columnDefs: [
+				{ orderable: false, targets: [0,3,4,5] }
+			],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+			//	{ extend: 'remove', editor: editor, className:'btn-danger' },
+				{
+					extend: "create",
+					text: '轉保留',
+					action: function ( e, dt, node, config ) {
+						editor
+						.title('轉保留')
+						.message('將既有訂單轉換成保留單')
+						.create()
+						.buttons('確定')
+						.set('mode', 'bind')
+					}
+				},
+/* 				DataTableConfig.actionButton({
+					className:'btn-warning',
+					text:'轉銷售',
+					confirm:'確定要轉銷售嗎？轉銷售後會變成一般訂單',
+					url:'{{baseUrl}}/ajax/SalesOrderReservation/unbind',
+				}), */
+
+/* 				{
+					extend: "create",
+					text: '匯出報表',
+					action: function ( e, dt, node, config ) {
+						exportFile.show();
+					}
+				}, */
+
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [1,3,4,5],[16,16,16]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		//DataTableHelper.initEditorOnCallback(table,editor);
+		//DataTableHelper.inlineModePlugin(table);
+		//DataTableHelper.injectInline(table,editor);
+		salesOrderReservationTable = table;
+		//DataTableHelper.showHideAllColumns(editor, true)
+		editor
+		.on( 'open', function (e,mode,action) {
+			DataTableHelper.showHideAllColumns(editor, true);
+			this.hide('uuid');
+			this.hide('mode');
+			if (action == 'create') {
+				this.show('groupBuyId');
+			} else {
+				this.hide('groupBuyId');
+			}
+		})
+		.dependent('mode', function(val, data, callback) {
+			if (val == 'bind') {
+				DataTableHelper.showHideAllColumns(editor, false);
+				this.show('uuid');
+			} else {
+				this.hide('uuid');
+			}
+		});
+
+		$(tableName +' tbody').on('click', 'button', function (e) {
+			e.stopPropagation();
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var id = row.data().salesOrderId;
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+
+			var msg = '';
+			var url = '';
+			switch (action) {
+			case 'returnAndRefund':
+				//url = GBF.ctx + '/backend/ReturnRefund/displayReturnAndRefund?salesOrderId='+id
+				//openFormF(url);
+				{{!-- 推導：原站此鈕開新視窗到前台 POS（GBF.ctx + '/' + shortUrl + '/pos?mode=x&soUuid=' + uuid），
+				      POS 不在本次重建範圍；改開與「所有訂單」列展開卡片相同的加退換商品精靈（/backend/ReturnRefund/wizard）。 --}}
+				openFormF(GBF.ctx + '/backend/ReturnRefund/wizard', 'uuid=' + row.data().uuid + '&salesOrderId=' + id);
+				return;
+			case 'returnAndRefund2':
+				{{!-- 推導：原站為舊版彈窗 openFormF(GBF.ctx + '/backend/ReturnRefund/displayReturnAndRefund?salesOrderId=' + id)，
+				      本系統只實作新版精靈，統一導向 /backend/ReturnRefund/wizard。 --}}
+				openFormF(GBF.ctx + '/backend/ReturnRefund/wizard', 'uuid=' + row.data().uuid + '&salesOrderId=' + id);
+				return;
+			case 'unbind':
+				msg = '確定要轉銷售嗎？轉銷售後會變成一般訂單';
+				break;
+			case 'cancel':
+				msg = '確定要釋放保留嗎?釋放後訂單將被取消';
+				break;
+			};
+
+			editor._action = action;
+			editor
+			.title('確定執行')
+			.message(msg)
+			.buttons('確定')
+			.remove(tr);
+		} );
+
+		$('#sorOrderForm .filters').on('change', function() {
+			var id = $(this).prop('id');
+			var val = $(this).val();
+
+			if (id == 'days') {
+				updateFilterEnable();
+			}
+
+			if ((id == 'days')
+					&& val == -1) {
+				return;
+			}
+			table.clear().ajax.reload();
+		});
+	} ); // end ready
+
+var erpTitles = [
+	'ERP報表1',
+	'ERP報表2',
+	'ERP報表3',
+	'ERP報表4',
+	'ERP報表5',
+	'ERP報表6',
+
+];
+
+var fileDownload = function(action, query) {
+	var table = salesOrderReservationTable;
+	var $form = $('#queryForm');
+	var dd = joinIds('salesOrderId', table);
+	$form.find('[name=salesOrderIds]').val(dd.substring('salesOrderId='.length));
+	$form.find('[name=batchAction]').val(action);
+	$form.find('[name=query]').val(query);
+
+	var $btn = $('.DTE_Action_Create .btn.btn-primary');
+	btnStartLoading($btn);
+
+	const form = document.getElementById('queryForm');
+	const myFormData = new FormData(form);
+	const formDataObj = Object.fromEntries(myFormData.entries());
+	// data string
+	//const data = JSON.stringify(Object.fromEntries(myFormData));
+
+	$.fileDownload($form.prop('action'), {
+		httpMethod: "POST",
+		data: formDataObj
+	})
+	.done(function () {
+		btnStopLoading($btn);
+	})
+	.fail(function () {
+		alert('下載失敗');
+		btnStopLoading($btn);
+	});
+}
+
+var exportFile = {
+	show:function() {
+		var table = salesOrderReservationTable;
+		var count = table.rows( { selected: true } ).count();
+		if (count > 0) {
+			this.totalRecords = count;
+		} else {
+			this.totalRecords = table.page.info().recordsDisplay;
+		}
+		this.maxPageSize = Math.min(4000, this.totalRecords);
+		var cEditor = this.editor();
+		cEditor
+		.title('匯出報表')
+		.message('總數量為：' + this.totalRecords)
+		.buttons({label:'匯出', className:'btn-primary', action: function () {this.submit();}})
+		.create( false );
+		cEditor
+		.set('iDisplayLength', this.maxPageSize)
+		.open();
+	},
+	editor:function() {
+		if (this._editor != null) return this._editor;
+		var table = salesOrderReservationTable;
+		var _this = this;
+		this._editor = new $.fn.dataTable.Editor( {
+				fields: [
+					{
+						label:'選擇匯出報表',
+						name:'action',
+						type:'radio',
+						def:'EXPORT_CSV',
+						options:[
+							{label:'匯出csv', value:'EXPORT_CSV'},
+							//{label:'匯出訂單商品數量', value:'EXPORT_ORDER_ITEM'},
+							{label:erpTitles[0], value:'EXPORT_ERP'},
+							{label:erpTitles[1], value:'EXPORT_ERP2'},
+							{label:erpTitles[2], value:'EXPORT_ERP3'},
+							{label:erpTitles[3], value:'EXPORT_ERP4'},
+							{label:erpTitles[4], value:'EXPORT_ERP5'},
+							{label:erpTitles[5], value:'EXPORT_ERP6'},
+						]
+					},
+					DataTableConfig.field_input('匯出數量','iDisplayLength',this.maxPageSize,'','','單次匯出上限為4000筆'),
+					DataTableConfig.field_select('第幾頁','pageNumber','','選擇頁數'),
+				],
+				formOptions:DataTableConfig.formOptions,
+				i18n:DataTableConfig.i18n,
+			} )
+			.dependent('action', function(val, data, callback) {
+				if (val == 'EXPORT_ORDER_ITEM') {
+					return {
+						hide:['iDisplayLength','pageNumber']
+					}
+				} else {
+					return {
+						show:['iDisplayLength','pageNumber']
+					};
+				}
+				return {
+					values:{
+						'pageNumber':'1',
+					},
+					options:{
+						'pageNumber':options
+					}
+				};
+			})
+			.dependent('iDisplayLength', function(val, data, callback) {
+				var pageSize = parseInt(val);
+				if (isNaN(pageSize) || pageSize == 0) pageSize = _this.maxPageSize;
+				else if (pageSize > _this.maxPageSize) pageSize = _this.maxPageSize;
+
+				var pages = (_this.totalRecords + pageSize - 1) / pageSize;
+				pages = Math.floor(pages);
+				pages = Math.min(100, pages);
+				var options = [];
+				for (var i = 1;i <=pages; i++) {
+					options.push({label:i,value:i});
+				}
+				return {
+					values:{
+						'pageNumber':'1',
+					},
+					options:{
+						'pageNumber':options
+					}
+				};
+			})
+			.on( 'preSubmit', function ( e, o, action ) {
+				var pageNumber = o.data[0].pageNumber;
+				var iDisplayLength = o.data[0].iDisplayLength;
+				var iDisplayStart = (pageNumber-1)*iDisplayLength;
+
+				var d = appendExtra(table.settings().ajax.params());
+				d.iDisplayStart = iDisplayStart;
+				d.iDisplayLength = iDisplayLength;
+				var j = JSON.stringify(d);
+				//queryFormAppend(o.data[0].action, j);
+				fileDownload(o.data[0].action, j);
+				return false;
+			} )
+			.on( 'open', function (e,mode,action) {
+				$('.DTE').closest('.modal-dialog').removeClass('modal-dialog-scrollable');
+				$('.DTE_Form_Content').find('input:radio').each(function(i,obj) {$(obj).addClass('form-check-input')});
+			});
+
+		return this._editor;
+	}
+};
+</script>{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+
+var salesOrderReservationItemTable;
+$(document).ready(function() {
+
+	var appendExtra = function (d) {
+		d.uid = $('#sorItemForm input[name=uid]').val();
+		return d;
+	}
+
+		var tableName = '#salesOrderReservationItemTable';
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/SalesOrderReservation/listItem',
+				type: "GET",
+				data: function(data) {
+					appendExtra(data);
+					return data;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_input('title'),
+				DataTableConfig.data_input('uid'),
+				DataTableConfig.data_input('daysReserved'),
+				DataTableConfig.data_input('salesName'),
+				DataTableConfig.data_input('total'),
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 3, "desc" ]],
+			columnDefs: [
+			//	{ orderable: false, targets: [1,2,3,4,5] }
+			],
+			select: false,
+			buttons:[],
+			initComplete: function () {
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		salesOrderReservationItemTable = table;
+
+		$('#sorItemForm .filters').on('change', function() {
+			var id = $(this).prop('id');
+			var val = $(this).val();
+
+			if (id == 'days') {
+				updateFilterEnable();
+			}
+
+			if ((id == 'days')
+					&& val == -1) {
+				return;
+			}
+			table.clear().ajax.reload();
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<!-- Classic tabs -->
+<div class="classic-tabs mt-4">
+	<ul class="nav tabs-primary" id="myClassicTab" role="tablist">
+		<li class="nav-item">
+			<a class="pb-2 pt-3 nav-link waves-light show active" id="tab-order" data-toggle="tab" data-table="salesOrderReservationTable" href="#tab-content-order" role="tab"
+				aria-controls="contact-classic" aria-selected="false"><h6>保留單</h6></a>
+		</li>
+		<li class="nav-item">
+			<a class="pb-2 pt-3 nav-link waves-light " id="tab-item" data-toggle="tab" data-table="salesOrderReservationItemTable" href="#tab-content-item" role="tab"
+				aria-controls="follow-classic" aria-selected="false"><h6>保留商品</h6></a>
+		</li>
+	</ul>
+	<div class="tab-content p-0 border-right border-bottom border-left rounded-bottom" id="myClassicTabContent">
+		<div class="tab-pane active show" id="tab-content-order" role="tabpanel" aria-labelledby="groupBuy-tab-itemSet">
+<div class="card">
+<div class='card-footer section-item'>
+	<form action="/backend/SalesOrderReservation/batchAction" id="sorOrderForm" class="" method="post">
+	<input type="hidden" name="batchAction" value="" id='batchAction'>
+	<input type="hidden" name="query" value="" id='query'>
+	<input type="hidden" name="salesOrderIds" value="" id='salesOrderIds'>
+	<span id="hideDone-group"><input type="checkbox" name="hideDone" id="hideDone" class="filters form-check-input" value="1"><label for="hideDone" class="pl-4 mr-2">只顯示進行中訂單</label></span>
+	<div class="row">
+		<div class="col-lg-6">
+		<div class="input-group py-2">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon">建立日期</span>
+			</div>
+			<select name="days" id="days" class="filters custom-select">
+			<!-- <option value="0">不限制</option> -->
+			<option value="30">30日內訂單</option>
+			<option value="0">今日訂單</option>
+			<option value="1">昨日訂單</option>
+			<!-- <option value="12">1年內訂單</option> -->
+			<option value="-1">指定日期區間</option>
+			</select>
+			<input type="text" data-type="dateCreated" style="display:none" class="filters input-sm form-control" name="dateCreatedBegin" id="dateCreatedBegin" placeholder="開始日期" size=12>
+			<input type="text" data-type="dateCreated" style="display:none" class="filters input-sm form-control" name="dateCreatedEnd" id="dateCreatedEnd" placeholder="結束日期" size=12>
+		</div>
+		</div>
+
+		<div class="col-lg-6">
+		<div class="input-group py-2">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon">商品代碼</span>
+			</div>
+			<input type="text" data-type="uid" class="filters input-sm form-control" name="uid" id="uid" placeholder="商品代碼" size=20>
+		</div>
+		</div>
+	</div>
+	</form>
+</div>
+<div class="card-body">
+	<table id="salesOrderReservationTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>訂單編號</th>
+				<th>訂單日期</th>
+				<th>業務名稱/ID</th>
+				<th>保留對象</th>
+				<th>團購ID</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>訂單編號</th>
+				<th>訂單日期</th>
+				<th>業務名稱/ID</th>
+				<th>保留對象</th>
+				<th>團購ID</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+
+<script>
+var updateFilterEnable = function() {
+	var days = $('#days').val();
+	if (days == -1) {
+		var dateCreatedBegin = $('#dateCreatedBegin').val();
+		var dateCreatedEnd = $('#dateCreatedEnd').val();
+		var a = moment(dateCreatedBegin);
+		var b = moment(dateCreatedEnd);
+		days = b.diff(a,'days');
+	}
+}
+
+$(document).ready(function() {
+	$('#days').on('change', function() {
+		var val = $(this).val();
+		if (val == -1) {
+			$('#dateCreatedBegin').show();
+		} else {
+			$('#dateCreatedBegin').hide();
+			$('#dateCreatedEnd').hide();
+			$('#dateCreatedBegin').val('');
+			$('#dateCreatedEnd').val('');
+		}
+	});
+
+	var shouldReloadDateCreated = function(date, obj) {
+		if ($('#dateCreatedBegin').val() != ''
+			&& $('#dateCreatedEnd').val() != '' ) {
+			table.clear().ajax.reload();
+		}
+	}
+
+	initDatetimePicker('#dateCreatedBegin', 'YYYY-MM-DD', 'months', function(date, obj) {
+		var now = moment(date, 'YYYY-MM-DD');
+		var maxDate = now.add('61', 'days').format('YYYY-MM-DD');
+		if ($('#dateCreatedEnd').data("DateTimePicker") != null) {
+			$('#dateCreatedEnd').data("DateTimePicker").destroy()
+		}
+		initDatetimePicker('#dateCreatedEnd', 'YYYY-MM-DD', 'months');
+		$('#dateCreatedEnd').data("DateTimePicker").minDate(date);
+		$('#dateCreatedEnd').data("DateTimePicker").maxDate(maxDate);
+		$('#dateCreatedEnd').data("DateTimePicker").defaultDate('');
+		$('#dateCreatedEnd').show();
+	});
+
+	$('[data-type=dateCreated]').on("dp.hide", function () {
+		if ($('#dateCreatedBegin').val() != ''
+			&& $('#dateCreatedEnd').val() != '' ) {
+			updateFilterEnable();
+			salesOrderReservationTable.clear().ajax.reload();
+		}
+	});
+});
+</script></div>
+		<div class="tab-pane fade" id="tab-content-item" role="tabpanel" aria-labelledby="groupBuy-tab-salesRule">
+<div class="card">
+<div class='card-footer section-item'>
+	<form action="/backend/SalesOrderReservation/batchAction" id="sorItemForm" class="" method="post">
+]	<div class="row">
+		<div class="col-lg-6">
+		<div class="input-group py-2">
+			<div class="input-group-prepend">
+				<span class="input-group-text md-addon">商品代碼</span>
+			</div>
+			<input type="text" data-type="uid" class="filters input-sm form-control" name="uid" placeholder="商品代碼" size=20>
+		</div>
+		</div>
+	</div>
+	</form>
+</div>
+<div class="card-body">
+	<table id="salesOrderReservationItemTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>已保留天數</th>
+				<th>業務名稱/ID</th>
+				<th>保留數量</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>已保留天數</th>
+				<th>業務名稱/ID</th>
+				<th>保留數量</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div></div>
+	</div>
+
+</div>
+<!-- Classic tabs -->
+
+
+</div>

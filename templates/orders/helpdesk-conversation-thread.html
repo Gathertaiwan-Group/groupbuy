@@ -1,0 +1,13 @@
+{{!-- 推導：客服對話訊息串（顧客靠左、商家靠右）。由 helpdesk-conversation-show.html 引入，
+      回覆後以 /backend/helpdesk/Conversation/thread?conversationId= 重新載入。 --}}
+{{#if messages.length}}{{#each messages}}
+<div class="conversation-message {{#if isAdmin}}from-admin{{else}}from-customer{{/if}}" data-id="{{conversationMessageId}}">
+	<div class="conversation-body">
+		<div class="conversation-meta">{{#if isAdmin}}<i class="fa-light fa-headset mr-1"></i>{{else}}<i class="fa-light fa-user mr-1"></i>{{/if}}{{senderName}}<span class="ml-2">{{dateCreatedString}}</span>{{#unless isAdmin}}{{#if read}}<span class="ml-2">已讀</span>{{/if}}{{/unless}}</div>
+		<div class="conversation-bubble">{{message}}</div>{{#each attachments}}
+		<div class="small mt-1"><a href="{{this}}" target="_blank"><i class="fa-light fa-paperclip mr-1"></i>{{this}}</a></div>{{/each}}
+	</div>
+</div>{{/each}}
+{{else}}
+<p class="text-muted mb-0">尚無訊息</p>
+{{/if}}

@@ -1,0 +1,120 @@
+<!--#head-->
+{{!-- 推導：原站列表「檢視」→ /backend/helpdesk/Conversation/toUrl?uuid=… 會在新分頁開啟外部客服系統的對話畫面（未擷取）。
+      本頁依原站後台卡片風格推導：對話資訊、訊息串（顧客靠左、商家靠右）、回覆框與「已回覆／已結案」按鈕；
+      開啟時顧客訊息標為已讀；回覆寫 conversation_messages（ADMIN）、狀態→已回覆、寄信通知顧客【未串接】。 --}}
+<style type="text/css" class="init">
+.conversation-thread{max-height:60vh;overflow-y:auto;background-color:#fafafa;}
+.conversation-message{display:flex;margin-bottom:1rem;}
+.conversation-message.from-admin{justify-content:flex-end;}
+.conversation-message .conversation-body{max-width:75%;}
+.conversation-message.from-admin .conversation-body{text-align:right;}
+.conversation-meta{font-size:.75rem;color:#757575;margin-bottom:.25rem;}
+.conversation-bubble{display:inline-block;text-align:left;padding:.5rem .75rem;border-radius:.75rem;white-space:pre-wrap;word-break:break-word;}
+.from-customer .conversation-bubble{background-color:#fff;border:1px solid #e0e0e0;border-top-left-radius:.15rem;}
+.from-admin .conversation-bubble{background-color:#e3f2fd;border:1px solid #bbdefb;border-top-right-radius:.15rem;}
+#conversationInfo th{width:120px;white-space:nowrap;font-weight:500;}
+</style>
+<script type="text/javascript" class="init">
+$(document).ready(function() {
+	var conversationId = {{json conversation.conversationId}};
+	var threadUrl = '/backend/helpdesk/Conversation/thread?conversationId=' + conversationId;
+	var scrollBottom = function() {
+		var el = document.getElementById('conversationThread');
+		if (el) el.scrollTop = el.scrollHeight;
+	};
+	var showNotice = function(msg, css) {
+		$('#replyNotice').html('<div class="alert alert-' + css + ' py-2 mb-2">' + $('<div>').text(msg).html() + '</div>');
+	};
+	scrollBottom();
+
+	$('#replyForm').on('submit', function(e) {
+		e.preventDefault();
+		var $btn = $(this).find('button[type=submit]');
+		var message = $.trim($('#replyMessage').val());
+		if (message == '') {
+			showNotice('請輸入回覆內容', 'danger');
+			return;
+		}
+		btnStartLoading($btn);
+		$.ajax({
+			type: 'POST',
+			url: GBF.baseUrl + '/ajax/helpdesk/Conversation/reply',
+			data: { conversationId: conversationId, message: message },
+			dataType: 'json'
+		})
+		.done(function(json) {
+			$('#replyMessage').val('');
+			showNotice(json.message, 'warning');
+			$('#conversationStatus').attr('class', 'badge badge-success ml-1').text('已回覆');
+			$('#replyForm button[data-action=replied]').remove();
+			$('#conversationThread').load(threadUrl, scrollBottom);
+		})
+		.fail(function(xhr) {
+			showNotice((xhr.responseJSON && xhr.responseJSON.error) || '回覆失敗', 'danger');
+		})
+		.always(function() {
+			btnStopLoading($btn);
+		});
+	});
+
+	$('#replyForm').on('click', 'button[data-action]', function(e) {
+		e.preventDefault();
+		var action = $(this).attr('data-action');
+		var $btn = $(this);
+		btnStartLoading($btn);
+		$.ajax({
+			type: 'POST',
+			url: GBF.baseUrl + '/ajax/helpdesk/Conversation/action.do?conversationId=' + conversationId,
+			data: { action: 'remove', batchAction: action },
+			dataType: 'json'
+		})
+		.done(function() {
+			location.reload();
+		})
+		.fail(function(xhr) {
+			btnStopLoading($btn);
+			showNotice((xhr.responseJSON && xhr.responseJSON.error) || '更新失敗', 'danger');
+		});
+	});
+});
+</script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4" id="conversationCard">
+<div class="card-header">客服對話 <span id="conversationStatus" class="badge {{conversation.statusBadge}} ml-1">{{conversation.statusLabel}}</span></div>
+<div class="card-body">
+	<table class="table table-sm mb-0" id="conversationInfo">
+		<tbody>
+			<tr><th>訂單編號</th><td>{{conversation.orderUuid}}</td></tr>
+			<tr><th>團購</th><td>{{#if conversation.groupBuyId}}{{conversation.groupBuyId}}<br><span class="badge badge-default small text-eclipse">{{conversation.groupBuyTitle}}</span>{{/if}}</td></tr>
+			<tr><th>顧客姓名</th><td>{{conversation.name}}</td></tr>
+			<tr><th>Email</th><td>{{conversation.email}}</td></tr>
+			<tr><th>電話</th><td>{{conversation.telephone}}</td></tr>
+			<tr><th>標題</th><td>{{conversation.title}}</td></tr>
+			<tr><th>建立日期</th><td>{{conversation.dateCreatedString}}</td></tr>
+			<tr><th>最後更新日期</th><td>{{conversation.dateModifiedString}}</td></tr>
+		</tbody>
+	</table>
+</div>
+</div>
+
+<div class="card mt-4">
+<div class="card-header">對話紀錄</div>
+<div class="card-body conversation-thread" id="conversationThread">
+{{> orders/helpdesk-conversation-thread.html}}
+</div>
+<div class="card-footer">
+	<form id="replyForm" method="post" action="{{baseUrl}}/ajax/helpdesk/Conversation/reply">
+		<input type="hidden" name="conversationId" value="{{conversation.conversationId}}">
+		<div class="form-group mb-2">
+			<label for="replyMessage">回覆內容</label>
+			<textarea name="message" id="replyMessage" class="form-control" rows="4" maxlength="2000" placeholder="輸入要回覆顧客的訊息"></textarea>
+		</div>
+		<div id="replyNotice"></div>
+		<button type="submit" class="btn btn-primary">回覆</button>
+		{{#if (eq conversation.status "WAITING_FOR_REPLY")}}<button type="button" class="btn btn-secondary text-nowrap" data-action="replied">已回覆</button>{{/if}}
+		{{#if (ne conversation.status "CLOSED")}}<button type="button" class="btn btn-warning text-nowrap" data-action="closed">已結案</button>{{/if}}
+		<a class="btn btn-default" href="/backend/helpdesk/Conversation/list">回列表</a>
+	</form>
+</div>
+</div>
+</div>

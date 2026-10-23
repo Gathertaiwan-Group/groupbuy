@@ -1,0 +1,224 @@
+<!--#head-->
+{{!-- 客服對話（/backend/helpdesk/Conversation/list）：由 spec/html/helpdesk-conversation-list.html 清理；
+      spec 的 ⟦未擷取⟧ 缺段已依原站 p4 同頁完整 HTML 補齊（2026-10-23 唯讀擷取）。 --}}
+{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+
+var conversationTable;
+$(document).ready(function() {
+
+	function showStars(count) {
+
+		// Generate HTML markup for stars
+		let starsHTML = '<div class="rating small d-inline ml-1">';
+		for (let i = 0; i < 5; i++) {
+			if (i < count) {
+				starsHTML += '<i class="fas fa-star"></i>'; // Solid star for filled
+			} else {
+				starsHTML += '<i class="far fa-star"></i>'; // Outline star for empty
+			}
+		}
+		starsHTML += '</div>';
+		return starsHTML;
+	}
+
+		var tableName = '#conversationTable';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/helpdesk/Conversation/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/helpdesk/Conversation/update.do?conversationId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/helpdesk/Conversation/action.do?conversationId=_id_',
+					data: function(data) {
+						data.batchAction = editor._action;
+						return data;
+					}
+				}
+			},
+			table: tableName,
+			idSrc: 'conversationId',
+			fields: [
+					DataTableConfig.field_select('對話狀態','status'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/helpdesk/Conversation/list.do',
+				type: "POST",
+				data: function ( d ) {
+					d.status = $('input[name=status]:checked').val();
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('dateModifiedString'),
+				{
+					data:'merchantUserId',
+					orderable:false,
+					render: function ( data, type, row ) {
+						if (!data) data = '';
+						let html = '<br><span class="badge badge-default">留言數量: '+row.messageCount+'</span>'
+						if (row.rating > 0) {
+							html += showStars(row.rating);
+						}
+						if (data.length != 14) {
+							data = row.title
+						}
+						return data + html;
+					}
+				},
+				DataTableConfig.data_select('status'),
+				{
+					data:null,
+					class:'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						let html = '';
+						let url = "/backend/helpdesk/Conversation/toUrl?uuid=" + row.uuid;
+						html += '<a class="btn btn-default btn-sm px-2" target="_blank" href="' + url + '">檢視</a>'
+
+						if (row.status == 'WAITING_FOR_REPLY') {
+							html += '<button class="btn btn-secondary text-nowrap" data-action="replied">已回覆</button>'
+						}
+						if (row.status != 'CLOSED') {
+							html += '<button class="btn btn-warning text-nowrap" data-action="closed">已結案</button>'
+						}
+						return html;
+					}
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "desc" ]],
+			columnDefs: [
+				{ width: '20%', targets: 0 },
+				{ orderable: false, targets: [0,2,3] }
+			],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'edit', editor: editor }
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [2],[16]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		//DataTableHelper.initEditorOnCallback(table,editor);
+		//DataTableHelper.inlineModePlugin(table);
+		//DataTableHelper.injectInline(table,editor);
+		injectDetailsControl(tableName, table);
+		conversationTable = table;
+
+		table.on('error.dt', function (e, settings, techNote, message) {
+			console.log('xxx');
+			return false;
+		})
+		$(tableName +' tbody').on('click', 'button', function (e) {
+			e.stopPropagation();
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var uuid = row.data().uuid;
+			var url = "/backend/helpdesk/Conversation/toUrl?uuid=" + uuid;
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+
+			switch (action) {
+			case 'view':
+				window.open(url, "_blank");
+				return;
+			case 'closed':
+				msg = '將對話設為「已結束」，確定要執行嗎？';
+				break;
+			case 'replied':
+				msg = '將對話設為「已回覆」，確定要執行嗎？';
+				break;
+			}
+
+			editor._action = action;
+			editor
+			.remove(tr, false).submit();
+		});
+
+		$('.card').on('change', '.filters', function() {
+			table.clear().ajax.reload();
+		});
+
+		function showStatus() {
+			$.ajax({
+				type:'GET',
+				url:GBF.baseUrl + '/ajax/helpdesk/Conversation/status',
+				data:{
+
+				},
+				async:true,
+			})
+			.done(function(json) {
+				var status = json.data;
+				var html = ''
+					+'<ul class="list-group">'
+					+'<li class="list-group-item d-flex justify-content-between align-items-center">'
+					+'尚未回覆數量 <span class="badge badge-primary badge-pill">'+status.waitingForReply+'</span>'
+					+'</li>'
+					+'</ul>'
+				$('#statusCard .card-body').html(html);
+			});
+		};
+
+		showStatus();
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4" id="statusCard">
+<div class="card-body p-0"></div>
+</div>
+
+<div class="card mt-4">
+<div class="card-header">客服對話</div>
+<div class='card-footer pb-0'>
+		<input type="radio" name="status" id="status_WAITING_FOR_REPLY" class="filters form-check-input" value="WAITING_FOR_REPLY"  checked ><label for="status_WAITING_FOR_REPLY" class="form-check-label pl-4 mr-2">等待回覆中</label>
+<input type="radio" name="status" id="status_REPLIED" class="filters form-check-input" value="REPLIED" ><label for="status_REPLIED" class="form-check-label pl-4 mr-2">已回覆</label>
+<input type="radio" name="status" id="status_CLOSED" class="filters form-check-input" value="CLOSED" ><label for="status_CLOSED" class="form-check-label pl-4 mr-2">已結案</label>
+</div>
+<div class="card-body">
+	<table id="conversationTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>最後更新日期</th>
+				<th>訂單編號</th>
+				<th>對話狀態</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>最後更新日期</th>
+				<th>訂單編號</th>
+				<th>對話狀態</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
