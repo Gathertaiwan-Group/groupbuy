@@ -1,0 +1,5 @@
+{{!-- 訂單「加入黑名單」（所有訂單明細卡 loadAjax('/backend/Blacklist/add','salesOrderId=…')）
+     推導：原站未擷取。loadAjax 會把回應放進隱藏的 #loadAjax，所以這裡只放 script：用 openForm 開啟黑名單彈窗（預填訂單顧客資料）。 --}}
+<script>
+openForm('/backend/Blacklist/addForm', 'salesOrderId=' + {{json salesOrderId}});
+</script>

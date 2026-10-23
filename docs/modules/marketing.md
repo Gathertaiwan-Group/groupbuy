@@ -36,7 +36,7 @@
 | 商品標籤 | `GroupBuyItemCrmTag/*`、`GroupBuyItemSysTag/*`；推導頁 `ItemCrmTag/list|set`、`ItemSysTag/list|set`（銷售標籤寫 `item_crm_tags`；系統標籤寫 `items.sys_tags`） |
 | 關鍵字標籤 | `GroupBuySysTagRef/list|save|update|delete|getAssociatedGroupBuys|removeTag|previewBatchTagging|addBatchTagging` |
 | 短網址 | `ShortUrl/list`、`newurl`、`createAccount`（未串接，直接回成功）；公開轉址 `GET /s/:code`（瀏覽數 +1） |
-| 黑名單 | `Blacklist/list|save|update|delete` |
+| 黑名單 | `Blacklist/list|save|update|delete`；訂單「加入黑名單」：`GET /backend/Blacklist/add?salesOrderId=`（loadAjax 載入的 script → openForm）、`GET /backend/Blacklist/addForm?salesOrderId=`（彈窗）、`POST /ajax/Blacklist/add`（回 `{code:200, error:訊息, data:{blacklistId}}`） |
 
 所有 Editor 端點只收自己的動作（save→create、update→edit、delete→remove），會改資料的端點一律 `post()`；查詢一律以 session 的 tenant_id 過濾（`/s/:code` 例外：以全站唯一代碼查，無登入）。
 
@@ -97,6 +97,7 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - 優惠條件綁定頁（品項／商品／不參與活動商品；不參與活動以規則的不合併計算標籤實作，未設時自動建立 `不參與活動-<規則id>`）。
 - 商品銷售標籤／商品系統標籤的「商品」頁（列出本團商品勾選加入／移除）。
 - 抽獎：獎項名稱必填才參加；條件＝時間區間（依訂單排序方式取付款時間或下單時間）、前幾名下單者、訂單金額滿；同一張訂單不重複得獎；依原站說明「重複抽獎三次以最後一次為結果」；結果寫 `lottery_winners`、`lotteries.date_drawn`；遮罩：姓名留頭尾、電話留前 4 後 3、Email 留前 2 碼。
+- 訂單「加入黑名單」（所有訂單明細卡，原站未擷取）：loadAjax 會把回應放進隱藏 div，所以 `/backend/Blacklist/add` 只回一段 script，以 openForm 開啟彈窗；彈窗欄位同黑名單編輯器（姓名／Email／電話／IP／備註），預填訂單的顧客姓名／Email／電話／IP，備註預填訂單編號；送出時電話（或 Email）已在黑名單內則只在 Log 追加「由訂單 … 加入」，不重複新增。
 - 黑名單：新增時至少要有電話／Email／IP 其一；Log 欄唯讀（伺服器寫入「後台新增」紀錄，`appendBlacklistLog` 供前台命中時追加）。
 - 團購關鍵字標籤：批次條件＝結團時間在最近 90 天內（含未結團）且標題包含所有關鍵字，預覽列前 20 筆；「解除關聯」後若標籤已無任何團購使用即刪除字典列（對應頁面說明「系統自動進行回收刪除」）；標籤字元規則同「所有團購」新增標籤。
 - 短網址：代碼 6 碼小寫英數、全站唯一；選擇的網域存於 `domain` 欄，實際短網址為 `https://<本站>/s/<code>`。
