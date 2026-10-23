@@ -449,8 +449,11 @@ export async function importItemCSV(ctx: RequestContext): Promise<Response> {
         short_name_display: patch.short_name_display || patch.title,
         item_settings: settingsPatch,
       };
-      if (row.stock_available === undefined) row.stock_available = row.stock;
-      if (row.stock_back_order_available === undefined) row.stock_back_order_available = row.stock_back_order;
+      // 新商品可售數量未填或維持範本預設 0 → 等於原始數量（與新增商品編輯器一致，推導）
+      if (row.stock_available === undefined || (n(row.stock_available) === 0 && n(row.stock) > 0)) row.stock_available = row.stock;
+      if (row.stock_back_order_available === undefined || (n(row.stock_back_order_available) === 0 && n(row.stock_back_order) > 0)) {
+        row.stock_back_order_available = row.stock_back_order;
+      }
       const ins = await db().from("items").insert(row).select("id").single();
       dbErr(ins.error, "匯入新增商品");
       const newId = Number((ins.data as Row).id);
