@@ -29,7 +29,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 | `/ajax/SalesOrderTransaction/verify` | POST | `salesOrderId`；回 `{data:[{amount, refund, short, payStatus, merchantOrderId, creditCardNumber, totalPaid, error}]}` |
 | `/ajax/RefundRequisition/list｜save｜update｜delete` | POST | 需 `refundRequisition` 權限 |
 | `/ajax/RefundRequisition/approve｜reject｜refund｜cancel` | POST | `refundRequisitionId=1,2` |
-| `/ajax/Refund/displayRefund?salesOrderId=` | GET | 訂單頁「退款」彈窗 → 建立退款單據（需權限） |
+| `/ajax/Refund/displayRefund?salesOrderId=` | GET | 訂單頁「退款」彈窗 → 建立退款單據（需權限；無權限時回「無權限」HTML 片段） |
 | `/ajax/Invoice/list?groupBuyId=` | GET/POST | serverSide；`invoiceStatus` 篩選；列另含 `invoiceSettings{error,receiptVatId,…}`、`invoiceRandomNumber`、`uuid`、`allowancable` |
 | `/ajax/Invoice/save｜update｜delete` | POST | Editor（只改狀態、開立時間；已開立的發票不可刪） |
 | `/ajax/Invoice/statusSend｜cancelSend` | POST | `invoiceId=1,2`：重新排程（失敗→預約中）／取消預約（預約中→已取消發送） |
@@ -41,6 +41,8 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 | `/ajax/Invoice/displayIssueInvalid｜displayIssueAllowance｜displayIssueInvoice｜displaySalesOrderInvoices` | GET | 彈窗（推導；後兩者供訂單頁使用） |
 | `/ajax/BillingTransaction/list` | GET/POST | 月結單；回應另含 `billingPlans` |
 | `/ajax/BillingTransactionRecord/list?billingTransactionId=` | GET/POST | 月結單明細（推導） |
+
+彈窗片段（`displayRefund`、`Invoice/display*`，由 `fragments.ts` 的 `modalFragment()` 登錄）：無權限或參數錯誤時回原站 error.jsp 樣式的訊息片段（HTML、HTTP 200，彈窗內顯示「無權限」等訊息）；純 AJAX 資料端點維持 JSON 403。
 
 側欄徽章：`badges.invoice`＝電子發票發送失敗筆數（側欄「會計 > 電子發票」紅色數字）。
 

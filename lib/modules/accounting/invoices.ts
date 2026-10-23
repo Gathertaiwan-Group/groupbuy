@@ -23,7 +23,8 @@ import { getServiceClient } from "@/lib/supabase/server";
 import { invoice } from "@/lib/db/entities";
 import { rowToApi, type Row } from "@/lib/db/mapping";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
-import { any, fragment, get, page, post, requireSession } from "@/lib/core/http/route-helpers";
+import { any, get, page, post, requireSession } from "@/lib/core/http/route-helpers";
+import { modalFragment } from "./fragments";
 import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
 import { actionOk, json } from "@/lib/core/http/responses";
 import { crudRoutes, listEntity, type ListSpec, type WriteSpec } from "@/lib/core/entity/crud";
@@ -658,8 +659,8 @@ export const invoiceRoutes: RouteDef[] = [
   get("/ajax/Invoice/get", getInvoice),
   get("/ajax/Invoice/salesOrder", salesOrderInvoices),
   get("/ajax/Invoice/previewInvoice", previewInvoice),
-  fragment("/ajax/Invoice/displayIssueInvalid", { template: "accounting/modal-invoice-issueinvalid.html", method: "GET", data: invalidFragmentData }),
-  fragment("/ajax/Invoice/displayIssueAllowance", {
+  modalFragment("/ajax/Invoice/displayIssueInvalid", { template: "accounting/modal-invoice-issueinvalid.html", method: "GET", data: invalidFragmentData }),
+  modalFragment("/ajax/Invoice/displayIssueAllowance", {
     template: "accounting/modal-invoice-issueallowance.html",
     method: "GET",
     data: async (ctx) => {
@@ -669,8 +670,8 @@ export const invoiceRoutes: RouteDef[] = [
       return { invoiceId: inv.id, invoiceNumber: inv.invoice_number ?? "", merchantOrderId: inv.merchant_order_id ?? "", amount: money(inv.amount) };
     },
   }),
-  fragment("/ajax/Invoice/displayIssueInvoice", { template: "accounting/modal-invoice-issueinvoice.html", method: "GET", data: issueInvoiceFragmentData }),
-  fragment("/ajax/Invoice/displaySalesOrderInvoices", {
+  modalFragment("/ajax/Invoice/displayIssueInvoice", { template: "accounting/modal-invoice-issueinvoice.html", method: "GET", data: issueInvoiceFragmentData }),
+  modalFragment("/ajax/Invoice/displaySalesOrderInvoices", {
     template: "accounting/modal-invoice-salesorder.html",
     method: "GET",
     data: async (ctx) => {

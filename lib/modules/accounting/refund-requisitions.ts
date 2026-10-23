@@ -12,7 +12,8 @@ import { getServiceClient } from "@/lib/supabase/server";
 import { refundRequisition } from "@/lib/db/entities";
 import type { Row } from "@/lib/db/mapping";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
-import { any, fragment, page, post, requireSession } from "@/lib/core/http/route-helpers";
+import { any, page, post, requireSession } from "@/lib/core/http/route-helpers";
+import { modalFragment } from "./fragments";
 import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
 import { actionOk } from "@/lib/core/http/responses";
 import { crudRoutes, listEntity, type ListSpec, type WriteSpec } from "@/lib/core/entity/crud";
@@ -313,7 +314,8 @@ export const refundRequisitionRoutes: RouteDef[] = [
     permission: REFUND_PERMISSION,
   }),
   ...ACTIONS.map((a) => post(`/ajax/RefundRequisition/${a}`, (ctx) => transition(ctx, a), { permission: REFUND_PERMISSION })),
-  fragment("/ajax/Refund/displayRefund", {
+  // 訂單頁「退款」彈窗：無權限時回「無權限」HTML 片段（同原站 error.jsp），不是 JSON 403
+  modalFragment("/ajax/Refund/displayRefund", {
     template: "accounting/modal-refund-display.html",
     method: "GET",
     permission: REFUND_PERMISSION,
