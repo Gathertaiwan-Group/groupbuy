@@ -1,20 +1,28 @@
 // 月結單：/backend/BillingTransaction/list
-// 原站：spec/html/billingtransaction-list.html、spec/runtime/billingtransaction-list.records.txt、SPEC「月結單」、7.5。
-//   POST /ajax/BillingTransaction/list            列表（serverSide，每頁 20；回應另含 billingPlans → 頁面 #billingPlanArea）
-//   GET  /backend/BillingTransactionRecord/list?billingTransactionId=   「明細」（原站另開視窗；頁面未擷取 → 推導）
-//   POST /ajax/BillingTransactionRecord/list?billingTransactionId=      明細列表（推導）
-// 月結單由平台核發（唯讀）：本模組只提供查詢；明細沒有存在 details 時，依計費方式即時由團購／訂單計算（推導）。
+// 依據：spec/html/billingtransaction-list.html（表格欄位、「明細」子列以 textarea 顯示 descr、方案區的儲值／折抵文字）、
+//       spec/runtime/billingtransaction-list.records.txt（回傳鍵含 billingPlans、options.billingType）、SPEC「月結單」、7.5。
+//   POST /ajax/BillingTransaction/list                              列表（serverSide，每頁 20；每列含 descr 文字摘要；回應另含 billingPlans）
+//   GET  /ajax/BillingTransaction/details?billingTransactionId=     明細子列的「團購別計費」（本系統自訂端點）
+// 月結單由平台核發（唯讀）：本模組只提供查詢。
+//
+// 本系統自訂的資料格式：
+//   billingPlans[]：{ billingPlanId, title, billingType, billingTypeLabel, rate, fixedFee, minimumFee,
+//                     dateStartString, dateEndString, note, credit, creditUsed, creditRegularlyLimit }
+//                   （儲值／折抵額度：本系統方案表沒有對應欄位 → null，頁面不顯示）
+//   details 回應：{ code: 200, data: { billingTransactionId, billingTypeLabel, periodStartString, periodEndString,
+//                   computed, records: [{ groupBuyId, groupBuyTitle, dateStartString, dateEndString, orders, groupBuyRevenue, rate, fee }],
+//                   total: { orders, groupBuyRevenue, fee } } }
+//   computed：true＝月結單沒有存明細，依計費方式即時由團購／訂單計算；false＝月結單存的明細。
 import { getServiceClient } from "@/lib/supabase/server";
 import { billingTransaction } from "@/lib/db/entities";
-import { rowToApi, type Row } from "@/lib/db/mapping";
+import type { Row } from "@/lib/db/mapping";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
-import { any, page, requireSession } from "@/lib/core/http/route-helpers";
+import { any, get, page, requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest, notFound } from "@/lib/core/http/errors";
+import { json } from "@/lib/core/http/responses";
 import { listEntity, type ListSpec } from "@/lib/core/entity/crud";
-import { parseDtRequest } from "@/lib/core/datatables/request";
-import { dtResponse } from "@/lib/core/datatables/response";
 import { enumLabel, enumOptionsFor } from "@/lib/core/enums";
-import { fetchAll, taipeiDay } from "./common";
+import { fetchAll, money, taipeiDay } from "./common";
 
 type PlanRow = {
   id: number;
@@ -29,7 +37,7 @@ type PlanRow = {
   note: string | null;
 };
 
-/** 頁面 renderBillingBlanArea 用的方案資料（monthlyFee、billingPlanSettings.credit/creditUsed/creditRegularlyLimit） */
+/** 啟用中的計費方案（頁面方案區） */
 async function billingPlansOf(session: AdminSession): Promise<Row[]> {
   const { data, error } = await getServiceClient()
     .from("billing_plans")
@@ -38,48 +46,26 @@ async function billingPlansOf(session: AdminSession): Promise<Row[]> {
     .eq("is_active", true)
     .order("id");
   if (error) throw new Error(`[accounting] ${error.message}`);
-  return ((data ?? []) as PlanRow[]).map((p) => ({
-    billingPlanId: p.id,
-    title: p.title,
-    billingType: p.billing_type,
-    rate: Number(p.rate),
-    monthlyFee: Number(p.fixed_fee) || null,
-    minimumFee: Number(p.minimum_fee) || null,
-    dateStartString: taipeiDay(p.date_start) ?? "",
-    dateEndString: taipeiDay(p.date_end) ?? "",
-    // 儲值／折抵額度：原站方案設定，本系統方案表沒有對應欄位（推導為 null，頁面不顯示）
-    billingPlanSettings: { credit: null, creditUsed: null, creditRegularlyLimit: null },
-  }));
+  const out: Row[] = [];
+  for (const p of (data ?? []) as PlanRow[]) {
+    out.push({
+      billingPlanId: p.id,
+      title: p.title,
+      billingType: p.billing_type,
+      billingTypeLabel: await enumLabel("BillingTransaction.billingType", p.billing_type),
+      rate: Number(p.rate),
+      fixedFee: Number(p.fixed_fee),
+      minimumFee: Number(p.minimum_fee),
+      dateStartString: taipeiDay(p.date_start) ?? "",
+      dateEndString: taipeiDay(p.date_end) ?? "",
+      note: p.note ?? "",
+      credit: null,
+      creditUsed: null,
+      creditRegularlyLimit: null,
+    });
+  }
+  return out;
 }
-
-function mapBill(api: Row, row: Row): Row {
-  const summary = (row.summary ?? {}) as Record<string, unknown>;
-  api.summary = { ...summary, groupBuyRevenue: summary.groupBuyRevenue ?? 0 };
-  api.invoiceNumber = api.invoiceNumber ?? "";
-  api.note = api.note ?? "";
-  api.descr = String(row.note ?? "");
-  return api;
-}
-
-async function listBills(ctx: RequestContext): Promise<Response> {
-  const session = requireSession(ctx);
-  const spec: ListSpec = {
-    search: ["billingType", "status", "invoiceNumber", "note"],
-    defaultOrder: [{ key: "dateTransactionString", ascending: false }],
-    where: (q, dt) => {
-      let qq = q;
-      if (dt.extra.payable === "true") qq = qq.eq("status", "UNPAID");
-      if (dt.extra.newBt === "true") qq = qq.gte("date_transaction", new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString());
-      return qq;
-    },
-    mapRow: (api, row) => mapBill(api, row),
-    options: () => enumOptionsFor({ billingType: "BillingTransaction.billingType" }),
-    extra: async () => ({ billingPlans: await billingPlansOf(session) }),
-  };
-  return listEntity(ctx, billingTransaction, spec);
-}
-
-/* ───────────────────────── 明細（推導） ───────────────────────── */
 
 type BillRow = Row & {
   id: number;
@@ -87,12 +73,64 @@ type BillRow = Row & {
   period_start: string | null;
   period_end: string | null;
   date_transaction: string;
+  date_paid: string | null;
   summary: Record<string, unknown> | null;
   details: Row[] | null;
   grand_total: string | number;
+  tax_fee: string | number | null;
   status: string;
+  invoice_number: string | null;
+  note: string | null;
   billing_plan_id: number | null;
 };
+
+/** 明細子列 textarea 的文字摘要（只用月結單本身的欄位，不另查詢） */
+async function describeBill(row: BillRow): Promise<string> {
+  const s = row.summary ?? {};
+  const typeLabel = await enumLabel("BillingTransaction.billingType", row.billing_type);
+  const statusLabel = await enumLabel("BillingTransaction.status", row.status);
+  const paid = taipeiDay(row.date_paid);
+  const lines = [
+    `計費方式：${typeLabel}`,
+    `計費期間：${row.period_start ?? ""} ~ ${row.period_end ?? ""}`,
+    `核發日期：${taipeiDay(row.date_transaction) ?? ""}`,
+    `團購數：${Number(s.groupBuys ?? 0)}　訂單數：${Number(s.orders ?? 0)}`,
+    `總營收：${money(s.groupBuyRevenue)}`,
+    `費率：${Number(s.rate ?? 0)}%　服務費：${money(s.fee)}`,
+    `稅額：${money(row.tax_fee)}　帳單金額：${money(row.grand_total)}`,
+    `狀態：${statusLabel}${paid ? `（${paid} 繳款）` : ""}`,
+  ];
+  if (row.invoice_number) lines.push(`發票號碼：${row.invoice_number}`);
+  if (row.note) lines.push(`備註：${row.note}`);
+  if (Array.isArray(row.details) && row.details.length) {
+    lines.push("", "團購別計費：");
+    for (const d of row.details) {
+      lines.push(`${String(d.groupBuyTitle ?? "")}　訂單 ${Number(d.orders ?? 0)}　營收 ${money(d.groupBuyRevenue)}　服務費 ${money(d.fee)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+async function listBills(ctx: RequestContext): Promise<Response> {
+  const session = requireSession(ctx);
+  const spec: ListSpec = {
+    search: ["billingType", "status", "invoiceNumber", "note"],
+    defaultOrder: [{ key: "dateTransactionString", ascending: false }],
+    mapRow: async (api, row) => {
+      const summary = (row.summary ?? {}) as Record<string, unknown>;
+      api.summary = { ...summary, groupBuyRevenue: Number(summary.groupBuyRevenue ?? 0) };
+      api.invoiceNumber = api.invoiceNumber ?? "";
+      api.note = api.note ?? "";
+      api.descr = await describeBill(row as BillRow);
+      return api;
+    },
+    options: () => enumOptionsFor({ billingType: "BillingTransaction.billingType" }),
+    extra: async () => ({ billingPlans: await billingPlansOf(session) }),
+  };
+  return listEntity(ctx, billingTransaction, spec);
+}
+
+/* ───────────────────────── 明細：團購別計費（本系統自訂） ───────────────────────── */
 
 async function loadBill(session: AdminSession, idRaw: unknown): Promise<BillRow> {
   const id = Number(idRaw);
@@ -103,14 +141,15 @@ async function loadBill(session: AdminSession, idRaw: unknown): Promise<BillRow>
   return data;
 }
 
+/** 不計入營收的訂單階段 */
 const INVALID_STATES = ["DRAFT", "CANCELED", "COMBINED", "SPLITED"];
 
-/** 月結明細：details 有存就用；沒有時依計費方式（END/START＝團購截止/開始日落在期間；ORDERS＝期間內成立的訂單）即時計算 */
-async function billRecords(session: AdminSession, bill: BillRow): Promise<Row[]> {
-  if (Array.isArray(bill.details) && bill.details.length) return bill.details;
+/** 團購別計費：月結單有存 details 就用；沒有時依計費方式（END/START＝團購截止／開始日落在期間；ORDERS＝期間內成立的訂單）即時計算 */
+async function billRecords(session: AdminSession, bill: BillRow): Promise<{ computed: boolean; records: Row[] }> {
+  if (Array.isArray(bill.details) && bill.details.length) return { computed: false, records: bill.details };
   const start = bill.period_start;
   const end = bill.period_end;
-  if (!start || !end) return [];
+  if (!start || !end) return { computed: true, records: [] };
   const from = `${start}T00:00:00+08:00`;
   const to = new Date(new Date(`${end}T00:00:00+08:00`).getTime() + 24 * 3600 * 1000).toISOString();
   const rate = Number(bill.summary?.rate ?? 0);
@@ -119,15 +158,15 @@ async function billRecords(session: AdminSession, bill: BillRow): Promise<Row[]>
   let gbs: Gb[];
   if (bill.billing_type === "ORDERS") {
     const orders = await fetchAll<{ group_buy_id: number | null }>((f, t) =>
-      db.from("sales_orders").select("group_buy_id").eq("tenant_id", session.tenantId).gte("created_at", from).lt("created_at", to).range(f, t),
-    );
+      db.from("sales_orders").select("group_buy_id").eq("tenant_id", session.tenantId).gte("created_at", from).lt("created_at", to).order("id").range(f, t),
+    200000);
     const ids = [...new Set(orders.map((o) => o.group_buy_id).filter((x): x is number => !!x))];
     gbs = ids.length ? (((await db.from("group_buys").select("id, title, date_start, date_end").eq("tenant_id", session.tenantId).in("id", ids)).data ?? []) as Gb[]) : [];
   } else {
     const col = bill.billing_type === "START" ? "date_start" : "date_end";
     gbs = ((await db.from("group_buys").select("id, title, date_start, date_end").eq("tenant_id", session.tenantId).gte(col, from).lt(col, to).order(col)).data ?? []) as Gb[];
   }
-  // 一次分頁讀出這些團購的訂單（PostgREST 單次上限 1000 筆，不可用 limit 截斷），再依團購彙總
+  // 分頁讀出這些團購的訂單（PostgREST 單次上限 1000 筆），再依團購彙總
   const gbIds = gbs.map((g) => g.id);
   const orders = gbIds.length
     ? await fetchAll<{ group_buy_id: number; grand_total: string | number; state: string }>((f, t) => {
@@ -144,11 +183,10 @@ async function billRecords(session: AdminSession, bill: BillRow): Promise<Row[]>
     a.revenue += Number(o.grand_total);
     agg.set(o.group_buy_id, a);
   }
-  const out: Row[] = [];
-  for (const gb of gbs) {
+  const records: Row[] = gbs.map((gb) => {
     const a = agg.get(gb.id) ?? { orders: 0, revenue: 0 };
     const revenue = Math.round(a.revenue);
-    out.push({
+    return {
       groupBuyId: gb.id,
       groupBuyTitle: gb.title,
       dateStartString: taipeiDay(gb.date_start) ?? "",
@@ -157,32 +195,31 @@ async function billRecords(session: AdminSession, bill: BillRow): Promise<Row[]>
       groupBuyRevenue: revenue,
       rate,
       fee: Math.round((revenue * rate) / 100),
-    });
-  }
-  // 期間內找不到可計算的團購（例：示範月結單的摘要是虛構值）→ 以月結單本身的摘要列出一列，避免明細與帳單不一致
-  const s = bill.summary ?? {};
-  if (out.length === 0 && Number(s.groupBuyRevenue ?? 0) > 0) {
-    out.push({
-      groupBuyId: null,
-      groupBuyTitle: `（月結單摘要）共 ${Number(s.groupBuys ?? 0)} 個團購`,
-      dateStartString: bill.period_start ?? "",
-      dateEndString: bill.period_end ?? "",
-      orders: Number(s.orders ?? 0),
-      groupBuyRevenue: Number(s.groupBuyRevenue ?? 0),
-      rate,
-      fee: Number(s.fee ?? 0) || Number(bill.grand_total ?? 0),
-    });
-  }
-  return out;
+    };
+  });
+  return { computed: true, records };
 }
 
-async function listRecords(ctx: RequestContext): Promise<Response> {
-  const started = Date.now();
+async function billDetails(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const bill = await loadBill(session, await ctx.param("billingTransactionId"));
-  const dt = await parseDtRequest(ctx);
-  const rows = await billRecords(session, bill);
-  return dtResponse(dt, { rows, options: {} }, started);
+  const { computed, records } = await billRecords(session, bill);
+  const total = records.reduce<{ orders: number; groupBuyRevenue: number; fee: number }>(
+    (a, r) => ({ orders: a.orders + Number(r.orders ?? 0), groupBuyRevenue: a.groupBuyRevenue + Number(r.groupBuyRevenue ?? 0), fee: a.fee + Number(r.fee ?? 0) }),
+    { orders: 0, groupBuyRevenue: 0, fee: 0 },
+  );
+  return json({
+    code: 200,
+    data: {
+      billingTransactionId: bill.id,
+      billingTypeLabel: await enumLabel("BillingTransaction.billingType", bill.billing_type),
+      periodStartString: bill.period_start ?? "",
+      periodEndString: bill.period_end ?? "",
+      computed,
+      records,
+      total,
+    },
+  });
 }
 
 export const billingTransactionRoutes: RouteDef[] = [
@@ -192,20 +229,5 @@ export const billingTransactionRoutes: RouteDef[] = [
     groupBuy: "none",
   }),
   any("/ajax/BillingTransaction/list", listBills),
-  page("/backend/BillingTransactionRecord/list", {
-    template: "accounting/billingtransactionrecord-list.html",
-    title: "月結單明細",
-    groupBuy: "none",
-    activeHref: "/backend/BillingTransaction/list",
-    async data(ctx) {
-      const bill = await loadBill(ctx.session, ctx.query.get("billingTransactionId"));
-      const api = mapBill(rowToApi(billingTransaction, bill), bill);
-      return {
-        bill: api,
-        billingTypeLabel: await enumLabel("BillingTransaction.billingType", bill.billing_type),
-        statusLabel: await enumLabel("BillingTransaction.status", bill.status),
-      };
-    },
-  }),
-  any("/ajax/BillingTransactionRecord/list", listRecords),
+  get("/ajax/BillingTransaction/details", billDetails),
 ];

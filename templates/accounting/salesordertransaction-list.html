@@ -1,123 +1,106 @@
+{{!-- 金流對帳（金流交易紀錄）：依 spec/html/salesordertransaction-list.html 已擷取部分（表格、欄位、按鈕、檢核 ajax）、
+     spec/runtime/salesordertransaction-list.records.txt、SPEC 7.5；⟦未擷取⟧缺段為推導（epst 物件、結果欄呈現、drawCallback）。
+     原站另有一個未被按鈕使用的 Editor（idSrc webMenuId、欄位「類別」），本頁不搬。 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
-<script type="text/javascript" class="init">
-$.EPST = function(groupBuyId, table) {
-	this.groupBuyId = groupBuyId;
-	this.table = table;
-	this.resultCellIndex = 7;
-}
+	<script type="text/javascript" language="javascript" class="init">
+	var table;
+	$(document).ready(function() {
+		var tableName = '#stTable';
+		var groupBuyId = {{json groupBuyId}};
+		var RESULT_COL = 7;
 
-$.EPST.prototype = {
-	verify : function(node) {
-		var _this = this;
-		var ids = joinIds('salesOrderId', _this.table, false);
-		_this.table.rows().deselect();
-		this.$button = $(node);
-		this.salesOrderIds = ids.split(',');
-		this.index = 0;
-		btnStartLoading(this.$button);
-		_this._verify();
-		/*
-		this.salesOrderIds.forEach(function(id) {
-			_this._verify(id);
-		});
-		*/
-	},
-	_verify : function() {
-		if (this.index >= this.salesOrderIds.length) {
-			btnStopLoading(this.$button);
-			return;
-		}
-		var id = this.salesOrderIds[this.index++];
-		var _this = this;
-		var _id = '#' + id;
-		var rowIndex = this.table.row(_id).index();
-		var result = {};
-		result.status = 'loading';
-		stTable.cell(rowIndex, this.resultCellIndex).data(result);
-		var ajaxurl = GBF.baseUrl + '/ajax/SalesOrderTransaction/verify';
-		$.ajax({
-			type:'POST',
-			url:ajaxurl,
-			data:{
-				merp:$('#merp_select').val(),
-				salesOrderId:id
-			},
-			async:true,
-		})
-		.done(function(json) {
-			var data = json.data;
-			if (data == null || data.length == 0) {
-				result.status = 'success';
-			} else {
-				result = data[0];
-				if (result.error != null || result.amount == null || result.amount == 0) {
-					result.status = 'error';
+		function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+
+		{{!-- 推導：檢核結果依 salesOrderId 暫存，翻頁／重繪後重新填回對應列 --}}
+		var epst = {
+			results: {},
+			running: false,
+			render: function(r) {
+				if (!r) return '';
+				if (r.error) return '<span class="text-danger small">' + esc(r.error) + '</span>';
+				var lines = [];
+				var badge;
+				if (r.refunded > 0) {
+					badge = '<span class="badge badge-info">有退款</span>';
+					lines.push('收款 ' + esc(r.received) + '、退款 ' + esc(r.refunded) + '、淨額 ' + esc(r.net));
 				} else {
-					result.status = 'success';
+					badge = r.difference == 0 ? '<span class="badge badge-success">相符</span>' : '<span class="badge badge-warning">金額不符</span>';
+					lines.push('收款 ' + esc(r.received));
 				}
-			}
-			stTable.cell(rowIndex, _this.resultCellIndex).data(result);
-		})
-		.fail(function(jqXHR, textStatus, errorThrown) {
-			var json = jqXHR.responseJSON;
-			result.status = 'error';
-			result.error = json ? json.error : textStatus;
-			stTable.cell(rowIndex, _this.resultCellIndex).data(result);
-		})
-		.always(function() {
-			setTimeout(function() {
-				console.log('xx');
-				_this._verify();
-			}, 100);
-		});
-	}
-}
-
-var epst;
-var stTable;
-$(document).ready(function() {
-	var tableName = '#stTable';
-	editor = new $.fn.dataTable.Editor( {
-		ajax: {
-		},
-		table: tableName,
-		idSrc: 'webMenuId',
-		fields: [
-				DataTableConfig.field_select('類別','category'),
-		],
-		//template: '#custom_rp_form',
-		formOptions:{
-			main: {
-				submit: 'all', //for activate
-				submitOnReturn: false,
-			}
-		},
-		i18n:DataTableConfig.i18n,
-	} );
-
-	var table = $(tableName).DataTable( {
-		dom: 'lBrtip',
-		serverSide:true,
-		processing:true,
-		scrollX:true,
-		rowId: 'salesOrderId',
-		"lengthMenu": [10, 25, 50, 100, 250],
-		ajax: {
-			url:'{{baseUrl}}/ajax/SalesOrder/list.do',
-			type: "POST",
-			data: function ( d ) {
-				d.groupBuyIds = '';
-				if (!d.groupBuyIds) {
-					d.groupBuyId = {{json groupBuyId}};
-				}
-				d.month = 100;
-				return d;
+				if (r.difference != 0) lines.push('<span class="text-danger">與已付 ' + esc(r.orderPaid) + ' 相差 ' + esc(r.difference) + '</span>');
+				if (r.merchantOrderId) lines.push('金流單號 ' + esc(r.merchantOrderId));
+				if (r.cardNumber) lines.push('卡號 ' + esc(r.cardNumber));
+				return badge + '<div class="small">' + lines.join('<br>') + '</div>';
 			},
-			//data: {groupBuyId: {{json groupBuyId}} }
-		},
-		language:DataTableConfig.i18n,
-		columns:[
+			fill: function(dt) {
+				dt.rows({ page: 'current' }).every(function() {
+					var d = this.data();
+					var r = d && epst.results[d.salesOrderId];
+					if (r) $(dt.cell(this.index(), RESULT_COL).node()).html(epst.render(r));
+				});
+			},
+			verify: function(node) {
+				if (epst.running) return;
+				var dt = table;
+				var rows = dt.rows({ selected: true }).data().toArray();
+				if (!rows.length) return;
+				epst.running = true;
+				if (typeof btnStartLoading === 'function') btnStartLoading($(node));
+				var lastMessage = '';
+				var i = 0;
+				var next = function() {
+					if (i >= rows.length) {
+						epst.running = false;
+						if (typeof btnStopLoading === 'function') btnStopLoading($(node));
+						if (lastMessage) displayAlertWarning(lastMessage);
+						return;
+					}
+					var id = rows[i++].salesOrderId;
+					var ajaxurl = GBF.baseUrl + '/ajax/SalesOrderTransaction/verify';
+					$.ajax({
+						type:'POST',
+						url:ajaxurl,
+						data:{
+							merp:$('#merp_select').val(),
+							salesOrderId:id
+						},
+						async:true,
+					})
+					.done(function(json) {
+						var data = json && json.data && json.data[0];
+						epst.results[id] = data || { error: '檢核失敗' };
+						if (json && json.message) lastMessage = json.message;
+					})
+					.fail(function(jqXHR) {
+						var j = jqXHR.responseJSON;
+						epst.results[id] = { error: (j && j.error) || '檢核失敗' };
+					})
+					.always(function() {
+						epst.fill(dt);
+						next();
+					});
+				};
+				next();
+			}
+		};
+
+		table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			pageLength: 10,
+			ajax: {
+				url: GBF.baseUrl + '/ajax/SalesOrder/list.do',
+				type: 'POST',
+				data: function ( d ) {
+					d.groupBuyId = groupBuyId;
+					return d;
+				}
+			},
+			language: DataTableConfig.i18n,
+			columns: [
 				DataTableConfig.data_select_checkbox,
 				DataTableConfig.data_input('uuid'),
 				DataTableConfig.data_select('state'),
@@ -125,99 +108,37 @@ $(document).ready(function() {
 				DataTableConfig.data_input('totalPaid'),
 				DataTableConfig.data_select('paymentMethod'),
 				DataTableConfig.data_input('creditCardNumber'),
+				{ data: 'xxx', defaultContent: '', orderable: false, className: 'inline-disabled', render: function(v, type, row) {
+					return epst.render(row && epst.results[row.salesOrderId]);
+				} },
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 0, "desc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				'selectAllTaggle',
 				{
-					data:'xxx',
-					'class':'inline-disabled',
-					orderable:false,
-					render: function ( data, type, row ) {
-						var html = '';
-						if (data == undefined) data = '';
-						else {
-							var s = '<i class="fa-light fa-check text-success mr-1"></i>';
-							var e = '<i class="fa-light fa-xmark text-danger mr-1"></i>';
-							var w = '<i class="fa-light fa-exclamation-circle text-warning mr-1"></i>';
-							switch (data.status) {
-							case 'loading':
-								html = '<span>查核中</span><i class="fa-light fa-spinner fa-refresh-animate ml-2"></i>';
-								return html;
-							case 'success':
-								if (data.amount != undefined) html += s + '金流收款金額:<span class="text-success">' + data.amount + '</span><br>';
-								if (data.creditCardNumber != undefined) html += s + '補充信用卡號:<span class="text-success">' + data.creditCardNumber + '</span><br>';
-								break;
-							case 'error':
-								if (data.error != null) html += e + '<span class="text-danger">' + data.error + '</span><br>';
-								break;
-							}
-							if (data.merchantOrderId != null && data.merchantOrderId != 0) {
-								html += s + '金流訂單號碼:<span class="text-success">' + data.merchantOrderId + '</span><br>';
-							}
-							var valid = data.amount;
-							var shortAmount = 0;
-							var refund = 0;
-							if (data.refund != null && data.refund != 0) {
-								refund = Math.abs(data.refund);
-								valid = data.amount - refund;
-								html += w + '付款:<span class="text-warning">' + data.amount + '</span> ';
-								html += '退款:<span class="text-warning">' + refund + '</span> ';
-								html += '有效:<span class="text-warning">' + valid + '</span><br>';
-							}
-							if (data['short'] != null && data['short'] != 0) {
-								shortAmount = data['short'];
-								html += w + '交易與訂單差額:<span class="text-warning">' + data['short'] + '</span><br>';
-							}
-							if (data.payStatus != null) {
-								html += w + '交易結果:<span class="text-warning">' + data.payStatus + '</span><br>';
-							}
-							if (shortAmount != 0) {
-								if (data.totalPaid == valid && refund + shortAmount == 0) {
-									html += s + '<span class="text-success">差額金額正確</span><br>';
-								} else {
-									html += e + '<span class="text-danger">檢查是否有差額</span><br>';
-								}
-							}
-						}
-						return html;
+					extend: "edit",
+					text: '檢核',
+					action: function ( e, dt, node, config ) {
+						epst.verify(node);
 					}
 				},
-		],
-		keys: DataTableConfig.keysInlineTab,
-		"order": [[ 0, "desc" ]],
-		select: DataTableConfig.selectOptionsOS,
-		buttons: [
-			'selectAllTaggle',
-			{
-				extend: "edit",
-				text: '檢核',
-				action: function ( e, dt, node, config ) {
-					epst.verify(node);
-				}
+				'excel',
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [1,2,3,5],[16,0,0,0]);
 			},
-			'excel',
-		],
-		initComplete: function () {
-			DataTableConfig.initFooterSearch(this, [1,2,3,5],[16,0,0,0]);
-		},
-		drawCallback: function (settings) {
-			$(".dataTables_scrollBody").floatingScroll();
-		}
-	} );
-	stTable = table;
-	$(tableName +' tbody').on('click', 'button', function (e) {
-		e.stopPropagation();
-		var tr = $(this).closest('tr');
-		var row = table.row( tr );
-		var webMenuId = row.data().webMenuId;
-		var action = $(this).attr('data-action');
-		if (action == null) return;
-		{{!-- 推導：原站此段為複製自其他頁的列按鈕處理（本頁列內沒有按鈕），內容未擷取 --}}
+			drawCallback: function (settings) {
+				epst.fill(this.api());
+			}
+		} );
 	});
-	var groupBuyId = {{json groupBuyId}};
-	epst = new $.EPST(groupBuyId, stTable);
-} ); // end ready
-</script>
+	</script>
 <!--#body--><div class="container-fluid ">
 <div class="card mt-4">
-<div class="card-header">金流交易紀錄 - {{groupBuy.title}}</div>
+<div class="card-header">金流交易紀錄
+	- {{groupBuy.title}}</div>
 <div class="card-body">
 <p>查詢訂單與金流後台紀錄</p>
 <p>支援信用卡：網易收(永豐)/綠界/支付連/國泰</p>

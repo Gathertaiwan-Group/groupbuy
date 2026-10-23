@@ -1,25 +1,96 @@
+{{!-- 月結單：依 spec/html/billingtransaction-list.html 已擷取部分（DataTable 設定、欄位、「明細」details-control、
+     子列 textarea 顯示 descr、方案區儲值／折抵文字）、spec/runtime/billingtransaction-list.records.txt、SPEC；
+     ⟦未擷取⟧缺段為推導：appendExtra（本頁無篩選）、方案區渲染位置與內容、明細展開（DataTables 子列）並載入團購別計費。 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
-<script type="text/javascript" class="init">
-var editor; // use a global for the submit and return data rendering in the examples
-	$.extend( true, $.fn.dataTable.defaults, {
-		"searching": true,
-		"pageLength":40,
-	} );
-	var appendExtra = function (d) {
-		d.payable = ($('input[name=payable]:checked').length > 0);
-		d.newBt = ($('input[name=newBt]:checked').length > 0);
+	<script type="text/javascript" language="javascript" class="init">
+	var table;
+	function appendExtra(d) {
+		{{!-- 推導：本頁沒有額外篩選元件，不加參數 --}}
+		return d;
 	}
+	function escHtml(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+
+	{{!-- 推導：方案區畫在「月結單」卡片的第一個 card-body --}}
+	function renderBillingPlans(json) {
+		var $area = $('#example').closest('.card').children('.card-body').first();
+		var plans = (json && json.billingPlans) || [];
+		var html = '';
+		if (!plans.length) {
+			html = '<div class="small text-muted">目前沒有啟用中的計費方案</div>';
+		}
+		plans.forEach(function(p) {
+			var credit = p.credit, creditUsed = p.creditUsed || 0, creditRegularlyLimit = p.creditRegularlyLimit;
+			html += '<div class="row mb-2">';
+			html += '<div class="col-12"><strong>' + escHtml(p.title) + '</strong> <span class="badge badge-default">' + escHtml(p.billingTypeLabel) + '</span></div>';
+			html += '<div class="col-12 small">費率:' + escHtml(p.rate) + '%'
+				+ (p.fixedFee ? ' 固定月費:' + escHtml(p.fixedFee) : '')
+				+ (p.minimumFee ? ' 最低費用:' + escHtml(p.minimumFee) : '')
+				+ (p.dateStartString || p.dateEndString ? ' 期間:' + escHtml(p.dateStartString) + ' ~ ' + escHtml(p.dateEndString) : '')
+				+ '</div>';
+			if (p.note) html += '<div class="col-12 small">' + escHtml(p.note) + '</div>';
+			if (creditRegularlyLimit)
+				html += '<div class="col-12 small">折抵額度儲值金額:'+creditRegularlyLimit + '</div>'
+			if (credit)
+				html += '<div class="col-12 small">儲值金額:'+credit + " 已使用金額:"+creditUsed+ '剩餘金額:'+ (credit-creditUsed)+ '</div>'
+			html += '</div>'
+		});
+		$area.html(html);
+	}
+
+	function format ( d ) {
+		return '<div class="row justify-content-center">'
+			+ '<div class="col-sm-10">'
+			+ '<div class="panel panel-primary">'
+			+ '<div class="panel-heading"></div>'
+			+ '<div class="panel-body"></div>'
+			+ '<table class="table table-striped">'
+			+ '<tr class="warning">'
+			+ '<td><textarea class="form-control" style="width:100%" rows=8>'+escHtml(d.descr)+'</textarea></td>'
+			+ '</tr>'
+			+ '</table>'
+			+ '</div>'
+			+ '</div>'
+			+ '</div>';
+	}
+
+	{{!-- 推導：團購別計費（/ajax/BillingTransaction/details）填入子列的 panel-heading／panel-body --}}
+	function loadDetails($child, billingTransactionId) {
+		var $body = $child.find('.panel-body');
+		$child.find('.panel-heading').html('<strong>團購別計費</strong>');
+		$body.html('<div class="small text-muted py-2">載入中...</div>');
+		$.get(GBF.baseUrl + '/ajax/BillingTransaction/details', { billingTransactionId: billingTransactionId })
+		.done(function(json) {
+			var d = json.data || {};
+			var recs = d.records || [];
+			if (!recs.length) {
+				$body.html('<div class="small text-muted py-2">計費期間 ' + escHtml(d.periodStartString) + ' ~ ' + escHtml(d.periodEndString) + ' 沒有可計算的團購（以上方帳單摘要為準）</div>');
+				return;
+			}
+			var h = '<table class="table table-sm small mb-2"><thead><tr><th>團購</th><th>期間</th><th>訂單數</th><th>營收</th><th>費率</th><th>服務費</th></tr></thead><tbody>';
+			recs.forEach(function(r) {
+				h += '<tr><td>' + escHtml(r.groupBuyTitle) + '</td><td>' + escHtml(r.dateStartString) + ' ~ ' + escHtml(r.dateEndString) + '</td><td>' + escHtml(r.orders) + '</td><td>' + escHtml(r.groupBuyRevenue) + '</td><td>' + escHtml(r.rate) + '%</td><td>' + escHtml(r.fee) + '</td></tr>';
+			});
+			var t = d.total || {};
+			h += '</tbody><tfoot><tr><th>合計</th><th></th><th>' + escHtml(t.orders) + '</th><th>' + escHtml(t.groupBuyRevenue) + '</th><th></th><th>' + escHtml(t.fee) + '</th></tr></tfoot></table>';
+			$body.html(h);
+		})
+		.fail(function(jqXHR) {
+			var j = jqXHR.responseJSON;
+			$body.html('<div class="small text-danger py-2">' + escHtml((j && j.error) || '明細載入失敗') + '</div>');
+		});
+	}
+
 	$(document).ready(function() {
 		var tableName = '#example';
-		var table = $(tableName).DataTable( {
+		table = $(tableName).DataTable( {
 			dom: 'lBfrtip',
 			scrollX:true,
 			serverSide: true,
 			processing:true,
 			lengthMenu: [20],
 			ajax: {
-				url:'/ajax/BillingTransaction/list.do',
+				url: GBF.baseUrl + '/ajax/BillingTransaction/list.do',
 				type: "POST",
 				data: function ( d ) {
 					appendExtra(d);
@@ -36,7 +107,7 @@ var editor; // use a global for the submit and return data rendering in the exam
 					"orderable":	false,
 					"data":null,
 					"defaultContent": '<a class="btn btn-default btn-sm btn_more">明細</a>'
-				},
+				}
 			],
 			keys: DataTableConfig.keysInlineTab,
 			"order": [[ 0, "desc" ]],
@@ -48,83 +119,26 @@ var editor; // use a global for the submit and return data rendering in the exam
 			},
 			buttons:[],
 			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
+				renderBillingPlans(this.api().ajax.json());
 			}
 		} );
-
-		var renderBillingBlanArea = function(billingPlans) {
-			billingPlans = billingPlans.filter(b => b.monthlyFee || b.billingPlanSettings.credit || b.billingPlanSettings.creditRegularlyLimit);
-			if (!billingPlans.length) return;
-			var html = '<div class="card mt-4"><div class="card-header">方案</div></div><div class="card-body"><div class="container">';
-			billingPlans.forEach(b => {
-				var monthlyFee = b.monthlyFee;
-				var credit = b.billingPlanSettings.credit;
-				var creditUsed = b.billingPlanSettings.creditUsed;
-				var creditRegularlyLimit = b.billingPlanSettings.creditRegularlyLimit;
-				html += '<div class="row my-1"><div class="col-12">' + b.title + '</div>';
-				html += '<div class="col-12 small">方案期限:' + b.dateStartString + '~' + b.dateEndString + '</div>';
-				if (monthlyFee)
-					html += '<div class="col-12 small">月費:' + monthlyFee + '</div>';
-				if (creditRegularlyLimit)
-					html += '<div class="col-12 small">每月折抵額度儲值金額:'+creditRegularlyLimit + '</div>'
-				if (credit)
-					html += '<div class="col-12 small">儲值金額:'+credit + " 已使用金額:"+creditUsed+ '剩餘金額:'+ (credit-creditUsed)+ '</div>'
-				html += '</div>'
-			});
-			html += "</div></div></div>"
-			$('#billingPlanArea').html(html);
-		}
-
-		table.on('xhr.dt', function ( e, settings, json, xhr ) {
-			if (json != null && json.billingPlans != null) {
-				renderBillingBlanArea(json.billingPlans);
-			}
-		});
-
-		function format ( d ) {
-			// `d` is the original data object for the row
-			var id = d.billingTransactionId;
-			return ''
-			+ '<div class="row">'
-			+ '<div class="col-sm-10">'
-			+ '<div class="panel panel-primary">'
-			+ '<div class="panel-heading"></div>'
-			+ '<div class="panel-body"></div>'
-			+ '<table class="table table-striped">'
-			+ '<tr class="warning">'
-			+ '<td><textarea class="form-control" style="width:100%" rows=8>'+d.descr+'</textarea></td>'
-			+ '</tr>'
-			+ '</table>'
-			+ '</div>'
-			+ '</div>'
-			+ '</div>'
-			;
-		}
 
 		$('#example tbody').on('click', 'a.btn_more', function () {
 			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-			var url = '/backend/BillingTransactionRecord/list.do?billingTransactionId=' + row.data().billingTransactionId;
-			window.open(url);
-			//location.href = '/backend/ItemSet/show.do?itemSetId=' + row.data().itemSetId;
-		} );
-
-		$('#example').on('click', 'a.editor_edit', function (e) {
-			e.preventDefault();
-			editor.edit( $(this).closest('tr'), {
-				title: '編輯',
-				buttons: '更新'
-			} );
-		} );
-
-		$('.filters').on('change', function() {
-			table.clear().ajax.reload();
+			var row = table.row(tr);
+			if (row.child.isShown()) {
+				row.child.hide();
+				tr.removeClass('shown');
+			} else {
+				row.child(format(row.data())).show();
+				tr.addClass('shown');
+				loadDetails($(row.child()), row.data().billingTransactionId);
+			}
 		});
-	} ); // end ready
-</script>
+	});
+	</script>
 <!--#body--><div class="container-fluid ">
-<div id="billingPlanArea"></div>
-	<div class="card mt-4">
+<div class="card mt-4">
 <div class="card-header">月結單</div>
 <div class="card-body">
 </div>

@@ -1,19 +1,6 @@
 <!--#head-->
-	<style type="text/css" class="init">
-	td.details-control {
-		background: url('../resources/details_open.png') no-repeat center center;
-		cursor: pointer;
-	}
-	 tr.shown td.details-control {
-		background: url('../resources/details_close.png') no-repeat center center;
-	}
-	</style>
 	<script type="text/javascript" language="javascript" class="init">
-var editor; // use a global for the submit and return data rendering in the examples
-	$.extend( true, $.fn.dataTable.defaults, {
-		"searching": false,
-		"pageLength":50,
-	} );
+	var editor;
 
 	$(document).ready(function() {
 		var tableName = '#bankTransactionTable';
@@ -78,6 +65,7 @@ var editor; // use a global for the submit and return data rendering in the exam
 
 		var table = $(tableName).DataTable( {
 			dom: 'Bfrtip',
+			pageLength: 50,
 			ajax: '{{baseUrl}}/ajax/GroupBuy/listBankTransactions.do?groupBuyId={{groupBuyId}}',
 			language:DataTableConfig.i18n,
 			columns: [

@@ -10,7 +10,7 @@
 //   POST /ajax/Invoice/list?groupBuyId=                列表（serverSide；invoiceStatus 篩選）
 //   POST /ajax/Invoice/save|update|delete              Editor（狀態、開立時間）
 //   POST /ajax/Invoice/statusSend                      重新排程（發送失敗 → 預約中）
-//   POST /ajax/Invoice/cancelSend                      取消預約（預約中 → 已取消發送）
+//   POST /ajax/Invoice/statusCancel                    取消預約（預約中／等待發票號碼中 → 已取消發送；本系統自訂路徑）
 //   GET  /ajax/Invoice/status                          24 小時內開立／預約／失敗數量
 //   POST /ajax/Invoice/issueInvoice                    開立（salesOrderId / salesOrderIds / uuid）
 //   POST /ajax/Invoice/issueInvalid                    作廢（uuid / invoiceId）
@@ -18,7 +18,8 @@
 //   GET  /ajax/Invoice/get?invoiceId=                  發票明細（折讓用）
 //   GET  /ajax/Invoice/salesOrder?salesOrderId=        訂單的發票（訂單頁 InvoiceManager）
 //   GET  /ajax/Invoice/previewInvoice?salesOrderId=    預覽開立明細
-//   GET  /ajax/Invoice/displayIssueInvalid|displayIssueAllowance|displayIssueInvoice|displaySalesOrderInvoices  彈窗（推導）
+//   GET  /ajax/Invoice/displayIssueInvalid|displayIssueInvoice|displaySalesOrderInvoices  彈窗（路徑見 SPEC；內容推導）
+//   GET  /ajax/Invoice/displayAllowance?invoiceId=     開立折讓彈窗（本系統自訂路徑）
 import { getServiceClient } from "@/lib/supabase/server";
 import { invoice } from "@/lib/db/entities";
 import { rowToApi, type Row } from "@/lib/db/mapping";
@@ -79,14 +80,13 @@ type InvRow = Row & {
   sales_orders?: { uuid?: string; group_buy_id?: number } | null;
 };
 
-/** 列表／明細回傳鍵：原站欄位＋ invoiceSettings（error/receiptVatId/remark）＋ invoiceRandomNumber、uuid */
+/** 列表／明細回傳鍵：entity 欄位（含 errorMessage）＋ invoiceSettings（receiptVatId/remark 等，invoice_v2.min.js 讀取）＋ invoiceRandomNumber、allowancable、uuid */
 function invoiceApi(r: InvRow): Row {
   const api = rowToApi(invoice, r);
   for (const k of ["merchantOrderId", "invoiceNumber", "dateEinvoiceString", "randomNumber", "buyerVatId", "buyerTitle"]) api[k] = api[k] ?? "";
   api.uuid = r.sales_orders?.uuid ?? (r.merchant_order_id ?? "").split("#")[0];
   api.invoiceRandomNumber = r.random_number ?? "";
   api.invoiceSettings = {
-    error: r.error_message ?? null,
     receiptVatId: r.buyer_vat_id ?? null,
     receiptTitle: r.buyer_title ?? null,
     carrierType: r.carrier_type ?? null,
@@ -321,7 +321,7 @@ async function statusSend(ctx: RequestContext): Promise<Response> {
 }
 
 /** 取消預約：「預約中／等待發票號碼中」→「已取消發送電子發票」 */
-async function cancelSend(ctx: RequestContext): Promise<Response> {
+async function statusCancel(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const rows = await loadInvoices(session, await idsParam(ctx));
   const ok = rows.filter((r) => SCHEDULED.includes(r.invoice_status));
@@ -651,7 +651,7 @@ export const invoiceRoutes: RouteDef[] = [
     writeSpec: invoiceWrite,
   }),
   post("/ajax/Invoice/statusSend", statusSend),
-  post("/ajax/Invoice/cancelSend", cancelSend),
+  post("/ajax/Invoice/statusCancel", statusCancel),
   get("/ajax/Invoice/status", invoiceStatusSummary),
   post("/ajax/Invoice/issueInvoice", issueInvoice),
   post("/ajax/Invoice/issueInvalid", issueInvalid),
@@ -660,7 +660,7 @@ export const invoiceRoutes: RouteDef[] = [
   get("/ajax/Invoice/salesOrder", salesOrderInvoices),
   get("/ajax/Invoice/previewInvoice", previewInvoice),
   modalFragment("/ajax/Invoice/displayIssueInvalid", { template: "accounting/modal-invoice-issueinvalid.html", method: "GET", data: invalidFragmentData }),
-  modalFragment("/ajax/Invoice/displayIssueAllowance", {
+  modalFragment("/ajax/Invoice/displayAllowance", {
     template: "accounting/modal-invoice-issueallowance.html",
     method: "GET",
     data: async (ctx) => {

@@ -1,4 +1,4 @@
-{{!-- 推導：原站「開立折讓」彈窗（/ajax/Invoice/displayIssueAllowance?invoiceId=）未擷取；
+{{!-- 推導：「開立折讓」彈窗（本系統自訂路徑 /ajax/Invoice/displayAllowance?invoiceId=；原站此彈窗未擷取）；
      元素 id／name 依原站 public/scripts/invoice.js 的 invoiceManager.prepareAllowance() 所需補完 --}}
 <form name="InvoiceAllowanceForm" method="post" action="{{baseUrl}}/ajax/Invoice/issueAllowance.do" class="form-horizontal" id="InvoiceAllowanceForm"><input type="hidden" name="invoiceId" value="{{invoiceId}}" id="invoiceId"><div class="modal-header">
     <h5 class="modal-title">開立折讓 {{invoiceNumber}}</h5>
