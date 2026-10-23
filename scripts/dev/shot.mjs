@@ -7,7 +7,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, v, i, arr) => { if (v.startsWith('--')) acc.push([v.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : 'true']); return acc; }, []));
 const W = +(args.w || 1512), H = +(args.h || 900);
-const port = 9400 + Math.floor(Math.random() * 400);
+// 除錯埠：先確認沒被占用（多個 agent 同時跑時，撞埠會連到別人的 headless Chrome 並操作別人的頁面）
+const net = await import('node:net');
+const portFree = (p) => new Promise((res) => { const s = net.createServer(); s.once('error', () => res(false)); s.once('listening', () => s.close(() => res(true))); s.listen(p, '127.0.0.1'); });
+let port = 0;
+for (let i = 0; i < 50 && !port; i++) { const p = 9400 + Math.floor(Math.random() * 2000); if (await portFree(p)) port = p; }
+if (!port) throw new Error('找不到可用的除錯埠');
 const prof = mkdtempSync(path.join(process.env.SHOT_TMP || tmpdir(), 'shotprof-'));
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, `--window-size=${W},${H}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -28,7 +33,7 @@ process.on('uncaughtException', (e) => { console.error(e); cleanup(); process.ex
 process.on('unhandledRejection', (e) => { console.error(e); cleanup(); process.exit(1); });
 const watchdog = setTimeout(() => { console.error('[shot] 逾時 180 秒，強制結束'); cleanup(); process.exit(2); }, +(process.env.SHOT_TIMEOUT_MS || 180000));
 let target;
-for (let i = 0; i < 80; i++) { try { const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); target = list.find((t) => t.type === 'page'); if (target) break; } catch {} await sleep(250); }
+for (let i = 0; i < 80; i++) { let pages = null; try { pages = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).filter((t) => t.type === 'page'); } catch {} if (pages && pages.length) { if (pages.length === 1 && pages[0].url === 'about:blank') { target = pages[0]; break; } cleanup(); throw new Error('除錯埠上的 Chrome 不是本程式啟動的（可能撞埠），中止'); } await sleep(250); }
 if (!target) { cleanup(); throw new Error('devtools 沒起來'); }
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
