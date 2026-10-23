@@ -1,88 +1,87 @@
-<style>
-.btn-input-check {min-width:72px !important;}
-.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;}
-.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
-/*.modal-body {min-height: 400px;}*/
-span.input-group-text.md-addon {min-width: 152px;}
-</style>
-<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/markAsShipped.do" class="form-horizontal" id="SalesOrderForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><input type="hidden" name="uuid" value="{{uuid}}" id="uuid"><div class="modal-header">
-		<h5 style="overflow:hidden">設為已出貨&raquo;</h5>
+{{!-- 推導：設為已出貨彈窗（/backend/SalesOrder/markAsShipped；片段資料 salesOrderId、uuid、orders[{salesOrderId, uuid, customerFirstname, shippingReceiptNumber, pickup, sendEmail, warning}]）。
+     原站片段未擷取（需先勾選訂單才開得到），依 lead 規格、i18n（SalesOrder.action.markAsShipped、SalesOrder.dateShipped、SalesOrder.shippingReceiptNumber、EmailCategory.shipment.notice）
+     與本系統彈窗版型撰寫。由所有訂單工具列「出貨 → 設為已出貨」開啟。
+     送出 POST markAsShipped.do：dateShippedString、salesOrders[i][salesOrderId|shippingReceiptNumber|status(=1 寄出貨信)|pickup(=1 自取)]。
+     出貨日期用 <input type=date>（值為 YYYY-MM-DD；原站 datetimepicker 的浮動日曆在可捲動的 modal-body 內會被裁切），預設今天。 --}}
+<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/markAsShipped.do" class="form-horizontal" id="MarkAsShippedForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId">
+	<div class="modal-header">
+		<h5 style="overflow:hidden">設為已出貨 <small class="grey-text">（{{orders.length}} 筆訂單）</small></h5>
 		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 	</div>
 	<div class="modal-body">
 	<div class="modal-message"></div>
-	<div class="mb-2">
-	<p>預設為發送出貨信<br>
-	設為自取預設不發送出貨信，可再點擊「出貨信」強制發送</p>
-	</div>
-{{!-- 推導：原站需選取訂單才會輸出每筆訂單列（無資料時擷取不到）；依本片段 script 的 name$=pickup]、[status]、[shippingReceiptNumber] 與 .btn-input-check／.input-error 樣式推導 --}}
-{{#each orders}}
-<div class="form-group row mb-2">
-		<div class="col-12">
-			<input type="hidden" name="salesOrders[{{@index}}][salesOrderId]" value="{{salesOrderId}}">
-			<div class="input-group py-0">
-				<div class="input-group-prepend">
-					<span class="input-group-text md-addon">{{uuid}} {{customerFirstname}}</span>
-				</div>
-				<input type="text" name="salesOrders[{{@index}}][shippingReceiptNumber]" maxlength="255" value="{{shippingReceiptNumber}}" placeholder="查貨號碼" class=" form-control">
-				<div class="input-group-append btn-group-toggle" data-toggle="buttons">
-					<label class="btn btn-default btn-input-check px-2 m-0{{#if sendEmail}} active{{/if}}"><input type="checkbox" name="salesOrders[{{@index}}][status]" value="1" autocomplete="off"{{#if sendEmail}} checked{{/if}}> 出貨信</label>
-					<label class="btn btn-default btn-input-check px-2 m-0{{#if pickup}} active{{/if}}"><input type="checkbox" name="salesOrders[{{@index}}][pickup]" value="1" autocomplete="off"{{#if pickup}} checked{{/if}}> 自取</label>
-				</div>
-			</div>
-			{{#if warning}}<input type="text" class="form-control form-control-sm input-error" readonly value="{{warning}}">{{/if}}
+	<div class="form-group row">
+		<label class="col-sm-3 control-label" for="dateShippedString">已出貨日期</label>
+		<div class="col-sm-9">
+			<input type="date" name="dateShippedString" id="dateShippedString" maxlength="10" placeholder="YYYY-MM-DD" class="required form-control" required autocomplete="off">
 		</div>
 	</div>
-{{/each}}
-<div class="form-group row mt-4">
-		<div class="col-12">
-			<div class="input-group py-0">
-				<div class="input-group-prepend">
-					<span class="input-group-text md-addon">已出貨日期</span>
-				</div>
-				<input type="text" name="dateShippedString" maxlength="20" value="" type="text" id="dateShippedString" class=" form-control" required></div>
-		</div>
+	{{#if orders.length}}
+	<div class="table-responsive">
+	<table class="table table-sm table-striped mb-1" id="markAsShippedTable">
+		<thead>
+			<tr>
+				<th>訂單編號</th>
+				<th style="min-width:140px">查貨號碼</th>
+				<th class="text-nowrap"><input type="checkbox" id="markAsShippedAllEmail" class="form-check-input"><label class="form-check-label" for="markAsShippedAllEmail">寄信</label></th>
+				<th class="text-nowrap">自取</th>
+			</tr>
+		</thead>
+		<tbody>
+		{{#each orders}}
+			<tr{{#if warning}} class="table-warning"{{/if}}>
+				<td>
+					<div class="text-nowrap">{{uuid}}</div><input type="hidden" name="salesOrders[{{@index}}][salesOrderId]" value="{{salesOrderId}}">
+					<div class="small grey-text">{{customerFirstname}}</div>
+					{{#if warning}}<span class="badge badge-danger">{{warning}}</span>{{/if}}
+				</td>
+				<td><input type="text" name="salesOrders[{{@index}}][shippingReceiptNumber]" value="{{shippingReceiptNumber}}" maxlength="100" class="form-control form-control-sm srn"{{#if pickup}} placeholder="自取"{{/if}}></td>
+				<td><input type="checkbox" name="salesOrders[{{@index}}][status]" value="1" id="markAsShippedEmail{{@index}}" class="form-check-input send-email"{{#if sendEmail}} checked{{/if}}><label class="form-check-label" for="markAsShippedEmail{{@index}}"></label></td>
+				<td><input type="checkbox" name="salesOrders[{{@index}}][pickup]" value="1" id="markAsShippedPickup{{@index}}" class="form-check-input pickup"{{#if pickup}} checked{{/if}}><label class="form-check-label" for="markAsShippedPickup{{@index}}"></label></td>
+			</tr>
+		{{/each}}
+		</tbody>
+	</table>
 	</div>
-<div style="height:240px"></div>
-	</div> <!-- modal-body -->
-
+	<div class="field-info">勾選「寄信」會寄出「已出貨通知」信；勾選「自取」且未填查貨號碼時，查貨號碼記為「自取」。</div>
+	{{else}}
+	<p class="text-danger mb-0">請先勾選要設為已出貨的訂單</p>
+	{{/if}}
+</div> <!-- modal-body -->
 	<div class="progress">
 		<div class="progress-bar" role="progressbar"></div>
 	</div>
 	<div class="modal-footer">
 		<button class="btn btn-default" data-dismiss="modal">關閉</button>
-		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出"{{#unless orders.length}} disabled{{/unless}} />
 	</div>
-</form><script type="text/javascript">
-$(function () {
-	$('#dateShippedString').datetimepicker({format:"YYYY-MM-DD", defaultDate:new Date()});
+</form><script>
+(function() {
+	var $form = $('#MarkAsShippedForm');
+	var $date = $form.find('#dateShippedString');
+	$date.val(moment().format('YYYY-MM-DD'));
 
-	$('input:checkbox[name$=pickup\\]]').on('change', function(e) {
-		var checked = $(this).prop('checked');
-		var name = $(this).prop('name');
-		var prefix = name.split('][')[0] + ']';
-console.log('s')
-		if (checked) {
-			if ($('input:checkbox[name='+$.escapeSelector(prefix+'[status]')+']').prop('checked')) {
-				$('input:checkbox[name='+$.escapeSelector(prefix+'[status]')+']').click();
-			}
-			$('input[name='+$.escapeSelector(prefix+'[shippingReceiptNumber]')+']').val('自取');
-		} else {
-			var srn = $('input[name='+$.escapeSelector(prefix+'[shippingReceiptNumber]')+']').val();
-			if (srn == '自取') {
-				$('input[name='+$.escapeSelector(prefix+'[shippingReceiptNumber]')+']').val('');
-			}
-		}
+	// 表頭「寄出貨信」一次切換全部列
+	var $emails = $form.find('input.send-email');
+	var syncAll = function() {
+		$form.find('#markAsShippedAllEmail').prop('checked', $emails.length > 0 && $emails.filter(':checked').length === $emails.length);
+	};
+	$form.find('#markAsShippedAllEmail').on('change', function() {
+		$emails.prop('checked', this.checked);
 	});
-});
-</script>
-<script>
-var success = function(json) {
-	table.ajax.reload( null, false);
-	msg = '成功';
-	modalShowSuccess($('#myModal'), msg);
-	$('#submitButton').prop('disabled',true);
-}
+	$emails.on('change', syncAll);
+	syncAll();
+	// 自取：沒有查貨號碼時提示會記為「自取」
+	$form.find('input.pickup').on('change', function() {
+		$(this).closest('tr').find('input.srn').attr('placeholder', this.checked ? '自取' : '');
+	});
 
-initAjaxForm('SalesOrderForm', success);
+	initAjaxForm('MarkAsShippedForm', function(json) {
+		var $box = $form.closest('.modal-content');
+		modalShowSuccess($box.length ? $box : $form, json.error);
+		$form.find('#submitButton').hide();
+		var $dt = $('#mydt');
+		if ($dt.length && $.fn.dataTable && $.fn.dataTable.isDataTable($dt)) $dt.DataTable().ajax.reload(null, false);
+	});
+})();
 </script>

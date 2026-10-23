@@ -1,325 +1,336 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
-<html>
-
+<!DOCTYPE html>
+{{!-- 推導：原站列印頁（訂單／商品標籤／超付取單／訂單barcode／報價單）spec 未擷取，整頁依列印行為推導：
+     由 sales-order-export.ts renderPrint() 輸出完整頁（不套後台版面殼）；內容 partial（print-order／print-quotation／print-c2c）沿用，
+     商品標籤（.label-piece）與 barcode（.label-barcode）在本頁以 {{#each orders}} 輸出。
+     需要：A4 列印 CSS、每筆訂單頁碼（.footer .pageNumber／.pageTotal）、條碼（JsBarcode，cdnjs 固定版本，讀 svg.barcode 的 jsbarcode-* 屬性）、
+     工具列「列印」；訂單列印另有列印設定（GET／POST {{baseUrl}}/ajax/SystemPreference/salesOrderPrintSettings，POST 鍵 data[0][欄位]，存後重新整理套用）。 --}}
+<html lang="zh-Hant-TW">
 <head>
-    <base href="/backend/SalesOrder/print.jsp"><link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" integrity="sha512-dTfge/zgoMYpP7QbHy4gWMEGsbsdZeCXz7irItjcC3sPUFtf0kuFbDz/ixG7ArTxmDjLXDmezHubeNikyKGVyQ==" crossorigin="anonymous">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <title>{{title}}</title>
-	<style>
-		body {
-			font-family:"微軟正黑體","Helvetica Neue",Helvetica,Arial,sans-serif;
-			font-size:12pt;
-		}
-		.footer {
-			position:absolute;
-			bottom:0px;
-			left:0px;
-			text-align:center;
-			width:100%;
-		}
-		.tr-item-normal{}
-		.tr-item-small{font-size:10pt;}
-		.tr-item-tiny{font-size:8pt;}
-		.tr-billingInfo-mask, .tr-shippingInfo-mask{}
-		span.uid {display: inline-block;white-space: nowrap;overflow: hidden;text-overflow: ellipsis; max-width: 400px;}
-		.img-logo {height:44px;position: absolute;top: 4px;right: 44px;}
-		.d-none {display:none !important;}
-		.td-price,.th-price {text-align:right}
-		.ul-itemPack{margin-top:1rem;font-size:10px;}
-		.dateCreated {margin-left:20px;font-size:8pt;line-height:12pt;}
-		svg.barcode {
-			position: absolute;
-			left: 20px;
-			top: 0;
-		}
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{title}}</title>
+<link rel="shortcut icon" href="/upload/images/unsort/favicon.png">
+<style>
+:root {
+	--ink: #212529;
+	--muted: #6c757d;
+	--line: #cfd4da;
+	--stripe: #f1f3f5;
+	--legend: #1a3e72;
+	--sheet-bg: #e9ecef;
+	--bar-bg: #37474f;
+	--accent: #1e88e5;
+	--danger: #c62828;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+	background: var(--sheet-bg);
+	color: var(--ink);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+	font-size: 14px;
+	line-height: 1.45;
+	-webkit-print-color-adjust: exact;
+	print-color-adjust: exact;
+}
+body.font-small { font-size: 12px; }
+body.font-large { font-size: 16px; }
+/* 非彩色列印：文字改黑灰、不印底色（不用 filter，避免列印時文字被點陣化） */
+body.mono { --legend: #000; --danger: #000; --muted: #444; --stripe: transparent; -webkit-print-color-adjust: economy; print-color-adjust: economy; }
+body.mono .print-logo { filter: grayscale(100%); }
 
-		@page {
-			margin: 0mm;
-			size:210mm 297mm;
-			padding:0mm;
-		}
-		.print{
-			border: 1px #000000 dashed;
-			page-break-after:always;
-			width:210mm;
-			min-height:277mm;
-			margin:10mm auto;
-		}
-		.subpage {
-			border: 1px #000000 solid;
-			width: 190mm;
-			height: 276mm;
-			margin:10mm;
-			padding:5mm;
-			position:relative;
-		}
+/* ── 工具列／列印設定（只在螢幕顯示） ── */
+.print-toolbar {
+	position: sticky; top: 0; z-index: 10;
+	display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+	padding: 8px 16px; background: var(--bar-bg); color: #fff;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .3);
+}
+.print-toolbar .toolbar-title { font-size: 15px; font-weight: 600; }
+.print-toolbar .toolbar-count { font-size: 13px; opacity: .8; margin-right: auto; }
+.print-toolbar button, .settings-panel button {
+	font: inherit; font-size: 14px; line-height: 1.2; cursor: pointer;
+	border: 1px solid transparent; border-radius: 3px; padding: 6px 14px;
+}
+.btn-print { background: var(--accent); color: #fff; }
+.btn-print:disabled { opacity: .5; cursor: not-allowed; }
+.btn-light { background: #fff; color: var(--ink); border-color: #b0bec5 !important; }
+.settings-panel {
+	width: 210mm; max-width: calc(100% - 32px); margin: 16px auto 0; padding: 12px 16px;
+	background: #fff; border-radius: 4px; box-shadow: 0 1px 4px rgba(0, 0, 0, .2);
+}
+.settings-panel[hidden] { display: none; }
+.settings-panel h2 { font-size: 15px; margin: 0 0 8px; }
+.settings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px 16px; margin-bottom: 12px; }
+.settings-grid label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.settings-grid label.disabled { color: var(--muted); }
+.settings-grid select { font: inherit; padding: 2px 4px; }
+.settings-actions { display: flex; align-items: center; gap: 12px; }
+.settings-actions .hint { font-size: 12px; color: var(--muted); }
+.settings-message { font-size: 13px; }
+.settings-message.error { color: var(--danger); }
 
-		legend {
-			font-size:16pt;
-			border-bottom: 1px solid #000000;
-		}
-		@media print{
-			.print{
-				margin:0;
-				border:initial;
-				padding: 10mm 0mm 0mm 0mm;
-			}
-			.subpage {
-			margin:0mm 10mm;
-			}
-			.toolbar, .toolbar-inline {visibility: hidden;}
-			.table-striped>tbody>tr:nth-of-type(odd){background-color: transparent}
-			form {display:none;}
-		}
-		.toolbar-inline {position: fixed;right:8px;top:20px;}
-		.toolbar {position: fixed;right:8px;bottom:56px;}
-		.label-piece {display:inline-block;width:62mm;height:29mm;border:1px dashed #999;margin:2mm;padding:2mm;vertical-align:top;overflow:hidden;font-size:10pt;position:relative;}
-		.label-piece .label-uuid {font-size:8pt;}
-		.label-barcode {display:inline-block;width:92mm;border:1px dashed #999;margin:2mm;padding:3mm;vertical-align:top;font-size:10pt;}
-		.label-barcode svg {position:static;}
-		.notice-c2c {color:#c5221f;font-size:10pt;}
-	</style>
+/* ── A4 頁面（螢幕預覽：灰底白紙） ── */
+#printArea { padding: 16px 0 32px; }
+.print {
+	width: 210mm; margin: 0 auto 16px; background: #fff;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+}
+.subpage { min-height: 297mm; padding: 10mm 12mm; display: flex; flex-direction: column; }
+.subpage > svg.barcode { align-self: flex-end; height: 15mm; width: auto; margin-bottom: 2mm; }
+.print-logo { align-self: flex-start; max-height: 18mm; max-width: 60mm; margin-bottom: 3mm; }
+.print fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 0 0 4mm; padding: 1mm 4mm 3mm; min-width: 0; }
+.print legend { padding: 0 2mm; font-size: 1.15em; font-weight: 600; color: var(--legend); }
+.print legend .dateCreated { margin-left: 4mm; font-size: .78em; font-weight: normal; color: var(--muted); }
+.print table.table { width: 100%; border-collapse: collapse; }
+.print .table th, .print .table td { padding: 1.2mm 2mm; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+.print .table tr:first-child th, .print .table tr:first-child td { border-top: 0; }
+.print .table-condensed th { color: var(--muted); font-weight: normal; white-space: nowrap; }
+.print .table-striped tr:first-child th { border-bottom: 2px solid var(--line); }
+.print .table-striped tr:nth-child(even) td { background: var(--stripe); }
+.print .th-price, .print .td-price { text-align: right; white-space: nowrap; }
+.print .text-right { text-align: right; }
+.print .tr-item-small td { font-size: .88em; color: var(--muted); }
+.print .seq { color: var(--muted); }
+.print .uid { font-family: Menlo, Consolas, monospace; font-size: .82em; color: var(--muted); }
+.print .small { font-size: .85em; }
+.print .notice-c2c { margin: 1mm 0 2mm; font-size: .9em; color: var(--danger); }
+.print .footer { margin-top: auto; padding-top: 3mm; text-align: center; font-size: .82em; color: var(--muted); }
 
+/* ── 標籤（A4 標籤紙，3 欄） ── */
+.label-sheet {
+	width: 210mm; margin: 0 auto 16px; padding: 6mm 5mm; background: #fff;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+	display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 36mm; gap: 1mm;
+}
+.label-piece, .label-barcode {
+	border: 1px dashed #b0bec5; border-radius: 2mm; padding: 2mm 3mm; overflow: hidden;
+	display: flex; flex-direction: column; break-inside: avoid; page-break-inside: avoid;
+}
+.label-piece .lp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 2mm; }
+.label-piece .lp-uuid { font-family: Menlo, Consolas, monospace; font-weight: 700; }
+.label-piece .lp-count { font-size: .85em; color: var(--muted); white-space: nowrap; }
+.label-piece .lp-title { margin-top: 1mm; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.label-piece .lp-meta { font-size: .82em; color: var(--muted); }
+.label-piece .lp-tag { color: var(--danger); }
+.label-piece .lp-receiver, .label-barcode .lb-receiver { margin-top: auto; font-size: .9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label-barcode { align-items: center; text-align: center; }
+.label-barcode svg.barcode { height: 18mm; width: auto; max-width: 100%; }
+.label-barcode .lb-meta { font-size: .8em; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+.print-empty { width: 210mm; max-width: calc(100% - 32px); margin: 32px auto; padding: 48px 16px; background: #fff; text-align: center; color: var(--muted); font-size: 16px; border-radius: 4px; }
+
+/* ── 列印 ── */
+@page { size: A4 portrait; margin: 10mm; }
+@media print {
+	body { background: #fff; }
+	.no-print { display: none !important; }
+	#printArea { padding: 0; }
+	.print { width: auto; margin: 0; box-shadow: none; break-after: page; page-break-after: always; }
+	.print:last-child { break-after: auto; page-break-after: auto; }
+	.subpage { min-height: 276mm; padding: 0 2mm; }
+	.label-sheet { width: auto; margin: 0; padding: 0; box-shadow: none; }
+	.label-piece, .label-barcode { border-color: #90a4ae; }
+	.print-empty { display: none; }
+}
+</style>
 </head>
-<body>
+<body class="print-{{kind}} font-{{default settings.fontSize "normal"}}{{#unless settings.colorPrint}} mono{{/unless}}">
 
-{{!-- 推導：原站列印頁需有訂單才會輸出內容（無資料時只有「沒有資料可列印」）；版面依本頁 CSS（.print/.subpage/legend/.tr-*-mask/.td-price/svg.barcode/.img-logo）與 buildPage() 的表格欄位推導 --}}
-{{#if orders.length}}
-{{#if isOrder}}{{> orders/partials/print-order.html}}{{/if}}
-{{#if isQuotation}}{{> orders/partials/print-quotation.html}}{{/if}}
-{{#if isC2C}}{{> orders/partials/print-c2c.html}}{{/if}}
-{{#if isPiece}}{{#each orders}}{{#each pieces}}<div class="label-piece"><div class="label-uuid">{{../uuid}} {{../shippingFirstname}}</div><div><b>{{title}}</b>{{#if spec}} ({{spec}}){{/if}}</div><div>{{pieceNo}} / {{total}}{{#if backOrder}} 預購{{/if}}</div><svg class="barcode" jsbarcode-value="{{../uuid}}"></svg></div>{{/each}}{{/each}}{{/if}}
-{{#if isBarcode}}{{#each orders}}<div class="label-barcode"><svg class="barcode" jsbarcode-value="{{uuid}}" jsbarcode-height="40" jsbarcode-displayvalue="true"></svg><div>{{uuid}} {{shippingFirstname}}</div><div class="small">{{groupBuyTitle}}</div></div>{{/each}}{{/if}}
-{{else}}
-沒有資料可列印
+<div class="print-toolbar no-print">
+	<span class="toolbar-title">列印{{title}}</span>
+	<span class="toolbar-count">共 {{orders.length}} 筆訂單{{#if isPiece}}<span id="labelCount"></span>{{/if}}</span>
+	{{#if isOrder}}<button type="button" class="btn-light" id="printSettingsToggle">列印設定</button>{{/if}}
+	<button type="button" class="btn-print" id="printButton"{{#unless orders.length}} disabled{{/unless}}>列印</button>
+	<button type="button" class="btn-light" id="closeButton">關閉</button>
+</div>
+
+{{#if isOrder}}
+{{!-- 推導：列印設定（order_module_settings.salesOrderPrintSettings，全租戶共用）；鍵同 PRINT_SETTINGS_DEFAULT --}}
+<form class="settings-panel no-print" id="printSettingsForm" hidden>
+	<h2>列印設定</h2>
+	<div class="settings-grid">
+		<label><input type="checkbox" name="hideBillingInfo"> 隱藏訂購人資訊</label>
+		<label><input type="checkbox" name="maskBillingInfo"> 遮蔽訂購人資訊</label>
+		<label><input type="checkbox" name="maskShippingInfo"> 遮蔽收件人資訊</label>
+		<label><input type="checkbox" name="hidePrice"> 隱藏價格</label>
+		<label><input type="checkbox" name="showUid"> 顯示商品代碼</label>
+		<label><input type="checkbox" name="showUpc"> 顯示商品條碼(UPC)</label>
+		<label><input type="checkbox" name="showLogo"> 顯示LOGO</label>
+		<label><input type="checkbox" name="showReferralStaff"> 顯示推薦人員</label>
+		<label><input type="checkbox" name="colorPrint"> 彩色列印</label>
+		<label>字體大小
+			<select name="fontSize">
+				<option value="small">小</option>
+				<option value="normal">標準</option>
+				<option value="large">大</option>
+			</select>
+		</label>
+	</div>
+	<div class="settings-actions">
+		<button type="submit" class="btn-print" id="printSettingsSave">儲存並套用</button>
+		<span class="hint">設定會套用到所有訂單列印，儲存後重新整理本頁。</span>
+		<span class="settings-message" id="printSettingsMessage"></span>
+	</div>
+</form>
 {{/if}}
-<form name='SettingFormInner'>
-<div class="toolbar-inline">
-<div class="input-group" >
-<input type="text" name="adjustSeq" id="adjustSeq" size="16" placeholder="起始排序數字">
+
+{{#if settings.showLogo}}{{#if company.logo}}<img class="print-logo" id="printLogoTemplate" src="{{company.logo}}" alt="{{company.name}}" hidden>{{/if}}{{/if}}
+
+<div id="printArea">
+{{#if orders.length}}
+	{{#if isOrder}}{{> orders/partials/print-order.html}}{{/if}}
+	{{#if isQuotation}}{{> orders/partials/print-quotation.html}}{{/if}}
+	{{#if isC2C}}{{> orders/partials/print-c2c.html}}{{/if}}
+	{{#if isPiece}}
+	{{!-- 推導：商品標籤＝每件商品一張（pieces 已依數量展開），A4 標籤紙 3 欄；收件人依「遮蔽收件人資訊」設定 --}}
+	<div class="label-sheet">
+		{{#each orders}}{{#each pieces}}
+		<div class="label-piece" data-uuid="{{../uuid}}">
+			<div class="lp-head"><span class="lp-uuid">{{../uuid}}</span><span class="lp-count">{{pieceNo}} / {{total}}</span></div>
+			<div class="lp-title">{{title}}{{#if spec}} ({{spec}}){{/if}}</div>
+			<div class="lp-meta">{{#if ../../settings.showUid}}{{#if uid}}<span class="uid">{{uid}}</span> {{/if}}{{/if}}{{#if backOrder}}<span class="lp-tag">[預購]</span> {{/if}}{{#if gift}}<span class="lp-tag">[贈品]</span>{{/if}}</div>
+			<div class="lp-receiver">{{#if ../../settings.maskShippingInfo}}{{../shippingFirstnameMask}}{{else}}{{../shippingFirstname}}{{/if}}{{#if ../shippingType}}・{{../shippingType}}{{/if}}</div>
+		</div>
+		{{/each}}{{/each}}
+	</div>
+	{{/if}}
+	{{#if isBarcode}}
+	{{!-- 推導：訂單 barcode＝每筆訂單一張（訂單編號 CODE128），A4 標籤紙 3 欄 --}}
+	<div class="label-sheet">
+		{{#each orders}}
+		<div class="label-barcode" data-uuid="{{uuid}}">
+			<svg class="barcode" jsbarcode-value="{{uuid}}" jsbarcode-height="50" jsbarcode-fontsize="16"></svg>
+			<div class="lb-receiver">{{#if ../settings.maskShippingInfo}}{{shippingFirstnameMask}}{{else}}{{shippingFirstname}}{{/if}}{{#if shippingType}}・{{shippingType}}{{/if}}</div>
+			<div class="lb-meta">{{groupBuyTitle}}</div>
+		</div>
+		{{/each}}
+	</div>
+	{{/if}}
+{{else}}
+	<div class="print-empty">沒有資料可列印</div>
+{{/if}}
 </div>
-<button type="button" class="btn btn-default" onClick="updateInner();">更新</button>
-</div>
-</form>
-<form name='SettingForm'>
-<div class="toolbar">
-{{#if isOrder}}{{!-- 推導：列印設定（load()/update() 讀寫 salesOrderPrintSettings；套用於伺服器輸出） --}}<div class="panel panel-default small" style="padding:6px 10px;margin-bottom:6px;background:#fff">
-<label class="checkbox-inline"><input type="checkbox" name="hideBillingInfo" id="hideBillingInfo"> 隱藏訂購人</label>
-<label class="checkbox-inline"><input type="checkbox" name="maskBillingInfo" id="maskBillingInfo"> 遮蔽訂購人</label>
-<label class="checkbox-inline"><input type="checkbox" name="maskShippingInfo" id="maskShippingInfo"> 遮蔽收件人</label>
-<label class="checkbox-inline"><input type="checkbox" name="hidePrice" id="hidePrice"> 隱藏價格</label>
-<label class="checkbox-inline"><input type="checkbox" name="showUid" id="showUid"> 商品代碼</label>
-<label class="checkbox-inline"><input type="checkbox" name="showUpc" id="showUpc"> UPC</label>
-<label class="checkbox-inline"><input type="checkbox" name="showLogo" id="showLogo"> LOGO</label>
-<button type="button" class="btn btn-default btn-xs" onclick="update();">儲存設定</button>
-</div>{{/if}}
-<button type="button" class="btn btn-default" onclick="window.print();">列印</button>
-</div>
-</form>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js"></script>
 <script>
-/*
-$('#hideBillingInfo').on('change', function() {
-	if ($(this).prop('checked')) {
-		$('[class$=billingInfo]').hide()
-	} else {
-		$('[class$=billingInfo]').show()
-	}
-})
-$('#maskBillingInfo').on('change', function() {
-	if ($(this).prop('checked')) {
-		$('[class$=billingInfo]').hide()
-		$('[class$=billingInfo-mask]').show()
-	} else {
-		$('[class$=billingInfo]').show()
-		$('[class$=billingInfo-mask]').hide()
-	}
-})
-$('#maskShippingInfo').on('change', function() {
-	if ($(this).prop('checked')) {
-		$('[class$=shippingInfo]').hide()
-		$('[class$=shippingInfo-mask]').show()
-	} else {
-		$('[class$=shippingInfo]').show()
-		$('[class$=shippingInfo-mask]').hide()
-	}
-})
-$('#hidePrice').on('change', function() {
-	if ($(this).prop('checked')) {
-		$('[class$=price]').hide()
-	} else {
-		$('[class$=price]').show()
-	}
-	formatPages();
-})
-$('#showLogo').on('change', function() {
-	if ($(this).prop('checked')) {
-		$('img.img-logo').removeClass('d-none')
-		//$('#colorPrint').prop('checked', true).change();
-	} else {
-		$('img.img-logo').addClass('d-none')
-	}
-})
+(function () {
+	var baseUrl = {{json baseUrl}};
+	var isOrder = {{json isOrder}};
+	var embeddedSettings = {{json settings}};
 
-$('#colorPrint').on('change', function() {
-	var colorPrint = $(this).prop('checked');
-	var style = document.styleSheets[0];
-	if (colorPrint) {
-		style.rules[39].cssRules[0].style.setProperty('color','')
-	} else {
-		style.rules[39].cssRules[0].style.setProperty('color','rgb(0,0,0)')
-	}
-})
-$('#showReferralStaff').on('change', function() {
-	if ($(this).prop('checked')) {
-		$('tr.tr-referralStaff').removeClass('d-none')
-	} else {
-		$('tr.tr-referralStaff').addClass('d-none')
-	}
-})
-*/
-
-$(document).ready(function() {
-	load();
-	formatPages();
-	//quick hack to remove bootstrap @media print color:black
-	//	$('body').css('-webkit-print-color-adjust','exact');
-	//	var style = document.styleSheets[0];
-	//	style.deleteRule(39);
-
-});
-
-var formatPages = function() {
-
-	var pages = $('.print');
-	pages.each(function(idx, page) {
-		formatPage($(page));
+	// 條碼：每個 svg 各自產生，單一條碼失敗不影響其他（JsBarcode 無法載入時改顯示文字）
+	var svgs = document.querySelectorAll('svg.barcode[jsbarcode-value]');
+	Array.prototype.forEach.call(svgs, function (svg) {
+		var value = svg.getAttribute('jsbarcode-value');
+		try {
+			if (typeof JsBarcode !== 'function') throw new Error('JsBarcode not loaded');
+			JsBarcode(svg).options({ format: 'CODE128', width: 1.6, height: 40, fontSize: 14, margin: 4, displayValue: true }).init();
+		} catch (e) {
+			var span = document.createElement('span');
+			span.className = 'barcode-text';
+			span.textContent = value;
+			svg.parentNode.replaceChild(span, svg);
+		}
 	});
 
-	JsBarcode(".barcode").options({
-        format: "CODE128",
-        height: 20,
-        margin: 2,
-        displayValue: false
-    }).init();
-}
-
-var formatPage = function($page, $rootParent) {
-	if (!$page) {
-		console.log('done return;');
-		return;
-	}
-
-	var uuid = $page.data('uuid');
-	var pageBottom = $page[0].getBoundingClientRect().bottom;
-	var trItems = [];
-	$page.find('table tr').each(function (idx, item) {
-		if (item.getBoundingClientRect().bottom + 60 < pageBottom) return;
-		trItems.push(item);
-		$(item).remove();
+	// 頁碼：每筆訂單一頁（.print），填入「第 N 頁 / 共 M 頁」
+	var pages = document.querySelectorAll('#printArea .print');
+	Array.prototype.forEach.call(pages, function (page, i) {
+		Array.prototype.forEach.call(page.querySelectorAll('.pageNumber'), function (n) { n.textContent = String(i + 1); });
+		Array.prototype.forEach.call(page.querySelectorAll('.pageTotal'), function (n) { n.textContent = String(pages.length); });
 	});
 
-	var $newPage = buildPage($page, trItems);
-	formatPage($newPage, $page);
-
-	if (!$rootParent) {
-		var len = $('div[data-uuid="'+uuid+'"]').length;
-		var pageNumber = 1;
-		$('div[data-uuid="'+uuid+'"]').each(function(idx,obj){
-			$(obj).find('.pageNumber').text(pageNumber++);
-			$(obj).find('.pageTotal').text(len);
+	// LOGO（列印設定「顯示LOGO」且有公司 LOGO 時）放在每頁開頭
+	var logo = document.getElementById('printLogoTemplate');
+	if (logo) {
+		Array.prototype.forEach.call(pages, function (page) {
+			var sub = page.querySelector('.subpage') || page;
+			var img = logo.cloneNode(true);
+			img.removeAttribute('id');
+			img.removeAttribute('hidden');
+			sub.insertBefore(img, sub.firstChild);
 		});
 	}
-}
 
-var buildPage = function($page, items) {
-	if (!items.length) return;
-	var itemHtml = '';
-	items.forEach(function(item,idx){
-		itemHtml += item.outerHTML;
-	});
+	var labelCount = document.getElementById('labelCount');
+	if (labelCount) labelCount.textContent = '，' + document.querySelectorAll('.label-piece').length + ' 張標籤';
 
-	var uuid = $page.data('uuid');
-	var html = '<div class="print" data-uuid="'+uuid+'"><div class="subpage"><fieldset>'
-			+ '<legend>訂單商品 - '+ uuid + '</legend>'
-			+ '<table class="table table-striped">'
-			+ '<tr>'
-			+ '<th>名稱</th>'
-			+ '<th width="100px">訂購數量</th>'
+	document.getElementById('printButton').addEventListener('click', function () { window.print(); });
+	document.getElementById('closeButton').addEventListener('click', function () { window.close(); });
 
-			+ '<th width="100px" class="th-price">小計</th>'
+	if (!isOrder) return;
 
-			+ '</tr>'
-			+ itemHtml+'</table>'
-			+ '</fieldset>'
-			+ '<div class="footer">第<span class="pageNumber"></span>頁 / 共<span class="pageTotal"></span>頁</div>'
-			+ '</div></div>';
-	var $newPage = $(html);
-	$newPage.insertAfter($page);
-	return $newPage;
-}
+	// ── 列印設定 ──
+	var settingsUrl = baseUrl + '/ajax/SystemPreference/salesOrderPrintSettings';
+	var form = document.getElementById('printSettingsForm');
+	var message = document.getElementById('printSettingsMessage');
+	var fields = form.querySelectorAll('[name]');
 
-var updateInner = function() {
-	var s = parseInt($('input[name=adjustSeq]').val());
-	$('.seq').each(function(i,o){$(o).text(s+i)});
-}
-
-var update = function() {
-	var url = '{{baseUrl}}/ajax/SystemPreference/salesOrderPrintSettings'
-	var d = {};
-	$('Form[name=SettingForm]').find(':input').each((i,o)=> {
-		var name = $(o).attr('name');
-		var type = $(o).prop('type');
-		if (type == 'checkbox') {
-			d[name] = $(o).prop('checked');
-		} else if (type == 'select-one') {
-			d[name] = $(o).val();
-		}
-	})
-	var data = {
-		'data' : {
-			'0':d
-		}
+	function showMessage(text, isError) {
+		message.textContent = text || '';
+		message.className = 'settings-message' + (isError ? ' error' : '');
 	}
-	$.ajax( {
-		url: url,
-		type: 'POST',
-		dataType: 'json',
-		data: data,
-		success: function ( json ) {
-			window.location.reload()
-		}
-	});
-}
-
-var load = function() {
-	var url = '{{baseUrl}}/ajax/SystemPreference/salesOrderPrintSettings'
-		$.ajax( {
-			url: url,
-			type: 'GET',
-			dataType: 'json',
-			success: function ( json ) {
-				var data = json.data;
-				if (!data) return;
-				$('Form[name=SettingForm]').find(':input').each((i,o)=> {
-					var name = $(o).attr('name');
-					var type = $(o).prop('type');
-					var v = data[name];
-					if (type == 'checkbox') {
-						$(o).prop('checked', v);
-					} else {
-						$(o).val(v);
-					}
-				})
-				if (data.showUpc) $('.upc').show();
-				else $('.upc').hide();
-				if (data.showUid) $('.uid').show();
-				else $('.uid').hide();
-			}
+	function syncBillingOptions() {
+		var hide = form.elements.hideBillingInfo.checked;
+		form.elements.maskBillingInfo.disabled = hide;
+		form.elements.maskBillingInfo.parentNode.className = hide ? 'disabled' : '';
+	}
+	function fill(s) {
+		Array.prototype.forEach.call(fields, function (el) {
+			if (!s || !(el.name in s)) return;
+			var v = s[el.name];
+			if (el.type === 'checkbox') el.checked = v === true || v === 'true' || v === 1 || v === '1';
+			else if (v != null && v !== '') el.value = String(v);
 		});
-}
+		syncBillingOptions();
+	}
 
+	fill(embeddedSettings);
+	fetch(settingsUrl, { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } })
+		.then(function (r) { return r.ok ? r.json() : null; })
+		.then(function (json) { if (json && json.data) fill(json.data); })
+		.catch(function () {});
+
+	form.elements.hideBillingInfo.addEventListener('change', syncBillingOptions);
+	document.getElementById('printSettingsToggle').addEventListener('click', function () {
+		form.hidden = !form.hidden;
+	});
+
+	form.addEventListener('submit', function (e) {
+		e.preventDefault();
+		var body = new URLSearchParams();
+		Array.prototype.forEach.call(fields, function (el) {
+			body.append('data[0][' + el.name + ']', el.type === 'checkbox' ? String(el.checked) : el.value);
+		});
+		var button = document.getElementById('printSettingsSave');
+		button.disabled = true;
+		showMessage('儲存中...');
+		fetch(settingsUrl, {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+			body: body.toString()
+		})
+			.then(function (r) {
+				return r.json().catch(function () { return {}; }).then(function (json) { return { ok: r.ok, json: json }; });
+			})
+			.then(function (res) {
+				if (res.ok && res.json && res.json.code === 200) {
+					showMessage('已儲存，重新整理中...');
+					location.reload();
+				} else {
+					button.disabled = false;
+					showMessage((res.json && res.json.error) || '儲存失敗，請稍後再試', true);
+				}
+			})
+			.catch(function () {
+				button.disabled = false;
+				showMessage('儲存失敗，請稍後再試', true);
+			});
+	});
+})();
 </script>
 </body>
 </html>

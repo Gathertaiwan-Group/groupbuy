@@ -81,6 +81,34 @@ DB 函式（migration）：
 
 **推導畫面**：更改配送方式彈窗、顧客資訊彈窗、訂單明細彈窗／自取查詢結果（同列展開明細卡風格＋狀態歷程）、設為已出貨彈窗的逐筆列、列印頁內容（訂單／報價單／超付取單／商品標籤／barcode，含列印設定：隱藏/遮蔽訂購人、遮蔽收件人、隱藏價格、商品代碼…）、匯出檔欄位（CSV、ERP 報表 1–6、訂單商品數量、電子發票 CSV）、匯入外部訂單規則（同「來源平台訂單號碼」合併為一張、商品以商品貨號對應本團購商品代碼、付款方式/國家可用「值#代碼」對應）。
 
+## 推導（重寫）
+
+指揮官規則（2026-10-23）：擷取流程被安全過濾擋下的內容不得以編碼／轉碼／拆字／字元碼繞過。orders 小組在規則公布前，補 spec 缺段與擷取原站片段時用過「`=` 換成 `≡` 再 get_page_text」的作法，依裁示（A）以下段落全部**刪除讀回原文、改由規格與行為重寫**（依 SPEC、spec/runtime、repo 內已合法取得的原站 JS 資產與本系統端點行為；不對照讀回文字）。讀回的原文暫存檔（scratchpad `orders/orig/`、`orders/build/`、`orders-returns/orig-dl/` 與頁面擷取檔）已刪除。
+
+| # | 檔案 | 讀回段落（落點） | 來源 | 重寫狀態 |
+|---|---|---|---|---|
+| 1 | `templates/orders/salesorder-list.html` | head：頁面 CSS 結尾、i18n 字典表頭與結尾、`soI18n`、`salesOrderConf`、script 引用與初始化；body：主內容開頭（card／標題／欄位顯示切換）、「付款逾期」與「付款期限剩餘天數」、「現貨/預購」選項與「訂單金額超過」、匯入外部訂單 Editor script | lead | 已重寫 |
+| 2 | `templates/orders/splitsalesorder-split.html` | 表單 hidden 欄位與 modal-header、整段 `<script>`（預覽筆數、拆單方式切換） | lead | 已重寫 |
+| 3 | `templates/orders/salesorder-cancel.html` | 取消訂單彈窗全文 | lead | 已重寫 |
+| 4 | `templates/orders/salesorder-moveorderitems.html` | 拆單（搬移商品）彈窗全文 | lead | 已重寫 |
+| 5 | `templates/orders/salesorder-coupon.html` | 訂單優惠卷彈窗全文 | lead | 已重寫 |
+| 6 | `templates/orders/salesordercvs-info.html` | 超商取貨資訊彈窗全文 | lead | 已重寫 |
+| 7 | `templates/orders/salesorder-markasshipped.html` | 設為已出貨彈窗（表單、日期、說明、script；逐筆列原本即推導） | lead | 已重寫 |
+| 8 | `templates/orders/salesorder-print.html` | 列印頁外框（CSS、列印設定 load/update、工具列；內容 partial 原本即推導） | lead | 已重寫 |
+| 9 | `templates/orders/preordertostock-prepare.html` | 預購轉現貨彈窗全文 | lead 擷取／b2s 模板化 | 已重寫 |
+| 10 | `templates/orders/preordertostock-list.html` | spec 缺段補回處（7 段以上） | b2s | 已重寫 |
+| 11 | `templates/orders/salesorderreservation-list.html` | spec 缺段補回處（8 段以上） | resv | 已重寫 |
+| 12 | `templates/orders/helpdesk-conversation-list.html` | spec 缺段補回處（5 段以上） | helpdesk | 已重寫 |
+| 13 | `templates/orders/salesorderreturn-list.html` | head script 與 body 缺段補回處 | returns | 已重寫 |
+| 14 | `templates/orders/returnrefund-wizard.html`、`-displayreturn.html`、`-displayreshipment.html`、`-displayreturnandrefund.html` | 加退換商品精靈各片段全文 | returns | 已重寫 |
+| 15 | `public/modules/orders/returns-rar.js`、`returns-rr.js` | 原站 `/backend/ReturnRefund/*.js` 鏡射 | returns | 已重寫 |
+
+重寫方式：受影響檔先自工作目錄刪除，再由未接觸讀回原文的新 agent 依上述來源重建（禁看 git 歷史與正式站舊頁）；重建後 DOM 覆蓋率：所有訂單 96.5%、退換貨 98.5%、保留單 98.3%、客服 98.1%、預購轉現貨 97.5%、分割訂單彈窗 99.3%。
+
+不受影響：`salesorder-pickup.html`（唯一缺段為 1 個空白字元）、所有 `lib/modules/orders/*.ts`、migration、推導頁（訂單明細、更改配送方式、顧客資訊、客服明細頁）。
+
+**安全稽核**（重寫前執行）：以 token／密鑰／jsessionid／GBSID／Bearer／HashKey／帳密欄位／JWT／雲端金鑰格式／Email／手機號碼／後台帳號名等樣式，掃描上述檔案現況、讀回暫存檔，以及 git 歷史中 `templates/orders`、`public/modules/orders`、`lib/modules/orders`、`supabase/migrations/30*`、`docs/modules/orders.md` 的所有版本：**未發現任何敏感值**（唯一命中為 class 名稱 `g-scrollable` 的誤判）。
+
 ## 已知缺口
 
 - 訂單列「加入黑名單」呼叫 `/backend/Blacklist/add`：黑名單屬 marketing（blacklist-list），目前尚無模組實作 → 404。

@@ -1,16 +1,26 @@
-<form name="SplitSalesOrderForm" method="post" action="{{baseUrl}}/ajax/SplitSalesOrder/split.do" class="form-horizontal" id="SplitSalesOrderForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><div class="modal-header">
-		<h5>團購 &raquo; 拆單</h5>
+{{!-- 分割訂單彈窗（/backend/SplitSalesOrder/split；片段資料 groupBuyId、salesOrderId（逗號串）、rules[{id,title}]）。
+     表單主體依 spec/html/modal-splitsalesorder.html 可見段落；⟦未擷取⟧缺段（表單開頭 hidden 欄位／modal-header／拆單方式標籤、整段 script）為推導，見各段註解。
+     開啟方式：團購選單「分割訂單」、團購列表「拆單」→ openFormF(..., 'groupBuyId=')；所有訂單工具列「拆單/合併 → 拆單」→ openForm(..., 'groupBuyId=&salesOrderId=1,2')。 --}}
+{{!-- 推導：拆單方式的 label 帶 h-100，一般尺寸彈窗（工具列 openForm）寬度不足換行時第二行會疊到下一列 → 只在本表單內改回自動高度 --}}
+<style>
+#SplitSalesOrderForm #splitOrderBy-group .form-check-label.h-100 {height:auto !important;}
+</style>
+<form name="SplitSalesOrderForm" method="post" action="{{baseUrl}}/ajax/SplitSalesOrder/split.do" class="form-horizontal" id="SplitSalesOrderForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId">
+	{{!-- 推導：缺段開頭（約 400 字元）＝其餘 hidden 欄位＋modal-header＋modal-body 開頭＋拆單方式列的標籤；標題取團購選單「分割訂單」，拆單範圍說明由下方 script 依 salesOrderId 填入 --}}
+	<div class="modal-header">
+		<h5 style="overflow:hidden">分割訂單 <small class="split-scope grey-text"></small></h5>
 		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 	</div>
 	<div class="modal-body">
 	<div class="modal-message"></div>
-	<div class="form-group row">
+	<div class="form-group row" id="splitOrderBy-group">
 		<label class="col-lg-4">拆單方式</label>
-		<div class="col-lg-8 h-100">
+		<div class="col-lg-8">
 <input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderByBACKORDER" value="BACKORDER" checked="true">
 		<label class="form-check-label h-100" for="splitSalesOrderByBACKORDER">現貨/預購</label>
 <input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderBySHIPPING_TAG" value="SHIPPING_TAG" >
-		<label class="form-check-label h-100" for="splitSalesOrderBySHIPPING_TAG">倉儲標籤 (--)</label>
+		{{!-- 推導：括號內為團購使用中的倉儲標籤；片段資料目前未提供（shippingTags），沒有時顯示 -- --}}
+		<label class="form-check-label h-100" for="splitSalesOrderBySHIPPING_TAG">倉儲標籤 ({{#if shippingTags}}{{shippingTags}}{{else}}--{{/if}})</label>
 <input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderByWEIGHT" value="WEIGHT" >
 		<label class="form-check-label h-100" for="splitSalesOrderByWEIGHT">材積</label>
 <input type="radio" class="form-check-input" name="splitOrderBy" id="splitSalesOrderByTAX" value="TAX" >
@@ -63,40 +73,41 @@
 	進階篩選條件<span class="help-block with-errors small float-right"></span>
 	</legend>
 	<div class="form-group row">
-		<label class="col-lg-4 control-label" for="itemTitle">指定單號</label>
+		<label class="col-lg-4 control-label" for="uuids">指定單號</label>
 		<div class="col-lg-8">
-			<input type="text" name="uuids" maxlength="255" placeholder="可逗點多筆" value="" type="text" id="uuids" class="form-control"></div>
+			<input type="text" name="uuids" maxlength="255" placeholder="可逗點多筆" value="" id="uuids" class="form-control"></div>
 	</div>
 	<div class="form-group row">
 		<label class="col-lg-4 control-label">現貨商品總金額範圍</label>
 		<div class="col-lg-8 form-inline">
-			<input type="text" name="normalPriceMin" maxlength="10" size="10" placeholder="最小金額" value="" type="text" id="normalPriceMin" class="form-control">
-			~ <input type="text" name="normalPriceMax" maxlength="10" size="10" placeholder="最大金額" value="" type="text" id="normalPriceMax" class="form-control"></div>
+			<input type="text" name="normalPriceMin" maxlength="10" size="10" placeholder="最小金額" value="" id="normalPriceMin" class="form-control">
+			~ <input type="text" name="normalPriceMax" maxlength="10" size="10" placeholder="最大金額" value="" id="normalPriceMax" class="form-control"></div>
 	</div>
 	<div class="form-group row">
 		<label class="col-lg-4 control-label">預購商品總金額範圍</label>
 		<div class="col-lg-8 form-inline">
-			<input type="text" name="backOrderPriceMin" maxlength="10" size="10" placeholder="最小金額" value="" type="text" id="backOrderPriceMin" class="form-control">
-			~ <input type="text" name="backOrderPriceMax" maxlength="10" size="10" placeholder="最大金額" value="" type="text" id="backOrderPriceMax" class="form-control"></div>
+			<input type="text" name="backOrderPriceMin" maxlength="10" size="10" placeholder="最小金額" value="" id="backOrderPriceMin" class="form-control">
+			~ <input type="text" name="backOrderPriceMax" maxlength="10" size="10" placeholder="最大金額" value="" id="backOrderPriceMax" class="form-control"></div>
 	</div>
 	<div class="form-group row">
 		<label class="col-lg-4 control-label">現貨商品數量範圍</label>
 		<div class="col-lg-8 form-inline">
-			<input type="text" name="normalTotalMin" maxlength="10" size="10" placeholder="最小數量" value="" type="text" id="normalTotalMin" class="form-control">
-			~ <input type="text" name="normalTotalMax" maxlength="10" size="10" placeholder="最大數量" value="" type="text" id="normalTotalMax" class="form-control"></div>
+			<input type="text" name="normalTotalMin" maxlength="10" size="10" placeholder="最小數量" value="" id="normalTotalMin" class="form-control">
+			~ <input type="text" name="normalTotalMax" maxlength="10" size="10" placeholder="最大數量" value="" id="normalTotalMax" class="form-control"></div>
 	</div>
 	<div class="form-group row">
 		<label class="col-lg-4 control-label">預購商品數量範圍</label>
 		<div class="col-lg-8 form-inline">
-			<input type="text" name="backOrderTotalMin" maxlength="10" size="10" placeholder="最小數量" value="" type="text" id="backOrderTotalMin" class="form-control">
-			~ <input type="text" name="backOrderTotalMax" maxlength="10" size="10" placeholder="最大數量" value="" type="text" id="backOrderTotalMax" class="form-control"></div>
+			<input type="text" name="backOrderTotalMin" maxlength="10" size="10" placeholder="最小數量" value="" id="backOrderTotalMin" class="form-control">
+			~ <input type="text" name="backOrderTotalMax" maxlength="10" size="10" placeholder="最大數量" value="" id="backOrderTotalMax" class="form-control"></div>
 	</div>
 	<div class="form-group row">
 		<label class="col-lg-4 control-label" for="itemTitle">商品出貨短名稱</label>
 		<div class="col-lg-8">
-			<input type="text" name="itemTitle" maxlength="255" placeholder="可輸入部分商品名稱，逗點區隔多個商品" value="" type="text" id="itemTitle" class="form-control"></div>
+			<input type="text" name="itemTitle" maxlength="255" placeholder="可輸入部分商品名稱，逗點區隔多個商品" value="" id="itemTitle" class="form-control"></div>
 	</div>
-	<div class="form-group row" id="keywordMatch">
+	{{!-- 原站此列 div 與下方 select 同為 id="keywordMatch"（重複 id，label 指不到 select）→ 列改用 keywordMatch-group，與其他列命名一致 --}}
+	<div class="form-group row" id="keywordMatch-group">
 		<label class="col-lg-4 control-label" for="keywordMatch">商品比對方式:</label>
 		<div class="col-lg-8">
 		<select name="keywordMatch" id="keywordMatch" class="form-control"><option value="ALL">完全包含</option>
@@ -112,7 +123,7 @@
 {{/each}}</select></div>
 	</div>
 </div> <!-- modal-body -->
-	<div id="preview"></div>
+	<div id="preview" style="max-height:30vh;overflow:auto"></div>
 	<div class="progress">
 		<div class="progress-bar" role="progressbar"></div>
 	</div>
@@ -133,109 +144,116 @@
 	<p><mark>不包括</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單沒有包含前述任何一樣商品才會符合條件</p>
 	</div>
 </form><script>
+{{!-- 推導：原站整段 script 未擷取，依 lead 提供的行為規格與 split.ts 端點自行撰寫：
+     ①拆單方式切換 → 顯示/隱藏對應選項群組並重設被隱藏的選項；
+     ②非 .nocount 欄位變更 → POST previewSalesOrderToSplit.do，於「進階篩選條件」旁顯示符合筆數、#preview 列出部分訂單與商品（預購加標記、關鍵字以 mark 標示）；
+     ③送出走原站共用 initAjaxForm，成功後顯示訊息、重新載入訂單表（有 #mydt 時）並刷新預覽。 --}}
+(function() {
+	var $form = $('#SplitSalesOrderForm');
+	var previewUrl = {{json baseUrl}} + '/ajax/SplitSalesOrder/previewSalesOrderToSplit.do';
+	var ticket = 0, timer = null;
 
-var createIndexes = function() {
-	var ajaxurl = GBF.baseUrl + '/ajax/ShippingCSV/createIndexes';
-	jQuery.get( ajaxurl,
-			{},
-			function( data ) {
-				console.log('done:%o', data);
+	var esc = function(s) {
+		return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	};
+	var keywords = function() {
+		return $.map(String($form.find('input[name=itemTitle]').val() || '').split(/[,，]/), function(w) {
+			w = $.trim(w);
+			return w ? w : null;
+		});
+	};
+	// 商品名稱中符合關鍵字的片段以 <mark> 標示（先切段再逐段跳脫，避免把 HTML 當文字插入）
+	var highlight = function(text, words) {
+		text = String(text == null ? '' : text);
+		if (!words.length) return esc(text);
+		var pattern = new RegExp('(' + $.map(words, function(w) { return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }).join('|') + ')', 'g');
+		return $.map(text.split(pattern), function(part, i) {
+			return i % 2 === 1 ? '<mark>' + esc(part) + '</mark>' : esc(part);
+		}).join('');
+	};
+
+	// 訂單頁工具列用 openForm（可捲動的一般尺寸彈窗）：原站共用 dialogScrollableHotfixed 以表單內其他區塊高度推算 modal-body 高度，
+	// 「進階使用說明」與預覽太高時 modal-body 會被壓到幾乎看不見 → 一般尺寸時限制說明高度，預覽更新後重算一次（團購選單的 openFormF 全幅彈窗不受影響）
+	var scrollable = $form.closest('.modal-dialog').hasClass('modal-dialog-scrollable');
+	if (scrollable) $form.children('.alert-info').css({ maxHeight: '20vh', overflowY: 'auto' });
+	var refit = function() {
+		if (scrollable && typeof _dialogScrollableHotfixed === 'function') _dialogScrollableHotfixed($form.closest('.modal'));
+	};
+
+	// 拆單範圍說明（工具列帶入勾選訂單；團購選單只帶團購）
+	var picked = $.grep(String($form.find('input[name=salesOrderId]').val() || '').split(','), function(s) { return $.trim(s) !== ''; });
+	$form.find('.split-scope').text(picked.length ? '（已選取 ' + picked.length + ' 筆訂單）' : ($form.find('input[name=groupBuyId]').val() ? '（本團購所有處理中訂單）' : ''));
+
+	// ① 拆單方式 → 對應選項群組
+	var groupsBy = {
+		'#giftRules-group': ['BACKORDER'],
+		'#emptyTag-group': ['SHIPPING_TAG'],
+		'#shippingFeeBy-group': ['SHIPPING_TAG']
+	};
+	var syncGroups = function() {
+		var by = $form.find('input[name=splitOrderBy]:checked').val();
+		$.each(groupsBy, function(sel, modes) {
+			var $g = $form.find(sel), on = $.inArray(by, modes) >= 0;
+			$g.toggle(on);
+			if (!on) {
+				$g.find('input[type=checkbox]').prop('checked', false);
+				$g.find('input[type=radio]').each(function() { this.checked = this.defaultChecked; });
 			}
-	);
-};
+		});
+	};
 
-var onSuccess = function(json) {
-	//createIndexes();
-	modalShowSuccess($('#myModal'), json.error);
-}
-
-initAjaxForm('SplitSalesOrderForm', onSuccess);
-
-var getCount = function() {
-	var ajaxurl = GBF.baseUrl + '/ajax/SplitSalesOrder/previewSalesOrderToSplit.do';
-	jQuery.post( ajaxurl,
-			{
-				'groupBuyId':$('input[name="groupBuyId"]').val(),
-				'normalPriceMin':$('input[name="normalPriceMin"]').val(),
-				'normalPriceMax':$('input[name="normalPriceMax"]').val(),
-				'backOrderPriceMin':$('input[name="backOrderPriceMin"]').val(),
-				'backOrderPriceMax':$('input[name="backOrderPriceMax"]').val(),
-				'normalTotalMin':$('input[name="normalTotalMin"]').val(),
-				'normalTotalMax':$('input[name="normalTotalMax"]').val(),
-				'backOrderTotalMin':$('input[name="backOrderTotalMin"]').val(),
-				'backOrderTotalMax':$('input[name="backOrderTotalMax"]').val(),
-				'itemTitle':$('input[name="itemTitle"]').val(),
-				'keywordMatch':$('select[name="keywordMatch"]').val(),
-				'flatRateShippingId':$('select[name="flatRateShippingId"]').val(),
-			},
-			function( data ) {
-				$('.help-block').html('符合篩選條件數量:' + data.recordsTotal );
-				var html = '';
-				if (data.data !== null && data.data.length > 0) {
-					html += '<div class="container">';
-					html += '<div class="row">';
-					html += '<div class="col-sm-12"><h3>快速預覽部分訂單</h3></div>';
-
-					for (var i = 0; i < data.data.length; i++) {
-						html += '<div class="col-sm-3">';
-						var so = data.data[i];
-						html += so.uuid;
-						html += "</div>";
-						html += '<div class="col-sm-9"><p class="small">';
-						var items = '';
-						for (var j = 0; j < so.sortedOrderItems.length; j++ ) {
-							if (so.sortedOrderItems[j].backOrder) {
-								items += '<span class="badge badge-success">預</span>';
-							}
-							items += so.sortedOrderItems[j].shortName + 'x' + so.sortedOrderItems[j].total + ', ';
-						}
-						if ($('input[name="itemTitle"]').val().length > 0) {
-							var x = $('input[name="itemTitle"]').val().split(',');
-							for (var y = 0; y < x.length; y++) {
-								var word = x[y].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-								if (word.length == 0) continue;
-								items = items.replace(new RegExp(word, 'g'), '<mark><b>' + x[y] + '</b></mark>');
-							}
-						}
-						html += items + "</p></div>";
-					}
-					html += '</div>';
-					html += '</div>';
-				}
-				$('#preview').html(html);
-			}
-	);
-};
-$('#shippingFeeBy-group').hide();
-(function () {
-	var onSplitOrderBy = function() {
-		console.log('onSplitOrderBy')
-		var v = $('input[name=splitOrderBy]:checked').val();
-		if (v == 'SHIPPING_TAG') {
-			$('#shippingFeeBy-group').show()
-			$('#emptyTag-group').show();
-		} else {
-			$('#shippingFeeBy-group').hide();
-			$('#emptyTag-group').hide();
-			$('input[name=shippingFeeBy][value=ORIGIN]').prop('checked', true)
-		}
-
-		if (v == 'BACKORDER') {
-			$('#giftRules-group').show()
-		} else {
-			$('#giftRules-group').hide();
-			$('input[name=zeroAmountSalesOrder]').prop('checked', false);
-			$('input[name=giftWithBackOrder]').prop('checked', false);
-		}
-	}
-	$('.form-control, .form-check-input').on('change', function() {
-		if ($(this).attr("name") == 'splitOrderBy') {
-			onSplitOrderBy();
+	// ② 符合筆數＋快速預覽
+	var renderPreview = function(json) {
+		var rows = (json && json.data) || [], total = (json && json.recordsTotal) || 0, words = keywords();
+		$form.find('legend .help-block').html('符合 <b>' + total + '</b> 筆處理中訂單');
+		if (!rows.length) {
+			$form.find('#preview').html(total ? '' : '<p class="small grey-text px-3 mb-2">沒有符合條件的訂單</p>');
 			return;
 		}
-		if (!$(this).hasClass("nocount")) {
-			getCount();
-		}
+		var html = '<div class="px-3 pb-2"><div class="small grey-text mb-1">預覽' + (total > rows.length ? '（前 ' + rows.length + ' 筆，共 ' + total + ' 筆）' : '') + '</div>'
+			+ '<table class="table table-sm table-bordered mb-0 small"><tbody>';
+		$.each(rows, function(i, so) {
+			var items = $.map(so.sortedOrderItems || [], function(it) {
+				return '<span class="text-nowrap mr-2">' + (it.backOrder ? '<span class="badge badge-warning mr-1">預購</span>' : '')
+					+ highlight(it.shortName || it.title, words) + ' x' + esc(it.total) + '</span>';
+			});
+			html += '<tr><td class="text-nowrap" style="width:1%">' + esc(so.uuid) + '</td><td>' + (items.join(' ') || '-') + '</td></tr>';
+		});
+		$form.find('#preview').html(html + '</tbody></table></div>');
+	};
+	var refreshPreview = function() {
+		var my = ++ticket;
+		$form.find('legend .help-block').text('計算中…');
+		$.ajax({ type: 'POST', url: previewUrl, data: $form.serialize(), dataType: 'json' })
+			.done(function(json) {
+				if (my !== ticket) return;
+				renderPreview(json);
+				refit();
+			})
+			.fail(function(xhr) {
+				if (my !== ticket) return;
+				$form.find('legend .help-block').text((xhr.responseJSON && xhr.responseJSON.error) || '無法取得符合筆數');
+				$form.find('#preview').empty();
+				refit();
+			});
+	};
+	var schedule = function() {
+		clearTimeout(timer);
+		timer = setTimeout(refreshPreview, 250);
+	};
+
+	$form.find('input[name=splitOrderBy]').on('change', syncGroups);
+	$form.find('input, select').not('.nocount').not('[type=hidden],[type=submit]').on('change', schedule);
+	syncGroups();
+	refreshPreview();
+
+	// ③ 送出
+	initAjaxForm('SplitSalesOrderForm', function(json) {
+		var $box = $form.closest('.modal-content');
+		modalShowSuccess($box.length ? $box : $form, json.error);
+		var $dt = $('#mydt');
+		if ($dt.length && $.fn.dataTable && $.fn.dataTable.isDataTable($dt)) $dt.DataTable().ajax.reload(null, false);
+		refreshPreview();
 	});
-}());
+})();
 </script>

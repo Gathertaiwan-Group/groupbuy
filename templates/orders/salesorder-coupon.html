@@ -1,143 +1,107 @@
-<div class="modal-header">
-		<h5>優惠卷<span id="rr_uuid"></span>&raquo;</h5>
+{{!-- 推導：訂單優惠卷彈窗（/backend/SalesOrder/displayCoupon；片段資料 salesOrderId）。
+     原站片段未擷取（需有訂單才開得到），依 lead 規格、i18n（Coupon＝優惠卷）與本系統彈窗版型撰寫。由所有訂單列明細卡「優惠卷」開啟。
+     清單 GET SalesOrderCoupon/list.do?salesOrderId= → {data:[{salesOrderCouponId, discount, coupon:{title,code,discount}}]}；
+     移除 POST SalesOrderCoupon/delete.do（salesOrderCouponId）；新增 POST SalesOrderCoupon/redeem.do（salesOrderId、code，失敗 HTTP 400 {error}）。
+     變更後重新載入清單與訂單表。 --}}
+<form name="SalesOrderCouponForm" method="post" action="{{baseUrl}}/ajax/SalesOrderCoupon/redeem.do" class="form-horizontal" id="SalesOrderCouponForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId">
+	<div class="modal-header">
+		<h5 style="overflow:hidden">優惠卷 <span class="coupon-order-uuid"></span></h5>
 		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 	</div>
 	<div class="modal-body">
 	<div class="modal-message"></div>
-
-	<div class="card">
-	<div class="card-header">
-	訂單內優惠卷
-	</div>
-	<div class="card-body">
-	<div id="coupon_container">
-	<span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>
-	</div>
-	</div>
-	</div>
-
-	<div class="card mt-4">
-	<div class="card-header">
-	新增優惠卷
-	</div>
-	<div class="card-body">
-	<div id="select_gbis_container"></div>
-	<div id="select_item_container"></div>
-	</div>
-	<div class="card-footer">
-	<div class="input-group">
-		<input type="text" name="code" class="form-control" id="code" size="20" maxlength="20">
-		<div class="input-group-append">
-		<a href="javascript: void(0)" id="btnAddItem" class="btn btn-primary rounded-right m-0 px-3 py-2 z-depth-0" onclick="btnRedeem()">使用優惠卷</a>
+	<table class="table table-sm mb-3" id="salesOrderCouponTable">
+		<thead>
+			<tr>
+				<th>優惠卷</th>
+				<th>優惠碼</th>
+				<th class="text-right text-nowrap">折抵金額</th>
+				<th style="width:1%"></th>
+			</tr>
+		</thead>
+		<tbody><tr><td colspan="4" class="text-center grey-text">載入中…</td></tr></tbody>
+	</table>
+	<div class="form-group row">
+		<label class="col-sm-3 control-label" for="salesOrderCouponCode">新增優惠碼</label>
+		<div class="col-sm-9">
+			<input type="text" name="code" id="salesOrderCouponCode" maxlength="50" class="required form-control" placeholder="輸入優惠碼" required autocomplete="off">
+			<div class="field-info">新增或移除優惠卷後，會重新計算訂單折扣與結帳金額。</div>
 		</div>
 	</div>
+</div> <!-- modal-body -->
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
 	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="新增" />
+	</div>
+</form><script>
+(function() {
+	var $form = $('#SalesOrderCouponForm');
+	var base = {{json baseUrl}};
+	var salesOrderId = $form.find('input[name=salesOrderId]').val();
+	var $tbody = $form.find('#salesOrderCouponTable tbody');
+	var $box = $form.closest('.modal-content');
+	if (!$box.length) $box = $form;
+	var esc = function(s) {
+		return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	};
+	var money = function(n) {
+		return '$' + (Number(n) || 0).toLocaleString();
+	};
+	var reloadOrderTable = function() {
+		var $dt = $('#mydt');
+		if ($dt.length && $.fn.dataTable && $.fn.dataTable.isDataTable($dt)) $dt.DataTable().ajax.reload(null, false);
+	};
 
-	</div> <!-- modal-body -->
-
-<script>
-
-var addCouponsToForm = function(item, i) {
-	var coupon = item.coupon;
-	var defClass = '';
-	var namePrefix = 'coupons\\['+i+'\\]\\.';
-	var discount = item.discount;
-	if (discount == 0) {
-		discount = coupon.discount;
-	}
-	var html = '<div class="row border my-2 ' +defClass+ '">'
-			+ '<input type="hidden" name="coupons['+i+'].orderItemId" value="'+item.groupBuyFlatRateShippingId+'">'
-			+ '<div class="col-10 small">'+coupon.title+'</div>'
-			+ '<div class="col-2 small"><button class="btn btn-danger" onclick="removeCoupon('+item.groupBuyFlatRateShippingId+')"><i class="fa fa-remove"></i> 移除</button></div>'
-			+ '<div class="col-6 small" style="">優惠碼 '+coupon.code+'</div>'
-			+ '<div class="col-6 small" style="">折價 '+discount+'</div>'
-
-			+ '</div>'
-			;
-
-	$('#coupon_container').append(html);
-	$('select[name='+namePrefix+'status]').val(item.status);
-	$('input[name='+namePrefix+'total]').change(function(e) {
-		updateOrderItem(namePrefix);
-	});
-	$('input[name='+namePrefix+'price]').change(function(e) {
-		updateOrderItem(namePrefix);
-	});
-	$('input[name='+namePrefix+'discount]').change(function(e) {
-		updateOrderItem(namePrefix);
-	});
-	$('select[name='+namePrefix+'status]').change(function(e) {
-		updateOrderItem(namePrefix);
-	});
-
-}
-
-var removeCoupon = function(groupBuyFlatRateShippingId) {
-	jQuery.post(
-			'{{baseUrl}}/ajax/SalesOrderCoupon/delete.do',
-			{
-				'groupBuyFlatRateShippingId':groupBuyFlatRateShippingId
-			},
-			function(data) {
-				fullReload();
-				table.ajax.reload( null, false );
-			}
-			).fail(function(data) {
-				json = data.responseJSON;
-				modalShowDanger($('#myModal'), json.error);
+	var loadList = function() {
+		$.ajax({ type: 'GET', url: base + '/ajax/SalesOrderCoupon/list.do', data: { salesOrderId: salesOrderId }, dataType: 'json' })
+			.done(function(json) {
+				var rows = (json && json.data) || [];
+				if (!rows.length) {
+					$tbody.html('<tr><td colspan="4" class="text-center grey-text">此訂單沒有使用優惠卷</td></tr>');
+					return;
+				}
+				$tbody.html($.map(rows, function(r) {
+					var c = r.coupon || {};
+					return '<tr><td>' + esc(c.title || '-') + '</td><td>' + esc(c.code || '-') + '</td><td class="text-right">' + money(r.discount) + '</td>'
+						+ '<td class="text-nowrap"><button type="button" class="btn btn-danger btn-sm m-0 px-2 text-nowrap coupon-remove" data-id="' + esc(r.salesOrderCouponId) + '" data-label="' + esc(c.code || c.title || '') + '">移除</button></td></tr>';
+				}).join(''));
+			})
+			.fail(function(xhr) {
+				$tbody.html('<tr><td colspan="4" class="text-danger">' + esc((xhr.responseJSON && xhr.responseJSON.error) || '無法載入優惠卷') + '</td></tr>');
 			});
-}
+	};
 
-var btnRedeem = function() {
-	var $btn = $('#btnRedeem');
-	btnStartLoading($btn);
-
-	jQuery.post(
-			'{{baseUrl}}/ajax/SalesOrderCoupon/redeem.do',
-			{
-				'salesOrderId':{{salesOrderId}},
-				'code':$('#code').val(),
-			},
-			function(data) {
-				fullReload();
-				$('#modal-message').hide();
-				btnStopLoading($btn);
-				table.ajax.reload( null, false );
-			}
-			).fail(function(data) {
-				json = data.responseJSON;
-				modalShowDanger($('#myModal'), json.error);
-				btnStopLoading($btn);
+	$tbody.on('click', '.coupon-remove', function() {
+		var $btn = $(this);
+		if (!confirm('確定要移除優惠卷「' + $btn.data('label') + '」？')) return;
+		$btn.prop('disabled', true);
+		$.ajax({ type: 'POST', url: base + '/ajax/SalesOrderCoupon/delete.do', data: { salesOrderCouponId: $btn.data('id') }, dataType: 'json' })
+			.done(function(json) {
+				modalShowSuccess($box, (json && json.error) || '已移除優惠卷');
+				loadList();
+				reloadOrderTable();
+			})
+			.fail(function(xhr) {
+				$btn.prop('disabled', false);
+				modalShowDanger($box, (xhr.responseJSON && xhr.responseJSON.error) || '移除失敗');
 			});
-}
+	});
 
-var success = function(json) {
-	table.ajax.reload( null, false );
-	modalShowSuccess($('#myModal'), json.error);
-}
+	// 標題顯示訂單編號
+	$.ajax({ type: 'GET', url: base + '/ajax/SalesOrder/get.do', data: { salesOrderId: salesOrderId }, dataType: 'json' })
+		.done(function(json) {
+			if (json && json.data && json.data.uuid) $form.find('.coupon-order-uuid').html('&raquo; ' + esc(json.data.uuid));
+		});
 
-var fullReload = function() {
-	jQuery.get(
-			'{{baseUrl}}/ajax/SalesOrderCoupon/list.do',
-			{
-				'salesOrderId':{{salesOrderId}}
-			},
-			function(data) {
-				coupons = data.data;
-				$('#coupon_container').html('');
-				coupons.forEach(function(c,i) {
-					addCouponsToForm(c,i);
-				});
-			}
-			).fail(function(data) {
-				json = data.responseJSON;
-				modalShowDanger($('#myModal'), json.error);
-			});
-}
-
-
-$(document).ready(function() {
-	$('#modal-message').hide();
-	fullReload();
-});
+	loadList();
+	initAjaxForm('SalesOrderCouponForm', function(json) {
+		modalShowSuccess($box, json.error);
+		$form.find('#salesOrderCouponCode').val('');
+		loadList();
+		reloadOrderTable();
+	});
+})();
 </script>

@@ -1,28 +1,17 @@
 <!--#head-->
-{{!-- 客服對話（/backend/helpdesk/Conversation/list）：由 spec/html/helpdesk-conversation-list.html 清理；
-      spec 的 ⟦未擷取⟧ 缺段已依原站 p4 同頁完整 HTML 補齊（2026-10-23 唯讀擷取）。 --}}
-{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+{{!-- 推導：標題、訂單編號、顧客資料來自前台公開表單（「我想問問題」），自組 HTML 時一律跳脫，避免 stored XSS。 --}}
+var convEscape = function (v) {
+	return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+};
 
-var conversationTable;
-$(document).ready(function() {
-
-	function showStars(count) {
-
-		// Generate HTML markup for stars
-		let starsHTML = '<div class="rating small d-inline ml-1">';
-		for (let i = 0; i < 5; i++) {
-			if (i < count) {
-				starsHTML += '<i class="fas fa-star"></i>'; // Solid star for filled
-			} else {
-				starsHTML += '<i class="far fa-star"></i>'; // Outline star for empty
-			}
-		}
-		starsHTML += '</div>';
-		return starsHTML;
-	}
+	$(document).ready(function() {
 
 		var tableName = '#conversationTable';
-		editor = new $.fn.dataTable.Editor( {
+		{{!-- 推導：列按鈕（已回覆／已結案）沿用 Editor 的刪除確認框送到 action 端點（helpdesk.ts 只收 action=remove），以 batchAction 指定要改成的狀態。 --}}
+		var pendingStatus = null;
+		var editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
 					type: 'POST',
@@ -35,9 +24,9 @@ $(document).ready(function() {
 				remove: {
 					type: 'POST',
 					url:  '{{baseUrl}}/ajax/helpdesk/Conversation/action.do?conversationId=_id_',
-					data: function(data) {
-						data.batchAction = editor._action;
-						return data;
+					data: function (d) {
+						d.batchAction = pendingStatus || '';
+						return d;
 					}
 				}
 			},
@@ -51,16 +40,17 @@ $(document).ready(function() {
 			i18n:DataTableConfig.i18n,
 		} );
 
+		{{!-- 推導：列表查詢。dom／lengthMenu 同本模組其他列表；status 取目前勾選的狀態 radio（helpdesk.ts 讀 dt.extra.status）。 --}}
 		var table = $(tableName).DataTable( {
 			dom: 'lBrtip',
-			serverSide:true,
-			processing:true,
-			scrollX:true,
+			serverSide: true,
+			processing: true,
+			scrollX: true,
 			"lengthMenu": [10, 25, 50, 100, 250],
 			ajax: {
-				url:'{{baseUrl}}/ajax/helpdesk/Conversation/list.do',
-				type: "POST",
-				data: function ( d ) {
+				url: '{{baseUrl}}/ajax/helpdesk/Conversation/list.do',
+				type: 'POST',
+				data: function (d) {
 					d.status = $('input[name=status]:checked').val();
 					return d;
 				}
@@ -73,37 +63,45 @@ $(document).ready(function() {
 					data:'merchantUserId',
 					orderable:false,
 					render: function ( data, type, row ) {
-						if (!data) data = '';
-						let html = '<br><span class="badge badge-default">留言數量: '+row.messageCount+'</span>'
-						if (row.rating > 0) {
-							html += showStars(row.rating);
+						{{!-- 推導：第一行訂單編號（沒有時以標題代替），有訂單編號時標題放第二行；另標示顧客名稱、訊息數與滿意度星等（helpdesk.ts 提供 messageCount、rating）。全部跳脫。 --}}
+						if (type !== 'display') return data;
+						var html = '';
+						if (row.merchantUserId) {
+							html += convEscape(row.merchantUserId);
+							if (row.title) html += '<br><span class="small text-muted">' + convEscape(row.title) + '</span>';
+						} else {
+							html += convEscape(row.title);
 						}
-						if (data.length != 14) {
-							data = row.title
-						}
-						data = $('<div>').text(data == null ? '' : data).html(); // 標題來自前台公開表單：輸出前跳脫（防 XSS）
-						return data + html;
-					}
-				},
-				DataTableConfig.data_select('status'),
-				{
-					data:null,
-					class:'inline-disabled',
-					orderable:false,
-					render: function ( data, type, row ) {
-						let html = '';
-						let url = "/backend/helpdesk/Conversation/toUrl?uuid=" + row.uuid;
-						html += '<a class="btn btn-default btn-sm px-2" target="_blank" href="' + url + '">檢視</a>'
-
-						if (row.status == 'WAITING_FOR_REPLY') {
-							html += '<button class="btn btn-secondary text-nowrap" data-action="replied">已回覆</button>'
-						}
-						if (row.status != 'CLOSED') {
-							html += '<button class="btn btn-warning text-nowrap" data-action="closed">已結案</button>'
+						if (row.name) html += '<br><span class="badge badge-default">' + convEscape(row.name) + '</span>';
+						if (row.messageCount > 0) html += ' <span class="badge badge-info">' + parseInt(row.messageCount, 10) + ' 則訊息</span>';
+						var rating = parseInt(row.rating, 10) || 0;
+						if (rating > 0) {
+							html += ' <span class="text-warning text-nowrap">';
+							for (var i = 0; i < Math.min(rating, 5); i++) html += '<i class="fa-solid fa-star"></i>';
+							html += '</span>';
 						}
 						return html;
 					}
 				},
+				DataTableConfig.data_select('status'),
+				{
+					data: null,
+					'class': 'inline-disabled',
+					orderable: false,
+					render: function ( data, type, row ) {
+						{{!-- 推導：「檢視」連到 toUrl（helpdesk.ts：302 轉對話明細頁），新分頁開啟；等待回覆中才有「已回覆」，未結案才有「已結案」（同對話明細頁的按鈕）。 --}}
+						var url = '/backend/helpdesk/Conversation/toUrl?uuid=' + encodeURIComponent(row.uuid);
+						var html = '<a class="btn btn-default btn-sm px-2" target="_blank" href="' + url + '">檢視</a>'
+
+						if (row.status == 'WAITING_FOR_REPLY') {
+							html += '<button class="btn btn-secondary text-nowrap" data-action="replied">已回覆</button>';
+						}
+						if (row.status != 'CLOSED') {
+							html += '<button class="btn btn-warning text-nowrap" data-action="closed">已結案</button>';
+						}
+						return html;
+					}
+				}
 			],
 			keys: DataTableConfig.keysInlineTab,
 			"order": [[ 1, "desc" ]],
@@ -126,40 +124,40 @@ $(document).ready(function() {
 		//DataTableHelper.initEditorOnCallback(table,editor);
 		//DataTableHelper.inlineModePlugin(table);
 		//DataTableHelper.injectInline(table,editor);
-		injectDetailsControl(tableName, table);
-		conversationTable = table;
 
-		table.on('error.dt', function (e, settings, techNote, message) {
-			console.log('xxx');
-			return false;
-		})
-		$(tableName +' tbody').on('click', 'button', function (e) {
-			e.stopPropagation();
+		{{!-- 推導：列按鈕的確認框與送出；狀態變更後重新整理狀態統計。 --}}
+		var confirmStatus = function (tr, batchAction, title, message, btnClass) {
+			pendingStatus = batchAction;
+			editor.remove(tr, {
+				title: title,
+				message: message,
+				buttons: [
+					{ text: '確定', className: 'btn ' + btnClass, action: function () { this.submit(); } },
+					{ text: '關閉', className: 'btn btn-default', action: function () { this.close(); } }
+				]
+			});
+		};
+		$(tableName + ' tbody').on('click', 'button', function () {
 			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-			var uuid = row.data().uuid;
-			var url = "/backend/helpdesk/Conversation/toUrl?uuid=" + uuid;
 			var action = $(this).attr('data-action');
-			if (action == null) return;
-
+			if (action == null || table.row(tr).data() == null) return;
 			switch (action) {
-			case 'view':
-				window.open(url, "_blank");
-				return;
-			case 'closed':
-				msg = '將對話設為「已結束」，確定要執行嗎？';
-				break;
 			case 'replied':
-				msg = '將對話設為「已回覆」，確定要執行嗎？';
+				confirmStatus(tr, 'replied', '已回覆', '確定要將此對話設為「已回覆」嗎？', 'btn-secondary');
+				break;
+			case 'closed':
+				confirmStatus(tr, 'closed', '已結案', '確定要將此對話結案嗎？', 'btn-warning');
 				break;
 			}
-
-			editor._action = action;
-			editor
-			.remove(tr, false).submit();
+		});
+		editor.on('submitSuccess', function () {
+			showStatus();
+		});
+		editor.on('closed', function () {
+			pendingStatus = null;
 		});
 
-		$('.card').on('change', '.filters', function() {
+		$(document).on('change', '.filters', function() {
 			table.clear().ajax.reload();
 		});
 
@@ -170,30 +168,24 @@ $(document).ready(function() {
 				data:{
 
 				},
-				async:true,
-			})
-			.done(function(json) {
-				var status = json.data;
-				var html = ''
-					+'<ul class="list-group">'
-					+'<li class="list-group-item d-flex justify-content-between align-items-center">'
-					+'尚未回覆數量 <span class="badge badge-primary badge-pill">'+status.waitingForReply+'</span>'
-					+'</li>'
-					+'</ul>'
-				$('#statusCard .card-body').html(html);
+				{{!-- 推導：狀態統計（helpdesk.ts 回 data.waitingForReply／replied／closed）顯示在頁首；等待回覆中以紅色徽章標示。 --}}
+				success: function (json) {
+					var d = (json && json.data) || {};
+					var n = function (v) { return parseInt(v, 10) || 0; };
+					$('#statusWaitingForReply').text(n(d.waitingForReply)).toggleClass('badge-danger', n(d.waitingForReply) > 0).toggleClass('badge-default', n(d.waitingForReply) == 0);
+					$('#statusReplied').text(n(d.replied));
+					$('#statusClosed').text(n(d.closed));
+					$('#conversationStatus').show();
+				}
 			});
-		};
-
+		}
 		showStatus();
 	} ); // end ready
 </script>
 <!--#body--><div class="container-fluid ">
-<div class="card mt-4" id="statusCard">
-<div class="card-body p-0"></div>
-</div>
-
 <div class="card mt-4">
-<div class="card-header">客服對話</div>
+{{!-- 推導：頁首與狀態統計（原站本段未擷取；showStatus() 取 /ajax/helpdesk/Conversation/status 填入）。 --}}
+<div class="card-header">客服對話<span id="conversationStatus" class="small ml-3" style="display:none">尚未回覆 <span id="statusWaitingForReply" class="badge badge-default">0</span><span class="ml-2">已回覆 <span id="statusReplied" class="badge badge-default">0</span></span><span class="ml-2">已結案 <span id="statusClosed" class="badge badge-default">0</span></span></span></div>
 <div class='card-footer pb-0'>
 		<input type="radio" name="status" id="status_WAITING_FOR_REPLY" class="filters form-check-input" value="WAITING_FOR_REPLY"  checked ><label for="status_WAITING_FOR_REPLY" class="form-check-label pl-4 mr-2">等待回覆中</label>
 <input type="radio" name="status" id="status_REPLIED" class="filters form-check-input" value="REPLIED" ><label for="status_REPLIED" class="form-check-label pl-4 mr-2">已回覆</label>

@@ -1,33 +1,58 @@
-<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/cancelOrder.do" class="form-horizontal" id="SalesOrderForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}">
+{{!-- 推導：取消訂單彈窗（/backend/SalesOrder/displayCancelOrder；片段資料 salesOrderId 逗號串）。
+     原站片段未擷取（需先有訂單／勾選列才開得到），依 lead 規格、i18n（SalesOrder.action.cancel／.cancel.confirm、SalesOrder.staffNote／.staffNote.descr）
+     與本系統彈窗版型（salesorder-editshippingrule.html）撰寫。由所有訂單列明細卡「取消訂單」與工具列「取消/還原 → 取消訂單」開啟。
+     送出 POST {{baseUrl}}/ajax/SalesOrder/cancelOrder.do：salesOrderId（逗號串）、staffNote（參數與回應不可改，warehouse 也呼叫同一端點）。 --}}
+<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/cancelOrder.do" class="form-horizontal" id="CancelOrderForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId">
 	<div class="modal-header">
-		<h5 style="overflow:hidden">取消訂單&raquo;</h5>
+		<h5 style="overflow:hidden">取消訂單</h5>
 		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 	</div>
 	<div class="modal-body">
 	<div class="modal-message"></div>
-
-	<div class="form-group row">
-		<label class="col-12 control-label" for="reason">員工備註:</label>
-		<div class="col-12">
-		<input type="text" name="staffNote" maxlength="100" placeholder="員工備註" value="" type="text" id="staffNote" class=" form-control"></div>
+	{{!-- 推導：確認文字用 i18n SalesOrder.action.cancel.confirm；訂單清單由 script 依 salesOrderId 填入（有訂單表時顯示訂單編號與顧客） --}}
+	<p class="font-weight-bold mb-1 cancel-confirm">確定要取消以下訂單？</p>
+	<ul class="small pl-4 mb-3 cancel-orders"></ul>
+	<div class="form-group">
+		<label for="staffNote">員工備註</label>
+		<textarea name="staffNote" id="staffNote" rows="3" maxlength="1000" class="form-control" placeholder="可填寫取消原因（選填）"></textarea>
+		<div class="field-info">員工備註只出現於管理後台，消費者不會看到員工備註</div>
 	</div>
+	<p class="small grey-text mb-0">取消後會釋放訂單商品占用的庫存；已取消／已合併／已拆單的訂單會略過。需要時可由工具列「取消/還原 &raquo; 還原已取消訂單」還原。</p>
 </div> <!-- modal-body -->
-
 	<div class="progress">
 		<div class="progress-bar" role="progressbar"></div>
 	</div>
 	<div class="modal-footer">
 		<button class="btn btn-default" data-dismiss="modal">關閉</button>
-		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-warning" value="送出" />
 	</div>
 </form><script>
-var success = function(json) {
-	table.ajax.reload( null, false);
-	msg = '';
-	var successCount = json.data.length;
-	msg = '<p>成功:' + successCount + '</p>' + msg;
-	modalShowSuccess($('#myModal'), msg);
-}
+(function() {
+	var $form = $('#CancelOrderForm');
+	var esc = function(s) {
+		return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	};
+	var $dt = $('#mydt');
+	var hasTable = $dt.length && $.fn.dataTable && $.fn.dataTable.isDataTable($dt);
+	var ids = $.grep(String($form.find('input[name=salesOrderId]').val() || '').split(','), function(s) { return $.trim(s) !== ''; });
 
-initAjaxForm('SalesOrderForm', success);
+	// 列出要取消的訂單：訂單表已載入的列顯示訂單編號／顧客，其餘顯示訂單 id
+	var rows = hasTable ? $dt.DataTable().rows().data().toArray() : [];
+	var byId = {};
+	$.each(rows, function(i, r) { if (r && r.salesOrderId != null) byId[String(r.salesOrderId)] = r; });
+	var shown = ids.slice(0, 20);
+	$form.find('.cancel-confirm').text('確定要取消以下 ' + ids.length + ' 筆訂單？');
+	$form.find('.cancel-orders').html($.map(shown, function(id) {
+		var r = byId[id];
+		return '<li>' + (r ? esc(r.uuid) + ' <span class="grey-text">' + esc(r.customerFirstname || '') + '</span>' : '#' + esc(id)) + '</li>';
+	}).join('') + (ids.length > shown.length ? '<li class="grey-text">…等 ' + ids.length + ' 筆</li>' : ''));
+	if (!ids.length) $form.find('#submitButton').prop('disabled', true);
+
+	initAjaxForm('CancelOrderForm', function(json) {
+		var $box = $form.closest('.modal-content');
+		modalShowSuccess($box.length ? $box : $form, json.error);
+		$form.find('#submitButton').hide();
+		if (hasTable) $dt.DataTable().ajax.reload(null, false);
+	});
+})();
 </script>

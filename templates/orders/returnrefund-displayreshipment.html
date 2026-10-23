@@ -1,93 +1,47 @@
-{{!-- 原站 /ajax/ReturnRefund/displayReshipment?salesOrderId=（精靈「補寄」，showAjax 載入 #myModalContent；原站實際擷取）。
-      原站表單 action 為 /demo/ajax/ReturnRefund/doReshipment.do（寫死的租戶前綴），本系統改用 baseUrl；
-      原站 $.getScript('/scripts/rr.js') 鏡射於 /modules/orders/returns-rr.js（內容未改）。 --}}
-<form name="ReturnRefundForm" method="post" action="{{baseUrl}}/ajax/ReturnRefund/doReshipment.do" class="form-horizontal" id="ReturnRefundForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><div class="modal-header">
-		<h5 style="overflow:hidden">產生補寄訂單 &raquo;</h5>
-		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
-	</div>
-	<div class="modal-body">
+{{!-- 推導：原站「補寄」步驟（/ajax/ReturnRefund/displayReshipment，載入精靈彈窗內）未擷取。依後端契約推導：
+     商品清單由 /ajax/ReturnRefund/get 載入，每列送 data[<orderItemId>][orderItemId]、data[<orderItemId>][total]；員工備註 staffNote；
+     送出 POST doReshipment → {data:[補寄單]}。說明文字依 migration 3020 註解的原站語意（將漏出貨的商品移至補寄單內出貨）。 --}}
+<form name="ReshipmentForm" method="post" action="{{baseUrl}}/ajax/ReturnRefund/doReshipment.do" class="form-horizontal" id="rrReshipmentForm">
+<input type="hidden" name="salesOrderId" value="{{salesOrderId}}">
 	<div class="modal-message"></div>
-
+	<div class="rr-form-body">
+	{{#unless shipped}}<div class="alert alert-warning">補寄限已出貨訂單使用：訂單 {{uuid}} 尚未出貨</div>{{/unless}}
 	<div class="card">
-	<div class="card-body">
-		<div class="blue-grey lighten-5 small p-2">
-		<p>確認送出後，將會產生補寄訂單</p>
-		<p>所選之補寄商品將會移至補寄訂單</p>
+		<div class="card-header">補寄商品 <span class="small grey-text ml-1">訂單 {{uuid}}</span></div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+			<table class="table table-sm mb-0">
+				<thead>
+					<tr>
+						<th>商品</th>
+						<th class="text-right" style="width:100px">單價</th>
+						<th class="text-right" style="width:100px">訂單數量</th>
+						<th style="width:140px">補寄數量 <a href="javascript:void(0)" class="small rr-qty-all">全部</a></th>
+					</tr>
+				</thead>
+				<tbody class="rr-items">
+					<tr><td colspan="4" class="text-center grey-text">載入中...</td></tr>
+				</tbody>
+			</table>
+			</div>
+		</div>
+		<div class="card-footer small grey-text">將漏出貨的商品移至補寄單內出貨（補寄申請中，可於退換貨訂單「匯出貨運清單」）；完成補寄後，補寄商品移回主訂單。</div>
+	</div>
+	<div class="card mt-4">
+		<div class="card-header">員工備註</div>
+		<div class="card-body">
+			<textarea name="staffNote" id="rrReshipmentStaffNote" class="form-control" rows="3" maxlength="500" placeholder="補寄原因（同時寫入補寄訂單員工備註）"></textarea>
 		</div>
 	</div>
 	</div>
-
-	<div id="allowance-step-1">
-	<div class="card" id="card-salesOrder-item-select">
-	<div class="card-header">挑選欲補寄商品</div>
-	<div class="card-body"><span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span></div>
-	<div class="card-footer">
-		<button type="button" class="btn btn-default btn-sm" data-action="select-item">確定</button>
-	</div>
-	</div>
-	<!-- card -->
-	</div>
-
-	<div id="allowance-step-2" class="d-none">
-	<div class="card" id="card-salesOrder-item">
-	<div class="card-header">補寄商品</div>
-	<div class="card-body"><span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span></div>
-	</div>
-	<!-- card -->
-
-	<div class="form-group row">
-		<label class="col-12 control-label" for="staffNote">客服備註</label>
-		<div class="col-12">
-		<input type="text" name="staffNote" value="" type="text" id="staffNote" class=" form-control"></div>
-		<div class="col-12 pt-2">
-		<span class="badge badge-primary badge-reason">取消訂單</span>
-		<span class="badge badge-primary badge-reason">商品瑕疵</span>
-		<span class="badge badge-primary badge-reason">尺寸不合</span>
-		<span class="badge badge-primary badge-reason">補寄商品</span>
-		</div>
-	</div>
-
-
-	</div>
-	<!-- step-2 -->
-	</div> <!-- modal-body -->
-
-	<div class="progress">
+	<div class="progress mt-3">
 		<div class="progress-bar" role="progressbar"></div>
 	</div>
-	<div class="modal-footer">
-		<button class="btn btn-default" data-dismiss="modal">關閉</button>
-		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	<div class="text-right mt-3">
+		<input type="submit" class="btn btn-primary mr-0" value="產生補寄訂單" />
 	</div>
-</form><script>
-if (typeof returnManager == 'undefined') {
-	$.getScript('/modules/orders/returns-rr.js', function(){
-		ready();
-	});
-} else {
-	ready();
-}
-function ready() {
-	$('#ReturnRefundForm').escapeExitOnKeyEnter();
-	returnManager
-	.init('#ReturnRefundForm', {{json salesOrderId}})
-	.prepareReturn();
-};
-
-var success = function(json) {
-	table.ajax.reload( null, false);
-	var msg = '成功產生補寄單:' + json.data[0].uuid;
-	if (json.data.length == 2) {
-		msg += '<br>成功產生換貨單:' + json.data[1].uuid;
-	}
-	modalShowSuccess($('#myModal'), msg);
-
-	$('#submitButton').hide();
-	table.clear().ajax.reload(null, false);
-}
-
-initAjaxForm('ReturnRefundForm', success);
-$('.badge-reason').on('click', function(e) {
-	$('#staffNote').val($(this).html());
-} );
+</form>
+<script src="/modules/orders/returns-wizard.js?v={{assetVersion}}"></script>
+<script>
+RRWizard.itemForm({ formId: 'rrReshipmentForm', baseUrl: {{json baseUrl}}, salesOrderId: {{json salesOrderId}}, kind: 'RESHIPMENT' });
 </script>

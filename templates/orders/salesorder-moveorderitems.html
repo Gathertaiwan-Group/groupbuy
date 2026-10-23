@@ -1,56 +1,52 @@
-<style>
-form[name=SalesOrderForm] label[for] {
-    height:100% !important;
-    margin-bottom:0;
-    }
-</style>
+{{!-- 推導：拆單（搬移訂單商品）彈窗（/backend/SalesOrder/displayMoveOrderItems；片段資料 salesOrderId）。
+     原站片段未擷取（需有訂單才開得到），依 lead 規格、i18n（SalesOrder.action.moveOrderItems＝拆單）、分割訂單彈窗的「訂單地址不共用」說明文字
+     與本系統彈窗版型撰寫。由所有訂單列明細卡「拆單」開啟。
+     流程：GET get.do?salesOrderId= 取訂單商品 → 勾選商品與數量（1～原數量）→ 目標訂單編號（留空＝建立新訂單；可用 get.do?uuid= 查詢）
+     → POST moveOrderItems.do：salesOrderId、orderItems[i].orderItemId、orderItems[i].total、toUuid、status=INQUIRED_RETURN（勾選退貨申請中）、uniqueAddress。 --}}
+<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/moveOrderItems.do" class="form-horizontal" id="MoveOrderItemsForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId">
 	<div class="modal-header">
-		<h5>拆單<span id="rr_uuid"></span>&raquo;</h5>
+		<h5 style="overflow:hidden">拆單 <span class="move-from-uuid"></span></h5>
 		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 	</div>
 	<div class="modal-body">
-<form name="SalesOrderForm" method="post" action="{{baseUrl}}/ajax/SalesOrder/moveOrderItems.do" class="form-horizontal" id="MoveOrderItemsForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><div class="card">
-	<div class="card-header">
-	<div class="row">
-	<div class="col-9">訂單商品</div>
-	<div class="col-3">數量</div>
-	</div>
-	</div>
-	<div class="card-body">
-	<div id="order_item_container">
-	<span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>
-	</div>
-	</div>
-	</div>
-
-	<div class="card mt-4">
-		<div class="card-header">
-		<p>勾選所要拆單的商品</p>
-		<p>數量預設為該商品所有數量，可調整數量部分搬移</p>
-		<p>請輸入所要轉換至的訂單號碼(保持空白將拆分至新訂單)</p>
-		</div>
-		<div class="card-body toUuid-section">
+	<div class="modal-message"></div>
+	<p class="small grey-text mb-2">勾選要移出的商品並填寫數量，商品會移到指定的訂單，或移到新建立的訂單（沿用本訂單的訂購人／收件人資料）。</p>
+	<table class="table table-sm mb-3" id="moveOrderItemsTable">
+		<thead>
+			<tr>
+				<th style="width:1%"></th>
+				<th>商品</th>
+				<th class="text-right text-nowrap">原數量</th>
+				<th class="text-nowrap" style="width:120px">移出數量</th>
+			</tr>
+		</thead>
+		<tbody><tr><td colspan="4" class="text-center grey-text">載入中…</td></tr></tbody>
+	</table>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label" for="moveToUuid">移至訂單編號</label>
+		<div class="col-sm-8">
 			<div class="input-group">
-			<input type="text" name="toUuid" class="form-control" placeholder="訂單編號">
-			<div class="input-group-append">
-				<a href="javascript: void(0)" id="btnVerifySalesOrder" class="input-group-text md-addon" onclick="btnVerifySalesOrder()">檢查訂單</a>
+				<input type="text" name="toUuid" id="moveToUuid" maxlength="50" class="form-control" placeholder="留空＝建立新訂單" autocomplete="off">
+				<div class="input-group-append"><button type="button" class="btn btn-default btn-sm m-0 px-3" id="moveCheckUuid">查詢</button></div>
 			</div>
-			</div>
-			<div class="help" id="salesOrderInfo"></div>
-			<div class="help text-danger" id="btnVerifySalesOrder_help"></div>
-		</div>
-		<div class="card-body">
-		<input type="checkbox" name="status" value="INQUIRED_RETURN" id="status" class="form-check-input">
-		<label for="status" class="h-100">退貨申請中<br><span class="small">會將新訂單階段設為「退貨中」，狀態設為「退貨申請中」<br>
-		待收到貨品檢核完整後，再將新訂單取消釋放庫存</span></label>
-		</div>
-		<div class="card-body">
-		<input type="checkbox" name="uniqueAddress" value="1" id="uniqueAddress" class="form-check-input">
-		<label for="uniqueAddress" class="h-100">訂單地址不共用<br><span class="small">共用代表當修改其中一張訂單地址，另一張訂單會自動更新地址</span></label>
+			<div class="field-info move-to-result"></div>
 		</div>
 	</div>
-</form></div> <!-- modal-body -->
-
+	<div class="form-group row">
+		<label class="col-sm-4">退貨申請中</label>
+		<div class="col-sm-8">
+			<input type="checkbox" name="status" value="INQUIRED_RETURN" id="moveInquiredReturn" class="form-check-input"><label class="form-check-label" for="moveInquiredReturn">新訂單設為退貨申請中</label>
+			<div class="field-info">新訂單階段為「退換貨中」、狀態為「退貨申請中」；收到退貨並檢核完整後，再取消新訂單釋放庫存。勾選時只能建立新訂單。</div>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-sm-4">訂單地址不共用</label>
+		<div class="col-sm-8">
+			<input type="checkbox" name="uniqueAddress" value="on" id="moveUniqueAddress" class="form-check-input"><label class="form-check-label" for="moveUniqueAddress">訂單地址不共用</label>
+			<div class="field-info">共用代表當修改其中一張訂單地址，另一張訂單會自動更新地址</div>
+		</div>
+	</div>
+</div> <!-- modal-body -->
 	<div class="progress">
 		<div class="progress-bar" role="progressbar"></div>
 	</div>
@@ -58,105 +54,127 @@ form[name=SalesOrderForm] label[for] {
 		<button class="btn btn-default" data-dismiss="modal">關閉</button>
 		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
 	</div>
+</form><script>
+(function() {
+	var $form = $('#MoveOrderItemsForm');
+	var base = {{json baseUrl}};
+	var salesOrderId = $form.find('input[name=salesOrderId]').val();
+	var $tbody = $form.find('#moveOrderItemsTable tbody');
+	var fromUuid = '';
+	var STATE = { DRAFT: '草稿', NEW: '新訂單', PROCESSING: '處理中', COMPLETE: '已完成', HOLDED: '保留', COMBINED: '已合併', SPLITED: '已拆單', RETURNING: '退換貨中', RETURNED: '已退換貨', CANCELED: '已取消' };
+	var esc = function(s) {
+		return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	};
+	var reloadOrderTable = function() {
+		var $dt = $('#mydt');
+		if ($dt.length && $.fn.dataTable && $.fn.dataTable.isDataTable($dt)) $dt.DataTable().ajax.reload(null, false);
+	};
 
-<script>
-
-var addOrderItemsToForm = function(items) {
-	for (idx in items) {
-		addOrderItemToForm(items[idx]);
-	}
-}
-
-var addOrderItemToForm = function(item, i) {
-	var namePrefix = 'orderItems['+i+'].';
-	var tag = item.backOrder ? ' <span class="badge badge-success">預購</span>' : '';
-	var html = '<div class="row"><div class="col-9">'
-			+ '<input type="checkbox" class="form-check-input" name="'+namePrefix+'orderItemId" value="'+item.orderItemId+'" id="orderItemId'+item.orderItemId+'">'
-			+ '<label for="orderItemId'+item.orderItemId+'">'+tag+ item.title +'</label>'
-			+ '</div>'
-			+ '<div class="col-3"><input type="text" class="form-control form-control-sm" name="'+namePrefix+'total" value="'+item.total+'"></div>'
-			+ '<div class="col-12 small help text-danger"></div>'
-			+ '<hr class="w-100"></div>'
-			;
-
-	$('#order_item_container').append(html);
-}
-
-var btnVerifySalesOrder = function() {
-	var $btn = $('#btnVerifySalesOrder');
-	var toUuid = $('input[name=toUuid]').val();
-	btnStartLoading($btn);
-	$('#btnVerifySalesOrder_help').html('');
-	jQuery.get(
-			'{{baseUrl}}/ajax/SalesOrder/get.do',
-			{
-				'uuid':toUuid,
-			},
-			function(data) {
-				so = data.data;
-				$('#salesOrderInfo').html(so.uuid + ":" + so.customerFirstname);
-				$('#salesOrderInfo').addClass('pt-4');
-				btnStopLoading($btn);
-			}
-			).fail(function(data) {
-				json = data.responseJSON;
-				btnStopLoading($btn);
-				$('#btnVerifySalesOrder_help').html(json.error);
+	// 商品清單：一般商品可勾選；組合商品的子商品跟著母商品（依移出比例）一起移動
+	var renderItems = function(order) {
+		var items = order.sortedOrderItems || [];
+		var roots = $.grep(items, function(it) { return !it.bundleChild || !it.parentOrderItemId; });
+		var idx = 0, html = '';
+		$.each(roots, function(r, it) {
+			var i = idx++;
+			html += '<tr class="move-root" data-total="' + esc(it.total) + '">'
+				+ '<td><input type="checkbox" class="form-check-input move-pick" id="movePick' + i + '"><label class="form-check-label" for="movePick' + i + '"></label>'
+				+ '<input type="hidden" name="orderItems[' + i + '].orderItemId" value="' + esc(it.orderItemId) + '" disabled></td>'
+				+ '<td><label for="movePick' + i + '" class="mb-0">' + esc(it.title) + (it.specificationsLabel ? ' <small class="grey-text">' + esc(it.specificationsLabel) + '</small>' : '')
+				+ (it.backOrder ? ' <span class="badge badge-warning">預購</span>' : '') + (it.gift ? ' <span class="badge badge-info">贈品</span>' : '') + '</label></td>'
+				+ '<td class="text-right">' + esc(it.total) + '</td>'
+				+ '<td><input type="number" name="orderItems[' + i + '].total" value="' + esc(it.total) + '" min="1" max="' + esc(it.total) + '" step="1" class="form-control form-control-sm move-qty" required disabled></td>'
+				+ '</tr>';
+			$.each(items, function(c, child) {
+				if (!child.bundleChild || String(child.parentOrderItemId) !== String(it.orderItemId)) return;
+				var j = idx++;
+				html += '<tr class="move-child grey-text small" data-total="' + esc(child.total) + '">'
+					+ '<td><input type="hidden" name="orderItems[' + j + '].orderItemId" value="' + esc(child.orderItemId) + '" disabled>'
+					+ '<input type="hidden" name="orderItems[' + j + '].total" value="' + esc(child.total) + '" class="move-child-qty" disabled></td>'
+					+ '<td class="pl-4">' + esc(child.title) + (child.specificationsLabel ? ' ' + esc(child.specificationsLabel) : '') + ' <span class="badge badge-light">子商品</span></td>'
+					+ '<td class="text-right">' + esc(child.total) + '</td><td class="move-child-show"></td></tr>';
 			});
-}
-
-var fullReload = function(so) {
-	$('#order_item_container').html('');
-	$('#rr_uuid').html(so.uuid);
-	so.sortedOrderItems.forEach(function(c,i) {
-		addOrderItemToForm(c,i);
 		});
-}
-
-var success = function(json) {
-	modalShowSuccess($('#myModal'), json.error);
-	loadData({{salesOrderId}});
-	table.ajax.reload( null, false );
-}
-
-var loadData = function(salesOrderId) {
-	jQuery.get(
-			'{{baseUrl}}/ajax/SalesOrder/get.do',
-			{
-				'salesOrderId':salesOrderId
-			},
-			function(data) {
-				fullReload(data.data);
-			}
-			).fail(function(data) {
-				json = data.responseJSON;
-				modalShowDanger($('#myModal'), json.error);
+		$tbody.html(html || '<tr><td colspan="4" class="text-center grey-text">此訂單沒有商品</td></tr>');
+	};
+	// 子商品數量＝原數量 × 母商品移出比例（至少 1）
+	var syncChildren = function($root) {
+		var on = $root.find('.move-pick').prop('checked');
+		var ratio = Number($root.find('.move-qty').val()) / Math.max(1, Number($root.data('total')));
+		$root.nextUntil('tr.move-root', 'tr.move-child').each(function() {
+			var $c = $(this), qty = Math.min(Number($c.data('total')), Math.max(1, Math.round(Number($c.data('total')) * ratio)));
+			$c.find('input').prop('disabled', !on);
+			$c.find('.move-child-qty').val(qty);
+			$c.find('.move-child-show').text(on ? qty : '');
+		});
+	};
+	var loadOrder = function() {
+		$.ajax({ type: 'GET', url: base + '/ajax/SalesOrder/get.do', data: { salesOrderId: salesOrderId }, dataType: 'json' })
+			.done(function(json) {
+				var order = (json && json.data) || {};
+				fromUuid = String(order.uuid || '');
+				$form.find('.move-from-uuid').html('&raquo; ' + esc(fromUuid));
+				renderItems(order);
+			})
+			.fail(function(xhr) {
+				$tbody.html('<tr><td colspan="4" class="text-danger">' + esc((xhr.responseJSON && xhr.responseJSON.error) || '無法載入訂單') + '</td></tr>');
 			});
-}
+	};
 
-$(document).ready(function() {
+	$tbody.on('change', '.move-pick', function() {
+		var $root = $(this).closest('tr');
+		$root.find('input[type=hidden], .move-qty').prop('disabled', !this.checked);
+		syncChildren($root);
+	});
+	$tbody.on('change input', '.move-qty', function() {
+		syncChildren($(this).closest('tr'));
+	});
 
-	$ ('#MoveOrderItemsForm').on('keydown', function(e) {
-		if (e.keyCode == 13) {
-			e.preventDefault();
-			return false;
+	// 目標訂單：可查詢既有訂單；勾「退貨申請中」時只能建立新訂單
+	var $to = $form.find('#moveToUuid'), $result = $form.find('.move-to-result');
+	var checkUuid = function() {
+		var uuid = $.trim($to.val());
+		if (!uuid) {
+			$result.removeClass('text-danger text-success').text('將建立新訂單');
+			return;
 		}
+		if (uuid === fromUuid) {
+			$result.removeClass('text-success').addClass('text-danger').text('不可拆單至同一張訂單');
+			return;
+		}
+		$result.removeClass('text-danger text-success').text('查詢中…');
+		$.ajax({ type: 'GET', url: base + '/ajax/SalesOrder/get.do', data: { uuid: uuid }, dataType: 'json' })
+			.done(function(json) {
+				if ($.trim($to.val()) !== uuid) return;
+				var o = (json && json.data) || {};
+				$result.removeClass('text-danger').addClass('text-success')
+					.text('訂單 ' + (o.uuid || uuid) + '｜' + (o.customerFirstname || '-') + '｜' + (STATE[o.state] || o.state || ''));
+			})
+			.fail(function(xhr) {
+				if ($.trim($to.val()) !== uuid) return;
+				$result.removeClass('text-success').addClass('text-danger').text((xhr.responseJSON && xhr.responseJSON.error) || '查無此訂單');
+			});
+	};
+	$form.find('#moveCheckUuid').on('click', checkUuid);
+	$to.on('change', checkUuid);
+	$form.find('#moveInquiredReturn').on('change', function() {
+		if (this.checked) $to.val('');
+		$to.prop('disabled', this.checked);
+		$form.find('#moveCheckUuid').prop('disabled', this.checked);
+		$result.removeClass('text-danger text-success').text(this.checked ? '將建立新訂單（退換貨中／退貨申請中）' : '');
 	});
 
-	loadData({{salesOrderId}});
-	initAjaxForm('MoveOrderItemsForm', success);
-	$('.modal-footer .btn[type=submit]').on('click', function() {
-		$('#MoveOrderItemsForm').submit();
+	loadOrder();
+	initAjaxForm('MoveOrderItemsForm', function(json) {
+		var $box = $form.closest('.modal-content');
+		modalShowSuccess($box.length ? $box : $form, json.error);
+		reloadOrderTable();
+		// 原訂單商品已變動：重新載入清單、清空目標與選項，避免重複送出到同一設定
+		$form.find('#moveInquiredReturn, #moveUniqueAddress').prop('checked', false);
+		$to.prop('disabled', false).val('');
+		$form.find('#moveCheckUuid').prop('disabled', false);
+		$result.removeClass('text-danger text-success').text('');
+		loadOrder();
 	});
-});
-
-$('#status').on('change', function() {
-	var $this = $(this);
-	if ($this.is(':checked')) {
-		$('input[name=toUuid]').val('');
-		$('.toUuid-section').hide();
-	} else {
-		$('.toUuid-section').show();
-	}
-});
+})();
 </script>

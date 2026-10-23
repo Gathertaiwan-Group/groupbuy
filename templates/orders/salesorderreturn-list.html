@@ -1,13 +1,59 @@
 <!--#head-->
-{{!-- 原站 /backend/SalesOrderReturn/list：head 內頁面專屬 script 與 body（spec/html 缺段已由原站重讀補齊，原文沿用；只把 /guest_ep 換成 baseUrl） --}}
 {{> core/partials/dte-style.html}}
+{{!-- 推導：本頁 head script 在原站擷取中有多個缺段（Editor 建構開頭、DataTable 選項、動作欄 render、列按鈕事件、篩選事件、匯出報表/匯出貨運清單物件、檔案下載）。
+     已擷取的部分（Editor ajax 網址與 fields、DataTable ajax/columns、RETURN/REPLACE/RESHIPMENT 按鈕文字與 class、工具列 actionButton、匯出報表 Editor 欄位與 dependent、匯出貨運清單按鈕）照原文保留；
+     其餘依本系統後端契約（lib/modules/orders/returns.ts：列表 extra 參數、action 端點、batchAction 匯出）與原站共用 JS（dataTable.config/dataTable/ias_v5、salesOrderList.min.js 的匯出彈窗流程）推導，命名為本系統自訂。 --}}
 <script type="text/javascript" class="init">
+	var salesOrderReturnTable;
+	{{!-- 推導：ERP 報表名稱。原站由系統設定帶入（所有訂單頁 salesOrderConf.erpTitles）；本系統後端 ERP_TITLES 固定為 ERP報表1～6 --}}
+	var erpTitles = ['ERP報表1', 'ERP報表2', 'ERP報表3', 'ERP報表4', 'ERP報表5', 'ERP報表6'];
 
-				var salesOrderReturnTable;
-				$(document).ready(function () {
+	{{!-- 推導：列按鈕定義（依 migration 3020 orders_rr_action 的狀態規則：退貨申請中/取件中可取消、檢核中不可取消；換貨未完成可完成/取消；補寄可完成）。
+	     按鈕文字與 class 取自原站擷取段；確認文字依 migration 3020 開頭註解的原站語意撰寫 --}}
+	var rrRowActions = {
+		pending: '',
+		returnNotice: '完成退貨將會將主訂單階段改為「已完成」，退換貨訂單狀態改「退貨完成」，階段改「已完成」，確定要執行嗎？',
+		defs: {
+			pickupReturn: { label: '退貨取件中', css: 'btn-default', confirm: '將退貨訂單狀態改為「退貨取件中」，確定要執行嗎？' },
+			verifyReturn: { label: '退貨檢核中', css: 'btn-default', confirm: '將退貨訂單狀態改為「退貨檢核中」（檢核中的退貨將無法取消），確定要執行嗎？' },
+			returned: { label: '完成退貨(可銷售)', css: 'btn-warning', confirm: 'RETURN_NOTICE<br>退貨商品將補回可售庫存。' },
+			returned_nosale: { label: '完成退貨(不可銷售)', css: 'btn-warning', confirm: 'RETURN_NOTICE<br>退貨商品不補回庫存。' },
+			cancel_return: { label: '取消退貨', css: 'btn-danger', confirm: '確定要取消嗎?該退貨操作將會被還原，退貨商品將移回原訂單。' },
+			replaced: { label: '完成換貨', css: 'btn-warning', confirm: '完成換貨將會將主訂單階段改為「已完成」，換貨商品將移回主訂單，確定要執行嗎？' },
+			cancel_replace: { label: '取消換貨', css: 'btn-danger', confirm: '確定要取消嗎?該換貨操作將會被還原，換貨商品將補回可售庫存。' },
+			reshipmented: { label: '完成補寄', css: 'btn-warning', confirm: '完成補寄將會將主訂單階段改為「已完成」，補寄商品將移回主訂單，確定要執行嗎？' }
+		},
+		returnSteps: {
+			INQUIRED_RETURN: ['pickupReturn', 'returned', 'returned_nosale', 'cancel_return'],
+			PICKUP_RETURN: ['verifyReturn', 'returned', 'returned_nosale', 'cancel_return'],
+			VERIFY_RETURN: ['returned', 'returned_nosale']
+		},
+		available: function (row) {
+			if (row.state == 'CANCELED' || row.state == 'COMPLETE') return [];
+			switch (row.relation) {
+			case 'RETURN':
+				return this.returnSteps[row.status] || [];
+			case 'REPLACE':
+				return row.status == 'REPLACED' ? [] : ['replaced', 'cancel_replace'];
+			case 'RESHIPMENT':
+				return row.status == 'RESHIPMENTED' ? [] : ['reshipmented'];
+			}
+			return [];
+		},
+		html: function (row) {
+			var defs = this.defs;
+			return $.map(this.available(row), function (key) {
+				return '<button class="btn ' + defs[key].css + ' text-nowrap" data-action="' + key + '">' + defs[key].label + '</button>';
+			}).join('');
+		},
+		message: function (key) {
+			return this.defs[key].confirm.replace('RETURN_NOTICE', this.returnNotice);
+		}
+	};
 
-					var tableName = '#salesOrderReturnTable';
-					editor = new $.fn.dataTable.Editor({
+	$(document).ready(function () {
+		var tableName = '#salesOrderReturnTable';
+		var editor = new $.fn.dataTable.Editor({
 						ajax: {
 							create: {
 								type: 'POST',
@@ -21,7 +67,8 @@
 								type: 'POST',
 								url: '{{baseUrl}}/ajax/SalesOrderReturn/action.do?salesOrderId=_id_',
 								data: function (data) {
-									data.action = editor._action;
+									{{!-- 推導：列按鈕沿用 Editor remove 協定送出，body 的 action 改成按下的操作（後端 rrAction 讀 action 參數） --}}
+									data.action = rrRowActions.pending;
 									return data;
 								}
 							}
@@ -37,9 +84,10 @@
 						//template: '#custom_rp_form',
 						formOptions: DataTableConfig.formOptions,
 						i18n: DataTableConfig.i18n,
-					});
+		});
 
-					var table = $(tableName).DataTable({
+		{{!-- 推導：dom/lengthMenu 同原站同類列表頁（保留單、超商追蹤）；預設排序 [[1,"desc"]] 取自 spec/runtime --}}
+		var table = $(tableName).DataTable({
 						dom: 'lBrtip',
 						serverSide: true,
 						processing: true,
@@ -67,49 +115,17 @@
 								data: null,
 								'class': 'inline-disabled',
 								orderable: false,
+								defaultContent: '',
 								render: function (data, type, row) {
-									var html = '';
-									//	html += '<button class="btn btn-default text-nowrap" data-action="item">商品</button>';
-									if (row.state == 'CANCELED' || row.state == 'COMPLETE') {
-
-									} else if (row.relation == 'RETURN') {
-										switch (row.status) {
-											case 'INQUIRED_RETURN':
-												html += '<button class="btn btn-default text-nowrap" data-action="pickupReturn">退貨取件中</button>'
-												html += '<button class="btn btn-warning text-nowrap" data-action="returned">完成退貨(可銷售)</button>'
-												html += '<button class="btn btn-warning text-nowrap" data-action="returned_nosale">完成退貨(不可銷售)</button>'
-												html += '<button class="btn btn-danger text-nowrap" data-action="cancel_return">取消退貨</button>'
-												break;
-											case 'PICKUP_RETURN':
-												html += '<button class="btn btn-default text-nowrap" data-action="verifyReturn">退貨檢核中</button>'
-												html += '<button class="btn btn-warning text-nowrap" data-action="returned">完成退貨(可銷售)</button>'
-												html += '<button class="btn btn-warning text-nowrap" data-action="returned_nosale">完成退貨(不可銷售)</button>'
-												html += '<button class="btn btn-danger text-nowrap" data-action="cancel_return">取消退貨</button>'
-												break;
-											case 'VERIFY_RETURN':
-												html += '<button class="btn btn-warning text-nowrap" data-action="returned">完成退貨(可銷售)</button>'
-												html += '<button class="btn btn-warning text-nowrap" data-action="returned_nosale">完成退貨(不可銷售)</button>'
-										}
-									} else if (row.relation == 'REPLACE') {
-										if (row.status != 'REPLACED') {
-											html += '<button class="btn btn-warning text-nowrap" data-action="replaced">完成換貨</button>'
-											html += '<button class="btn btn-danger text-nowrap" data-action="cancel_replace">取消換貨</button>'
-										}
-									} else if (row.relation == 'RESHIPMENT') {
-										if (row.status != ' RESHIPMENTED') {
-											html += '<button class="btn btn-warning text-nowrap" data-action="reshipmented">完成補寄</button>'
-										}
-									}
-									return '<div class="d-block">' + html + '</div>';
+									return type === 'display' ? rrRowActions.html(row) : '';
 								}
 							},
 						],
-						keys: DataTableConfig.keysInlineTab,
 						"order": [[1, "desc"]],
 						select: DataTableConfig.selectOptionsOS,
 						buttons: [
 							//	{ extend: 'create', editor: editor },
-							//	{ extend: 'edit', editor: editor },
+							//	{ extend: 'edit',   editor: editor },
 							//	{ extend: 'remove', editor: editor, className:'btn-danger' },
 							DataTableConfig.actionButton({
 								text: '完成退貨(可銷售)',
@@ -121,12 +137,11 @@
 								confirm: '完成退貨將會將主訂單階段改為「已完成」，退換貨訂單狀態改「退貨完成」，階段改「已完成」，確定要執行嗎？',
 								url: '/ajax/SalesOrderReturn/action?action=returned_nosale',
 							}),
-
-								{
-									extend: "create",
+							{
+								extend: "create",
 								text: '匯出報表',
-								action: function ( e, dt, node, config ) {
-									exportFile.show();
+								action: function (e, dt, node, config) {
+									exportFile.show(dt);
 								}
 							},
 								{
@@ -138,7 +153,7 @@
 									shippingExport.show();
 								}
 							},
-
+							
 						],
 						initComplete: function () {
 							DataTableConfig.initFooterSearch(this, [2, 3, 4], [16, 16, 16]);
@@ -150,145 +165,85 @@
 
 					//DataTableHelper.initEditorOnCallback(table,editor);
 					//DataTableHelper.inlineModePlugin(table);
-					//DataTableHelper.injectInline(table,editor);
-					injectDetailsControl(tableName, table);
-					salesOrderReturnTable = table;
+		injectDetailsControl(tableName, table);
+		salesOrderReturnTable = table;
 
-					$(tableName + ' tbody').on('click', 'button', function (e) {
-						e.stopPropagation();
-						var tr = $(this).closest('tr');
-						var row = table.row(tr);
-						var id = row.data().salesOrderId;
-						var action = $(this).attr('data-action');
-						if (action == null) return;
+		{{!-- 推導：列按鈕 → 以 Editor remove 開確認框（標題＝按鈕文字、內容＝確認文字），確定後 POST action.do?salesOrderId=…；成功後 serverSide 表自動重抓 --}}
+		$(tableName + ' tbody').on('click', 'button[data-action]', function (e) {
+			e.stopPropagation();
+			var key = $(this).attr('data-action');
+			if (!rrRowActions.defs[key]) return;
+			rrRowActions.pending = key;
+			editor.remove($(this).closest('tr'), {
+				title: rrRowActions.defs[key].label,
+				message: rrRowActions.message(key),
+				buttons: [
+					{ text: '確定', className: 'btn btn-danger', action: function () { this.submit(); } },
+					{ text: '關閉', className: 'btn btn-default', action: function () { this.close(); } }
+				]
+			});
+		});
+	}); // end ready
 
-						var msg = '';
+	{{!-- 推導：列表與匯出共用的篩選參數（後端 filtersFrom：relation/status/state/hideDone/days/dateCreatedBegin/dateCreatedEnd） --}}
+	var appendExtra = function (d) {
+		d.relation = $('#relation').val();
+		d.status = $('#status').val();
+		d.state = $('#state').val();
+		d.hideDone = $('#hideDone').prop('checked');
+		d.days = $('#days').val();
+		d.dateCreatedBegin = $('#dateCreatedBegin').val();
+		d.dateCreatedEnd = $('#dateCreatedEnd').val();
+		return d;
+	};
 
-						switch (action) {
-							case 'pickupReturn':
-								msg = '訂單狀態將改為「退貨取件中」，確定要執行嗎？'
-								break;
-							case 'verifyReturn':
-								msg = '訂單狀態將改為「退貨檢核中」，確定要執行嗎？'
-								break;
-							case 'returned':
-							case 'returned_nosale':
-								msg = '完成退貨將會將主訂單階段改為「已完成」，退換貨訂單狀態改「退貨完成」，階段改「已完成」，確定要執行嗎？';
-								break;
-							case 'replaced':
-								msg = '完成換貨將會將主訂單階段改為「已完成」，退換貨訂單狀態改「換貨完成」，階段改「已完成」，換貨商品將移回主訂單，確定要執行嗎？';
-								break;
-							case 'reshipmented':
-								msg = '完成補寄將會將主訂單階段改為「已完成」，補寄貨訂單狀態改「補寄完成」，階段改「已完成」，補寄商品將移回主訂單，確定要執行嗎？';
-								break;
-							case 'cancel_return':
-							case 'cancel_replace':
-								msg = '確定要取消嗎?該退/換貨操作將會被還原';
-								break;
-						};
+	{{!-- 推導：#queryForm 以 jquery.fileDownload POST 到 /backend/SalesOrderReturn/batchAction（batchAction、query＝列表參數 JSON、salesOrderIds＝勾選列；其餘篩選欄位隨表單送出） --}}
+	var fileDownload = function (batchAction, query, done) {
+		var form = $('#queryForm');
+		var picked = [];
+		salesOrderReturnTable.rows({ selected: true }).data().each(function (row) {
+			picked.push(row.salesOrderId);
+		});
+		form.find('[name=batchAction]').val(batchAction);
+		form.find('[name=query]').val(query || '');
+		form.find('[name=salesOrderIds]').val(picked.join(','));
+		var payload = Object.fromEntries(new FormData(form[0]).entries());
+		var button = $('.DTE .DTE_Form_Buttons .btn-primary');
+		btnStartLoading(button);
+		Cookies.remove('fileDownload', { path: '/' });
+		$.fileDownload(form.prop('action'), {
+			httpMethod: 'POST',
+			data: payload
+		}).done(function () {
+			btnStopLoading(button);
+			if (done) done();
+		}).fail(function (responseHtml) {
+			btnStopLoading(button);
+			messagebox('匯出失敗', responseHtml, '確定');
+		});
+	};
 
-						editor._action = action;
-						editor
-							.title('確定執行')
-							.message(msg)
-							.buttons('確定')
-							.remove(tr);
-					});
-
-					$('.filters').on('change', function () {
-						var id = $(this).prop('id');
-						var val = $(this).val();
-
-						if (id == 'days') {
-							updateFilterEnable();
-						}
-
-						if ((id == 'days')
-							&& val == -1) {
-							return;
-						}
-						table.clear().ajax.reload();
-					});
-				}); // end ready
-
-				var erpTitles = [
-		'ERP報表1',
-'ERP報表2',
-'ERP報表3',
-'ERP報表4',
-'ERP報表5',
-'ERP報表6',
-
-				];
-
-				var appendExtra = function (d) {
-					d.hideDone = $('#hideDone').prop("checked");
-					d.days = $('#days').val();
-					d.dateCreatedBegin = $('#dateCreatedBegin').val();
-					d.dateCreatedEnd = $('#dateCreatedEnd').val();
-					d.relation = $('#relation').val();
-					d.status = $('#status').val();
-					d.state = $('#state').val();
-					return d;
-				}
-
-				var fileDownload = function (action, query) {
-					var table = salesOrderReturnTable;
-					var $form = $('#queryForm');
-					var dd = joinIds('salesOrderId', table);
-					$form.find('[name=salesOrderIds]').val(dd.substring('salesOrderId='.length));
-					$form.find('[name=batchAction]').val(action);
-					$form.find('[name=query]').val(query);
-
-					var $btn = $('.DTE_Action_Create .btn.btn-primary');
-					btnStartLoading($btn);
-
-					const form = document.getElementById('queryForm');
-					const myFormData = new FormData(form);
-					const formDataObj = Object.fromEntries(myFormData.entries());
-					// data string
-					//const data = JSON.stringify(Object.fromEntries(myFormData));
-
-					$.fileDownload($form.prop('action'), {
-						httpMethod: "POST",
-						data: formDataObj
-					})
-					.done(function () {
-						btnStopLoading($btn);
-						if (action == 'EXPORT_SHIPPING_CSV')
-							table.clear().ajax.reload();
-					})
-					.fail(function () {
-						alert('下載失敗');
-						btnStopLoading($btn);
-					});
-				}
-
-				var exportFile = {
-					show: function () {
-						var table = salesOrderReturnTable;
-						var count = table.rows({ selected: true }).count();
-						if (count > 0) {
-							this.totalRecords = count;
-						} else {
-							this.totalRecords = table.page.info().recordsDisplay;
-						}
-						this.maxPageSize = Math.min(4000, this.totalRecords);
-						var cEditor = this.editor();
+	{{!-- 推導：匯出報表彈窗（原站擷取：title/message/buttons、action 選項、匯出數量、第幾頁、dependent('action')、preSubmit 回傳 false、open 移除捲動）；
+	     筆數＝勾選列數或目前篩選總數，上限 4000；頁數選項依匯出數量計算（同所有訂單頁匯出流程） --}}
+	var exportFile = {
+		totalRecords: 0,
+		maxPageSize: 4000,
+		show: function (dt) {
+			var picked = dt.rows({ selected: true }).count();
+			this.totalRecords = picked > 0 ? picked : dt.page.info().recordsDisplay;
+			this.maxPageSize = Math.max(1, Math.min(4000, this.totalRecords));
+			var cEditor = this.editor();
 						cEditor
 							.title('匯出報表')
 							.message('總數量為：' + this.totalRecords)
 							.buttons({ label: '匯出', className: 'btn-primary', action: function () { this.submit(); } })
 							.create(false);
-						cEditor
-							.set('iDisplayLength', this.maxPageSize)
-							.open();
-					},
-					editor: function () {
-						if (this._editor != null) return this._editor;
-						var table = salesOrderReturnTable;
-						var _this = this;
-						this._editor = new $.fn.dataTable.Editor({
+			cEditor.set('iDisplayLength', this.maxPageSize).open();
+		},
+		editor: function () {
+			if (this._editor) return this._editor;
+			var self = this;
+			this._editor = new $.fn.dataTable.Editor({
 							fields: [
 								{
 									label: '選擇匯出報表',
@@ -322,27 +277,13 @@
 										show: ['iDisplayLength', 'pageNumber']
 									};
 								}
-								return {
-									values: {
-										'pageNumber': '1',
-									},
-									options: {
-										'pageNumber': options
-									}
-								};
 							})
 							.dependent('iDisplayLength', function (val, data, callback) {
-								var pageSize = parseInt(val);
-								if (isNaN(pageSize) || pageSize == 0) pageSize = _this.maxPageSize;
-								else if (pageSize > _this.maxPageSize) pageSize = _this.maxPageSize;
-
-								var pages = (_this.totalRecords + pageSize - 1) / pageSize;
-								pages = Math.floor(pages);
-								pages = Math.min(100, pages);
+								var size = parseInt(val, 10);
+								if (isNaN(size) || size <= 0 || size > self.maxPageSize) size = self.maxPageSize;
+								var pages = Math.min(100, Math.max(1, Math.ceil(self.totalRecords / size)));
 								var options = [];
-								for (var i = 1; i <= pages; i++) {
-									options.push({ label: i, value: i });
-								}
+								for (var p = 1; p <= pages; p++) options.push({ label: p, value: p });
 								return {
 									values: {
 										'pageNumber': '1',
@@ -353,61 +294,59 @@
 								};
 							})
 							.on('preSubmit', function (e, o, action) {
-								var pageNumber = o.data[0].pageNumber;
-								var iDisplayLength = o.data[0].iDisplayLength;
-								var iDisplayStart = (pageNumber - 1) * iDisplayLength;
-
-								var d = appendExtra(table.settings().ajax.params());
-								d.iDisplayStart = iDisplayStart;
-								d.iDisplayLength = iDisplayLength;
-								var j = JSON.stringify(d);
-								//queryFormAppend(o.data[0].action, j);
+								var row = o.data[0] || {};
+								var size = parseInt(row.iDisplayLength, 10);
+								if (isNaN(size) || size <= 0 || size > 4000) size = self.maxPageSize;
+								var pageNumber = parseInt(row.pageNumber, 10) || 1;
+								var params = appendExtra($.extend({}, salesOrderReturnTable.ajax.params()));
+								params.iDisplayStart = (pageNumber - 1) * size;
+								params.iDisplayLength = size;
+								var j = JSON.stringify(params);
 								fileDownload(o.data[0].action, j);
 								return false;
 							})
 							.on('open', function (e, mode, action) {
 								$('.DTE').closest('.modal-dialog').removeClass('modal-dialog-scrollable');
-								$('.DTE_Form_Content').find('input:radio').each(function (i, obj) { $(obj).addClass('form-check-input') });
+								$('.DTE_Form_Content').find('input:radio').addClass('form-check-input');
 							});
+			return this._editor;
+		}
+	};
 
-						return this._editor;
-					}
-				};
-				var shippingExport = {
-					show: function () {
-						var cEditor = this.editor();
-						cEditor
-							.title('匯出貨運清單')
-							.message('不會匯出準備出貨中訂單，匯出後會將訂單狀態改成準備出貨中。<br>一次最多匯出500筆')
-							.buttons({ label: '下載', className: 'btn-primary', action: function () { this.submit(); } })
-							.create(false);
-						cEditor.open();
-					},
-					editor: function () {
-						if (this._editor != null) return this._editor;
-						this._editor = new $.fn.dataTable.Editor({
-								fields: [],
-								formOptions: DataTableConfig.formOptions,
-								i18n: DataTableConfig.i18n,
-							})
-							.on('preSubmit', function (e, o, action) {
-								var d = {};
-								d.iDisplayStart = 0;
-								d.iDisplayLength = 500;
-								var j = JSON.stringify(d);
-
-								fileDownload('EXPORT_SHIPPING_CSV', j);
-								return false;
-							})
-							.on('open', function (e, mode, action) {
-								$('.DTE').closest('.modal-dialog').removeClass('modal-dialog-scrollable');
-							});
-						return this._editor;
-					}
-				};
-			</script>
+	{{!-- 推導：匯出貨運清單（只在「補換貨申請中」分頁顯示）：匯出換貨/補寄申請中的訂單（勾選列優先、一次最多匯出500筆），匯出後狀態改「準備出貨中」→ 重新整理列表 --}}
+	var shippingExport = {
+		show: function () {
+			var dt = salesOrderReturnTable;
+			var picked = dt.rows({ selected: true }).count();
+			var total = picked > 0 ? picked : dt.page.info().recordsDisplay;
+			var ed = this.editor();
+			ed.title('匯出貨運清單')
+				.message((picked > 0 ? '匯出所選 ' : '匯出目前篩選的 ') + total + ' 筆換貨／補寄申請中的訂單（一次最多匯出500筆）。<br>匯出後訂單狀態將改為「準備出貨中」，確定要匯出嗎？')
+				.buttons({ label: '匯出', className: 'btn-primary', action: function () { this.submit(); } })
+				.create(false);
+			ed.open();
+		},
+		editor: function () {
+			if (this._editor) return this._editor;
+			var ed = this._editor = new $.fn.dataTable.Editor({
+				fields: [DataTableConfig.field_hidden('batchAction', 'EXPORT_SHIPPING_CSV')],
+				formOptions: DataTableConfig.formOptions,
+				i18n: DataTableConfig.i18n,
+			}).on('preSubmit', function (e, o, action) {
+				var params = appendExtra($.extend({}, salesOrderReturnTable.ajax.params()));
+				fileDownload('EXPORT_SHIPPING_CSV', JSON.stringify(params), function () {
+					ed.close();
+					salesOrderReturnTable.clear().ajax.reload();
+				});
+				return false;
+			});
+			return ed;
+		}
+	};
+</script>
 <!--#body--><div class="container-fluid ">
-	<div class="classic-tabs mt-4">
+{{!-- 推導：主內容開頭落在側欄 script 之後的缺段（3147 字元，扣除側欄 script 其餘部分約剩 60 字元，同保留單頁的同一處），只容得下 container-fluid 與 classic-tabs 外框，沒有標題卡片 --}}
+					<div class="classic-tabs mt-4">
 						<!-- Nav Tabs -->
 						<ul class="nav tabs-primary" id="orderTypeTabs" role="tablist">
 							<li class="nav-item" role="presentation">
@@ -524,44 +463,34 @@
 							</div>
 						</div>
 					</div>
-
+					{{!-- 推導：表尾與頁面 script 開頭落在缺段（1058＋343…字元）。依已擷取的片段（結束日期 datetimepicker 的 min/max、分頁切換時「匯出貨運清單」按鈕只在 replace-apply-tab 顯示、切換後重抓列表）補完：
+					     建立日期選「指定日期區間」才顯示開始日期，選了開始日期再出現結束日期（最多一年，同所有訂單頁），兩者都有才重抓；其他篩選（只顯示進行中、建立日期）變更即重抓；
+					     分頁切換把 data-relation/data-status/data-state 寫入 #queryForm 的 hidden 欄位（列表與匯出共用） --}}
 					<script>
-						var updateFilterEnable = function () {
-							var days = $('#days').val();
-							if (days == -1) {
-								var dateCreatedBegin = $('#dateCreatedBegin').val();
-								var dateCreatedEnd = $('#dateCreatedEnd').val();
-								var a = moment(dateCreatedBegin);
-								var b = moment(dateCreatedEnd);
-								days = b.diff(a, 'days');
-							}
-						}
-
 						$(document).ready(function () {
+							var dateRangeReady = function () {
+								return $('#dateCreatedBegin').val() != '' && $('#dateCreatedEnd').val() != '';
+							};
+
 							$('#days').on('change', function () {
-								var val = $(this).val();
-								if (val == -1) {
+								if ($(this).val() == -1) {
 									$('#dateCreatedBegin').show();
-								} else {
-									$('#dateCreatedBegin').hide();
-									$('#dateCreatedEnd').hide();
-									$('#dateCreatedBegin').val('');
-									$('#dateCreatedEnd').val('');
+									return;
 								}
+								$('#dateCreatedBegin').hide().val('');
+								$('#dateCreatedEnd').hide().val('');
+								salesOrderReturnTable.clear().ajax.reload();
 							});
 
-							var shouldReloadDateCreated = function (date, obj) {
-								if ($('#dateCreatedBegin').val() != ''
-									&& $('#dateCreatedEnd').val() != '') {
-									table.clear().ajax.reload();
-								}
-							}
+							$('.filters').not('#days').not('[data-type=dateCreated]').on('change', function () {
+								if ($('#days').val() == -1 && !dateRangeReady()) return;
+								salesOrderReturnTable.clear().ajax.reload();
+							});
 
 							initDatetimePicker('#dateCreatedBegin', 'YYYY-MM-DD', 'months', function (date, obj) {
-								var now = moment(date, 'YYYY-MM-DD');
-								var maxDate = now.add('61', 'days').format('YYYY-MM-DD');
+								var maxDate = moment(date, 'YYYY-MM-DD').add(1, 'years').format('YYYY-MM-DD');
 								if ($('#dateCreatedEnd').data("DateTimePicker") != null) {
-									$('#dateCreatedEnd').data("DateTimePicker").destroy()
+									$('#dateCreatedEnd').data("DateTimePicker").destroy();
 								}
 								initDatetimePicker('#dateCreatedEnd', 'YYYY-MM-DD', 'months');
 								$('#dateCreatedEnd').data("DateTimePicker").minDate(date);
@@ -570,28 +499,17 @@
 								$('#dateCreatedEnd').show();
 							});
 
-							$('[data-type=dateCreated]').on("dp.hide", function () {
-								if ($('#dateCreatedBegin').val() != ''
-									&& $('#dateCreatedEnd').val() != '') {
-									updateFilterEnable();
-									salesOrderReturnTable.clear().ajax.reload();
-								}
+							$('[data-type=dateCreated]').on('dp.hide', function () {
+								if (dateRangeReady()) salesOrderReturnTable.clear().ajax.reload();
 							});
 
-							// Handle tab switching for order type filter
 							$('#orderTypeTabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-								var relation = $(e.target).data('relation');
-								var status = $(e.target).data('status');
-								var state = $(e.target).data('state');
-								var tabId = $(e.target).attr('id');
-
-								$('#relation').val(relation);
-								$('#status').val(status);
-								$('#state').val(state);
-
-								// Show/hide shipping export button based on active tab
+								var tab = $(e.target);
+								$('#relation').val(tab.attr('data-relation'));
+								$('#status').val(tab.attr('data-status'));
+								$('#state').val(tab.attr('data-state'));
 								var shippingBtn = salesOrderReturnTable.button('shippingExport:name');
-								if (tabId === 'replace-apply-tab') {
+								if (tab.attr('id') == 'replace-apply-tab') {
 									shippingBtn.enable();
 									$(shippingBtn.node()).show();
 								} else {

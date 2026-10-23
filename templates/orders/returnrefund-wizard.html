@@ -1,294 +1,113 @@
-{{!-- 原站 /backend/ReturnRefund/wizard?uuid=&salesOrderId=（openFormF 片段；原站實際擷取）。
-      伺服器依訂單決定是否輸出 .card-wizrd-shippedonly / .card-wizrd-paidonly 的 disabled（原站：未出貨/未付款時輸出）。 --}}
-<style>
-.breadcrumb-item {cursor: pointer;}
-/*.wizard-body {min-height:678px;}*/
-.card-wizard.card {border:1px solid #dee2e6;text-align:center;letter-spacing: 2px;transform: scale(1);transition-duration: 0.3s;}
-.card-wizard.card:hover {border: solid 1px #7f8c98;transform: scale(1.05);transition-duration: 0.3s;}
-.card-wizard .card-header {font-size: 16pt;font-weight: 400;}
-.card-wizard .card-body {display: flex;justify-content: center;min-height: 158px;align-items: center;flex-wrap: wrap;font-size: 14px;text-align:left;}
-.wizard-step1 .card-wizard .card-body {min-height: 232px;}
-
-.card-wizard span {display:inline-block;}
-.wizard-stepfinal .modal-footer {position: absolute;bottom: 0px;width: 100%;}
-.btn-input-check,.btn-input-check:hover,.btn-input-check.active {min-width:72px !important;background-color: #fff!important;color: black;border: 1px solid #ced4da;}
-.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;color:#10ad1d}
-.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
-label.error {display: flex;justify-content: center;align-items: center;height: 38px;margin: 0;padding: 0 2px;background-color: red;color: #fff;font-weight: 500;}
-
-.mask {background-color: rgba(255,255,255,0.7);width: 100%;height: 100%;position: absolute;}
-.card.card-wizard.card-wizrd-shippedonly.disabled {color: #cccccc;}
-.card-wizard > .badge.badge-info {position:absolute;padding:6px;border-radius: 0 !important;}
-</style>
+{{!-- 推導：原站「加退換商品」精靈（所有訂單列明細卡 openFormF('/backend/ReturnRefund/wizard','uuid=…&salesOrderId=…')，modal-fluid）畫面未擷取。
+     依本系統後端契約（lib/modules/orders/returns.ts）與原站後台彈窗版型（modal-header／modal-body 卡片／modal-footer）推導：
+     第一步選擇操作：原單操作[預設]（→ displayReturnAndRefund）、退貨／換貨與補寄（限已出貨，→ displayReturn／displayReshipment 載入本彈窗）、
+     建立新單（限已付款，→ createNewForReturnRefund）；重開新單（→ createAndMove）依後端註解「原站卡片隱藏」保留為隱藏卡片。
+     說明文字取自 migration 3020 開頭註解記載的原站語意（「所選之退貨商品將會移至退貨訂單」「將漏出貨的商品移至補寄單內出貨」）。 --}}
 <div class="modal-header">
-	<h5>訂單 &raquo; 加退換商品 {{uuid}}</h5>
+	<h5 style="overflow:hidden">加退換商品 {{uuid}}&raquo;</h5>
 	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
 </div>
-<div class="modal-body modal-body-wizard">
-	<div class="modal-message"></div>
-
-	<div class="wizard-body">
-		<div class="wizard-step wizard-step1" id="wizard-step1-all" >
-		<div class="row">
-			<div class="col-6 mb-4">
-			<div class="card card-wizard" data-type="default">
-				<div class="card-header">原單操作[預設]</div>
-				<div class="card-body">使用原單進行增加/減少/刪除商品的操作
-				<br>
-				<br>用途：
-				<br>(1) 未付款單
-				<br>異動後金額增加或減少：異動後商品皆在原單，可使用原訂單的新金額進行付款
-				<br>
-				<br>(2) 已付款單
-				<br>異動後金額增加：異動後商品皆在原單，產生補款訂單，待客戶補付款差額後系統將付款金額併入原單
-				<br>異動後金額減少：異動後商品皆在原單，使用原單退款差額
-				<br>
-				<p class="small red-text w-100">
-				<br>＊會計對帳＊：
-				<br>限：訂單尚未付款前使用
-				<br>限：已付款訂單，且修改商品僅可能金額減少或維持金額不變
-				</p>
-				</div>
-			</div></div>
-			<div class="col-6 mb-4">
-			<div class="card card-wizard card-wizrd-paidonly" data-type="new-add">
-				<div class="badge badge-info">限已付款</div>
-				<div class="card-header">建立新單</div>
-				<div class="card-body">用途：
-				<br>使用原單進行異動且金額增加的情況下，可針對新訂單單獨開立發票使用
-				<br>
-				<br>可額外產生新訂單，原單可自動［保留］，等待新單客戶付款後，
-				<br>再由客服手動將原單階段改為［處理中］，並與新單做［合併訂單］後再一起出貨
-				<br>
-				<p class="small red-text w-100">
-				<br>＊會計對帳＊：
-				<br>已付款單：若修改訂單後有金額變多情況需使用建立新單
-				</p>
-				</div>
-			</div></div>
-
-
-			<div class="col-12 mb-4 col-confirm-new-add d-none">
-			<div class="card">
+<div class="modal-body" id="rrWizard">
+	<div class="mb-3">
+		<span class="mr-2">訂單 {{uuid}}</span>
+		{{#if shipped}}<span class="badge badge-success z-depth-0">已出貨</span>{{else}}<span class="badge badge-default z-depth-0">尚未出貨</span>{{/if}}
+		{{#if paid}}<span class="badge badge-success z-depth-0">已付款</span>{{else}}<span class="badge badge-default z-depth-0">尚未付款</span>{{/if}}
+	</div>
+	<div class="row" id="rrWizardChoose">
+		<div class="col-md-6 col-xl-3 mb-3">
+			<div class="card h-100 rr-mode" style="cursor:pointer">
 				<div class="card-body">
-				<div class="col-12">{{uuid}} 確定要產生新訂單？</div>
-				<div class="col-12 small"><input type="checkbox" class="form-check-input" id="markAsHolded" name="markAsHolded"><label for="markAsHolded">同時將原訂單改為「保留中」</label></div>
-				<div class="col-12 small">若後續付款後想手動合併訂單出貨，建議先將原單改為「保留中」已避免提前出貨
-				<br>待新訂單付款後再將「保留中」改為「處理中」合併出貨</div>
-				<button type="button" class="btn btn-sm btn-primary" id="btn-confirm-new-add">產生新訂單並開始加入商品</button>
+					<div class="form-check pl-0">
+						<input type="radio" name="rrMode" value="edit" id="rrModeEdit" class="form-check-input" checked>
+						<label for="rrModeEdit" class="form-check-label font-weight-bold">原單操作[預設]</label>
+					</div>
+					<p class="small grey-text mt-2 mb-0">直接修改此訂單：調整商品數量、單價、折價或現貨／預購，加購商品、重新套用優惠；送出後寫回原訂單，可另建新單收取差額。</p>
 				</div>
-				<div class="card-footer text-danger"></div>
-			</div></div>
-
-			<div class="col-12 mb-4 col-created d-none">
-			<div class="card">
-				<div class="card-body"><span class="created-result"></span>
-				<button type="button" class="btn btn-sm btn-primary" id="btn-go">開始修改訂單</button>
-				</div>
-			</div></div>
-
-			<div class="col-6 mb-4 d-none">
-			<div class="card card-wizard" data-type="new">
-				<div class="card-header">重開新單</div>
-				<div class="card-body">
-				建議用途：
-				<br>若退換貨後有金額變多情況時
-				<br>整張訂單取消重新使用新單
-				<br>方便會計金流核對使用
-				<br>
-				<br>*原單商品會自動轉移至新單
-				<br>*原單將會預設為階段[保留]
-				<br>(請自行取消+退款+作廢發票)
-				<br>*需將新單連結資訊提供客戶付款
-				</div>
-			</div></div>
-			<div class="col-6 mb-4">
-			<div class="card card-wizard card-wizrd-shippedonly" data-type="return">
-				<div class="badge badge-info">限已出貨</div>
-				<div class="card-header">退/換貨</div>
-				<div class="card-body">
-				建議用途：
-				<br>產生退/換貨單
-				<br>將指定商品移至退/換貨訂單操作
-				<br>僅限原單已出貨後使用
-				</div>
-			</div></div>
-
-			<div class="col-6 mb-4">
-			<div class="card card-wizard card-wizrd-shippedonly" data-type="reshipment">
-				<div class="badge badge-info">限已出貨</div>
-				<div class="card-header">補寄</div>
-				<div class="card-body">
-				用途：
-				<br>產生補寄單
-				<br>將漏出貨的商品移至補寄單內出貨
-				<br>僅限原單已出貨後使用
-				</div>
-			</div></div>
-
-			<div class="col-12 mb-4 col-confirm-exchange d-none">
-			<div class="card">
-				<div class="card-body"> {{uuid}} 確定要產生換貨單？
-				<button type="button" class="btn btn-sm btn-primary" id="btn-confirm-exchange">確定</button>
-				</div>
-				<div class="card-footer text-danger"></div>
-			</div></div>
-
-			<div class="col-12 mb-4 col-confirm d-none">
-			<div class="card">
-				<div class="card-body">確定要將 {{uuid}} 訂單商品轉移至新訂單？
-				<button type="button" class="btn btn-sm btn-primary" id="btn-confirm">確定</button>
-				</div>
-				<div class="card-footer text-danger"></div>
-			</div></div>
-
-
-			<!--
-			<div class="col-6 mb-4"><div class="card card-wizard" data-type="constraint" data-step="1">
-			<div class="card-header">原單保留</div>
-			<div class="card-body">
-			商品保留於原單
-			<br>將原始資訊移至新訂單
-			<br>後續須將新訂單取消，刷退及作廢發票
-			<br>＊適合已付款且異動後金額變多時使用
-			<br>＊需刷退原單，重新付款新單
-			<br>＊客人可用原單號查詢訂單
-			<br>＊利於會計金流核對
 			</div>
-			</div>
-			 -->
 		</div>
+		<div class="col-md-6 col-xl-3 mb-3">
+			<div class="card h-100 rr-mode" style="cursor:pointer">
+				<div class="card-body">
+					<div class="form-check pl-0">
+						<input type="radio" name="rrMode" value="return" id="rrModeReturn" class="form-check-input"{{#unless shipped}} disabled{{/unless}}>
+						<label for="rrModeReturn" class="form-check-label font-weight-bold">退貨／換貨 <span class="badge badge-warning z-depth-0">限已出貨</span></label>
+					</div>
+					<p class="small grey-text mt-2 mb-0">所選之退貨商品將會移至退貨訂單；可同時產生換貨訂單（退換同規格商品，或退換不同商品）。</p>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-6 col-xl-3 mb-3">
+			<div class="card h-100 rr-mode" style="cursor:pointer">
+				<div class="card-body">
+					<div class="form-check pl-0">
+						<input type="radio" name="rrMode" value="reshipment" id="rrModeReshipment" class="form-check-input"{{#unless shipped}} disabled{{/unless}}>
+						<label for="rrModeReshipment" class="form-check-label font-weight-bold">補寄 <span class="badge badge-warning z-depth-0">限已出貨</span></label>
+					</div>
+					<p class="small grey-text mt-2 mb-0">將漏出貨的商品移至補寄單內出貨；完成補寄後，補寄商品移回主訂單。</p>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-6 col-xl-3 mb-3">
+			<div class="card h-100 rr-mode" style="cursor:pointer">
+				<div class="card-body">
+					<div class="form-check pl-0">
+						<input type="radio" name="rrMode" value="newOrder" id="rrModeNewOrder" class="form-check-input"{{#unless paid}} disabled{{/unless}}>
+						<label for="rrModeNewOrder" class="form-check-label font-weight-bold">建立新單 <span class="badge badge-warning z-depth-0">限已付款</span></label>
+					</div>
+					<p class="small grey-text mt-2 mb-0">建立一張空白的補款新單（沿用訂購人與收件資料），再「開始修改訂單」加入商品與金額。</p>
+				</div>
+			</div>
+		</div>
+		{{!-- 推導：重開新單（後端註解：原站卡片隱藏）→ 保留卡片但不顯示 --}}
+		<div class="col-md-6 col-xl-3 mb-3" style="display:none">
+			<div class="card h-100 rr-mode" style="cursor:pointer">
+				<div class="card-body">
+					<div class="form-check pl-0">
+						<input type="radio" name="rrMode" value="move" id="rrModeMove" class="form-check-input">
+						<label for="rrModeMove" class="form-check-label font-weight-bold">重開新單</label>
+					</div>
+					<p class="small grey-text mt-2 mb-0">原訂單商品全數轉移至新單，原訂單改為保留。</p>
+				</div>
+			</div>
 		</div>
 	</div>
+
+	<div class="card rr-panel" id="rrNewOrderPanel" style="display:none">
+		<div class="card-header">建立新單</div>
+		<div class="card-body">
+			<div class="modal-message"></div>
+			<p class="mb-3">建立一張空白的新訂單（補款新單，訂購人／收件資料沿用訂單 {{uuid}}），建立後可「開始修改訂單」加入商品並設定金額。</p>
+			<div class="form-check">
+				<input type="checkbox" id="rrMarkAsHolded" class="form-check-input" checked>
+				<label for="rrMarkAsHolded" class="form-check-label">原訂單改為「保留」</label>
+			</div>
+		</div>
+		<div class="card-footer text-right">
+			<span class="rr-after-create" style="display:none"></span>
+			<button type="button" class="btn btn-primary btn-sm m-0" id="rrNewOrderSubmit">建立新單</button>
+		</div>
+	</div>
+
+	<div class="card rr-panel" id="rrMovePanel" style="display:none">
+		<div class="card-header">重開新單</div>
+		<div class="card-body">
+			<div class="modal-message"></div>
+			<p class="mb-0">訂單 {{uuid}} 的商品將全數轉移至新單（含金額），原訂單改為「保留」。</p>
+		</div>
+		<div class="card-footer text-right">
+			<span class="rr-after-create" style="display:none"></span>
+			<button type="button" class="btn btn-primary btn-sm m-0" id="rrMoveSubmit">重開新單</button>
+		</div>
+	</div>
+
+	<div id="rrWizardStep"></div>
 </div> <!-- modal-body -->
+<div class="modal-footer">
+	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+	<button type="button" class="btn btn-default" id="rrWizardBack" style="display:none">上一步</button>
+	<button type="button" class="btn btn-primary" id="rrWizardNext">下一步</button>
+</div>
+<script src="/modules/orders/returns-wizard.js?v={{assetVersion}}"></script>
 <script>
-
-$(document).ready(function() {
-	//$('#myModal').data('bs.modal')._config.keyboard = false;
-	//$('#myModal').data('bs.modal')._config.backdrop = 'static';
-	console.log('wizard init');
-	var id = {{json salesOrderId}};
-	var newId = '';
-	$('.card-wizard').click(function() {
-		var type = $(this).data('type');
-		var url = '';
-		switch (type) {
-			case 'default' : {
-				url = GBF.ctx + '/backend/ReturnRefund/displayReturnAndRefund';
-				showAjax(
-					url,
-					{
-						salesOrderId:id
-					},
-					'myModalContent'
-				)
-				break;
-			}
-			case 'new':
-				$('.col-confirm').removeClass('d-none');
-				break;
-			case 'new-add':
-				$('.col-confirm-new-add').removeClass('d-none');
-				break;
-			case 'return':
-				url = GBF.ctx + '/ajax/ReturnRefund/displayReturn';
-				showAjax(
-					url,
-					{
-						salesOrderId:id
-					},
-					'myModalContent'
-				)
-				break;
-			case 'reshipment':
-				url = GBF.ctx + '/ajax/ReturnRefund/displayReshipment';
-				showAjax(
-					url,
-					{
-						salesOrderId:id
-					},
-					'myModalContent'
-				)
-				break;
-		}
-	});
-	$('#btn-confirm').click(function() {
-		var $btn = $(this);
-		btnStartLoading($btn);
-		moveOrder(id, $btn);
-	});
-
-	$('#btn-confirm-new-add').click(function() {
-		var $btn = $(this);
-		btnStartLoading($btn);
-		newOrder(id, $btn);
-	});
-
-	$('#btn-go').click(function() {
-		showRR(newId);
-	})
-
-	var showRR = function(id) {
-		var url = GBF.ctx + '/backend/ReturnRefund/displayReturnAndRefund';
-		showAjax(
-			url,
-			{
-				salesOrderId:id
-			},
-			'myModalContent'
-		)
-	};
-
-	var moveOrder = function(id, $caller) {
-		{{!-- 原站以 jQuery.get 呼叫會建立訂單的端點；本系統規定寫入端點一律 POST，改用 jQuery.post（參數相同） --}}
-		jQuery.post(
-				GBF.baseUrl+'/ajax/SalesOrder/createAndMove',
-				{
-					'salesOrderId':id
-				},
-				function(data) {
-					var msg = '已產生訂單 ' + data.data.uuid;
-					newId = data.data.salesOrderId;
-					$('.created-result').html(msg);
-					$('.col-created').removeClass('d-none');
-				}
-			).fail(function(data) {
-				json = data.responseJSON;
-				$('.col-confirm .card-footer').html(json.error);
-			}).always(function() {
-				btnStopLoading($caller);
-			})
-	}
-
-	var newOrder = function(id, $caller) {
-		jQuery.post(
-				GBF.baseUrl+'/ajax/SalesOrder/createNewForReturnRefund',
-				{
-					'salesOrderId':id,
-					'markAsHolded':$('#markAsHolded').prop('checked')
-				},
-				function(data) {
-					var msg = '已產生訂單 ' + data.data.uuid;
-					newId = data.data.salesOrderId;
-					$('.created-result').html(msg);
-					$('.col-created').removeClass('d-none');
-				}
-			).fail(function(data) {
-				json = data.responseJSON;
-				$('.col-confirm-new-add .card-footer').html(json.error);
-			}).always(function() {
-				btnStopLoading($caller);
-			})
-	}
-
-
-	//$('.card-wizrd-shippedonly .mask').remove();
-	//$('.card-wizrd-shippedonly').remove();
-{{#unless shipped}}	$('.card-wizrd-shippedonly').addClass('disabled');
-{{/unless}}
-{{#unless paid}}	$('.card-wizrd-paidonly').addClass('disabled');
-{{/unless}}
-	$('.mask').click(function(e) {e.stopPropagation()})
-
-});
+RRWizard.init({ baseUrl: {{json baseUrl}}, salesOrderId: {{json salesOrderId}}, uuid: {{json uuid}} });
 </script>

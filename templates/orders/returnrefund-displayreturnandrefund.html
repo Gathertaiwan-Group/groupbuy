@@ -1,278 +1,153 @@
-{{!-- 原站 /backend/ReturnRefund/displayReturnAndRefund?salesOrderId=（精靈「原單操作[預設]」、「開始修改訂單」、「編輯換貨單」；原站實際擷取）。
-      表單 action 改用 baseUrl；bundle-modal.min.js 為原站自家 JS（已鏡射於 /public/scripts/）；
-      /backend/ReturnRefund/returnAndRefund.js?v=3 鏡射於 /modules/orders/returns-rar.js（修改處見該檔開頭）。 --}}
-<style>
-			.select2-container .select2-selection--single .select2-selection__rendered {white-space: break-spaces;}
-			.rr-items .card,
-			.rr-items .card-body {
-			 padding:2px;
-			}
-			.rr-items .order-item-row {
-			 margin-left:0;
-			 margin-right:0;
-			}
-			.rr-items .input-group button,
-			.rr-items .input-group span.input-group-text {
-			 padding-left:2px;
-			 padding-right:2px;
-			}
-			.rr-items .input-group span.input-group-text {
-			 min-width:72px;
-			 max-width:72px;
-			}
-			.rr-items .card-footer p {
-			 text-align:right;
-			}
-			.input-group-rr .input-group-text {
-				display: -webkit-box;
-				white-space: normal;
-				-webkit-line-clamp: 1;
-				-webkit-box-orient: vertical;
-				flex: 1 1;
-				text-align: left;
-				overflow: hidden;
-				min-width: 100px;
-				max-width: 100px;
-			}
-
-			.input-group-rr .input-group-prepend {
-				flex: 1
-			}
-			.bundle-child-locked-view {
-			 display: flex;
-			}
-			.input-group.input-group-sm {
-			 display: flex;
-			 align-items: stretch !important;
-			 width: 96px;
-			 height: 28px;
-			 border: 1px solid #eee !important;
-			 border-radius: 4px !important;
-			 overflow: hidden;
-			 padding: 0;
-			 background-color: #fff !important;
-			}
-			.input-group.input-group-sm .btn {
-			 width: 28px !important;
-			 padding: 0 !important;
-			 margin: 0 !important;
-			 display: flex !important;
-			 align-items: center !important;
-			 justify-content: center !important;
-			 background: transparent !important;
-			 border: none !important;
-			 box-shadow: none !important;
-			 cursor: pointer;
-			 transition: background 0.2s;
-			}
-			.input-group.input-group-sm .btn:hover {
-			 background: rgba(0, 0, 0, 0.05) !important;
-			}
-			.input-group.input-group-sm .btn:hover {
-			 background: rgba(255, 255, 255, 0.1) !important;
-			}
-			.input-group.input-group-sm .input {
-			 flex: 1 !important;
-			 width: 0 !important;
-			 height: 100% !important;
-			 border-top: none !important;
-			 border-bottom: none !important;
-			 border-left: 1px solid #eee !important;
-			 border-right: 1px solid #eee !important;
-			 text-align: center !important;
-			 padding: 0 !important;
-			 margin: 0 !important;
-			 box-shadow: none !important;
-			 background: transparent !important;
-			 font-size: 1rem !important;
-			 font-weight: 700 !important;
-			 border-radius: 0 !important;
-			}
-			.bundle-group-container {
-				background-color: #d4edda;
-				/* Bootstrap table-success color */
-				border: 1px solid #c3e6cb;
-			}
-		</style>
-		<form name="ReturnRefundForm" method="post" action="{{baseUrl}}/ajax/ReturnRefund/returnAndRefund.do" class="form-horizontal" id="ReturnRefundForm"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId"><div class="modal-header">
-				<h5>
-					加退換商品<span id="rr_uuid"></span><span
-						class="badge badge-info order-type mx-1"></span>&raquo;
-				</h5>
-				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+{{!-- 推導：原站「原單操作」（修改訂單內容；/backend/ReturnRefund/displayReturnAndRefund，由精靈「原單操作[預設]」、建立新單後「開始修改訂單」、
+     退換不同商品後「編輯換貨單」以 openFormF 開啟）畫面未擷取。依後端契約（returns.ts：prepare／updateOrderItem／addOrderItem／applySalesRules／
+     itemTags／itemOptions／isTypeBundleConfigable／returnAndRefund 的參數與 rr 回應鍵）與原站後台彈窗版型推導：
+     商品表（現貨/預購、單價、數量、折價即時試算，送出欄位 orderItems[i].*）、加購商品（品項→分類→商品）、訂單金額（運費、退換後訂單金額、差額）、
+     退換明細（salesReturnRecords）、額外操作（自動刪除數量為0商品、建立新單支付差額、訂單更新通知信、重新產生虛擬帳號／超商取貨付款單號）。 --}}
+<form name="ReturnAndRefundForm" method="post" action="{{baseUrl}}/ajax/ReturnRefund/returnAndRefund.do" class="form-horizontal" id="rrEditForm"><input type="hidden" name="salesOrderId" value="{{salesOrderIdText}}">
+	<div class="modal-header">
+		<h5 style="overflow:hidden">修改訂單內容 <span class="rr-uuid"></span>&raquo;</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="card">
+		<div class="card-header d-flex align-items-center">
+			<span>原單操作：訂單商品</span>
+			<button type="button" class="btn btn-default btn-sm my-0 mr-0 ml-auto" id="rrApplySalesRules">重新套用優惠</button>
+		</div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+			<table class="table table-sm mb-0">
+				<thead>
+					<tr>
+						<th>商品</th>
+						<th style="width:110px">現貨/預購</th>
+						<th style="width:120px">單價</th>
+						<th style="width:100px">數量</th>
+						<th style="width:110px">折價</th>
+						<th class="text-right" style="width:110px">小計</th>
+						<th class="text-right" style="width:130px">原數量／原小計</th>
+					</tr>
+				</thead>
+				<tbody class="rr-edit-items">
+					<tr><td colspan="7" class="text-center grey-text">載入中...</td></tr>
+				</tbody>
+			</table>
 			</div>
-			<div class="modal-body">
-				<div class="container-fluid rr-items">
-					<div class="row">
-						<div class="card col-lg-7">
-							<div class="card-header">
-								訂單內商品
-							</div>
-							<div class="card-body">
-								<div id="order_item_container">
-									<span class="glyphicon glyphicon-refresh glyphicon-refresh-animate"></span>
-								</div>
-							</div>
-						</div>
-
-						<div class="card col-lg-5">
-							<div class="card-header">
-								新增商品
-							</div>
-							<div class="card-body">
-								<div class="input-group input-group-rr">
-									<div class="input-group-prepend">
-										<span class="input-group-text md-addon">關鍵字</span>
-										<select id="selItem" class=" form-control"></select>
-									</div>
-									<div class="input-group-append"><button type="button" id="btn_addItemSelect2"
-											class="btn btn-default btn-small m-0">加入商品</button>
-									</div>
-								</div>
-								<div class="help text-danger" id="btnAddItemSelect2_help"></div>
-
-								<div class="input-group input-group-rr">
-									<div class="input-group-prepend">
-										<span class="input-group-text md-addon">商品代碼</span>
-										<select id="selItemUid" class=" form-control"></select>
-									</div>
-									<div class="input-group-append"><button type="button" id="btn_addItemSelect3"
-											class="btn btn-default btn-small m-0">加入商品</button>
-									</div>
-								</div>
-								<div class="help text-danger" id="btnAddItemSelect3_help"></div>
-							</div>
-							<div class="card-header">下拉選擇商品</div>
-							<div class="card-body">
-								<div id="select_gbis_container"></div>
-								<div id="select_tag_container"></div>
-								<div id="select_item_container"></div>
-							</div>
-							<div class="card-footer">
-								<p><a href="javascript: void(0)" id="btn_addItem" class="btn btn-default">加入商品</a></p>
-								<div class="help text-danger" id="btnAddItem_help"></div>
-							</div>
-						</div>
+		</div>
+		<div class="card-footer small grey-text">修改現貨/預購、單價、數量或折價後即時試算；數量改為 0 即退回該商品（庫存於送出後同步補回／扣除）。組合商品的子項數量隨組合調整。</div>
+	</div>
+	<div class="card mt-4" id="rrAddSection">
+		<div class="card-header">加購商品</div>
+		<div class="card-body">
+			<div class="form-row">
+				<div class="col-md-4 mb-2">
+					<label class="small mb-1" for="rrAddSet">品項</label>
+					<select id="rrAddSet" class="form-control" style="width:100%"></select>
+				</div>
+				<div class="col-md-3 mb-2">
+					<label class="small mb-1" for="rrAddTag">分類</label>
+					<select id="rrAddTag" class="custom-select custom-select-sm"></select>
+				</div>
+				<div class="col-md-4 mb-2">
+					<label class="small mb-1" for="rrAddItem">商品</label>
+					<select id="rrAddItem" class="custom-select custom-select-sm"></select>
+				</div>
+				<div class="col-md-1 mb-2 d-flex align-items-end">
+					<button type="button" class="btn btn-primary btn-sm btn-block m-0" id="rrAddItemBtn">加入</button>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="row mt-4 rr-after-items">
+		<div class="col-lg-6 mb-4">
+			<div class="card h-100">
+				<div class="card-header">訂單金額</div>
+				<div class="card-body">
+					<div class="form-group row mb-2">
+						<label class="col-sm-5 control-label">原訂單金額</label>
+						<div class="col-sm-7"><span class="rr-ori-grand">-</span></div>
+					</div>
+					<div class="form-group row mb-2">
+						<label class="col-sm-5 control-label">商品金額異動</label>
+						<div class="col-sm-7"><span class="rr-items-diff">0</span></div>
+					</div>
+					<div class="form-group row mb-2">
+						<label class="col-sm-5 control-label" for="rrShippingAmount">運費</label>
+						<div class="col-sm-7"><input type="text" inputmode="decimal" autocomplete="off" name="shippingAmount" id="rrShippingAmount" class="form-control form-control-sm"></div>
+					</div>
+					<div class="form-group row mb-2">
+						<label class="col-sm-5 control-label" for="rrGrandTotal">退換後訂單金額</label>
+						<div class="col-sm-7"><input type="text" inputmode="decimal" autocomplete="off" name="grandTotal" id="rrGrandTotal" class="form-control form-control-sm"></div>
+					</div>
+					<div class="form-group row mb-0">
+						<label class="col-sm-5 control-label">差額</label>
+						<div class="col-sm-7"><span class="rr-diff font-weight-bold">-</span></div>
 					</div>
 				</div>
-				<div id="summary" class="card mt-4">
-					<div class="card-header bg-info">
-						訂單摘要
-					</div>
-					<div class="card-body">
-						<div class="container-fruid">
-							<div class="row">
-								<div class="col-4 small my-auto">原始訂單金額</div>
-								<div class="col-8"><span class="text-success" id="summary_ori_grand_total"> </span>
-								</div>
-								<div class="col-4 small my-auto">運費</div>
-								<div class="col-8"><input type="text" id="summary_shipping_amount" name="shippingAmount"
-										size=8></div>
-								<div class="col-4 small my-auto">退換後訂單金額</div>
-								<div class="col-8"><input type="text" id="summary_new_grand_total" name="grandTotal"
-										size=8><span class="text-danger" id="summary_diff_grand_total"> </span></div>
-							</div>
-						</div>
-
-						<div class="container-fruid mt-2">
-							<div class="row" id="item_result_container">
-							</div>
-						</div>
-
-					</div>
-					<div class="card-footer">
-						<p><a href="javascript: void(0)" id="btnApplySalesRules" class="btn btn-default">重新計算優惠條件</a>
-						</p>
-						<p>註：系統不會自動新增「自選」類型的贈品</p>
-					</div>
-				</div>
-
-				<div id="options" class="card mt-4">
-					<div class="card-header">
-						額外操作
-					</div>
-					<div class="card-body">
-						<div class="container">
-							<div class="row">
-								<div class="col-12 small"><input type="checkbox" class="form-check-input"
-										id="optionDeleteEmptyOrderItem" name="optionDeleteEmptyOrderItem"><label
-										for="optionDeleteEmptyOrderItem">自動刪除數量為0商品</label></div>
-								<div class="col-12 small"><input type="checkbox" class="form-check-input"
-										id="optionSendSalesOrderUpdateEmail"
-										name="optionSendSalesOrderUpdateEmail"><label
-										for="optionSendSalesOrderUpdateEmail">發送訂單更新信(不須補款使用)</label></div>
-								<div id="optionCreateSalesOrderContainer">
-									<div class="col-12 small"><input type="checkbox" class="form-check-input"
-											id="optionCreateSalesOrder" name="optionCreateSalesOrder"><label
-											for="optionCreateSalesOrder">將此訂單更新為「保留」，產生須支付差額之新訂單並發送付款通知（待客完成付款後<span
-												class="alert-warning">系統將自動合併訂單</span>）</label></div>
-								</div>
-								<div id="optionGrandTotalToPayContainer">
-									<div class="row">
-										<div class="col-8 small my-auto">新訂單支付差額金額</div>
-										<div class="col-4"><input type="text" id="optionGrandTotalToPay"
-												name="grandTotalToPay" size=6></div>
-									</div>
-								</div>
-								<div id="optionRegenVirtualAccountContainer">
-									<div class="col-8 small"><input type="checkbox" class="form-check-input"
-											id="optionRegenVirtualAccount" name="optionRegenVirtualAccount"><label
-											for="optionRegenVirtualAccount">重新產生虛擬帳號(訂單金額有異動時建議使用)</label></div>
-								</div>
-								<div id="optionRenewCVSPickupContainer">
-									<div class="col-8 small"><input type="checkbox" class="form-check-input"
-											id="optionRenewCVSPickup" name="optionRenewCVSPickup"><label
-											for="optionRenewCVSPickup">重新產生超商取貨付款單號(訂單金額有異動時建議使用)</label></div>
-								</div>
-							</div>
-						</div>
-					</div>
-				</div>
-
-			</div> <!-- modal-body -->
-
-			<div class="progress">
-				<div class="progress-bar" role="progressbar"></div>
 			</div>
-			<div class="modal-footer">
-				<button class="btn btn-default" data-dismiss="modal">
-					關閉</button>
-				<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary"
-					value="更新" />
+		</div>
+		<div class="col-lg-6 mb-4">
+			<div class="card h-100">
+				<div class="card-header">退換明細</div>
+				<div class="card-body p-0">
+					<table class="table table-sm mb-0">
+						<thead>
+							<tr>
+								<th>商品</th>
+								<th class="text-right">退回數量</th>
+								<th class="text-right">加購數量</th>
+							</tr>
+						</thead>
+						<tbody class="rr-records">
+							<tr><td colspan="3" class="text-center grey-text">尚無異動</td></tr>
+						</tbody>
+					</table>
+				</div>
 			</div>
-			<div id="bundle-selection-container" style="display:none;"></div>
-		</form><script type="text/javascript">
-			(function () {
-				var loadScript = function (url) {
-					return $.ajax({
-						url: url,
-						dataType: "script",
-						cache: true
-					});
-				};
-
-				var promises = [];
-
-				// Check if BundleModal is already defined (prevents class re-declaration error)
-				if (typeof BundleModal === 'undefined') {
-					promises.push(loadScript("/public/scripts/bundle-modal.min.js?v=251008"));
-				}
-
-				// Check if ReturnRefundApp is already defined
-				if (typeof ReturnRefundApp === 'undefined') {
-					promises.push(loadScript("/modules/orders/returns-rar.js?v=3"));
-				}
-
-				$.when.apply($, promises).done(function () {
-					// Init App
-					if (typeof ReturnRefundApp !== 'undefined') {
-						ReturnRefundApp.init({
-							gba: GBF.baseUrl,
-							salesOrderId: {{json salesOrderIdText}}
-						});
-					}
-				}).fail(function () {
-					console.error("Error loading ReturnRefund scripts");
-				});
-			})();
-		</script>
+		</div>
+	</div>
+	<div class="card rr-after-items">
+		<div class="card-header">額外操作</div>
+		<div class="card-body">
+			<div class="form-check py-1">
+				<input type="checkbox" name="optionDeleteEmptyOrderItem" value="true" id="optionDeleteEmptyOrderItem" class="form-check-input">
+				<label for="optionDeleteEmptyOrderItem" class="form-check-label">自動刪除數量為0商品</label>
+			</div>
+			<div class="rr-opt-pay" style="display:none">
+				<div class="form-check py-1">
+					<input type="checkbox" name="optionCreateSalesOrder" value="true" id="optionCreateSalesOrder" class="form-check-input">
+					<label for="optionCreateSalesOrder" class="form-check-label">建立新單支付差額（原訂單改為保留，新單付款後再合併）</label>
+				</div>
+				<div class="form-group row ml-4 mb-2">
+					<label class="col-sm-4 control-label small" for="grandTotalToPay">新訂單支付差額金額</label>
+					<div class="col-sm-4"><input type="text" inputmode="decimal" autocomplete="off" name="grandTotalToPay" id="grandTotalToPay" class="form-control form-control-sm"></div>
+				</div>
+			</div>
+			<div class="form-check py-1">
+				<input type="checkbox" name="optionSendSalesOrderUpdateEmail" value="true" id="optionSendSalesOrderUpdateEmail" class="form-check-input">
+				<label for="optionSendSalesOrderUpdateEmail" class="form-check-label">寄送訂單內容更新通知信</label>
+			</div>
+			<div class="form-check py-1 rr-opt-virtual" style="display:none">
+				<input type="checkbox" name="optionRegenVirtualAccount" value="true" id="optionRegenVirtualAccount" class="form-check-input">
+				<label for="optionRegenVirtualAccount" class="form-check-label">重新產生虛擬帳號</label>
+			</div>
+			<div class="form-check py-1 rr-opt-cvs" style="display:none">
+				<input type="checkbox" name="optionRenewCVSPickup" value="true" id="optionRenewCVSPickup" class="form-check-input">
+				<label for="optionRenewCVSPickup" class="form-check-label">重新產生超商取貨付款單號</label>
+			</div>
+		</div>
+	</div>
+</div> <!-- modal-body -->
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" disabled />
+	</div>
+</form>
+<script src="/modules/orders/returns-edit.js?v={{assetVersion}}"></script>
+<script>
+RREdit.init({ baseUrl: {{json baseUrl}}, salesOrderId: {{json salesOrderId}}, formId: 'rrEditForm' });
+</script>

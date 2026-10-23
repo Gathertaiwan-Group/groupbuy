@@ -81,311 +81,302 @@
 	}
 	.card-detail-salesOrder .card-footer .btn.btn-warning:hover {
 		background: #ea580c !important;
+{{!-- 推導：hover 規則結尾在擷取缺段內，補上邊框色（取比 #ea580c 深一階的橘色）並結束本段 style --}}
 		border-color: #c2410c !important;
-		color: #ffffff !important;
 	}
 	</style>
-	{{> core/partials/dte-style.html}}<script type="text/javascript">
-/**
- * SalesOrder 多國語言與文字字典
- * 第一部分：系統既有多國語言 (由 messages.properties 提供)
- * 第二部分：從 list_js.jsp 抽出之寫死文字 (後續可補入 messages.properties)
- */
-var salesOrderI18n = {
-    // ===== 系統既有多國語言 (JSP fmt:message) =====
-    "Blacklist": '黑名單',
-    "Blacklist.action.add": '加入黑名單',
-    "Coupon": '優惠卷',
-    "DeliverTime.Afternoon": '下午（14-18時）',
-    "DeliverTime.Morning": '上午（09-13時）',
-    "DeliverTime.Unspecified": '不指定',
-    "EmailCategory.custom": '其他自訂義',
-    "EmailCategory.cvs.delivery.arrived": '超取已配達通知',
-    "EmailCategory.cvs.shipment.notice": '超取已出貨通知',
-    "EmailCategory.member.activated": '會員開通',
-    "EmailCategory.member.upgraded": '會員升等',
-    "EmailCategory.order.cancelled": '訂單取消',
-    "EmailCategory.order.confirmed": '訂單確認',
-    "EmailCategory.order.updated": '訂單更新',
-    "EmailCategory.password.reset": '重設密碼',
-    "EmailCategory.payment.extension": '繳款展延',
-    "EmailCategory.payment.received": '已付款通知',
-    "EmailCategory.payment.reminder": '未付款提醒',
-    "EmailCategory.pickup.available": '可自取通知',
-    "EmailCategory.promo.code.sent": '優惠碼發送通知',
-    "EmailCategory.refund.notice": '退款通知',
-    "EmailCategory.shipment.notice": '已出貨通知',
-    "FlatRateShipping": '運費規則',
-    "GroupBuySettings.installment": '分期期數(請洽銀行開啟分期及可使用期數並先測試下單)',
-    "Invoice": '電子發票',
-    "ItemPack": '組合商品',
-    "Item.gift": '贈品',
-    "OrderItem": '訂單商品',
-    "OrderItem.backOrder": '預購',
-    "SalesOrder.action": '進階操作',
-    "SalesOrder.action.b2s": '預購轉現貨',
-    "SalesOrder.action.b2s.confirm": '確定要將訂單預購商品轉現貨?請先確認現貨庫存是否足夠!',
-    "SalesOrder.action.bindCustomer": '綁定顧客',
-    "SalesOrder.action.bindCustomer.confirm": '將該訂單與相同email的註冊會員綁定，若沒有相同email則找相同電話號碼會員綁定。確認操作嗎？',
-    "SalesOrder.action.cancel": '取消訂單',
-    "SalesOrder.action.cancel.confirm": '確定要取消以下 {0} 筆訂單？',
-    "SalesOrder.action.cancel.undo": '取消/還原',
-    "SalesOrder.action.cvs": '超取',
-    "SalesOrder.action.export": '匯出報表',
-    "SalesOrder.action.exportCSV": '匯出csv',
-    "SalesOrder.action.exportEInvoice": '匯出發票csv',
-    "SalesOrder.action.exportERP": '匯出ERP報表1',
-    "SalesOrder.action.exportERP2": '匯出ERP報表2',
-    "SalesOrder.action.exportERP3": '匯出ERP報表3',
-    "SalesOrder.action.exportERP4": '匯出ERP報表4',
-    "SalesOrder.action.exportOrderItem": '匯出訂單商品數量',
-    "SalesOrder.action.extend.datePaymentDue": '展延繳款日期',
-    "SalesOrder.action.extend.datePaymentDue.confirm": '「展延繳款日期」將會自動展延訂單繳款期限並且寄送展延通知信。確定操作?',
-    "SalesOrder.action.import.salesOrders": '匯入外部訂單',
-    "SalesOrder.action.issueInvalid": '作廢發票',
-    "SalesOrder.action.issueInvoice": '開立電子發票',
-    "SalesOrder.action.issueInvoice.confirm": '確定要開立電子發票?',
-    "SalesOrder.action.join": '合併訂單',
-    "SalesOrder.action.join.confirm": '將會合併「處理中」且「狀態（但不包括正在發送信）/電話號碼/Email」相同的訂單。確定要執行？',
-    "SalesOrder.action.markAsCVSDateDued": '設為未取貨',
-    "SalesOrder.action.markAsCVSDateDued.descr": '確定要將選定的「準備出貨中」訂單設置為「商品逾期未領」嗎?',
-    "SalesOrder.action.markAsPaid": '設為已付款',
-    "SalesOrder.action.markAsPaid.confirm": '確定要將選定的「處理中」訂單設置為已付款並發送「已付款通知信」嗎?',
-    "SalesOrder.action.markAsPrepareShipping": '設為準備出貨中',
-    "SalesOrder.action.markAsShipped": '設為已出貨',
-    "SalesOrder.action.moveOrderItems": '拆單',
-    "SalesOrder.action.print": '列印',
-    "SalesOrder.action.print.order": '列印(訂單)',
-    "SalesOrder.action.print.piece": '列印(商品標籤)',
-    "SalesOrder.action.printBarcode": '列印訂單barcode',
-    "SalesOrder.action.printC2COrderInfo": '列印超付取單',
-    "SalesOrder.action.printInvoice": '列印發票',
-    "SalesOrder.action.quotation": '列印報價單',
-    "SalesOrder.action.reauthPeriod": '請求授權',
-    "SalesOrder.action.refund": '退款',
-    "SalesOrder.action.renewCVSPickup": '更新超取小白單',
-    "SalesOrder.action.renewCVSPickup.confirm": '是否要重新產生超取小白單？若您有使用冷凍超取，在產生超商小白單之後，一兩天內，會有物流業者到登記的收貨地址，跟您收取相關包裹。',
-    "SalesOrder.action.returnAndRefund": '加退換商品',
-    "SalesOrder.action.sendEmail": '寄信',
-    "SalesOrder.action.shipping": '出貨',
-    "SalesOrder.action.split": '拆單',
-    "SalesOrder.action.split.merge": '拆單/合併',
-    "SalesOrder.action.tpl.createShipment": '回拋出貨',
-    "SalesOrder.action.undoCancel": '還原已取消訂單',
-    "SalesOrder.action.undoCancel.confirm": '確定要還原以下 {0} 筆已取消訂單?請先確認庫存是否足夠!訂單金額將會重新計算',
-    "SalesOrder.action.view": '訂單明細 (網址可給客人)',
-    "SalesOrder.apiUserData": '第三方資料',
-    "SalesOrder.codFee": '貨到付款手續費',
-    "SalesOrder.creditCardNumber": '信用卡號',
-    "SalesOrder.customerEmail": '顧客Email',
-    "SalesOrder.customerFirstname": '顧客姓名',
-    "SalesOrder.customerIp": '顧客 IP',
-    "SalesOrder.customerTelephone": '顧客電話',
-    "SalesOrder.dateCreated": '訂單日期',
-    "SalesOrder.dateEinvoice": '預約電子發票日期',
-    "SalesOrder.dateExpectedShipping": '期望配達日',
-    "SalesOrder.datePaid": '付款日期',
-    "SalesOrder.datePaymentDue": '繳款期限',
-    "SalesOrder.dateShipped": '已出貨日期',
-    "SalesOrder.deliverTime": '收件時間',
-    "SalesOrder.error.payment.dued": '繳款期限逾期',
-    "SalesOrder.extraFee": '額外費用',
-    "SalesOrder.grandTotal": '結帳金額',
-    "SalesOrder.invoiceNumber": '發票號碼',
-    "SalesOrder.log": '訂單操作紀錄',
-    "SalesOrder.note": '備註',
-    "SalesOrder.paymentMethod": '付款方式',
-    "SalesOrder.shippingAmount": '運費(含貨付)',
-    "SalesOrder.shippingProvider": '出貨貨運',
-    "SalesOrder.shippingReceiptNumber": '查貨號碼',
-    "SalesOrder.shippingTag": '貨運標籤',
-    "SalesOrder.shouldRegenVirtualBankAccount": '重新產生虛擬帳戶',
-    "SalesOrder.shouldRegenVirtualBankAccount.descr": '金額, 繳款日期異動時需要重新產生帳號. 註：已產生的帳號只要尚未逾期都可轉帳',
-    "SalesOrder.shouldResetCVS": '重置超取資訊',
-    "SalesOrder.shouldResetCVS.descr": '金額,異動時需要重新產生超商條碼. 勾選更新後，客戶需到訂單畫面重取條碼.註：已產生的條碼只要尚未逾期仍可付款',
-    "SalesOrder.shouldUpdateGrandTotalAndShipping": '重新計算總額跟運費',
-    "SalesOrder.shouldUpdateSalesRules": '重新計算優惠',
-    "SalesOrder.shouldUpdateShippingTag": '更新貨運標籤',
-    "SalesOrder.staffNote": '員工備註',
-    "SalesOrder.staffNote.descr": '員工備註只出現於管理後台，消費者不會看到員工備註',
-    "SalesOrder.state": '階段',
-    "SalesOrder.status": '狀態',
-    "SalesOrder.totalPaid": '已付金額',
-    "SalesOrder.virtualBankAccount": '虛擬帳戶',
-    "SalesOrderBillingAddress.bankAccount": '銀行帳號後五碼',
-    "SalesOrderBillingAddress.bankName": '銀行名稱',
-    "SalesOrderBillingAddress.birthday": '生日',
-    "SalesOrderBillingAddress.city": '城市',
-    "SalesOrderBillingAddress.country": '國家/區域',
-    "SalesOrderBillingAddress.district": '州/區',
-    "SalesOrderBillingAddress.email": '電子信箱(Email)',
-    "SalesOrderBillingAddress.fbNickname": '臉書暱稱',
-    "SalesOrderBillingAddress.postcode": '郵遞區號(Postcode)',
-    "SalesOrderBillingAddress.receiptCarrierNum": '載具編號',
-    "SalesOrderBillingAddress.receiptCarrierType": '載具類別',
-    "SalesOrderBillingAddress.receiptDonate": '捐獻發票',
-    "SalesOrderBillingAddress.receiptPaper": '紙本發票',
-    "SalesOrderBillingAddress.receiptTitle": '發票抬頭',
-    "SalesOrderBillingAddress.receiptType": '發票類型',
-    "SalesOrderBillingAddress.receiptVatId": '發票統編',
-    "SalesOrderBillingAddress.street": '地址',
-    "SalesOrderShippingAddress": '收件人資訊',
-    "SalesOrderShippingAddress.city": '城市',
-    "SalesOrderShippingAddress.country": '國家/區域',
-    "SalesOrderShippingAddress.district": '州/區',
-    "SalesOrderShippingAddress.email": '電子信箱(Email)',
-    "SalesOrderShippingAddress.postcode": '郵遞區號(Postcode)',
-    "SalesOrderShippingAddress.street": '地址',
-    "SalesOrderShippingAddress.telephone": '電話',
-    "ShippingTypeEnum.CVS": '超商取貨',
-    "action.duplicate": '複製',
-    "form.select": '選擇',
-
-    // ===== 本次重構抽取之寫死字串 (預留日後補入 messages.properties) =====
-    "SalesOrder.ui.btn.confirm": '確定',
-    "SalesOrder.ui.btn.expandAll": '展開全部',
-    "SalesOrder.ui.btn.collapseAll": '收合全部',
-    "SalesOrder.ui.btn.batchReplenish": '批次補款',
-    "SalesOrder.ui.btn.bindMemberProgram": '綁定會員方案',
-    "SalesOrder.ui.confirm.execute": '確定執行?',
-    "SalesOrder.ui.btn.exportSelected": '匯出所選訂單',
-    "SalesOrder.ui.warn.diffFormsMerge": '<h6 class="text-danger">警告：所選訂單包含不同的表單，確定要繼續合併嗎？</h6>',
-    "SalesOrder.ui.confirm.updateShippingTag": '確定更新所有符合基本條件篩選的訂單貨運標籤？',
-    "SalesOrder.ui.btn.ecpayCvsNumber": '綠界取得托運單號',
-    "SalesOrder.ui.confirm.ecpayCvsNumber": '若訂單未收到回拋，可透過此取得托運單號',
-    "SalesOrder.ui.badge.vip": '優',
-    "SalesOrder.ui.badge.pointsDeduct": '-點',
-    "SalesOrder.ui.badge.pointsAdd": '+點',
-    "SalesOrder.ui.badge.paid": '已付款',
-    "SalesOrder.ui.badge.installment": '分期付款',
-    "SalesOrder.ui.badge.backorder": '預購',
-    "SalesOrder.ui.badge.overdue": '逾期',
-    "SalesOrder.ui.badge.customerNote": '客註',
-    "SalesOrder.ui.badge.staffNote": '員註',
-    "SalesOrder.ui.badge.triplicateReceipt": '三聯',
-    "SalesOrder.ui.badge.oversea": '海外',
-    "SalesOrder.ui.badge.island": '外島',
-    "SalesOrder.ui.badge.unpaidNoShip": '未付款請勿出貨',
-    "SalesOrder.ui.badge.unpaid": '未付款',
-    "SalesOrder.ui.badge.childItem": '子商品',
-    "SalesOrder.ui.tip.executionTime": ' (執行時間：',
-    "SalesOrder.ui.lbl.virtualBankAccount": '虛擬帳號',
-    "SalesOrder.ui.lbl.cvsBarcode": '超商條碼',
-    "SalesOrder.ui.lbl.receiptCarrierNum": '載具編號',
-    "SalesOrder.ui.lbl.receiptDonateNum": '捐贈碼',
-    "SalesOrder.ui.tip.piecesSummary": '(內含 {0} 件)',
-    "SalesOrder.ui.tip.perBundle": '(每組{0})',
-    "SalesOrder.ui.tip.noChildItems": '(無子商品明細)',
-    "SalesOrder.ui.tip.copyVat": '複製統編',
-    "SalesOrder.ui.title.customerAndShipping": '顧客與收件資訊',
-    "SalesOrder.ui.title.customerAndPickup": '顧客與取件資訊',
-    "SalesOrder.ui.badge.shippingNormal": '宅配到府',
-    "SalesOrder.ui.badge.shippingCvs": '超商取貨',
-    "SalesOrder.ui.badge.shippingPickupStore": '門市自取',
-    "SalesOrder.ui.badge.shippingPickupSpot": '現場自取',
-    "SalesOrder.ui.badge.shippingNod": '免配送',
-    "SalesOrder.ui.badge.shippingIntl": '國際配送',
-    "SalesOrder.ui.badge.checkId": '需核對證件',
-    "SalesOrder.ui.lbl.pickupPerson": '取件人資訊',
-    "SalesOrder.ui.lbl.pickupStore": '自取門市 / 據點',
-    "SalesOrder.ui.lbl.pickupStoreAddress": '門市地址',
-    "SalesOrder.ui.lbl.cvsStore": '取件門市',
-    "SalesOrder.ui.lbl.cvsStoreAddress": '門市地址',
-    "SalesOrder.ui.lbl.preferredPickupDate": '預計自取日期',
-    "SalesOrder.ui.lbl.preferredDeliveryDate": '預計配送日期',
-    "SalesOrder.ui.tip.copyStoreCode": '複製店號',
-    "SalesOrder.ui.tip.copyStoreName": '複製門市',
-    "SalesOrder.ui.tip.copyPhone": '複製電話',
-    "SalesOrder.ui.tip.copyAddress": '複製地址',
-    "SalesOrder.ui.title.orderAndPayment": '訂單與款項資訊',
-    "SalesOrder.ui.btn.editShippingRule": '更改配送方式',
-    "SalesOrder.ui.tip.searchRule": '訂單號碼搜尋必須由左至右輸入，如要搜尋末幾碼，請輸入?，如?3456<br>電話號碼搜尋必須由左至右輸入，如要搜尋末幾碼，請輸入?，如?3456',
-    "SalesOrder.ui.lbl.exmatch": '完整符合',
-    "SalesOrder.ui.tip.exmatchDescr": '使用完整符合時，能查詢任何時間內符合[訂單號碼/姓名/電話/email]條件的訂單',
-    "SalesOrder.ui.modal.title.syncShipping": '回拋出貨',
-    "SalesOrder.ui.modal.msg.syncShipping": '只有串接第三方物流倉儲能使用此功能，',
-    "SalesOrder.ui.modal.chk.reCreateShipment": '此訂單已回拋過，需再次重拋',
-    "SalesOrder.ui.modal.title.exportReport": '匯出報表',
-    "SalesOrder.ui.modal.msg.totalCount": '總數量為：',
-    "SalesOrder.ui.modal.btn.export": '匯出',
-    "SalesOrder.ui.modal.lbl.selectReport": '選擇匯出報表',
-    "SalesOrder.ui.modal.lbl.exportQty": '匯出數量',
-    "SalesOrder.ui.modal.lbl.exportLimit": '單次匯出上限為4000筆',
-    "SalesOrder.ui.modal.lbl.pageNum": '第幾頁',
-    "SalesOrder.ui.modal.lbl.selectPage": '選擇頁數',
-    "SalesOrder.ui.modal.title.sendEmail": '發送Email',
-    "SalesOrder.ui.modal.msg.sendEmailNotice": '**系統發出信件，消費者收到後將無法直接回覆您，避免信件遺失，請於此信件中提供客服聯繫方式以便消費者直接與您聯繫**',
-    "SalesOrder.ui.modal.btn.submit": '送出',
-    "SalesOrder.ui.modal.lbl.selectEmailTpl": '選擇Email樣板',
-    "SalesOrder.ui.modal.lbl.emailSubject": '標題',
-    "SalesOrder.ui.modal.lbl.emailBody": '內容',
-    "SalesOrder.ui.err.fieldRequired": '欄位必填不得為空',
-};
-
-/**
- * 安全取詞輔助函式
- * @param {string} key - 字典鍵值
- * @param {string} [fallback] - 未命中時的預設值
- * @returns {string}
- */
-function soI18n(key, fallback) {
-    if (typeof salesOrderI18n !== "undefined" && salesOrderI18n[key] !== undefined) {
-        return salesOrderI18n[key];
-    }
-    return fallback !== undefined ? fallback : key;
-}
-</script>
+{{> core/partials/dte-style.html}}
 <script type="text/javascript">
+{{!-- 推導：本段的字典開頭註解、字典結尾、取詞函式與 salesOrderConf 開頭在原站擷取缺段內。
+	・字典＝spec/runtime/salesorder-list.i18n.txt 全部 225 鍵（順序同該檔）。
+	・soI18n：public/scripts/salesOrder.js 直接呼叫 soI18n(key)；salesOrderList.min.js 的取詞函式在 window.soI18n 存在時改呼叫 soI18n(key, 預設字)。
+	  回傳規則比照 salesOrderList.min.js 自己的 fallback：字典值 → 預設字 → key。
+	・salesOrderConf：鍵依 SalesOrderModule.init 實際讀取的鍵；值由 sales-order-list.ts 的 conf 與共用變數 tenantCode 帶入；
+	  posEnabled／tplEnabled 目前 conf 沒有對應資料鍵 → 預設 false（日後 conf 提供同名鍵即生效）。 --}}
+	/* 訂單管理頁 UI 字典：SalesOrderModule（salesOrderList.min.js）與 salesOrder.js 共用 */
+	var salesOrderI18n = {
+		/* 既有多國語言鍵 */
+		"Blacklist": "黑名單",
+		"Blacklist.action.add": "加入黑名單",
+		"Coupon": "優惠卷",
+		"DeliverTime.Afternoon": "下午（14-18時）",
+		"DeliverTime.Morning": "上午（09-13時）",
+		"DeliverTime.Unspecified": "不指定",
+		"EmailCategory.custom": "其他自訂義",
+		"EmailCategory.cvs.delivery.arrived": "超取已配達通知",
+		"EmailCategory.cvs.shipment.notice": "超取已出貨通知",
+		"EmailCategory.member.activated": "會員開通",
+		"EmailCategory.member.upgraded": "會員升等",
+		"EmailCategory.order.cancelled": "訂單取消",
+		"EmailCategory.order.confirmed": "訂單確認",
+		"EmailCategory.order.updated": "訂單更新",
+		"EmailCategory.password.reset": "重設密碼",
+		"EmailCategory.payment.extension": "繳款展延",
+		"EmailCategory.payment.received": "已付款通知",
+		"EmailCategory.payment.reminder": "未付款提醒",
+		"EmailCategory.pickup.available": "可自取通知",
+		"EmailCategory.promo.code.sent": "優惠碼發送通知",
+		"EmailCategory.refund.notice": "退款通知",
+		"EmailCategory.shipment.notice": "已出貨通知",
+		"FlatRateShipping": "運費規則",
+		"GroupBuySettings.installment": "分期期數(請洽銀行開啟分期及可使用期數並先測試下單)",
+		"Invoice": "電子發票",
+		"ItemPack": "組合商品",
+		"Item.gift": "贈品",
+		"OrderItem": "訂單商品",
+		"OrderItem.backOrder": "預購",
+		"SalesOrder.action": "進階操作",
+		"SalesOrder.action.b2s": "預購轉現貨",
+		"SalesOrder.action.b2s.confirm": "確定要將訂單預購商品轉現貨?請先確認現貨庫存是否足夠!",
+		"SalesOrder.action.bindCustomer": "綁定顧客",
+		"SalesOrder.action.bindCustomer.confirm": "將該訂單與相同email的註冊會員綁定，若沒有相同email則找相同電話號碼會員綁定。確認操作嗎？",
+		"SalesOrder.action.cancel": "取消訂單",
+		"SalesOrder.action.cancel.confirm": "確定要取消以下 {0} 筆訂單？",
+		"SalesOrder.action.cancel.undo": "取消/還原",
+		"SalesOrder.action.cvs": "超取",
+		"SalesOrder.action.export": "匯出報表",
+		"SalesOrder.action.exportCSV": "匯出csv",
+		"SalesOrder.action.exportEInvoice": "匯出發票csv",
+		"SalesOrder.action.exportERP": "匯出ERP報表1",
+		"SalesOrder.action.exportERP2": "匯出ERP報表2",
+		"SalesOrder.action.exportERP3": "匯出ERP報表3",
+		"SalesOrder.action.exportERP4": "匯出ERP報表4",
+		"SalesOrder.action.exportOrderItem": "匯出訂單商品數量",
+		"SalesOrder.action.extend.datePaymentDue": "展延繳款日期",
+		"SalesOrder.action.extend.datePaymentDue.confirm": "「展延繳款日期」將會自動展延訂單繳款期限並且寄送展延通知信。確定操作?",
+		"SalesOrder.action.import.salesOrders": "匯入外部訂單",
+		"SalesOrder.action.issueInvalid": "作廢發票",
+		"SalesOrder.action.issueInvoice": "開立電子發票",
+		"SalesOrder.action.issueInvoice.confirm": "確定要開立電子發票?",
+		"SalesOrder.action.join": "合併訂單",
+		"SalesOrder.action.join.confirm": "將會合併「處理中」且「狀態（但不包括正在發送信）/電話號碼/Email」相同的訂單。確定要執行？",
+		"SalesOrder.action.markAsCVSDateDued": "設為未取貨",
+		"SalesOrder.action.markAsCVSDateDued.descr": "確定要將選定的「準備出貨中」訂單設置為「商品逾期未領」嗎?",
+		"SalesOrder.action.markAsPaid": "設為已付款",
+		"SalesOrder.action.markAsPaid.confirm": "確定要將選定的「處理中」訂單設置為已付款並發送「已付款通知信」嗎?",
+		"SalesOrder.action.markAsPrepareShipping": "設為準備出貨中",
+		"SalesOrder.action.markAsShipped": "設為已出貨",
+		"SalesOrder.action.moveOrderItems": "拆單",
+		"SalesOrder.action.print": "列印",
+		"SalesOrder.action.print.order": "列印(訂單)",
+		"SalesOrder.action.print.piece": "列印(商品標籤)",
+		"SalesOrder.action.printBarcode": "列印訂單barcode",
+		"SalesOrder.action.printC2COrderInfo": "列印超付取單",
+		"SalesOrder.action.printInvoice": "列印發票",
+		"SalesOrder.action.quotation": "列印報價單",
+		"SalesOrder.action.reauthPeriod": "請求授權",
+		"SalesOrder.action.refund": "退款",
+		"SalesOrder.action.renewCVSPickup": "更新超取小白單",
+		"SalesOrder.action.renewCVSPickup.confirm": "是否要重新產生超取小白單？若您有使用冷凍超取，在產生超商小白單之後，一兩天內，會有物流業者到登記的收貨地址，跟您收取相關包裹。",
+		"SalesOrder.action.returnAndRefund": "加退換商品",
+		"SalesOrder.action.sendEmail": "寄信",
+		"SalesOrder.action.shipping": "出貨",
+		"SalesOrder.action.split": "拆單",
+		"SalesOrder.action.split.merge": "拆單/合併",
+		"SalesOrder.action.tpl.createShipment": "回拋出貨",
+		"SalesOrder.action.undoCancel": "還原已取消訂單",
+		"SalesOrder.action.undoCancel.confirm": "確定要還原以下 {0} 筆已取消訂單?請先確認庫存是否足夠!訂單金額將會重新計算",
+		"SalesOrder.action.view": "訂單明細 (網址可給客人)",
+		"SalesOrder.apiUserData": "第三方資料",
+		"SalesOrder.codFee": "貨到付款手續費",
+		"SalesOrder.creditCardNumber": "信用卡號",
+		"SalesOrder.customerEmail": "顧客Email",
+		"SalesOrder.customerFirstname": "顧客姓名",
+		"SalesOrder.customerIp": "顧客 IP",
+		"SalesOrder.customerTelephone": "顧客電話",
+		"SalesOrder.dateCreated": "訂單日期",
+		"SalesOrder.dateEinvoice": "預約電子發票日期",
+		"SalesOrder.dateExpectedShipping": "期望配達日",
+		"SalesOrder.datePaid": "付款日期",
+		"SalesOrder.datePaymentDue": "繳款期限",
+		"SalesOrder.dateShipped": "已出貨日期",
+		"SalesOrder.deliverTime": "收件時間",
+		"SalesOrder.error.payment.dued": "繳款期限逾期",
+		"SalesOrder.extraFee": "額外費用",
+		"SalesOrder.grandTotal": "結帳金額",
+		"SalesOrder.invoiceNumber": "發票號碼",
+		"SalesOrder.log": "訂單操作紀錄",
+		"SalesOrder.note": "備註",
+		"SalesOrder.paymentMethod": "付款方式",
+		"SalesOrder.shippingAmount": "運費(含貨付)",
+		"SalesOrder.shippingProvider": "出貨貨運",
+		"SalesOrder.shippingReceiptNumber": "查貨號碼",
+		"SalesOrder.shippingTag": "貨運標籤",
+		"SalesOrder.shouldRegenVirtualBankAccount": "重新產生虛擬帳戶",
+		"SalesOrder.shouldRegenVirtualBankAccount.descr": "金額, 繳款日期異動時需要重新產生帳號. 註：已產生的帳號只要尚未逾期都可轉帳",
+		"SalesOrder.shouldResetCVS": "重置超取資訊",
+		"SalesOrder.shouldResetCVS.descr": "金額,異動時需要重新產生超商條碼. 勾選更新後，客戶需到訂單畫面重取條碼.註：已產生的條碼只要尚未逾期仍可付款",
+		"SalesOrder.shouldUpdateGrandTotalAndShipping": "重新計算總額跟運費",
+		"SalesOrder.shouldUpdateSalesRules": "重新計算優惠",
+		"SalesOrder.shouldUpdateShippingTag": "更新貨運標籤",
+		"SalesOrder.staffNote": "員工備註",
+		"SalesOrder.staffNote.descr": "員工備註只出現於管理後台，消費者不會看到員工備註",
+		"SalesOrder.state": "階段",
+		"SalesOrder.status": "狀態",
+		"SalesOrder.totalPaid": "已付金額",
+		"SalesOrder.virtualBankAccount": "虛擬帳戶",
+		"SalesOrderBillingAddress.bankAccount": "銀行帳號後五碼",
+		"SalesOrderBillingAddress.bankName": "銀行名稱",
+		"SalesOrderBillingAddress.birthday": "生日",
+		"SalesOrderBillingAddress.city": "城市",
+		"SalesOrderBillingAddress.country": "國家/區域",
+		"SalesOrderBillingAddress.district": "州/區",
+		"SalesOrderBillingAddress.email": "電子信箱(Email)",
+		"SalesOrderBillingAddress.fbNickname": "臉書暱稱",
+		"SalesOrderBillingAddress.postcode": "郵遞區號(Postcode)",
+		"SalesOrderBillingAddress.receiptCarrierNum": "載具編號",
+		"SalesOrderBillingAddress.receiptCarrierType": "載具類別",
+		"SalesOrderBillingAddress.receiptDonate": "捐獻發票",
+		"SalesOrderBillingAddress.receiptPaper": "紙本發票",
+		"SalesOrderBillingAddress.receiptTitle": "發票抬頭",
+		"SalesOrderBillingAddress.receiptType": "發票類型",
+		"SalesOrderBillingAddress.receiptVatId": "發票統編",
+		"SalesOrderBillingAddress.street": "地址",
+		"SalesOrderShippingAddress": "收件人資訊",
+		"SalesOrderShippingAddress.city": "城市",
+		"SalesOrderShippingAddress.country": "國家/區域",
+		"SalesOrderShippingAddress.district": "州/區",
+		"SalesOrderShippingAddress.email": "電子信箱(Email)",
+		"SalesOrderShippingAddress.postcode": "郵遞區號(Postcode)",
+		"SalesOrderShippingAddress.street": "地址",
+		"SalesOrderShippingAddress.telephone": "電話",
+		"ShippingTypeEnum.CVS": "超商取貨",
+		"action.duplicate": "複製",
+		"form.select": "選擇",
+		/* 訂單頁介面字串（SalesOrder.ui.*） */
+		"SalesOrder.ui.btn.confirm": "確定",
+		"SalesOrder.ui.btn.expandAll": "展開全部",
+		"SalesOrder.ui.btn.collapseAll": "收合全部",
+		"SalesOrder.ui.btn.batchReplenish": "批次補款",
+		"SalesOrder.ui.btn.bindMemberProgram": "綁定會員方案",
+		"SalesOrder.ui.confirm.execute": "確定執行?",
+		"SalesOrder.ui.btn.exportSelected": "匯出所選訂單",
+		"SalesOrder.ui.warn.diffFormsMerge": "<h6 class=\"text-danger\">警告：所選訂單包含不同的表單，確定要繼續合併嗎？</h6>",
+		"SalesOrder.ui.confirm.updateShippingTag": "確定更新所有符合基本條件篩選的訂單貨運標籤？",
+		"SalesOrder.ui.btn.ecpayCvsNumber": "綠界取得托運單號",
+		"SalesOrder.ui.confirm.ecpayCvsNumber": "若訂單未收到回拋，可透過此取得托運單號",
+		"SalesOrder.ui.badge.vip": "優",
+		"SalesOrder.ui.badge.pointsDeduct": "-點",
+		"SalesOrder.ui.badge.pointsAdd": "+點",
+		"SalesOrder.ui.badge.paid": "已付款",
+		"SalesOrder.ui.badge.installment": "分期付款",
+		"SalesOrder.ui.badge.backorder": "預購",
+		"SalesOrder.ui.badge.overdue": "逾期",
+		"SalesOrder.ui.badge.customerNote": "客註",
+		"SalesOrder.ui.badge.staffNote": "員註",
+		"SalesOrder.ui.badge.triplicateReceipt": "三聯",
+		"SalesOrder.ui.badge.oversea": "海外",
+		"SalesOrder.ui.badge.island": "外島",
+		"SalesOrder.ui.badge.unpaidNoShip": "未付款請勿出貨",
+		"SalesOrder.ui.badge.unpaid": "未付款",
+		"SalesOrder.ui.badge.childItem": "子商品",
+		"SalesOrder.ui.tip.executionTime": " (執行時間：",
+		"SalesOrder.ui.lbl.virtualBankAccount": "虛擬帳號",
+		"SalesOrder.ui.lbl.cvsBarcode": "超商條碼",
+		"SalesOrder.ui.lbl.receiptCarrierNum": "載具編號",
+		"SalesOrder.ui.lbl.receiptDonateNum": "捐贈碼",
+		"SalesOrder.ui.tip.piecesSummary": "(內含 {0} 件)",
+		"SalesOrder.ui.tip.perBundle": "(每組{0})",
+		"SalesOrder.ui.tip.noChildItems": "(無子商品明細)",
+		"SalesOrder.ui.tip.copyVat": "複製統編",
+		"SalesOrder.ui.title.customerAndShipping": "顧客與收件資訊",
+		"SalesOrder.ui.title.customerAndPickup": "顧客與取件資訊",
+		"SalesOrder.ui.badge.shippingNormal": "宅配到府",
+		"SalesOrder.ui.badge.shippingCvs": "超商取貨",
+		"SalesOrder.ui.badge.shippingPickupStore": "門市自取",
+		"SalesOrder.ui.badge.shippingPickupSpot": "現場自取",
+		"SalesOrder.ui.badge.shippingNod": "免配送",
+		"SalesOrder.ui.badge.shippingIntl": "國際配送",
+		"SalesOrder.ui.badge.checkId": "需核對證件",
+		"SalesOrder.ui.lbl.pickupPerson": "取件人資訊",
+		"SalesOrder.ui.lbl.pickupStore": "自取門市 / 據點",
+		"SalesOrder.ui.lbl.pickupStoreAddress": "門市地址",
+		"SalesOrder.ui.lbl.cvsStore": "取件門市",
+		"SalesOrder.ui.lbl.cvsStoreAddress": "門市地址",
+		"SalesOrder.ui.lbl.preferredPickupDate": "預計自取日期",
+		"SalesOrder.ui.lbl.preferredDeliveryDate": "預計配送日期",
+		"SalesOrder.ui.tip.copyStoreCode": "複製店號",
+		"SalesOrder.ui.tip.copyStoreName": "複製門市",
+		"SalesOrder.ui.tip.copyPhone": "複製電話",
+		"SalesOrder.ui.tip.copyAddress": "複製地址",
+		"SalesOrder.ui.title.orderAndPayment": "訂單與款項資訊",
+		"SalesOrder.ui.btn.editShippingRule": "更改配送方式",
+		"SalesOrder.ui.tip.searchRule": "訂單號碼搜尋必須由左至右輸入，如要搜尋末幾碼，請輸入?，如?3456<br>電話號碼搜尋必須由左至右輸入，如要搜尋末幾碼，請輸入?，如?3456",
+		"SalesOrder.ui.lbl.exmatch": "完整符合",
+		"SalesOrder.ui.tip.exmatchDescr": "使用完整符合時，能查詢任何時間內符合[訂單號碼/姓名/電話/email]條件的訂單",
+		"SalesOrder.ui.modal.title.syncShipping": "回拋出貨",
+		"SalesOrder.ui.modal.msg.syncShipping": "只有串接第三方物流倉儲能使用此功能，",
+		"SalesOrder.ui.modal.chk.reCreateShipment": "此訂單已回拋過，需再次重拋",
+		"SalesOrder.ui.modal.title.exportReport": "匯出報表",
+		"SalesOrder.ui.modal.msg.totalCount": "總數量為：",
+		"SalesOrder.ui.modal.btn.export": "匯出",
+		"SalesOrder.ui.modal.lbl.selectReport": "選擇匯出報表",
+		"SalesOrder.ui.modal.lbl.exportQty": "匯出數量",
+		"SalesOrder.ui.modal.lbl.exportLimit": "單次匯出上限為4000筆",
+		"SalesOrder.ui.modal.lbl.pageNum": "第幾頁",
+		"SalesOrder.ui.modal.lbl.selectPage": "選擇頁數",
+		"SalesOrder.ui.modal.title.sendEmail": "發送Email",
+		"SalesOrder.ui.modal.msg.sendEmailNotice": "**系統發出信件，消費者收到後將無法直接回覆您，避免信件遺失，請於此信件中提供客服聯繫方式以便消費者直接與您聯繫**",
+		"SalesOrder.ui.modal.btn.submit": "送出",
+		"SalesOrder.ui.modal.lbl.selectEmailTpl": "選擇Email樣板",
+		"SalesOrder.ui.modal.lbl.emailSubject": "標題",
+		"SalesOrder.ui.modal.lbl.emailBody": "內容",
+		"SalesOrder.ui.err.fieldRequired": "欄位必填不得為空"
+	};
+
+	/* 取詞：字典有值用字典，否則用呼叫端給的預設字，再不然回傳 key 本身 */
+	function soI18n(key, fallback) {
+		var text = salesOrderI18n[key];
+		if (text) return text;
+		return fallback || key;
+	}
+
 	var salesOrderConf = {
-		gba: '{{tenantCode}}',
-		groupBuyId: {{conf.groupBuyId}},
-		customerId: '{{conf.customerId}}',
-		salesOrderId: '{{conf.salesOrderId}}',
-		itemUid: '{{conf.itemUid}}',
-		groupBuyAccount: '{{tenantCode}}',
-		posEnabled: false,
-		tplEnabled: false,
+		gba: {{json tenantCode}},
+		groupBuyId: {{json conf.groupBuyId}},
+		customerId: {{json conf.customerId}},
+		salesOrderId: {{json conf.salesOrderId}},
+		itemUid: {{json conf.itemUid}},
+		groupBuyAccount: {{json tenantCode}},
+		posEnabled: {{json (default conf.posEnabled false)}},
+		tplEnabled: {{json (default conf.tplEnabled false)}},
 		ctx: '',
-
-		permissions: {
-			canCreate: {{conf.permissions.canCreate}},
-			canUpdate: {{conf.permissions.canUpdate}},
-			canDelete: {{conf.permissions.canDelete}},
-			canExport: {{conf.permissions.canExport}},
-			canAction: {{conf.permissions.canAction}},
-			isFinance: {{conf.permissions.isFinance}},
-			isAdvanced: {{conf.permissions.isAdvanced}},
-			isAdvancedMarkAsShipped: {{conf.permissions.isAdvancedMarkAsShipped}},
-			isPaidDisabled: {{conf.permissions.isPaidDisabled}}
-		},
-
+		permissions: {{json conf.permissions}},
 		erpTitles: [
-		'ERP報表1',
-'ERP報表2',
-'ERP報表3',
-'ERP報表4',
-'ERP報表5',
-'ERP報表6',
-
+			'ERP報表1',
+			'ERP報表2',
+			'ERP報表3',
+			'ERP報表4',
+			'ERP報表5',
+			'ERP報表6'
 		],
-
 		i18n: typeof salesOrderI18n !== 'undefined' ? salesOrderI18n : {}
 	};
 	</script>
-	<script src="/scripts/salesOrderBulkUuids.js?v="></script>
-	<script src="/scripts/salesOrder.js?v="></script>
+	<script src="/scripts/salesOrderBulkUuids.js?v={{assetVersion}}"></script>
+	<script src="/scripts/salesOrder.js?v={{assetVersion}}"></script>
 	<script src="/public/scripts/backend/salesOrderList.min.js?v=261008"></script>
 	<script type="text/javascript">
-	$(document).ready(function() {
+{{!-- 推導：初始化呼叫在擷取缺段內。SalesOrderModule 對外入口為 init(conf)（內部自行處理 DOM ready），以 salesOrderConf 初始化。
+	另：列表回應帶 b2sTotal（sales-order-list.ts；b2s.ts 註明供 #b2sBadge 使用），原站 JS 只在「預購轉現貨」按鈕後更新徽章，
+	頁面載入／重新查詢時由此處依列表回應更新（0 筆時不顯示數字，同 spec 靜態 HTML 的空徽章）。 --}}
+	jQuery(function ($) {
+		$('#mydt').on('xhr.dt', function (e, settings, json) {
+			if (json && json.b2sTotal !== undefined && json.b2sTotal !== null) {
+				$('#b2sBadge').text(Number(json.b2sTotal) > 0 ? json.b2sTotal : '');
+			}
+		});
 		SalesOrderModule.init(salesOrderConf);
 	});
 	</script>
 <!--#body--><div class="container-fluid ">
-	<!-- card -->
+{{!-- 推導：主內容開頭（容器、卡片、標題、欄位顯示切換區）在原站擷取缺段內。
+	依 spec 可見的後段結構：#columnShowHidePanel 之後緊接一個 </div>，再接 card-footer（篩選表單）、card-body（#mydt）、</div><!-- card -->，
+	且 SalesOrderModule 以 $(".card").on("change", ".filters") 監聽篩選 → 篩選表單必須位於 .card 內。
+	卡片版型比照同類頁（月份紀錄等）的 card mt-4 ＋ card-header；標題用本頁 <title>「訂單」。 --}}
 <div class="card mt-4">
 <div class="card-header">訂單</div>
-<div class='card-footer'>
-	<p>顯示/隱藏欄位</p>
+<div class="card-body">
 	<p class="dt-buttons btn-group" id="columnShowHidePanel"></p>
 </div>
 <!-- footer -->
@@ -406,11 +397,13 @@ function soI18n(key, fallback) {
 	<span><input type="checkbox" name="checkStaffNote" id="checkStaffNote" class="filters form-check-input" value="1"><label for="checkStaffNote" class="pl-4 mr-2">員工備註</label></span>
 	<input type="checkbox" name="checkDuplicate" id="checkDuplicate" class="filters form-check-input" value="1" ><label for="checkDuplicate" class="pl-4 mr-2">重複訂單(15天內)</label>
 	<input type="checkbox" name="checkPaymentDued" id="checkPaymentDued" class="filters form-check-input" value="1"><label for="checkPaymentDued" class="pl-4 mr-2">付款逾期</label>
-	<div id="daysBeforePaymentDue-group" class="input-group py-2" style="display:initial;width:auto;">
-		<div class="input-group-prepend" style="display:initial;margin-right:-4px">
-			<span class="input-group-text md-addon" style="display:initial;">付款期限剩餘天數</span>
+	{{!-- 推導：「付款逾期」標籤之後到「付款期限剩餘天數」輸入框之前在擷取缺段內。
+		標籤文字、輸入框 name/id/placeholder/class 依 SPEC 篩選元件表；外層 id daysBeforePaymentDue-group 是 SalesOrderModule 依日期範圍 show/hide 的對象。
+		外觀沿用本表單「建立日期」的 input-group＋md-addon 寫法；外層不用 d-* 類別（!important 會讓 jQuery hide() 失效）。 --}}
+	<div id="daysBeforePaymentDue-group" class="mr-2" style="display:inline-block;vertical-align:middle">
+		<div class="input-group input-group-sm"><div class="input-group-prepend"><span class="input-group-text md-addon">付款期限剩餘天數</span></div>
+		<input type="text" class="filters input-sm form-control w-auto d-inline" name="daysBeforePaymentDue" id="daysBeforePaymentDue" placeholder="天數" size=2>
 		</div>
-		<input type="text" style="flex:initial" class="filters input-sm form-control w-auto d-inline" name="daysBeforePaymentDue" id="daysBeforePaymentDue" placeholder="天數" size=2>
 	</div>
 	<input type="checkbox" name="unprocessed" id="unprocessed" class="filters form-check-input" value="1"><label for="unprocessed" class="pl-4 mr-2">未處理訂單</label>
 	<span id="unshipped-group"><input type="checkbox" name="unshipped" id="unshipped" class="filters form-check-input" value="1"><label for="unshipped" class="pl-4 mr-2">未出貨訂單</label></span>
@@ -424,10 +417,12 @@ function soI18n(key, fallback) {
 	</select>
 	<select name="backOrder" id="backOrder" class="filters custom-select custom-select-sm w-auto">
 	<option value="-1">現貨+預購</option>
+	{{!-- 推導：現貨／預購選項與「訂單金額超過」輸入框在擷取缺段內；選項值依 SPEC 篩選元件表（現貨+預購=-1、現貨=0、預購=1），
+		金額輸入框 name/id/placeholder/class 依 SPEC；兩個金額框以一個行內容器包住（spec 可見其結尾 </div>）。 --}}
 	<option value="0">現貨</option>
 	<option value="1">預購</option>
 	</select>
-	<div class="input-group py-1" style="display: inline-block;width: auto;">
+	<div class="d-inline-block">
 		<input type="text" class="filters input-sm form-control w-auto d-inline" name="grandTotalGreater" id="grandTotalGreater" placeholder="訂單金額超過" size=12>
 		<input type="text" class="filters input-sm form-control w-auto d-inline" name="grandTotalLess" id="grandTotalLess" placeholder="訂單金額少於" size=12>
 	</div>
@@ -732,6 +727,7 @@ function soI18n(key, fallback) {
 	<div class="col-12 col-sm-12">
 		<fieldset id="importSalesOrdersForm2">
 		<legend>欄位對應XLS標頭名稱</legend>
+{{!-- 推導：兩欄 col-sm-6 的外層 row 在擷取缺段內（spec 可見對應的結尾 </div>） --}}
 		<div class="row">
 			<div class="col-sm-6">
 				<editor-field name="merchantOrderIdCol"></editor-field>
@@ -772,21 +768,164 @@ function soI18n(key, fallback) {
 <!-- importSalesOrdersForm -->
 </div>
 
+{{> core/partials/dte-style.html}}
+<script type="text/javascript">
+{{!-- 推導：「匯入外部訂單」Editor。原站此段的開頭、上傳後更新欄位、預覽／匯入結果表、載入上次欄位對應與按鈕列後半在擷取缺段內。
+	可見段落沿用：欄位清單與說明文字、#importSalesOrdersForm 樣板、idSrc、標題「匯入外部訂單」、按鈕「下一步」「關閉」、
+	開啟時顯示表單並隱藏結果表、已選欄位底色 #c6e4ef、結果表欄位（#importSalesOrdersTable）。
+	流程依 lib/modules/orders/sales-order-import.ts 的端點契約：
+	1) 開啟：GET getImportSalesOrderPreference?groupBuyId= → data 的 col<欄位>（-1＝未設定）帶回各對應下拉、countryColMapping／paymentMethodColMapping 帶回文字框。
+	2) 上傳：Editor upload（uploadSalesOrders）回 data:[{label,value}]＝檔案標頭 → 更新全部 <x>Col 下拉（已選的標頭若仍存在就保留）。
+	3) 下一步：Editor create 送 importSalesOrders（groupBuyId 一併送出）；preview=1 只預覽，結果表顯示在表單下方，可調整後再按下一步；
+	   preview=0 實際匯入：隱藏表單只留結果表與「關閉」，並重新載入訂單列表。
+	4) Editor 送出成功後 action 會清空，再按「下一步」前先以 create(false) 重設並帶回目前值。
+	5) 付款方式欄以 DataTableConfig.data_select 依回應 options.paymentMethod 轉文字（data_select 讀表格 settings.json）。 --}}
+(function ($) {
+	var MAPPING_FIELDS = [
+		'merchantOrderIdCol', 'firstnameCol', 'telephoneCol', 'emailCol', 'countryCol', 'postcodeCol', 'cityCol', 'districtCol', 'streetCol',
+		'paymentMethodCol', 'totalPaidCol', 'shippingAmountCol', 'creditCardNumberCol', 'shippingReceiptNumberCol', 'noteCol',
+		'invoiceNumberCol', 'receiptTitleCol', 'receiptVatIdCol', 'itemTitleCol', 'itemUidCol', 'itemPriceCol', 'itemTotalCol',
+		'itemPartBeginCol', 'itemPartEndCol'
+	];
+	var $form = $('#importSalesOrdersForm');
+	var $resultTable = $('#importSalesOrdersTable');
+	var state = { editor: null, table: null, groupBuyId: null, rearm: false };
 
-{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+	/* merchantOrderIdCol → colMerchantOrderId（上次欄位對應的鍵名） */
+	function preferenceKey(field) {
+		var base = field.replace(/Col$/, '');
+		return 'col' + base.charAt(0).toUpperCase() + base.slice(1);
+	}
 
-var uploadSalesOrdersEditor; // use a global for the submit and return data rendering in the examples
-var importSalesOrdersTable;
+	/* 已指定欄位的下拉加框線與底色 */
+	function paint(select) {
+		var chosen = !!$(select).val();
+		$(select).toggleClass('border border-info', chosen).css('background-color', chosen ? '#c6e4ef' : '');
+	}
+	$form.on('change', 'select', function () {
+		paint(this);
+	});
 
-var showUploadSalesOrdersEditor = function(groupBuyId) {
+	function resultApi(editor) {
+		if (!state.table) {
+			$('<div class="pt-3"></div>').append($resultTable).appendTo(editor.dom.body);
+			state.table = $resultTable.DataTable({
+				dom: 'frtip',
+				data: [],
+				scrollX: true,
+				language: DataTableConfig.i18n,
+				columns: [
+			DataTableConfig.data_input('uuid'),
+			DataTableConfig.data_input('merchantOrderId'),
+			DataTableConfig.data_input('firstname'),
+			DataTableConfig.data_input('telephone'),
+			DataTableConfig.data_input('email'),
+			DataTableConfig.data_input('country'),
+			DataTableConfig.data_input('postcode'),
+			DataTableConfig.data_input('city'),
+			DataTableConfig.data_input('district'),
+			DataTableConfig.data_input('street'),
+			DataTableConfig.data_select('paymentMethod'),
+			DataTableConfig.data_input('totalPaid'),
+			DataTableConfig.data_input('shippingAmount'),
+			DataTableConfig.data_input('creditCardNumber'),
+			DataTableConfig.data_input('shippingReceiptNumber'),
+			DataTableConfig.data_input('invoiceNumber'),
+			DataTableConfig.data_input('receiptTitle'),
+			DataTableConfig.data_input('receiptVatId'),
+			DataTableConfig.data_input('itemTitle'),
+			DataTableConfig.data_input('itemUid'),
+			DataTableConfig.data_input('itemPrice'),
+			DataTableConfig.data_input('itemTotal'),
+			DataTableConfig.data_input('log'),
+				],
+				select: DataTableConfig.selectOptionsOS,
+				buttons: []
+			});
+		}
+		return state.table;
+	}
 
-	if (!uploadSalesOrdersEditor) {
-		uploadSalesOrdersEditor = new $.fn.dataTable.Editor( {
-			ajax: '{{baseUrl}}/ajax/SalesOrder/importSalesOrders?groupBuyId='+groupBuyId,
+	function hideResults() {
+		if (state.table) state.table.clear().draw();
+		$('#importSalesOrdersTable_wrapper').hide();
+	}
+
+	function showResults(editor, json) {
+		var api = resultApi(editor);
+		api.settings()[0].json = json;
+		api.clear().rows.add(json.data).draw();
+		$('#importSalesOrdersTable_wrapper').show();
+		api.columns.adjust();
+	}
+
+	function applyPreference(editor, pref) {
+		if (!pref || !editor.s) return;
+		$.each(MAPPING_FIELDS, function (i, name) {
+			var header = pref[preferenceKey(name)];
+			if (header === undefined || header === null || header === '' || String(header) === '-1') return;
+			var field = editor.field(name);
+			var exists = $(field.input()).find('option').filter(function () { return this.value === String(header); }).length > 0;
+			if (!exists) field.update([{ label: String(header), value: String(header) }], true);
+			field.val(String(header));
+		});
+		$.each(['countryColMapping', 'paymentMethodColMapping'], function (i, name) {
+			if (pref[name]) editor.field(name).val(pref[name]);
+		});
+	}
+
+	function loadPreference(editor, groupBuyId) {
+		$.ajax({
+			url: GBF.baseUrl + '/ajax/SalesOrder/getImportSalesOrderPreference',
+			data: { groupBuyId: groupBuyId },
+			dataType: 'json',
+			success: function (json) {
+				applyPreference(editor, json ? json.data : null);
+			},
+			error: function (xhr, textStatus, thrown) {
+				if (xhr.responseJSON && xhr.responseJSON.error) displayAlertWarning(xhr.responseJSON.error);
+				else console.warn('getImportSalesOrderPreference', textStatus, thrown);
+			}
+		});
+	}
+
+	function buttonsFor(step) {
+		var close = { label: '關閉', className: 'btn-default', action: function () { this.close(); } };
+		if (step === 'done') return [close];
+		return [
+			{ label: '下一步', className: 'btn-primary', tabIndex: 0, action: function () {
+				if (state.rearm) {
+					var current = this.get();
+					this.create(false);
+					this.set(current);
+					state.rearm = false;
+				}
+				this.submit();
+			} },
+			close
+		];
+	}
+
+	function importEditor() {
+		if (state.editor) return state.editor;
+		var uploadField = DataTableConfig.field_upload('匯入檔案:','importSalesOrdersFile', GBF.baseUrl + '/ajax/SalesOrder/uploadSalesOrders');
+		uploadField.display = function (id) {
+			var files = $.fn.dataTable.Editor.files && $.fn.dataTable.Editor.files.importSalesOrders;
+			return files && files[id] && files[id].filename ? $('<span>').text(files[id].filename).html() : id;
+		};
+		var editor = new $.fn.dataTable.Editor({
+			ajax: {
+				type: 'POST',
+				url: GBF.baseUrl + '/ajax/SalesOrder/importSalesOrders',
+				data: function (d) {
+					d.groupBuyId = state.groupBuyId;
+					return d;
+				}
+			},
 			idSrc: 'salesOrderId',
 			template: '#importSalesOrdersForm',
 			fields: [
-				DataTableConfig.field_upload('匯入檔案:','importSalesOrdersFile', '{{baseUrl}}/ajax/SalesOrder/uploadSalesOrders'),
+				uploadField,
 				DataTableConfig.field_checkbox_bool('預覽匯入','preview',1),
 				DataTableConfig.field_select('來源平台訂單號碼','merchantOrderIdCol','','選擇'),
 				DataTableConfig.field_select('姓名','firstnameCol','','請選擇(必填)'),
@@ -814,180 +953,61 @@ var showUploadSalesOrdersEditor = function(groupBuyId) {
 				DataTableConfig.field_select('商品數量','itemTotalCol','','選擇'),
 				DataTableConfig.field_select('規格商品數量起始欄位','itemPartBeginCol','','選擇'),
 				DataTableConfig.field_select('規格商品數量結束欄位','itemPartEndCol','','選擇','','如果一個訂單內商品包含其他規格品，可在此指定規格商品的範圍'),
-	
 			],
-			formOptions:{
-				onComplete:'none'
+			formOptions: {
+				main: { onComplete: 'none' }
 			},
-			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
-			}
-		} );
-
-		uploadSalesOrdersEditor
-		.on ( 'open', function( e, mode, action ) {
-			$('.DTE_Body_Content').show();
-			$('#importSalesOrdersTable_wrapper').hide();
-			$('#importSalesOrdersForm select').change(function() {
-				if ($(this).val().length) {
-					$(this).addClass('border border-info');
-					$(this).css('background-color','#c6e4ef')
-				} else {
-					$(this).removeClass('border border-info');
-					$(this).css('background-color','');
-				};
-			});
-		})
-		.on( 'uploadXhrSuccess', function ( e, fieldName, json ) {
-			var editor = this;
-			/* var fields = [
-				'reasonCol',
-				'pointsCol',
-				'amountCol',
-			] */
-			var data = json.data;
-			if (data == null) return;
-
-			var fields = editor.order();
-			for (var i= 0; i < fields.length; i++) {
-				if (!fields[i].endsWith('Col')) continue;
-				var field = editor.field( fields[i] );
-				field.update(data);
-			}
-
-			editor.show();
-		} )
-		.on( 'preSubmit', function ( e, data, action ) {
-			if ( action == 'remove' ) return;
-			var fields = [
-				'firstnameCol',
-				'telephoneCol',
-				'itemUidCol',
-				'totalPaidCol',
-			];
-			for (var i = 0; i < fields.length; i++) {
-				var field = this.field(fields[i]);
-				if (!field.val()) {
-					field.error('需要選擇一個欄位');
-				}
-			}
-			if (this.inError()) return false;
-
-			// reset table
-			if (importSalesOrdersTable) {
-				importSalesOrdersTable.rows().remove().draw();
-			}
-		})
-		.on( 'postSubmit', function (e, json, data, action, xhr) {
-			if (json.data) {
-				if (!importSalesOrdersTable) {
-					$('#importSalesOrdersTable').insertAfter($('.DTE_Body_Content'));
-					initImportSalesOrdersTable();
-				}
-				$('#importSalesOrdersTable_wrapper').show();
-				importSalesOrdersTable.context[0].json = json;
-				importSalesOrdersTable.rows.add(json.data).draw();
-				$('.DTE_Body_Content').hide();
-				if (data.data[0].preview == '1') {
-					$('.DTE_Form_Buttons').find('button[tabindex=0]').text('實際匯入');
-					this.field('preview').val('0');
-					// set action to make submit button available again
-					window.setTimeout(( () => {uploadSalesOrdersEditor.s.action = 'create';} ), 100);
-				} else {
-					$('.DTE_Form_Buttons').find('button[tabindex=0]').hide();
-					//reload salesOrderTable;
-					table.ajax.reload(null, false);
-				}
-			}
-		} )
-		.on( 'close', function (e,mode,action) {
-			$('#importSalesOrdersForm select').unbind('change');
+			i18n: DataTableConfig.i18n
 		});
+
+		editor
+		.on('open', function () {
+			$(editor.dom.bodyContent).show();
+			hideResults();
+			$form.find('select').each(function () { paint(this); });
+		})
+		.on('uploadXhrSuccess', function (e, fieldName, json) {
+			if (fieldName !== 'importSalesOrdersFile' || !json || !$.isArray(json.data)) return;
+			$.each(MAPPING_FIELDS, function (i, name) {
+				editor.field(name).update(json.data);
+			});
+			hideResults();
+		})
+		.on('postSubmit', function (e, json, data) {
+			if (!json || !$.isArray(json.data) || json.error || (json.fieldErrors && json.fieldErrors.length)) return;
+			var sent = data && data.data ? data.data[Object.keys(data.data)[0]] || {} : {};
+			showResults(editor, json);
+			if (String(sent.preview) === '1') {
+				$(editor.dom.body).animate({ scrollTop: $(editor.dom.body).scrollTop() + $('#importSalesOrdersTable_wrapper').position().top }, 300);
+			} else {
+				$(editor.dom.bodyContent).hide();
+				editor.buttons(buttonsFor('done'));
+				SalesOrderModule.reload();
+			}
+		})
+		.on('submitSuccess', function () {
+			state.rearm = true;
+		});
+
+		state.editor = editor;
+		return editor;
 	}
 
-	$.ajax({
-		url: '{{baseUrl}}/ajax/SalesOrder/getImportSalesOrderPreference',
-		data:{
-			'groupBuyId':groupBuyId,
-		},
-		dataType: 'json',
-		success: function(json) {
-			if (!json || !json.data) return;
-			var fields = uploadSalesOrdersEditor.fields();
-			for (var col in json.data) {
-				if (json.data[col] == -1) continue;
-				var dataCol = '';
-				if (col.startsWith('col')) {
-					dataCol = col.substring(3,4).toLowerCase() + col.substring(4) + 'Col';
-				} else if (col.endsWith('Mapping')) {
-					dataCol = col;
-				} else {
-					continue;
-				}
-				var f = fields.filter(o=>o == dataCol);
-				if (f.length) {
-					uploadSalesOrdersEditor.set(f[0], json.data[col]);
-				}
-			}
-		},
-		error: function (xhr, ajaxOptions, thrownError) {
-			alert(xhr.status + " "+ thrownError);
+	/* 工具列「匯入外部訂單」（SalesOrderModule 以目前團購 id 呼叫） */
+	window.showUploadSalesOrdersEditor = function (groupBuyId) {
+		if (!groupBuyId || groupBuyId == 0) {
+			displayAlertWarning('請先在「團購」選擇要匯入的團購');
+			return;
 		}
-	});
-
-	uploadSalesOrdersEditor
-	.title('匯入外部訂單')
-	.buttons([
-		{label:'下一步', className:'btn-primary', tabIndex:0, action: function () {this.submit();}},
-		{label:'關閉', className:'btn-default', tabIndex:1, action: function () {this.close();}}
-	])
-	.create({
-		onComplete:'none'
-	})
-	.hide()
-	.show('importSalesOrdersFile')
-	.show('preview');
-};
-
-var initImportSalesOrdersTable = function() {
-	if (importSalesOrdersTable) return;
-
-	importSalesOrdersTable = $("#importSalesOrdersTable").DataTable( {
-		dom: 'lBrtip',
-		scrollX: true,
-		"lengthMenu": [10, 25, 50, 100, 250, 500],
-		language:DataTableConfig.i18n,
-		columns:[
-			DataTableConfig.data_input('uuid'),
-			DataTableConfig.data_input('merchantOrderId'),
-			DataTableConfig.data_input('firstname'),
-			DataTableConfig.data_input('telephone'),
-			DataTableConfig.data_input('email'),
-			DataTableConfig.data_input('country'),
-			DataTableConfig.data_input('postcode'),
-			DataTableConfig.data_input('city'),
-			DataTableConfig.data_input('district'),
-			DataTableConfig.data_input('street'),
-			DataTableConfig.data_select('paymentMethod'),
-			DataTableConfig.data_input('totalPaid'),
-			DataTableConfig.data_input('shippingAmount'),
-			DataTableConfig.data_input('creditCardNumber'),
-			DataTableConfig.data_input('shippingReceiptNumber'),
-			DataTableConfig.data_input('invoiceNumber'),
-			DataTableConfig.data_input('receiptTitle'),
-			DataTableConfig.data_input('receiptVatId'),
-			DataTableConfig.data_input('itemTitle'),
-			DataTableConfig.data_input('itemUid'),
-			DataTableConfig.data_input('itemPrice'),
-			DataTableConfig.data_input('itemTotal'),
-			DataTableConfig.data_input('log'),
-		],
-		select: DataTableConfig.selectOptionsOS,
-		buttons:[],
-	});
-}
-
-$(document).ready(function() {
-
-});
-</script></div>
+		state.groupBuyId = groupBuyId;
+		state.rearm = false;
+		var editor = importEditor();
+		editor
+		.title('匯入外部訂單')
+		.buttons(buttonsFor('form'))
+		.create();
+		loadPreference(editor, groupBuyId);
+	};
+})(jQuery);
+</script>
+</div>
