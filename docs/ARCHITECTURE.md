@@ -28,7 +28,7 @@ lib/core/                       core 共用（模組不可改）
   datatables/  request.ts（legacy 參數解析）query.ts（套到 PostgREST）response.ts（原站信封）
   editor/      protocol.ts（Editor create/edit/remove 請求與回應）
   entity/      crud.ts（listEntity / editorEntity / crudRoutes，建在 lib/db/mapping 上）
-  enums.ts  time.ts  groupbuy-menu.ts
+  enums.ts  time.ts  select2.ts（select2 查詢/初值）  groupbuy-menu.ts（單一團購側欄資料）
 lib/db/                         datamodel 擁有：entity-types.ts、entities/*.ts（109 實體）、mapping.ts、derived*.ts、relations.ts
 lib/modules/                    路由登錄
   index.ts types.ts             中央（core 擁有）：串起 10 個模組
@@ -55,6 +55,7 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
        排序：priority（小先）→ 非萬用 → 靜態段多 → 不帶租戶前綴；方法不符 → 405
   3. 認證：route.auth（預設 /backend、/ajax → admin；/ajax/web 與其他 → public）
        admin 未登入：頁面回登入頁（HTTP 200、網址不變，與原站同）；AJAX 回 401 {code:401}
+       admin 路由的 AJAX 與非 GET 請求帶 Sec-Fetch-Site: cross-site → 403（CSRF，見 §11）
        網址租戶前綴 ≠ 登入者租戶 → 403；route.permission 不符 → 原站「無權限」頁 / 403 JSON
   4. handler(ctx) → Response；例外統一轉換：
        FieldErrors → 200 {fieldErrors, data:[]}（Editor）
@@ -102,14 +103,14 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 只用 `groupbuy` schema；service-role client（`lib/supabase/server.ts`，`cache: no-store`）；**每個查詢以 session 的 tenant_id 過濾**（`crud.ts`、`dtQuery` 自動加）。anon/authenticated 對所有表無權限（RLS＋revoke）。
 - 原站 JSON 鍵 ↔ 欄位：datamodel 的 `EntityDef`（`lib/db/entity-types.ts` 介面合約）＋ `rowToApi/apiToRow`。
 - 列舉：`groupbuy.enum_options` → `lib/core/enums.ts`（每個執行個體快取 10 分鐘）。
-- 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN。
+- 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage（`gb/` 檔名含 UUID、內容不變 → 轉址可快取一年）；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN（快取一天）。
 - Migration：`scripts/apply-migrations.mjs`（Management API，單一交易＋帳本），CI 在 main push 且 migration 有變更時自動套用；**禁止 `supabase db push`**（共用庫）。
 
 ## 8. 相容層與授權
 
 | 原站 | 授權 | 本系統 | 位置 |
 |---|---|---|---|
-| MDB PRO 4.8.8（dashboard／main） | 商業 | MDB Free 4.8.8（cdnjs, MIT）＋自寫補丁：side-nav/slim、collapsible（350ms easeOutQuart、自動初始化）、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr（md-toast）、materialSelect 樁；dashboard 全站改寫（`body #eee`、`.table td #4f4f4f`…） | `public/compat/mdb-pro-compat.*`、`backend-compat.css`（後台）、`mdb-pro-frontend.css`（前台） |
+| MDB PRO 4.8.8（dashboard／main） | 商業 | MDB Free 4.8.8（cdnjs, MIT）＋自寫補丁：side-nav/slim、collapsible（350ms easeOutQuart、自動初始化）、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr（md-toast）、materialSelect 樁、燈箱 `initPhotoSwipeFromDOM`（PhotoSwipe 5，MIT）；dashboard 全站改寫（`body #eee`、`.table td #4f4f4f`…） | `public/compat/mdb-pro-compat.*`、`backend-compat.css`（後台）、`mdb-pro-frontend.css`（前台） |
 | Font Awesome Pro 6.0.0-alpha3 | 商業 | FA Free 6.7.2（cdnjs）＋對照規則（light/thin/sharp → Free solid/regular、Pro 專屬圖示 → 最接近 Free、`"Font Awesome 6 Pro"` 字型家族別名） | `public/compat/fa-pro-compat.css` |
 | DataTables Editor 1.9.2（含 bootstrap4、ckeditor 外掛） | 商業 | 自寫相容 shim（API/DOM/class/事件/協定同原版；範圍見 MODULE_GUIDE §8.1；自我測試頁 `/backend/dev/editorShimTest`） | `public/compat/editor-shim.*` |
 | CKFinder | 商業 | 上傳樁＋`/json/uploadImage/*` | `public/compat/ckfinder-shim.js` |

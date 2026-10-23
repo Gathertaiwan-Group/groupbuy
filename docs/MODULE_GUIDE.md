@@ -334,7 +334,7 @@ export const routes = [
 
 ### 8.1 DataTables Editor 相容 shim（`public/compat/editor-shim.js`）
 
-照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，47 項全部 ✔ 才算正常；改到 shim 相關行為時自己也可以跑）。
+照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，50 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs）；改到 shim 相關行為時自己也可以跑）。
 
 原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
 
@@ -371,7 +371,7 @@ export const routes = [
 
 | 原站（商業） | 本系統 | 你要注意 |
 |---|---|---|
-| MDB PRO 4.8.8 | cdnjs **MDB Free 4.8.8** + `public/compat/mdb-pro-compat.css/js`（共用：側欄 side-nav/slim、collapsible、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr、materialSelect 樁、smooth-scroll、fixed-action-btn、chip 關閉、#mdb-preloader）＋後台 `backend-compat.css`（dashboard 全站改寫）＋前台 `mdb-pro-frontend.css`（前台側欄 `.side-nav.fixed`、fixed-action-btn、chip、#mdb-preloader、md-accordion） | **前台頁**引用順序：`https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css` → `/compat/mdb-pro-compat.css` → `/compat/mdb-pro-frontend.css`（不要引 backend-compat.css）；JS：`.../mdbootstrap/4.8.8/js/mdb.min.js` → `/compat/mdb-pro-compat.js`。尚未補：lightbox（建議 cdnjs PhotoSwipe，原站新路徑已用 PhotoSwipe 5）、stepper（原站頁面無標記）、`mdb-autocomplete`（原站傳入函式導致實際無作用，可省略） |
+| MDB PRO 4.8.8 | cdnjs **MDB Free 4.8.8** + `public/compat/mdb-pro-compat.css/js`（共用：側欄 side-nav/slim、collapsible、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr、materialSelect 樁、smooth-scroll、fixed-action-btn、chip 關閉、#mdb-preloader、燈箱 `initPhotoSwipeFromDOM`（PRO 用 PhotoSwipe 4 → 改用 PhotoSwipe 5 cdnjs 5.4.4；原站 ias_v5 的 `$.fn.toLightbox`／`itemsLightbox` 可直接用））＋後台 `backend-compat.css`（dashboard 全站改寫）＋前台 `mdb-pro-frontend.css`（前台側欄 `.side-nav.fixed`、fixed-action-btn、chip、#mdb-preloader、md-accordion） | **前台頁**引用順序：`https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css` → `/compat/mdb-pro-compat.css` → `/compat/mdb-pro-frontend.css`（不要引 backend-compat.css）；JS：`.../mdbootstrap/4.8.8/js/mdb.min.js` → `/compat/mdb-pro-compat.js`。尚未補：lightbox（建議 cdnjs PhotoSwipe，原站新路徑已用 PhotoSwipe 5）、stepper（原站頁面無標記）、`mdb-autocomplete`（原站傳入函式導致實際無作用，可省略） |
 | Font Awesome Pro 6 | cdnjs **FA Free 6.7.2** + `public/compat/fa-pro-compat.css` | `fa-light/fa-thin/fa-sharp/fa-duotone`、Pro 專屬圖示（如 `fa-analytics`）、CSS 寫死的 `"Font Awesome 6 Pro"` 都已對照；新寫的程式請只用 Free 有的圖示 |
 | DataTables Editor 1.9.2 | `public/compat/editor-shim.js/css` | 見 8.1 |
 | CKFinder | `public/compat/ckfinder-shim.js` + `/json/uploadImage/*` | 只提供上傳 |

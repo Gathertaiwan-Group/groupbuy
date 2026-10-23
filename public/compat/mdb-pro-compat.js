@@ -2,6 +2,7 @@
  * groupbuy compat：MDB PRO 元件行為補丁（自行撰寫，非 MDB PRO 程式碼）
  * 頁面先載入 MDB Free 4.8.8 JS（MIT），再載入本檔。提供原站用到的 PRO API：
  *   $.fn.sideNav、$.fn.collapsible、toastr、$.fn.materialSelect（最小相容）、
+ *   燈箱 initPhotoSwipeFromDOM（改用 PhotoSwipe 5，MIT）、前台 smooth-scroll／fixed-action-btn／chip／#mdb-preloader、
  *   以及後台側欄版面初始化 GBSideNav（原站 inline script 因擷取過濾不可得，依實際行為重寫）。
  */
 (function ($, window, document) {
@@ -284,5 +285,80 @@
 
   if (!$.fn.material_select) {
     $.fn.material_select = function (options) { return this.materialSelect(options); };
+  }
+
+  /* ── 燈箱 initPhotoSwipeFromDOM（MDB PRO lightbox 提供的全域函式）──────────────
+   * 原站 ias_v5 的 $.fn.toLightbox（商品說明 ≥3 張圖）、$.fn.itemsLightbox（品項圖）會呼叫它；
+   * MDB Free 沒有 → 原本會 ReferenceError 並中斷後續初始化。
+   * PRO 版用 PhotoSwipe 4；這裡改用 PhotoSwipe 5（MIT，cdnjs 5.4.4；優先用原站 ias_v5 內建的載入器 window.photoSwipeEsm）。
+   * 結構同 PRO：每個符合選擇器的元素是一個相簿，子節點 figure > a[href=大圖][data-size="寬x高"] > img。
+   */
+  if (typeof window.initPhotoSwipeFromDOM !== 'function') {
+    var PSWP = {
+      css: 'https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/photoswipe.min.css',
+      lightbox: 'https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/photoswipe-lightbox.esm.min.js',
+      core: 'https://cdnjs.cloudflare.com/ajax/libs/photoswipe/5.4.4/photoswipe.esm.min.js'
+    };
+    var fallbackLoader = null;
+    var pswpLoader = function () {
+      if (window.photoSwipeEsm && typeof window.photoSwipeEsm.loadLightbox === 'function') return window.photoSwipeEsm;
+      if (!fallbackLoader) {
+        var lb = null;
+        fallbackLoader = {
+          loadLightbox: function () {
+            if (!lb) {
+              if (!document.querySelector('link[data-photoswipe-css], link[href*="photoswipe.min.css"]')) {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = PSWP.css;
+                link.setAttribute('data-photoswipe-css', '1');
+                document.head.appendChild(link);
+              }
+              lb = import(PSWP.lightbox).then(function (m) { return m.default; });
+            }
+            return lb;
+          },
+          loadCore: function () { return import(PSWP.core); }
+        };
+      }
+      return fallbackLoader;
+    };
+    var sizeFromLink = function (itemData, linkEl) {
+      if (!linkEl) return itemData;
+      if (!itemData.src) itemData.src = linkEl.getAttribute('href');
+      var img = linkEl.querySelector('img');
+      if (img && !itemData.msrc) itemData.msrc = img.currentSrc || img.src || img.getAttribute('data-src') || undefined;
+      if (!itemData.width || !itemData.height) {
+        var m = /^\s*(\d+)\s*x\s*(\d+)\s*$/i.exec(linkEl.getAttribute('data-size') || '');
+        if (m) { itemData.width = +m[1]; itemData.height = +m[2]; }
+        else if (img && img.naturalWidth) { itemData.width = img.naturalWidth; itemData.height = img.naturalHeight; }
+        else { itemData.width = 1600; itemData.height = 1067; } // PRO 範例的預設尺寸（原站 toLightbox 也用 1600x1067）
+      }
+      return itemData;
+    };
+    window.initPhotoSwipeFromDOM = function (gallerySelector) {
+      var galleries = Array.prototype.slice.call(document.querySelectorAll(gallerySelector)).filter(function (el) {
+        return !el.getAttribute('data-gb-pswp');
+      });
+      if (!galleries.length) return;
+      galleries.forEach(function (el) { el.setAttribute('data-gb-pswp', '1'); });
+      var loader = pswpLoader();
+      loader.loadLightbox().then(function (PhotoSwipeLightbox) {
+        galleries.forEach(function (el) {
+          // 子項目在開啟時才查詢 → 之後才加進相簿的 figure 也包含在內
+          var lightbox = new PhotoSwipeLightbox({
+            gallery: el,
+            children: 'figure > a',
+            pswpModule: function () { return loader.loadCore(); }
+          });
+          lightbox.addFilter('domItemData', function (itemData, element, linkEl) { return sizeFromLink(itemData, linkEl || element); });
+          lightbox.init();
+          $(el).data('gbPswpLightbox', lightbox);
+        });
+      })['catch'](function (err) {
+        galleries.forEach(function (el) { el.removeAttribute('data-gb-pswp'); });
+        if (window.console) console.warn('initPhotoSwipeFromDOM: PhotoSwipe 載入失敗', err);
+      });
+    };
   }
 })(window.jQuery, window, document);

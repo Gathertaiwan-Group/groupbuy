@@ -349,6 +349,30 @@ $(document).ready(async function () {
 	var opt = $.fn.dataTable.ext.buttons;
 	T('ext.buttons.create/edit/remove/editSingle/removeSingle 已定義', function () { return !!(opt.create && opt.edit && opt.remove && opt.editSingle && opt.removeSingle); });
 
+	// 相容層（mdb-pro-compat.js）：MDB PRO 燈箱 initPhotoSwipeFromDOM（原站 ias_v5 的 $.fn.toLightbox 會呼叫）
+	T('相容層：initPhotoSwipeFromDOM 已定義', function () { return typeof window.initPhotoSwipeFromDOM === 'function'; });
+	var lbFig = '<figure class="image"><img src="/upload/images/unsort/logo.png"></figure>';
+	var lbWrap = $('<div class="gm-grid d-none"><div class="card-text" id="shimLb">' + lbFig + lbFig + lbFig + '</div></div>').appendTo('body');
+	var lbErr = null;
+	try { $('#shimLb').toLightbox(); } catch (e) { lbErr = e; }
+	T('相容層：原站 $.fn.toLightbox（≥3 張圖）不拋錯並建立相簿', function () {
+		if (lbErr) return 'EXCEPTION ' + lbErr.message;
+		return $('#shimLb .mdb-lightbox figure a').length === 3 || $('#shimLb').html().slice(0, 200);
+	});
+	lbWrap.removeClass('d-none');
+	await wait(2500);
+	var lbLink = $('#shimLb .mdb-lightbox figure a')[0];
+	if (lbLink) lbLink.click();
+	await wait(2500);
+	T('相容層：點相簿圖片開啟 PhotoSwipe（cdnjs 5.4.4）', function () {
+		var lb = $('#shimLb .mdb-lightbox').data('gbPswpLightbox');
+		var opened = !!(lb && lb.pswp);
+		if (opened) lb.pswp.close();
+		return opened || ('lightbox=' + !!lb + ' pswp=' + document.querySelectorAll('.pswp').length);
+	});
+	await wait(600);
+	lbWrap.remove();
+
 	window.__shimTest.done = true;
 	render();
 });
