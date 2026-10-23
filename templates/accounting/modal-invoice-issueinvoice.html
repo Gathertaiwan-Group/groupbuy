@@ -1,0 +1,39 @@
+{{!-- 推導：原站「開立電子發票」彈窗（訂單頁工具列 → /ajax/Invoice/displayIssueInvoice?salesOrderIds=）未擷取，依原站 modal 表單樣式補完 --}}
+<form name="InvoiceIssueForm" method="post" action="{{baseUrl}}/ajax/Invoice/issueInvoice.do" class="form-horizontal" id="InvoiceIssueForm"><input type="hidden" name="salesOrderIds" value="{{salesOrderIds}}" id="salesOrderIds"><div class="modal-header">
+    <h5 class="modal-title">開立電子發票</h5>
+    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="modal-body">
+    <div class="modal-message"></div>
+    {{#if orders}}
+    <table class="table table-sm table-striped">
+        <thead><tr><th>訂單編號</th><th>發票金額</th><th>發票類型</th><th>統一編號</th></tr></thead>
+        <tbody>
+        {{#each orders}}<tr><td>{{uuid}}</td><td>{{amount}}</td><td>{{receipt}}</td><td>{{vat}}</td></tr>
+        {{/each}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="alert alert-warning">請先勾選訂單</div>
+    {{/if}}
+    <div class="form-group row">
+        <div class="col-12">
+        <input type="checkbox" name="forceDuplicate" id="forceDuplicate" value="true" class="form-check-input"><label for="forceDuplicate" class="form-check-label pl-4">已有發票紀錄的訂單仍重新開立</label>
+        </div>
+    </div>
+    <p class="small text-danger">【未串接】電子發票平台尚未串接：送出後只建立「發送電子發票[預約中]」紀錄，不會實際開立發票。</p>
+    </div> <!-- modal-body -->
+    <div class="progress">
+        <div class="progress-bar" role="progressbar"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-default" data-dismiss="modal">關閉</button>
+        <input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" {{#unless orders}}disabled{{/unless}}/>
+    </div>
+</form><script>
+function invoiceIssueSuccess(json) {
+	modalShowSuccess($('#InvoiceIssueForm'), json.error);
+	$('#InvoiceIssueForm #submitButton').attr('disabled', true);
+}
+initAjaxForm('InvoiceIssueForm', invoiceIssueSuccess);
+</script>

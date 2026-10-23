@@ -1,0 +1,74 @@
+{{!-- 推導：原站訂單「發票」彈窗（/ajax/Invoice/displaySalesOrderInvoices?salesOrderId=）未擷取；
+     元素 id 依原站 public/public/scripts/invoice_v2.min.js（InvoiceManager）的 selectors 補完 --}}
+<div class="modal-header">
+	<h5 class="modal-title">發票 {{uuid}}</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="alert alert-warning small mb-2">【未串接】電子發票平台尚未串接：開立／作廢／折讓只會寫入系統紀錄（預約中／作廢發票／開立折讓），勾「只記錄」則直接標示完成。</div>
+	<div id="loadingState" class="text-center py-3"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">載入中...</p></div>
+	<div id="errorState" class="alert alert-danger" style="display:none"><span id="errorMessage"></span></div>
+	<div id="noInvoiceState" class="alert alert-info" style="display:none">此訂單尚無發票紀錄</div>
+	<div id="invoiceListContainer" style="display:none"><div class="row" id="invoiceCardsContainer"></div></div>
+	<div id="buttonSection" class="mt-2" style="display:none">
+		<button type="button" class="btn btn-primary" id="createInvoiceButton"><i class="fas fa-file-invoice"></i> 開立新發票</button>
+		<button type="button" class="btn btn-default" id="previewInvoiceButton"><i class="fas fa-eye"></i> 預覽發票明細</button>
+	</div>
+	<div id="previewInvoiceSection" class="card mt-3" style="display:none">
+		<div class="card-header d-flex justify-content-between align-items-center">發票明細預覽<button type="button" class="close" id="closePreviewInvoiceSection">&times;</button></div>
+		<div class="card-body">
+			<table class="table table-sm"><thead><tr><th>品名</th><th>數量</th><th>單價</th><th>小計</th></tr></thead><tbody id="previewInvoiceTableBody"></tbody></table>
+			<div class="text-right">總計：<span id="previewTotalAmount">0</span></div>
+		</div>
+	</div>
+	<div id="voidInvoiceSection" class="card mt-3" style="display:none">
+		<div class="card-header">作廢發票</div>
+		<div class="card-body">
+			<div class="form-group"><label for="voidReason">作廢原因</label><input type="text" id="voidReason" class="form-control" maxlength="100"></div>
+			<div class="mb-2">
+				<span class="badge badge-default badge-reason" style="cursor:pointer">退貨</span>
+				<span class="badge badge-default badge-reason" style="cursor:pointer">訂單取消</span>
+				<span class="badge badge-default badge-reason" style="cursor:pointer">發票資料錯誤</span>
+				<span class="badge badge-default badge-reason" style="cursor:pointer">重複開立</span>
+			</div>
+			<div class="form-check"><input type="checkbox" class="form-check-input" id="voidKeepInvalid" checked><label class="form-check-label" for="voidKeepInvalid">保留作廢紀錄</label></div>
+			<div class="form-check"><input type="checkbox" class="form-check-input" id="voidRecordOnly"><label class="form-check-label" for="voidRecordOnly">只記錄（不送電子發票平台）</label></div>
+			<div class="mt-2 small">跨期發票：
+				<input type="radio" name="crossQuarterMethod" value="invalid" id="crossQuarterMethod_invalid" checked><label for="crossQuarterMethod_invalid" class="mr-2 ml-1">作廢</label>
+				<input type="radio" name="crossQuarterMethod" value="allowance" id="crossQuarterMethod_allowance"><label for="crossQuarterMethod_allowance" class="ml-1">折讓</label>
+			</div>
+			<div class="mt-3"><button type="button" class="btn btn-default" id="cancelVoidButton">取消</button> <button type="button" class="btn btn-danger" id="confirmVoidButton">確認作廢</button></div>
+		</div>
+	</div>
+	<div id="allowanceSection" class="card mt-3" style="display:none">
+		<div class="card-header">開立折讓</div>
+		<div class="card-body">
+			<div id="allowance-step-1">
+				<div class="form-check mb-2"><input type="checkbox" class="form-check-input" id="card-invoice-item-select-checkall"><label class="form-check-label" for="card-invoice-item-select-checkall">全選</label></div>
+				<div id="allowance-items-selection"></div>
+				<button type="button" class="btn btn-primary btn-sm" id="allowance-next-step">下一步</button>
+			</div>
+			<div id="allowance-step-2" style="display:none">
+				<div id="allowance-items-edit"></div>
+				<div class="text-right mb-2">折讓總額：<span id="allowance-total-price">0</span></div>
+				<div class="form-group"><label for="allowanceReason">折讓原因</label><input type="text" id="allowanceReason" class="form-control" maxlength="100"></div>
+				<div class="mb-2">
+					<span class="badge badge-default badge-reason" style="cursor:pointer">退貨</span>
+					<span class="badge badge-default badge-reason" style="cursor:pointer">商品瑕疵</span>
+					<span class="badge badge-default badge-reason" style="cursor:pointer">價格調整</span>
+				</div>
+				<div class="form-check"><input type="checkbox" class="form-check-input" id="allowanceKeepInvalid" checked><label class="form-check-label" for="allowanceKeepInvalid">保留折讓紀錄</label></div>
+				<div class="form-check"><input type="checkbox" class="form-check-input" id="allowanceRecordOnly"><label class="form-check-label" for="allowanceRecordOnly">只記錄（不送電子發票平台）</label></div>
+			</div>
+			<div class="mt-3"><button type="button" class="btn btn-default" id="cancelAllowanceButton">取消</button> <button type="button" class="btn btn-default" id="backAllowanceButton" style="display:none">上一步</button> <button type="button" class="btn btn-warning" id="confirmAllowanceButton">下一步</button></div>
+		</div>
+	</div>
+	<div id="confirmDuplicateModal" class="alert alert-warning mt-3" style="display:none">此訂單已有發票，仍要重新開立嗎？ <button type="button" class="btn btn-sm btn-warning" id="confirmDuplicateInvoice">仍要開立</button></div>
+</div>
+<div class="modal-footer">
+	<button class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>
+<script>
+InvoiceManager.init({ baseUrl: GBF.baseUrl, orderId: {{json salesOrderId}} });
+</script>

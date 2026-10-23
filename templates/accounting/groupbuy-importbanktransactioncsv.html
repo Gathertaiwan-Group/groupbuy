@@ -1,0 +1,168 @@
+<!--#head-->
+	<style type="text/css" class="init">
+	td.details-control {
+		background: url('../resources/details_open.png') no-repeat center center;
+		cursor: pointer;
+	}
+	 tr.shown td.details-control {
+		background: url('../resources/details_close.png') no-repeat center center;
+	}
+	</style>
+	<script type="text/javascript" language="javascript" class="init">
+var editor; // use a global for the submit and return data rendering in the examples
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": false,
+		"pageLength":50,
+	} );
+
+	$(document).ready(function() {
+		var tableName = '#bankTransactionTable';
+		var groupBuyId = {{json groupBuyId}};
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					title:'upload',
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuy/importBankTransaction.do?groupBuyId={{groupBuyId}}'
+				},
+				{{!-- 推導：原站只有 create；刪除未入帳的明細（已入帳者需先取消入帳） --}}
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuy/deleteBankTransaction.do?groupBuyId={{groupBuyId}}&bankTransactionId=_id_'
+				}
+			},
+			table: tableName,
+			fields: [ {
+					name: 'datePaidStr',
+					type:'hidden',
+				},  {
+					name: 'checked',
+					type: 'checkbox',
+				},  {
+					label:'對帳紀錄。格式為：匯款日期 匯款金額 匯入帳號，預設資料範例:<br><div>0105/06/22 1000 10000000001<br>0105/06/22 3000 1000000003</div>',
+					name: 'status',
+					type: 'textarea',
+					def:''
+				},{
+					name:  'account',
+					type:'hidden',
+				}, {
+					name:  'amount',
+					type:'hidden',
+				}, {
+					label: '銀行對帳 ',
+					name:  'note',
+					type: "upload",
+					ajax:'{{baseUrl}}/ajax/GroupBuy/uploadBankTransactionCSV.do?groupBuyId={{groupBuyId}}',
+					dragDropText:'拖拉檔案至此',
+					fileReadText:'上傳中...',
+					uploadText:'選擇檔案',
+					display: function ( path ) {
+						return path;
+					},
+				},
+				{
+					label: '匯款轉帳-對帳銀行:',
+					name:  'bankProvider',
+					type: "select",
+					def:"ESUN"
+				},
+				{
+					name:  'groupBuyId',
+					type: 'hidden',
+					def: {{json groupBuyId}}
+				}
+			],
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			ajax: '{{baseUrl}}/ajax/GroupBuy/listBankTransactions.do?groupBuyId={{groupBuyId}}',
+			language:DataTableConfig.i18n,
+			columns: [
+				{ data: 'datePaidStr' },
+				{ data: 'account' },
+				{ data: 'amount' },
+				{ data: 'salesOrderUUID', defaultContent:'' },
+				{ data: 'status', defaultContent:'' },
+			],
+			"order": [[ 3, "desc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{{!-- 推導：確認入帳／取消入帳（訂單付款狀態只經 DB 函式＋歷程觸發器變更）、刪除未入帳明細、範本下載 --}}
+				DataTableConfig.actionButton({
+					className:'',
+					text:'確認入帳',
+					idSrc:'bankTransactionId',
+					confirm:'確定要將選取的 {0} 筆明細入帳，並把對應訂單設為已付款嗎？（只會處理狀態為「符合，待確認入帳」的明細；付款成功通知信未串接，僅寫入紀錄）',
+					url:'{{baseUrl}}/ajax/GroupBuy/confirmBankTransactions.do?groupBuyId={{groupBuyId}}',
+					success:function(json) { displayAlertSuccess(json.error); }
+				}),
+				DataTableConfig.actionButton({
+					className:'',
+					text:'取消入帳',
+					idSrc:'bankTransactionId',
+					confirm:'確定要取消選取的 {0} 筆明細的入帳，並把訂單付款狀態還原為入帳前嗎？',
+					url:'{{baseUrl}}/ajax/GroupBuy/revertBankTransactions.do?groupBuyId={{groupBuyId}}',
+					success:function(json) { displayAlertSuccess(json.error); }
+				}),
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+				{
+					text: '下載範本',
+					action: function ( e, dt, node, config ) {
+						window.location = '{{baseUrl}}/ajax/GroupBuy/bankTransactionTemplate.do';
+					}
+				},
+			]
+		} );
+
+		editor
+			.on( 'postCreate postRemove', function () {
+				// After create or edit, a number of other rows might have been effected -
+				// so we need to reload the table, keeping the paging in the current position
+				table.ajax.reload( null, false );
+			} )
+			.on( 'submitSuccess', function ( e, json ) {
+				{{!-- 推導：顯示匯入結果摘要（符合／多筆候選／未對到…筆數） --}}
+				if (json && json.message) displayAlertSuccess(json.message);
+			} )
+			.on( 'initCreate', function () {
+				// Enable order for create
+			//	editor.field( 'seq' ).enable();
+			} )
+			.on( 'initEdit', function () {
+				// Disable for edit (re-ordering is performed by click and drag)
+			//   editor.field( 'seq' ).disable();
+			} );
+	} );
+	</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">銀行對帳
+	- {{groupBuy.title}}</div>
+<div class="card-body">
+	 <table id="bankTransactionTable"class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>付款日期</th>
+				<th>匯款轉帳-銀行帳號</th>
+				<th>已付金額</th>
+				<th>訂單編號</th>
+				<th>狀態</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>付款日期</th>
+				<th>匯款轉帳-銀行帳號</th>
+				<th>已付金額</th>
+				<th>訂單編號</th>
+				<th>狀態</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

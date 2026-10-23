@@ -1,0 +1,55 @@
+{{!-- 推導：原站「作廢發票」彈窗（/ajax/Invoice/displayIssueInvalid?uuid=…）未擷取，依原站 modal 表單樣式（modal-groupbuy-displaysms）補完 --}}
+<form name="InvoiceInvalidForm" method="post" action="{{baseUrl}}/ajax/Invoice/issueInvalid.do" class="form-horizontal" id="InvoiceInvalidForm"><input type="hidden" name="uuid" value="{{uuid}}" id="uuid"><input type="hidden" name="invoiceId" value="{{invoiceIdParam}}" id="invoiceId"><div class="modal-header">
+    <h5 class="modal-title">作廢發票</h5>
+    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="modal-body">
+    <div class="modal-message"></div>
+    {{#if invoices}}
+    <table class="table table-sm table-striped">
+        <thead><tr><th>發票訂單號碼</th><th>發票號碼</th><th>發票金額</th><th>狀態</th></tr></thead>
+        <tbody>
+        {{#each invoices}}<tr{{#unless voidable}} class="text-muted"{{/unless}}><td>{{merchantOrderId}}</td><td>{{invoiceNumber}}</td><td>{{amount}}</td><td>{{statusLabel}}</td></tr>
+        {{/each}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="alert alert-warning">選取的訂單沒有可作廢的發票紀錄</div>
+    {{/if}}
+    <div class="form-group row">
+        <label class="col-4" for="reason">作廢原因:</label>
+        <div class="col-8">
+        <input type="text" name="reason" id="reason" class="form-control" maxlength="100" required/>
+        <div class="mt-1">
+            <span class="badge badge-default badge-reason" style="cursor:pointer">退貨</span>
+            <span class="badge badge-default badge-reason" style="cursor:pointer">訂單取消</span>
+            <span class="badge badge-default badge-reason" style="cursor:pointer">發票資料錯誤</span>
+            <span class="badge badge-default badge-reason" style="cursor:pointer">重複開立</span>
+        </div>
+        </div>
+    </div>
+    <div class="form-group row">
+        <div class="col-8 offset-4">
+        <input type="checkbox" name="recordOnly" id="recordOnly" value="true" class="form-check-input"><label for="recordOnly" class="form-check-label pl-4">只記錄（不送電子發票平台，直接標示為「發票已作廢」）</label>
+        </div>
+    </div>
+    <p class="small text-danger">【未串接】電子發票平台尚未串接：未勾「只記錄」時，發票會標示為「作廢發票」，待串接後才會實際送出；預約中尚未開立的發票會直接取消預約。</p>
+    </div> <!-- modal-body -->
+    <div class="progress">
+        <div class="progress-bar" role="progressbar"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-default" data-dismiss="modal">關閉</button>
+        <input id="submitButton" name="submitButton" type="submit" class="btn btn-danger" value="送出" {{#unless hasVoidable}}disabled{{/unless}}/>
+    </div>
+</form><script>
+$('#InvoiceInvalidForm .badge-reason').on('click', function() {
+	$('#InvoiceInvalidForm #reason').val($(this).text());
+});
+function invoiceInvalidSuccess(json) {
+	modalShowSuccess($('#InvoiceInvalidForm'), json.error);
+	$('#InvoiceInvalidForm #submitButton').attr('disabled', true);
+	if (typeof invoiceTable !== 'undefined' && invoiceTable) invoiceTable.ajax.reload(null, false);
+}
+initAjaxForm('InvoiceInvalidForm', invoiceInvalidSuccess);
+</script>

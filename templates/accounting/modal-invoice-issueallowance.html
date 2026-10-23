@@ -1,0 +1,53 @@
+{{!-- 推導：原站「開立折讓」彈窗（/ajax/Invoice/displayIssueAllowance?invoiceId=）未擷取；
+     元素 id／name 依原站 public/scripts/invoice.js 的 invoiceManager.prepareAllowance() 所需補完 --}}
+<form name="InvoiceAllowanceForm" method="post" action="{{baseUrl}}/ajax/Invoice/issueAllowance.do" class="form-horizontal" id="InvoiceAllowanceForm"><input type="hidden" name="invoiceId" value="{{invoiceId}}" id="invoiceId"><div class="modal-header">
+    <h5 class="modal-title">開立折讓 {{invoiceNumber}}</h5>
+    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="modal-body">
+    <div class="modal-message"></div>
+    <p class="small">發票訂單號碼：{{merchantOrderId}}　發票金額：{{amount}}</p>
+    <div id="allowance-step-0" class="d-none">
+        <div class="card mb-3" id="card-allowance-item"><div class="card-header">已折讓項目</div><div class="card-body"></div></div>
+    </div>
+    <div id="allowance-step-1">
+        <div class="card mb-3" id="card-invoice-item-select"><div class="card-header">選擇折讓項目</div><div class="card-body"></div></div>
+        <button type="button" class="btn btn-primary" data-action="select-item">下一步</button>
+    </div>
+    <div id="allowance-step-2" class="d-none">
+        <div class="card mb-3" id="card-invoice-item"><div class="card-header">折讓明細</div><div class="card-body"></div></div>
+        <div class="form-group row">
+            <label class="col-4">折讓總額:</label>
+            <div class="col-8"><span id="allowance-totl-price">0</span></div>
+        </div>
+        <div class="form-group row">
+            <label class="col-4" for="allowanceReason">折讓原因:</label>
+            <div class="col-8"><input type="text" name="reason" id="allowanceReason" class="form-control" maxlength="100" required/></div>
+        </div>
+        <div class="form-group row">
+            <div class="col-8 offset-4">
+            <input type="checkbox" name="recordOnly" id="allowanceRecordOnly" value="true" class="form-check-input"><label for="allowanceRecordOnly" class="form-check-label pl-4">只記錄（不送電子發票平台，直接標示為「折讓已開立」）</label>
+            </div>
+        </div>
+        <p class="small text-danger">【未串接】電子發票平台尚未串接：未勾「只記錄」時，折讓會標示為「開立折讓」，待串接後才會實際送出。</p>
+    </div>
+    </div> <!-- modal-body -->
+    <div class="progress">
+        <div class="progress-bar" role="progressbar"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-default" data-dismiss="modal">關閉</button>
+        <input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+    </div>
+</form><script>
+(function() {
+	var start = function() { invoiceManager.init('#InvoiceAllowanceForm', {{json invoiceId}}).prepareAllowance(); };
+	if (typeof invoiceManager === 'undefined') $.getScript('/scripts/invoice.js', start); else start();
+})();
+function invoiceAllowanceSuccess(json) {
+	modalShowSuccess($('#InvoiceAllowanceForm'), json.error);
+	$('#InvoiceAllowanceForm #submitButton').attr('disabled', true);
+	if (typeof invoiceTable !== 'undefined' && invoiceTable) invoiceTable.ajax.reload(null, false);
+}
+initAjaxForm('InvoiceAllowanceForm', invoiceAllowanceSuccess);
+</script>

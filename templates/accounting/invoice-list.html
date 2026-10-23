@@ -1,0 +1,240 @@
+<!--#head-->
+<style>
+.btn-group-toggle .btn-secondary.active::before {
+  content: "\f00c";
+  font-family: 'Font Awesome 6 Pro';
+  font-weight: 900;
+  margin-right: 5px; /* Adjust spacing as needed */
+}
+</style>
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var invoiceTable;
+var table;
+$(document).ready(function() {
+	var tableName = '#invoiceTable';
+	editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/Invoice/save.do?'
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/Invoice/update.do?invoiceId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/Invoice/delete.do?invoiceId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'invoiceId',
+		fields: [
+			DataTableConfig.field_select('狀態','invoiceStatus'),
+			DataTableConfig.field_datetime('開立時間','dateEinvoiceString','YYYY-MM-DD'),
+		],
+		//template: '#custom_rp_form',
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+
+	table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		"lengthMenu": [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/Invoice/list.do?groupBuyId={{groupBuyId}}',
+			type: "POST",
+			data: function ( d ) {
+				d.invoiceStatus = $('input[name=invoiceStatus]:checked').val();
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('dateEinvoiceString'),
+			DataTableConfig.data_input('merchantOrderId'),
+			{
+				data:'invoiceStatus',
+				render: function ( data, type, row, meta ) {
+					var html = renderOption(meta, data, 'invoiceStatus');
+					if (data == 'EINVOICE_FAILED') {
+						var url = '/backend/SalesOrder/list?salesOrderId=' + row.salesOrderId;
+						html += '<br>' + ' <a class="small blue-text" target="_blank" href="' + url + '">查看訂單</a>';
+						if (row.invoiceSettings && row.invoiceSettings.error) {
+							html += '<br><small>' + row.invoiceSettings.error + '</small>';
+						}
+					}
+					return html;
+				}
+			},
+			DataTableConfig.data_input('invoiceNumber'),
+			DataTableConfig.data_input('amount'),
+			{
+				data:null,
+				'class':'inline-disabled',
+				orderable:false,
+				render: function ( data, type, row ) {
+					var html = '';
+					switch (row.invoiceStatus) {
+					case 'EINVOICE_SENT':
+						html = '<button class="btn btn-default" data-action="issueAllowance">開立折讓</button>';
+						break;
+					case 'EINVOICE_FAILED':
+						html = '<button class="btn btn-default" data-action="issueInvoice">開立電子發票</button>';
+						break;
+					}
+					return html;
+				}
+			},
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 1, "desc" ]],
+		columnDefs: [ { orderable: false, targets: [2,3,4,5] } ],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+		//	{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+		//	{ extend: 'remove', editor: editor, className:'btn-danger' },
+			DataTableConfig.actionButton({
+				className:'',
+				text:'重新排程',
+				confirm:'確定要再次預約開立發票嗎?僅能重新排程開立失敗的發票記錄，如需調整預約時間，請用編輯功能',
+				url:'{{baseUrl}}/ajax/Invoice/statusSend',
+			}),
+			DataTableConfig.actionButton({
+				className:'',
+				text:'取消預約',
+				confirm:'確定要取消預約開立發票嗎',
+				url:'{{baseUrl}}/ajax/Invoice/cancelSend',
+			}),
+			{
+				extend: "remove",
+				text:'作廢發票',
+				action: function ( e, dt, node, config ) {
+					var dd = joinIds('merchantOrderId', dt, false);
+					dd = 'uuid=' + dd;
+					openForm(GBF.baseUrl + '/ajax/Invoice/displayIssueInvalid', dd);
+				}
+			},
+			{
+				extend: 'excel',
+		        text: '匯出 Excel',
+		        exportOptions: {
+		            columns: ':not(.noExport)'  // 排除 class noExport
+		        }},
+		],
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [2,4],[16,16]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	DataTableHelper.initEditorOnCallback(table,editor);
+	//DataTableHelper.inlineModePlugin(table);
+	//DataTableHelper.injectInline(table,editor);
+	injectDetailsControl(tableName, table);
+	invoiceTable = table;
+	$(tableName +' tbody').on('click', 'button', function (e) {
+		e.stopPropagation();
+		var tr = $(this).closest('tr');
+		var row = table.row( tr );
+		var invoiceId = row.data().invoiceId;
+		var salesOrderId = row.data().salesOrderId;
+		var action = $(this).attr('data-action');
+		if (action == null) return;
+		$btn = $(this);
+		btnStartLoading($btn);
+		setInterval(function() {
+			btnStopLoading($btn);
+		}, 3000);
+		switch (action) {
+		case 'issueAllowance':
+			openFormF(GBF.baseUrl + '/ajax/Invoice/displayIssueAllowance', 'invoiceId=' + invoiceId);
+			return;
+		case 'issueInvoice':
+			invoiceManager.issueBySalesOrderId(salesOrderId);
+			return;
+		default: {
+			var ajaxurl = '{{baseUrl}}/ajax/Invoice/' + action;
+			jQuery.post(
+				ajaxurl,
+				{
+					'invoiceId':invoiceId
+				},
+				function(json) {
+					invoiceTable.ajax.reload(null, false);
+					if (json.error != null && json.error != '') {
+						displayAlertSuccess(json.error);
+					}
+					invoiceTable.ajax.reload();
+				}
+				).fail(function(data) {
+					json = data.responseJSON;
+					displayAlertWarning(json.error);
+				}
+			);
+		}
+		}
+	});
+
+	$('.card').on('change', '.filters', function() {
+		table.clear().ajax.reload();
+	});
+
+	var im = invoiceManager.init();
+	im.showStatus();
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4" id="invoiceStatusCard">
+<div class="card-body p-0"></div>
+</div>
+
+<div class="card mt-4">
+<div class="card-header">電子發票</div>
+<div class='card-footer pb-0'>
+		<input type="radio" name="invoiceStatus" id="invoiceStatus_SEND_EINVOICE" class="filters form-check-input" value="SEND_EINVOICE" ><label for="invoiceStatus_SEND_EINVOICE" class="form-check-label pl-4 mr-2">發送電子發票[預約中]</label>
+<input type="radio" name="invoiceStatus" id="invoiceStatus_EINVOICE_SENT" class="filters form-check-input" value="EINVOICE_SENT" ><label for="invoiceStatus_EINVOICE_SENT" class="form-check-label pl-4 mr-2">電子發票已發送</label>
+<input type="radio" name="invoiceStatus" id="invoiceStatus_EINVOICE_FAILED" class="filters form-check-input" value="EINVOICE_FAILED"  checked ><label for="invoiceStatus_EINVOICE_FAILED" class="form-check-label pl-4 mr-2">電子發票發送失敗</label>
+<input type="radio" name="invoiceStatus" id="invoiceStatus_EINVOICE_INVALIDATED" class="filters form-check-input" value="EINVOICE_INVALIDATED" ><label for="invoiceStatus_EINVOICE_INVALIDATED" class="form-check-label pl-4 mr-2">發票已作廢</label>
+<input type="radio" name="invoiceStatus" id="invoiceStatus_PENDING_EINVOICE" class="filters form-check-input" value="PENDING_EINVOICE" ><label for="invoiceStatus_PENDING_EINVOICE" class="form-check-label pl-4 mr-2">等待發票號碼中</label>
+<input type="radio" name="invoiceStatus" id="invoiceStatus_ALLOWANCE_SENT" class="filters form-check-input" value="ALLOWANCE_SENT" ><label for="invoiceStatus_ALLOWANCE_SENT" class="form-check-label pl-4 mr-2">折讓已開立</label>
+<input type="radio" name="invoiceStatus" id="invoiceStatus_ALLOWANCE_FAILED" class="filters form-check-input" value="ALLOWANCE_FAILED" ><label for="invoiceStatus_ALLOWANCE_FAILED" class="form-check-label pl-4 mr-2">折讓失敗</label>
+</div>
+<div class="card-body">
+	<table id="invoiceTable" class="table table-striped display" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th class="noExport">開立時間</th>
+				<th>發票訂單號碼</th>
+				<th class="noExport">狀態</th>
+				<th>發票號碼</th>
+				<th>發票金額</th>
+				<th class="noExport"></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>開立時間</th>
+				<th>發票訂單號碼</th>
+				<th>狀態</th>
+				<th>發票號碼</th>
+				<th>發票金額</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
+<!--#foot-->
+<script src="/scripts/invoice.js"></script>
