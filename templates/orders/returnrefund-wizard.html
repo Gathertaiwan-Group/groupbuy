@@ -240,7 +240,8 @@ $(document).ready(function() {
 	};
 
 	var moveOrder = function(id, $caller) {
-		jQuery.get(
+		{{!-- 原站以 jQuery.get 呼叫會建立訂單的端點；本系統規定寫入端點一律 POST，改用 jQuery.post（參數相同） --}}
+		jQuery.post(
 				GBF.baseUrl+'/ajax/SalesOrder/createAndMove',
 				{
 					'salesOrderId':id
@@ -260,7 +261,7 @@ $(document).ready(function() {
 	}
 
 	var newOrder = function(id, $caller) {
-		jQuery.get(
+		jQuery.post(
 				GBF.baseUrl+'/ajax/SalesOrder/createNewForReturnRefund',
 				{
 					'salesOrderId':id,
