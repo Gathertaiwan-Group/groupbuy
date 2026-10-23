@@ -11,7 +11,8 @@ window.__shimTest = { results: [], done: false };
 function T(name, fn) {
 	try {
 		var r = fn();
-		var ok = r !== false;
+		// 通過＝回傳 true 或不回傳；回傳 false 或字串（`條件 || '細節'` 寫法的失敗細節）都算失敗
+		var ok = r === true || r === undefined;
 		window.__shimTest.results.push({ name: name, ok: ok, detail: r === true || r === undefined ? '' : String(r) });
 	} catch (e) {
 		window.__shimTest.results.push({ name: name, ok: false, detail: 'EXCEPTION ' + (e && e.message) });
@@ -427,12 +428,103 @@ $(document).ready(async function () {
 	T('undependent：移除後不再觸發', function () { return depN.da === depAfter || ('da=' + depN.da + ' expected ' + depAfter); });
 	depEd.destroy();
 
+	// editor.ajax()：getter／setter（同原版 Editor.prototype.ajax）
+	var ajEd = new E({ ajax: '/dev/a1', fields: [{ name: 'x' }] });
+	T('editor.ajax()：取得建構時的 ajax 設定', function () { return ajEd.ajax() === '/dev/a1' || String(ajEd.ajax()); });
+	T('editor.ajax(新值)：設定後回傳 Editor 本身並生效', function () {
+		var r = ajEd.ajax({ url: '/dev/a2', type: 'POST' });
+		return (r === ajEd && $.isPlainObject(ajEd.ajax()) && ajEd.ajax().url === '/dev/a2') || JSON.stringify(ajEd.ajax());
+	});
+	ajEd.destroy();
+
+	// 開表單時 dependent 依目前值觸發（同原版：設值的 change 在 open 之後才送出），且 open 事件裡「全部顯示」不會蓋掉 dependent 的隱藏
+	var opEd = new E({
+		fields: [
+			{ label: '類別', name: 'oc', type: 'select', def: 'A', options: [{ label: 'A', value: 'A' }, { label: 'B', value: 'B' }] },
+			DataTableConfig.field_checkbox_bool('會員限定', 'ob', 0, ''),
+			{ label: '數量', name: 'ot' },
+			{ label: '其他', name: 'ox' }
+		],
+		formOptions: DataTableConfig.formOptions,
+		i18n: DataTableConfig.i18n
+	});
+	var opDep = { oc: 0, ob: 0, openAt: -1, ocAt: -1 };
+	var opSeq = 0;
+	opEd.on('open', function () { opDep.openAt = ++opSeq; DataTableHelper.showHideAllColumns(opEd, true); });
+	opEd.dependent('oc', function (val) { opDep.oc++; opDep.ocAt = ++opSeq; return val === 'A' ? { hide: 'ox' } : { show: 'ox' }; });
+	opEd.dependent('ob', function (val) { opDep.ob++; return val == 1 ? { show: 'ot' } : { hide: 'ot' }; });
+	opEd.create();
+	await wait(900);
+	T('開表單（create）：dependent 在 open 之後依預設值觸發', function () {
+		return (opDep.oc > 0 && opDep.ob > 0 && opDep.ocAt > opDep.openAt) || JSON.stringify(opDep);
+	});
+	T('開表單（create）：open 事件「全部顯示」後 dependent 的隱藏仍生效', function () {
+		return ($(opEd.field('ox').node()).css('display') === 'none' && $(opEd.field('ot').node()).css('display') === 'none') ||
+			('ox=' + $(opEd.field('ox').node()).css('display') + ' ot=' + $(opEd.field('ot').node()).css('display'));
+	});
+	opEd.close();
+	await wait(600);
+	opEd.destroy();
+
+	// 顯示／隱藏動畫：後呼叫者為準（排隊中或進行中的動畫結束時不得蓋掉之後的結果）
+	var anEd = new E({ fields: [{ label: 'a', name: 'aa' }, { label: 'b', name: 'ab' }], i18n: DataTableConfig.i18n });
+	anEd.create();
+	await wait(800);
+	var anA = $(anEd.field('aa').node()), anB = $(anEd.field('ab').node());
+	T('動畫測試前置：表單已顯示', function () { return (!!anEd.display() && anA.is(':visible') && $('.modal.DTED.show').length === 1) || ('display=' + anEd.display() + ' visible=' + anA.is(':visible') + ' modal=' + $('.modal.DTED.show').length); });
+	// 「全部顯示」：aa 動畫隱藏中 → show() 全部（動畫排隊）→ 立即 hide('aa', false)
+	anEd.hide('aa');
+	anEd.show();
+	anEd.hide('aa', false);
+	// 排隊中的動畫若未清除，會在中途把欄位重新顯示（閃現）；取樣整段期間
+	var anSeen = [];
+	var anTimer = setInterval(function () { anSeen.push(anA.css('display')); }, 50);
+	await wait(1200);
+	clearInterval(anTimer);
+	T('「全部顯示」動畫排隊中再 hide(false)：期間與最後都為隱藏', function () {
+		return (anA.css('display') === 'none' && anSeen.every(function (d) { return d === 'none'; })) || ('aa=' + anA.css('display') + ' seen=' + anSeen.join(','));
+	});
+	// ab 動畫隱藏中 → 立即 show(false)
+	anEd.hide('ab');
+	anEd.show('ab', false);
+	await wait(1200);
+	T('隱藏動畫進行中再 show(false)：最後為顯示', function () { return anB.css('display') !== 'none' || ('ab=' + anB.css('display')); });
+	// 正常動畫序列仍有效：show() 動畫後 hide() 動畫 → 隱藏
+	anEd.show('aa');
+	anEd.hide('aa');
+	await wait(1200);
+	T('show() 動畫後接 hide() 動畫：最後為隱藏', function () { return anA.css('display') === 'none' || ('aa=' + anA.css('display')); });
+	anEd.close();
+	await wait(600);
+	anEd.destroy();
+
+	// 編輯開啟：依列資料值觸發 dependent（cat=A → 隱藏 qty），open 事件「全部顯示」不蓋掉
+	ted.on('open.deptest', function () { DataTableHelper.showHideAllColumns(ted, true); });
+	ted.dependent('cat', function (val) { return val === 'A' ? { hide: 'qty' } : { show: 'qty' }; });
+	table.rows().deselect();
+	table.row(function (idx, d) { return d.cat === 'A'; }).select();
+	$('#shimTable_wrapper .buttons-edit').trigger('click');
+	await wait(900);
+	T('開表單（edit）：依列資料觸發 dependent，open「全部顯示」後隱藏仍生效', function () {
+		return (ted.mode() === 'edit' && ted.field('cat').val() === 'A' && $(ted.field('qty').node()).css('display') === 'none') ||
+			('mode=' + ted.mode() + ' cat=' + ted.field('cat').val() + ' qty=' + $(ted.field('qty').node()).css('display'));
+	});
+	ted.close();
+	await wait(600);
+	ted.off('open.deptest');
+	ted.undependent('cat');
+	ted.show('qty', false);
+
 	// 相容層（mdb-pro-compat.js）：MDB PRO 燈箱 initPhotoSwipeFromDOM（原站 ias_v5 的 $.fn.toLightbox 會呼叫）
 	T('相容層：initPhotoSwipeFromDOM 已定義', function () { return typeof window.initPhotoSwipeFromDOM === 'function'; });
 	var lbFig = '<figure class="image"><img src="/upload/images/unsort/logo.png"></figure>';
 	var lbWrap = $('<div class="gm-grid d-none"><div class="card-text" id="shimLb">' + lbFig + lbFig + lbFig + '</div></div>').appendTo('body');
 	var lbErr = null;
+	// toLightbox 會呼叫 updateFigureImgDataSize（定義在前台的 gbs_v5/gbs_v6，後台頁同原站不載入）：測試頁暫補空函式
+	var lbStub = typeof window.updateFigureImgDataSize !== 'function';
+	if (lbStub) window.updateFigureImgDataSize = function () {};
 	try { $('#shimLb').toLightbox(); } catch (e) { lbErr = e; }
+	if (lbStub) delete window.updateFigureImgDataSize;
 	T('相容層：原站 $.fn.toLightbox（≥3 張圖）不拋錯並建立相簿', function () {
 		if (lbErr) return 'EXCEPTION ' + lbErr.message;
 		return $('#shimLb .mdb-lightbox figure a').length === 3 || $('#shimLb').html().slice(0, 200);

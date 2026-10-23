@@ -340,7 +340,7 @@ export const routes = [
 
 ### 8.1 DataTables Editor 相容 shim（`public/compat/editor-shim.js`）
 
-照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，56 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
+照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，65 項全部 ✔ 才算正常；測試函式回傳 `true`／不回傳才算通過，回傳字串＝失敗細節（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
 
 原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
 
@@ -366,13 +366,14 @@ export const routes = [
 |---|---|
 | 建構選項 | `ajax`（字串 / `{create,edit,remove}` 各自 `{type,url,data}` / jQuery 選項物件；URL `_id_` → 逗號串 id，create 為 `null`；`data` 函式可回傳新物件）、`idSrc`、`table`、`fields`、`template`（`<editor-field name>`、`data-editor-template`）、`i18n`、`formOptions`（main/inline/bubble：`submit`、`onBlur`、`onReturn`/`submitOnReturn`、`onEsc`、`onBackground`、`onComplete`、`drawType`、`focus`、`buttons`、`title`、`message`） |
 | 欄位型別 | `text`、`password`、`textarea`、`hidden`、`readonly`、`select`（placeholder、multiple、separator、options 更新）、`checkbox`（separator、unselectedValue、`[]` 名稱）、`radio`、`datetime`（以 flatpickr 呈現，format 為 moment 格式）、`upload`/`uploadMany`（拖放、display、clearText、`upload.editor` 事件）、`ckeditor`（CKEditor 4）、`select2`（含 initialValue 查詢）；原站外掛型別 `ckeditorClassic`、`customColorPicker`、WebEditor 各型別（`radioImage`…）、頁內 `checkbox_tree` 由原站程式自行註冊 |
-| 實例方法 | `create/edit/remove/inline/bubble/open/close/blur/submit/background`、`title/message/error/buttons`（含 `'_basic'`、字串）、`field/fields/add/clear/order`、`get/set/val`、`show/hide/enable/disable`、`dependent`（函式同步/callback/Promise、`{event}`、`values/options/labels/messages/errors/show/hide/enable/disable`）、`display/displayed/mode/modifier/ids/inError/processing/on/one/off/destroy`；內部屬性 `s.fields`、`s.idSrc`、`s.mode`、`s.globalError`、`classes`、`dom`、`_clearDynamicInfo`（可被 hijack） |
+| 實例方法 | `ajax`（getter/setter）、`create/edit/remove/inline/bubble/open/close/blur/submit/background`、`title/message/error/buttons`（含 `'_basic'`、字串）、`field/fields/add/clear/order`、`get/set/val`、`show/hide/enable/disable`、`dependent`（函式同步/callback/Promise、`{event}`、`values/options/labels/messages/errors/show/hide/enable/disable`）、`display/displayed/mode/modifier/ids/inError/processing/on/one/off/destroy`；內部屬性 `s.fields`、`s.idSrc`、`s.mode`、`s.globalError`、`classes`、`dom`、`_clearDynamicInfo`（可被 hijack） |
 | Field 方法 | `val/get/set/def/error/message/fieldInfo/label/labelInfo/input/node/show/hide/enable/disable/update/processing/focus/inError/displayed/multiGet/multiSet/isMultiValue`，型別的額外函式（如 `inst`、`minDate`）自動掛上 |
 | 事件 | `open/opened/close/closed/preOpen/cancelOpen/preClose/preBlur/initCreate/initEdit/initRemove/initSubmit/preSubmit/postSubmit/submitSuccess/submitUnsuccessful/submitError/submitComplete/preCreate/postCreate/preEdit/postEdit/preRemove/postRemove/setData/processing/displayOrder/uploadXhrSuccess/uploadXhrError/preUpload/postUpload`；`pre*` 回傳 false 取消並觸發 `*Cancelled`；命名空間事件 |
 | DataTables 整合 | Buttons `create/edit/remove/editSingle/removeSingle`（文字取 `DataTableConfig.i18n`）、API `table.editor()`、列表回應 `options` 自動更新欄位選項、client-side 表新增/更新/刪除列、serverSide 表自動重抓、`DataTableConfig.actionButton`（以 `remove(editor,true)` 當確認框）、`duplicate` 按鈕、多列編輯「多個數值」 |
 | 顯示 | Bootstrap 4 modal：`.modal.fade.DTED > .modal-dialog.modal-dialog-scrollable > .DTE.modal-content`（Header/Processing/Body/Footer 結構與 class 同原站） |
 | 已知差異 | datetime 的日曆外觀為 flatpickr（非 Editor 內建 DateTime）；bubble 定位交給原站頁面 CSS（畫面中央）；Editor 原版英文預設字串只在沒傳 `i18n` 的 Editor 出現 |
-| 設值與 dependent | `field.val(x)`／`set()` 以 API 設值時，select/checkbox/radio/select2/text 都會在 `setTimeout 0` 後 trigger `change`（同原版 `_triggerChange`），`dependent()` 隨之執行——**是非同步的**，設值後要讀 dependent 的結果請等下一個 tick；新增表單時每個欄位會觸發兩次（multiSet＋set，同原版）。`undependent(name)` 可移除 |
+| 設值與 dependent | `field.val(x)`／`set()` 以 API 設值時，select/checkbox/radio/select2/text 都會在 `setTimeout 0` 後 trigger `change`（同原版 `_triggerChange`），`dependent()` 隨之執行——**是非同步的**，設值後要讀 dependent 的結果請等下一個 tick；新增表單時每個欄位會觸發兩次（multiSet＋set，同原版）。開表單（create/edit）時這些 change 在 `open` 事件之後才送出，所以 dependent 會依表單目前值執行、且在 open 事件內的「全部顯示」（`DataTableHelper.showHideAllColumns`）之後，頁面不必自己再 trigger change。`undependent(name)` 可移除 |
+| 顯示／隱藏動畫 | 欄位 `show()/hide()` 先 `stop(true, true)` 結束進行中與排隊中的動畫：後呼叫者為準（例：動畫隱藏中呼叫 `show()` 全部再 `hide(x, false)`，x 不會閃現或被重新顯示） |
 | 欄位版面 | 欄位 `className: 'block'`：標籤在上、輸入佔整列（同原版 bootstrap4 的 `div.DTE_Field.block`，shim CSS 已內建，頁面不必自補） |
 
 ### 8.2 其他相容層

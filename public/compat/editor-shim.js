@@ -9,7 +9,7 @@
  * 支援範圍（詳見 docs/MODULE_GUIDE.md「Editor shim」）：
  *   建構選項：ajax（字串 / {create,edit,remove} / jQuery 選項；URL 中 _id_；ajax.data 函式）、idSrc、table、fields、
  *            template（<editor-field name>）、i18n、formOptions（main/inline/bubble）
- *   實例方法：add clear field fields get set val show hide enable disable dependent error message title buttons
+ *   實例方法：add ajax clear field fields get set val show hide enable disable dependent error message title buttons
  *            create edit remove inline bubble open close blur submit display displayed mode modifier ids inError
  *            processing on one off destroy order background
  *   Field：val get set def error message fieldInfo label labelInfo input node show hide enable disable update
@@ -469,6 +469,8 @@
     hide: function (animate) {
       var el = this.dom.container;
       if (animate === undefined) animate = true;
+      // 先結束進行中／排隊中的顯示隱藏動畫：後呼叫者為準（否則較早排入的 slideDown／slideUp 結束時會蓋掉這次的結果）
+      if (el.stop) el.stop(true, true);
       if (this.s.host.display() && animate && $.fn.slideUp) el.slideUp();
       else el.css('display', 'none');
       return this;
@@ -604,6 +606,7 @@
     show: function (animate) {
       var el = this.dom.container;
       if (animate === undefined) animate = true;
+      if (el.stop) el.stop(true, true);
       if (this.s.host.display() && animate && $.fn.slideDown) el.slideDown();
       else el.css('display', '');
       return this;
@@ -2363,6 +2366,15 @@
     display: function (show) {
       if (show === undefined) return this.s.displayed;
       return this[show ? 'open' : 'close']();
+    },
+
+    /* 取得／設定 ajax 設定（同原版 Editor.prototype.ajax：有參數時設定並回傳 Editor，無參數回傳目前設定） */
+    ajax: function (newAjax) {
+      if (newAjax) {
+        this.s.ajax = newAjax;
+        return this;
+      }
+      return this.s.ajax;
     },
 
     mode: function (mode) {
