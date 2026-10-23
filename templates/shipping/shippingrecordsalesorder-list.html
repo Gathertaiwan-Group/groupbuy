@@ -1,0 +1,64 @@
+<!--#head-->
+<!-- 本站頁面：匯出紀錄列上的「訂單」按鈕開新視窗，列出該出貨紀錄的訂單（原站對應頁未合法取得，版面為推導） -->
+<style>
+.dataTables_scrollBody{min-height:300px;}
+</style>
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var table = $('#shippingRecordSalesOrderTable').DataTable( {
+			dom: 'lfrtip',
+			serverSide: false,
+			processing: true,
+			scrollX: true,
+			"lengthMenu": [25, 50, 100, 250],
+			ajax: {
+				url: '{{baseUrl}}/ajax/ShippingRecord/orders.do?shippingRecordId={{shippingRecordId}}',
+				type: 'GET'
+			},
+			language: DataTableConfig.i18n,
+			columns: [
+				{ data: 'uuid', render: $.fn.dataTable.render.text() },
+				{ data: 'dateCreatedString' },
+				{ data: 'shippingFirstname', render: $.fn.dataTable.render.text() },
+				{ data: 'customerTelephone', render: $.fn.dataTable.render.text() },
+				{ data: 'shippingTypeString' },
+				{ data: 'stateString' },
+				{ data: 'statusString' },
+				{ data: 'shippingReceiptNumber', render: $.fn.dataTable.render.text() },
+				{ data: 'dateShippedString' },
+				{ data: 'grandTotal', className: 'text-right' }
+			],
+			order: [[ 0, 'asc' ]]
+		} );
+	} );
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/ShippingRecord/export">匯出出貨紀錄</a></li>
+		<li class="breadcrumb-item active" aria-current="page">出貨紀錄訂單</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-header">出貨紀錄 #{{shippingRecordId}} {{recordDate}} {{#if recordGroupBuyTitle}}<span class="badge badge-light">{{recordGroupBuyTitle}}</span>{{/if}} {{#if recordTag}}<span class="badge badge-default">{{recordTag}}</span>{{/if}}</div>
+<div class="card-body">
+	<table id="shippingRecordSalesOrderTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>訂單編號</th>
+				<th>訂單日期</th>
+				<th>收件人</th>
+				<th>電話</th>
+				<th>配送方式</th>
+				<th>階段</th>
+				<th>狀態</th>
+				<th>查貨號碼</th>
+				<th>出貨日期</th>
+				<th>結帳金額</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

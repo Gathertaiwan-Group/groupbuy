@@ -1,635 +1,240 @@
+<!-- 匯出貨運清單（本站設計）：依 SPEC 7.4——選匯出目的（出貨／回壓訂單）、訂單範圍、發送出貨信、現貨／預購預計出貨日、物流商格式（貨運標籤）。
+     原站此彈窗的內容未合法取得，版面與欄位名稱為推導，見 docs/modules/shipping.md。 -->
 <style>
-.card.card-wizard {border: 1px solid #dee2e6;text-align: center;letter-spacing: 4px;transform: scale(1);transition-duration: 0.3s;}
-.card-wizard .card-body {display: flex;justify-content: center;min-height: 158px;align-items: center;flex-wrap: wrap;}
-.container-fluid.container-wizard {min-height:calc(100vh - 200px);display: flex;justify-content: center;align-items: center}
-.form-check-input.disabled+label:before {border-right: 2px solid #6c757d !important;border-bottom: 2px solid #6c757d !important;}
-
-form#ShippingCSVForm legend {
-    font-size:1.2rem;
-    font-weight:400;
-    border:none;
-}
- 
-form#ShippingCSVForm .form-group {
-    margin-left:20px;
-}
-
- form#ShippingCSVForm .row {
-     padding-bottom:12px;
- }
-
- form#ShippingCSVForm legend {margin-top:24px;}
- form#ShippingCSVForm .form-group {margin-left:20px;}
+#ShippingCSVForm legend { font-size: 1.1rem; font-weight: 500; margin-top: 16px; border: none; }
+#ShippingCSVForm .form-group { margin-left: 12px; }
+#ShippingCSVForm .purpose-option { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; cursor: pointer; }
+#ShippingCSVForm .purpose-option.active { border-color: #4285f4; background: #f3f7ff; }
+#exportCountBox .preview-uuid { font-family: monospace; }
 </style>
 <div class="modal-header">
-	<h5>團購 &raquo; 匯出貨運清單 > <span class="purpose-label green-text"></span></h5>
-	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	<h5>團購 &raquo; 匯出貨運清單</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-label="關閉"><span aria-hidden="true">&times;</span></button>
 </div>
-
-<div class="container-fluid container-wizard">
-	<div class="row w-100">
-<div class="col-12 text-center pb-4"><h4><span class="text-danger">未指定表單</span>，將匯出時間區間內出貨訂單</h4></div>
-<div class="col-12 text-center pb-4"><h4>請先選擇匯出模式</h4></div>
-		<div class="col-6">
-			<div class="card card-wizard" data-purpose="preview">
-				<div class="card-header">預覽用</div>
-				<div class="card-body">不會修改訂單狀態<br>不會保存匯出紀錄</div>
-			</div>
-		</div>
-		<div class="col-6">
-			<div class="card card-wizard" data-purpose="shipping">
-				<div class="card-header">出貨用</div>
-				<div class="card-body">會將訂單狀態改為準備出貨中<br>不會匯出準備出貨中訂單<br>會保存匯出紀錄</div>
-			</div>
-		</div>
-	</div>
-</div>
-<form name="ShippingCSVForm" method="post" action="/backend/ShippingCSV/previewExportShippingCSV.do" class="form-horizontal" id="ShippingCSVForm"><input type="hidden" name="groupBuyId" id="groupBuyId" value="">
-	<div class="modal-body">
+<form id="ShippingCSVForm" class="form-horizontal" onsubmit="return false;">
+<input type="hidden" name="groupBuyId" value="{{groupBuyId}}">
+<div class="modal-body">
 	<div class="modal-message"></div>
-	<legend><span class="purpose-label green-text"></span></legend>
+	{{#if groupBuyTitle}}
+	<p class="mb-1">匯出團購：<b>{{groupBuyTitle}}</b></p>
+	{{else}}
+	<p class="mb-1 text-danger">未指定團購：請指定訂單日期區間（最多 {{maxDays}} 天），可匯出多個團購的訂單。</p>
+	{{/if}}
+
+	<legend>匯出目的</legend>
 	<div class="form-group">
-		<div class="row">
-			<label class="col-lg-4">匯出後更新訂單</label>
-			<div class="col-lg-8">
-				<input type="checkbox" name="prepareShipping" value="on" id="prepareShipping" class=" form-check-input"><label class="form-check-label" for="prepareShipping"><span class="field-info">匯出後，訂單狀態同步改為[準備出貨中]</span></label>
-			</div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">排除規則</label>
-			<div class="col-lg-8">
-				<input type="checkbox" name="ignorePrepareShipping" value="on" checked="checked" id="ignorePrepareShipping" class=" form-check-input"><label class="form-check-label" for="ignorePrepareShipping">不匯出[準備出貨中]訂單</label>
-				<i id="ignorePrepareShippingLocker" class="fa fa-lock" style="cursor: pointer;"></i>
-			</div>
-		</div>
+		<label class="purpose-option active d-block" for="purposeShip">
+			<input type="radio" class="form-check-input" name="purpose" id="purposeShip" value="SHIP" checked>
+			<span class="pl-4"><b>出貨</b>：匯出後會將訂單更新為已出貨，並保存出貨紀錄（可在「匯出紀錄」還原）</span>
+		</label>
+		<label class="purpose-option d-block" for="purposeExportOnly">
+			<input type="radio" class="form-check-input" name="purpose" id="purposeExportOnly" value="EXPORT_ONLY">
+			<span class="pl-4"><b>回壓訂單</b>：系統不會對既有訂單做任何更新，只保存匯出紀錄與檔案</span>
+		</label>
 	</div>
-	
-	<legend>訂單區間 <a data-toggle="collapse" class="" href="#form-group-date" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></legend>
-	<div class="form-group collapse" id="form-group-date">
-		<div class="row">
-			<label class="col-lg-4">訂單區間依照</label>
+
+	<legend>訂單範圍</legend>
+	<div class="form-group">
+		<div class="row mb-2" id="orderFilterRow">
+			<label class="col-lg-4">篩選</label>
 			<div class="col-lg-8">
-				<select class="form-control" name="shippingExportDateBy">
-				<option value="UUID">下單日</option>
-				<option value="DATE_PAID">付款日</option>
+				<select class="form-control" name="orderFilter">
+					<option value="UNSHIPPED">尚未出貨（含準備出貨中）</option>
+					<option value="ALL">所有訂單</option>
+				</select>
+				<small class="text-muted">「出貨」只會匯出尚未出貨的訂單</small>
+			</div>
+		</div>
+		<div class="row mb-2">
+			<label class="col-lg-4">訂單日期</label>
+			<div class="col-lg-8 form-inline">
+				<input type="date" name="dateBegin" class="form-control"{{#unless groupBuyId}} value="{{monthAgo}}"{{/unless}}>
+				<span class="mx-2">~</span>
+				<input type="date" name="dateEnd" class="form-control"{{#unless groupBuyId}} value="{{today}}"{{/unless}}>
+			</div>
+		</div>
+		<div class="row mb-2">
+			<label class="col-lg-4">配送方式</label>
+			<div class="col-lg-8">
+				<select class="form-control" name="shippingType">
+					<option value="">不限</option>
+					{{#each shippingTypes}}<option value="{{value}}">{{label}}</option>{{/each}}
 				</select>
 			</div>
 		</div>
-		<div class="row">
-			<label class="col-lg-4">日期區間</label>
-			<div class="col-lg-8 form-inline">
-				<input type="date" id="datePaidBegin" name="datePaidBegin" value="" placeholder="日期(起)" class="form-control nocount"/>
-				~ <input type="date" id="datePaidEnd" name="datePaidEnd" value="" placeholder="日期(迄)" class="form-control nocount"/>
-			</div>
-			<label class="col-lg-4"></label>
-			<div class="col-lg-8 help-block" id="date-error"></div>
-			<label class="col-lg-4"></label>
-			<div class="col-lg-8 help-block" id="date-farthest"></div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">預計配達日區間</label>
-			<div class="col-lg-8 form-inline">
-				<input type="date" id="dateExpectedShippingBegin" name="dateExpectedShippingBegin" value="" placeholder="日期(起)" class="form-control nocount"/>
-				~ <input type="date" id="dateExpectedShippingEnd" name="dateExpectedShippingEnd" value="" placeholder="日期(迄)" class="form-control nocount"/>
-			</div>
-		</div>
-	</div>
-	<legend>配送&貨運 <a data-toggle="collapse" class="" href="#form-group-shippingType" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></legend>
-	<div class="form-group collapse" id="form-group-shippingType">
-		<div class="row">
-			<div class="col-12 small field-info pb-2">*預設不會匯出「未付款」「自取」訂單。如需匯出請篩選「付款狀態」及「配送方式」</div>
-			<label class="col-lg-4" for="payStatus">付款狀態</label>
+		<div class="row mb-2">
+			<label class="col-lg-4">現貨／預購</label>
 			<div class="col-lg-8">
-				<select class="form-control" id="payStatus" name="payStatus">
-				<option value="0">不限制</option>
-				<option value="1">未付款</option>
-				<option value="2">已付款</option>
+				<select class="form-control" name="backOrder">
+					{{#each backOrders}}<option value="{{value}}">{{label}}</option>{{/each}}
 				</select>
 			</div>
 		</div>
-		<div class="row">
-			<label class="col-lg-4" for="state">配送方式</label>
+		<div class="row mb-2">
+			<label class="col-lg-4">付款狀態</label>
 			<div class="col-lg-8">
-				<select name="shippingType" id="shippingType" class="form-control"><option value="">選擇</option><option value="NORMAL">宅配</option>
-<option value="PICKUP">自取</option>
-<option value="CVS">超商取貨</option>
-<option value="INTL">國際配送</option>
-<option value="NOD">不需配送</option>
-<option value="HK_SF">順豐站(香港)</option></select></div>
-		</div>
-		<div class="row" id="shippingTag_div">
-			<label class="col-lg-4" for="state">貨運標籤</label>
-			<div class="col-lg-8">
-			<select name="shippingTag" id="shippingTag" class="form-control"><option value="">選擇</option>
-<option value="7-11超商取貨">7-11超商取貨</option>
-<option value="全家超商取貨">全家超商取貨</option>
-<option value="大型">大型</option>
-<option value="大榮貨運">大榮貨運</option>
-<option value="宅配">宅配</option>
-<option value="物流">物流</option></select></div>
-		</div>
-	</div>
-	<legend>進階篩選 <a data-toggle="collapse" class="" href="#form-group-item" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></legend>
-	<div class="from-group collapse" id="form-group-item">
-		<div class="row" id="backOrder_div">
-			<label class="col-lg-4">訂單商品現貨/預購</label>
-			<div class="col-lg-8">
-			<select name="backOrder" id="backOrder" class="form-control"><option value="-1">不限</option>
-<option value="0">只有現貨</option>
-<option value="1">只有預購</option>
-<option value="2">同時有現貨＋預購</option></select><span class="field-info">僅會匯出訂單有符合此商品狀態條件之訂單</span>
+				<select class="form-control" name="payStatus">
+					<option value="PAID_OR_COD">已付款或貨到付款</option>
+					<option value="PAID">已付款</option>
+					<option value="UNPAID">未付款</option>
+					<option value="ALL">不限</option>
+				</select>
 			</div>
 		</div>
-		<!-- 
-		<div class="form-group row" id="backOrder_div">
-			<label class="col-lg-4" for="backOrder">僅匯出訂單商品內包含現貨預購狀態</label>
+	</div>
+
+	<legend>物流商格式</legend>
+	<div class="form-group">
+		<div class="row mb-2">
+			<label class="col-lg-4">貨運標籤</label>
 			<div class="col-lg-8">
-				<select name="backOrder" id="backOrder" class="form-control"><option value="-1">不限</option>
-<option value="0">只有現貨</option>
-<option value="1">只有預購</option>
-<option value="2">同時有現貨＋預購</option></select></div>
+				<select class="form-control" name="shippingTag">
+					<option value="">不指定（標準格式、所有標籤訂單）</option>
+					{{#each shippingTags}}<option value="{{tag}}">{{title}}（{{tag}}）</option>{{/each}}
+				</select>
+				<small class="text-muted">指定時只匯出此貨運標籤的訂單，並依標籤的匯出格式產生檔案</small>
+			</div>
 		</div>
-		 -->
-		<div class="row">
-			<label class="col-lg-4">訂單金額範圍</label>
-			<div class="col-lg-8 form-inline">
-				<input type="text" name="grandTotalMin" maxlength="255" placeholder="最小數量" value="" type="text" id="grandTotalMin" class="form-control">
-				~ <input type="text" name="grandTotalMax" maxlength="255" placeholder="最大數量" value="" type="text" id="grandTotalMax" class="form-control"></div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">現貨商品總金額範圍</label>
-			<div class="col-lg-8 form-inline">
-				<input type="text" name="normalPriceMin" maxlength="255" placeholder="最小金額" value="" type="text" id="normalPriceMin" class="form-control">
-				~ <input type="text" name="normalPriceMax" maxlength="255" placeholder="最大金額" value="" type="text" id="normalPriceMax" class="form-control"></div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">預購商品總金額範圍</label>
-			<div class="col-lg-8 form-inline">
-				<input type="text" name="backOrderPriceMin" maxlength="255" placeholder="最小金額" value="" type="text" id="backOrderPriceMin" class="form-control">
-				~ <input type="text" name="backOrderPriceMax" maxlength="255" placeholder="最大金額" value="" type="text" id="backOrderPriceMax" class="form-control"></div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">現貨商品數量範圍</label>
-			<div class="col-lg-8 form-inline">
-				<input type="text" name="normalTotalMin" maxlength="255" placeholder="最小數量" value="" type="text" id="normalTotalMin" class="form-control">
-				~ <input type="text" name="normalTotalMax" maxlength="255" placeholder="最大數量" value="" type="text" id="normalTotalMax" class="form-control"></div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">預購商品數量範圍</label>
-			<div class="col-lg-8 form-inline">
-				<input type="text" name="backOrderTotalMin" maxlength="255" placeholder="最小數量" value="" type="text" id="backOrderTotalMin" class="form-control">
-				~ <input type="text" name="backOrderTotalMax" maxlength="255" placeholder="最大數量" value="" type="text" id="backOrderTotalMax" class="form-control"></div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4" for="itemTitle">商品出貨短名稱</label>
+		<div class="row mb-2" id="sendShippingEmailRow">
+			<label class="col-lg-4">出貨通知</label>
 			<div class="col-lg-8">
-				<input type="text" name="itemTitle" maxlength="255" placeholder="可輸入部分商品名稱，逗點區隔多個商品" value="" type="text" id="itemTitle" class="form-control"></div>
+				<input type="checkbox" class="form-check-input" name="sendShippingEmail" id="sendShippingEmail" value="on">
+				<label class="form-check-label" for="sendShippingEmail">發送出貨信</label>
+			</div>
 		</div>
-		<div class="row" id="keywordMatch">
-			<label class="col-lg-4" for="state">商品比對方式</label>
-			<div class="col-lg-8">
-			<select name="keywordMatch" id="keywordMatch" class="form-control"><option value="ALL">完全包含</option>
-<option value="OR">任一包含</option>
-<option value="ONLY">僅包含</option>
-<option value="EXCLUDE">不包含</option></select></div>
+		<div class="row mb-2">
+			<label class="col-lg-4">現貨預計出貨日</label>
+			<div class="col-lg-8"><input type="date" name="dateExpectedShipping" class="form-control"></div>
+		</div>
+		<div class="row mb-2">
+			<label class="col-lg-4">預購預計出貨日</label>
+			<div class="col-lg-8"><input type="date" name="dateExpectedShippingBackOrder" class="form-control"></div>
 		</div>
 	</div>
-	<legend>郵局設定 <a data-toggle="collapse" class="" href="#form-group-post" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></legend>
-	<div class="from-group collapse" id="form-group-post">
-		<div class="row">
-			<label class="col-lg-4" for="serialNumberFirst6">(*郵局用)「掛號號碼」前6碼</label>
-			<div class="col-lg-8">
-				<input type="text" name="serialNumberFirst6" maxlength="255" placeholder="系統將自動產生連續號碼" value="" type="text" id="serialNumberFirst6" class="form-control"></div>
-		</div>
-	</div>
+
 	<legend>匯出設定</legend>
 	<div class="form-group">
-		<div class="row">
-			<label class="col-lg-4">匯出格式</label>
+		<div class="row mb-2">
+			<label class="col-lg-4">檔案格式</label>
 			<div class="col-lg-8">
-	<input type="radio" class="form-check-input  nocount" name="fileFormat" id="fileFormatXLS" value="XLS" checked="true">
-			<label class="form-check-label" for="fileFormatXLS">XLS</label>
-	<input type="radio" class="form-check-input  nocount" name="fileFormat" id="fileFormatCSV" value="CSV" >
-			<label class="form-check-label" for="fileFormatCSV">CSV</label>
-	</div>
-		</div>
-		<div class="row">
-			<label class="col-lg-4">其他報表</label>
-			<div class="col-lg-8">
-				<div>
-					<input type="checkbox" name="exportERP1" value="on" id="exportERP1" class=" form-check-input nocount"><label class="form-check-label" for="exportERP1">同時匯出ERP1報表</label>
-				</div>
-				<div>
-					<input type="checkbox" name="exportLabel" value="on" id="exportLabel" class=" form-check-input nocount"><label class="form-check-label" for="exportLabel">同時匯出列印用地址單</label>
-				</div>
+				<input type="radio" class="form-check-input" name="fileFormat" id="fileFormatXls" value="XLS" checked>
+				<label class="form-check-label mr-4" for="fileFormatXls">Excel</label>
+				<input type="radio" class="form-check-input" name="fileFormat" id="fileFormatCsv" value="CSV">
+				<label class="form-check-label" for="fileFormatCsv">CSV</label>
 			</div>
 		</div>
-		<div class="row" id="row-oneShippingRecord">
-			<label class="col-lg-4">簡化管理</label>
+		{{#if multipleGroupBuys}}
+		<div class="row mb-2">
+			<label class="col-lg-4">出貨紀錄</label>
 			<div class="col-lg-8">
-				<div>
-					<input type="checkbox" name="oneShippingRecord" value="on" id="oneShippingRecord" class=" form-check-input nocount"><label class="form-check-label" for="oneShippingRecord">系統匯出紀錄頁面，將多團彙整成一份出貨紀錄。(預設為一團一個紀錄)</label>
-				</div>
+				<input type="checkbox" class="form-check-input" name="oneShippingRecord" id="oneShippingRecord" value="on">
+				<label class="form-check-label" for="oneShippingRecord">多團彙整成一筆出貨紀錄（預設一團一筆）</label>
 			</div>
 		</div>
-		<div class="row">
-			<label class="col-lg-4" for="exportShippingCSVTotal">匯出數量</label>
+		{{/if}}
+		{{#unless groupBuyId}}
+		<div class="row mb-2">
+			<label class="col-lg-4">出貨紀錄</label>
 			<div class="col-lg-8">
-				<input type="text" name="exportShippingCSVTotal" maxlength="6" size="6" value="0" type="text" id="exportShippingCSVTotal" class="required form-control" required><label for="exportShippingCSVTotal-help"></label>
+				<input type="checkbox" class="form-check-input" name="oneShippingRecord" id="oneShippingRecord" value="on">
+				<label class="form-check-label" for="oneShippingRecord">多團彙整成一筆出貨紀錄（預設一團一筆）</label>
 			</div>
-			<div class="col-12 text-right help-block with-errors">
-				未出貨數量(現貨0/預購0) 共0筆</div>
+		</div>
+		{{/unless}}
+		<div class="row mb-2">
+			<label class="col-lg-4">匯出數量</label>
+			<div class="col-lg-8 form-inline">
+				<input type="number" name="limit" class="form-control" min="1" max="{{maxExport}}" value="{{maxExport}}">
+				<small class="text-muted ml-2">單次上限 {{maxExport}} 筆，依訂單日期舊到新</small>
+			</div>
 		</div>
 	</div>
-	
-	</div> <!-- modal-body -->
-	<div id="preview" class="alert alert-info mx-2">
-	</div>
-	<div class="progress">
-		<div class="progress-bar" role="progressbar"></div>
-	</div>
-	<div class="alert alert-info m-2 p-2">
-	<legend>進階使用說明  <a data-toggle="collapse" class="" href="#help-item" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></legend>
-	<div class="collapse" id="help-item"">
-	<p><mark>包含預購</mark>沒打勾，會包含只有現貨商品的訂單</p>
-	<p><mark>現貨商品總金額範圍</mark>有填任意值，會包含「現貨商品總金額」符合範圍的訂單</p>
-	<p><mark>預購商品總金額範圍</mark>有填任意值，會包含「預購商品總金額」符合範圍的訂單</p>
-	<p><mark>現貨商品總金額</mark>以及<mark>預購商品總金額範圍</mark>有填任意值，會包含「預購商品總金額」「預購商品總金額」同時符合範圍的訂單</p>
-	<p><mark>商品比對方式</mark></p>
-	<p><mark>完全包含</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單同時有前述三樣商品才會符合條件</p>
-	<p><mark>完全包含</mark>時，請盡量輸入完整商品名稱</p>
-	<p><mark>僅包含</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單剛好有這三樣商品且不包含其他商品才會符合條件</p>
-	<p><mark>任一包含</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單有買帽子,衣服,褲子任何一樣商品就會符合條件</p>
-	<p><mark>不包括</mark>：若商品名稱輸入：帽子,衣服,褲子，只有訂單沒有包含前述任何一樣商品才會符合條件</p>
-	</div>
-	</div>
-</form><div class="modal-footer">
-	<span class="help-block submit-error"></span>
-	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
-	<button id="submitButton" name="submitButton" type="submit" class="btn btn-primary">送出</button>
+	<div id="exportCountBox" class="alert alert-info mb-0">計算中…</div>
 </div>
+<div class="modal-footer">
+	<span class="help-block text-danger submit-error mr-auto"></span>
+	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+	<button type="button" class="btn btn-primary" id="btnExportShipping">匯出</button>
+</div>
+</form>
 <script>
-
 (function () {
-	var maxDayDuration = 31;
-
-	var restricted = true;
-	var max = 2000;
-
-var multipleGroupBuys = false;
-
-
-	var dataFarthestDateStr = null;
-	var isUnspecifiedGroupBuy = function() {
-		return !$('#ShippingCSVForm input[name=groupBuyId]').val().length;
+	var $form = $('#ShippingCSVForm');
+	var esc = function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); };
+	var countTimer = null;
+	var syncPurpose = function () {
+		var ship = $form.find('input[name=purpose]:checked').val() === 'SHIP';
+		$form.find('.purpose-option').removeClass('active');
+		$form.find('input[name=purpose]:checked').closest('.purpose-option').addClass('active');
+		$form.find('select[name=orderFilter]').prop('disabled', ship);
+		if (ship) $form.find('select[name=orderFilter]').val('UNSHIPPED');
+		$('#sendShippingEmailRow').toggle(ship);
 	};
-
-	var updateDatePaidMinMax = function() {
-		if (!isUnspecifiedGroupBuy()) return;
-		var beginVal = $('#datePaidBegin').val();
-		var todayStr = moment().format('YYYY-MM-DD');
-		var minDateStr = dataFarthestDateStr || undefined;
-
-		// 1. datePaidBegin 允許自由選擇的最廣範圍：[半年最早出貨日 ~ 今天]
-		if (minDateStr) $('#datePaidBegin').attr('min', minDateStr);
-		$('#datePaidBegin').attr('max', todayStr);
-
-		// 2. datePaidEnd 受 beginVal 動態約束：[beginVal ~ Math.min(beginVal + maxDayDuration, todayStr)]
-		var endMin = beginVal || minDateStr;
-		var endMax = todayStr;
-		if (beginVal) {
-			var calculatedMaxEnd = moment(beginVal).add(maxDayDuration, 'days').format('YYYY-MM-DD');
-			if (moment(calculatedMaxEnd).isBefore(moment(todayStr))) {
-				endMax = calculatedMaxEnd;
-			}
-		}
-		if (endMin) $('#datePaidEnd').attr('min', endMin);
-		if (endMax) $('#datePaidEnd').attr('max', endMax);
-
-		// 3. dateExpectedShippingBegin: min 與 datePaidBegin 相同(或 minDateStr)，max 為 todayStr
-		var expBeginMin = beginVal || minDateStr;
-		if (expBeginMin) $('#dateExpectedShippingBegin').attr('min', expBeginMin);
-		$('#dateExpectedShippingBegin').attr('max', todayStr);
-
-		// 4. dateExpectedShippingEnd: min 為 dateExpectedShippingBegin(或 expBeginMin)，max 為 todayStr
-		var expBeginVal = $('#dateExpectedShippingBegin').val();
-		var expEndMin = expBeginVal || expBeginMin;
-		if (expEndMin) $('#dateExpectedShippingEnd').attr('min', expEndMin);
-		//$('#dateExpectedShippingEnd').attr('max', todayStr);
+	var refreshCount = function () {
+		clearTimeout(countTimer);
+		countTimer = setTimeout(function () {
+			$('#exportCountBox').removeClass('alert-danger').addClass('alert-info').text('計算中…');
+			$.post('{{baseUrl}}/ajax/ShippingCSV/countOrders.do', $form.serialize(), null, 'json').done(function (res) {
+				if (res.code && res.code !== 200) {
+					$('#exportCountBox').removeClass('alert-info').addClass('alert-danger').text(res.error);
+					return;
+				}
+				var html = '符合條件訂單：<b>' + res.recordsTotal + '</b> 筆（本次匯出 ' + res.exportTotal + ' 筆，' + res.groups + ' 個團購）';
+				if (res.data && res.data.length) {
+					html += '<div class="small mt-2">' + $.map(res.data, function (o) {
+						return '<div><span class="preview-uuid">' + esc(o.uuid) + '</span>　' + esc(o.items) + '</div>';
+					}).join('') + '</div>';
+				}
+				$('#exportCountBox').html(html);
+			}).fail(function (xhr) {
+				$('#exportCountBox').removeClass('alert-info').addClass('alert-danger').text((xhr.responseJSON && xhr.responseJSON.error) || '計算失敗');
+			});
+		}, 250);
 	};
-
-	if (restricted) {
-		$('select option[value="DATE_PAID"]').remove();
-		$('a[href="#form-group-date"]').click();
-		$('#date-error').text('未指定匯出表單時，需指定日期區間');
-	} else {
-		$('a[href="#form-group-shippingType"]').click();
-	}
-	var loading = true;
-	var getCount = function() {
-		if (loading) return;
-		loading = true;
-		btnStartLoading($('.help-block.with-errors'));
-		var showFarthest = !$('#date-farthest').text().length;
-		var ajaxurl =  GBF.baseUrl + '/ajax/ShippingCSV/previewSalesOrderToShip.do';
-		jQuery.post( ajaxurl, 
-					{
-					'groupBuyId':$('#ShippingCSVForm input[name=groupBuyId]').val(),
-					'backOrder':$('select[name="backOrder"]').val(),
-					//'backOrder':$('input[name="backOrder"]').prop('checked') ? '-1' : '0',
-					'ignorePrepareShipping':$('input[name="ignorePrepareShipping"]').prop('checked'),
-					'shippingTag':$('select[name="shippingTag"]').val(),
-					'shippingType':$('select[name="shippingType"]').val(),
-					'payStatus':$('select[name="payStatus"]').val(),
-					'normalPriceMin':$('input[name="normalPriceMin"]').val(),
-					'normalPriceMax':$('input[name="normalPriceMax"]').val(),
-					'backOrderPriceMin':$('input[name="backOrderPriceMin"]').val(),
-					'backOrderPriceMax':$('input[name="backOrderPriceMax"]').val(),
-					'grandTotalMin':$('input[name="grandTotalMin"]').val(),
-					'grandTotalMax':$('input[name="grandTotalMax"]').val(),
-					'normalTotalMin':$('input[name="normalTotalMin"]').val(),
-					'normalTotalMax':$('input[name="normalTotalMax"]').val(),
-					'backOrderTotalMin':$('input[name="backOrderTotalMin"]').val(),
-					'backOrderTotalMax':$('input[name="backOrderTotalMax"]').val(),
-					'itemTitle':$('input[name="itemTitle"]').val(),
-					'keywordMatch':$('select[name="keywordMatch"]').val(),
-					'datePaidBegin':$('input[name="datePaidBegin"]').val(),
-					'datePaidEnd':$('input[name="datePaidEnd"]').val(),
-					'dateExpectedShippingBegin':$('input[name="dateExpectedShippingBegin"]').val(),
-					'dateExpectedShippingEnd':$('input[name="dateExpectedShippingEnd"]').val(),
-					'shippingExportDateBy':$('select[name="shippingExportDateBy"]').val(),
-					'showFarthest':showFarthest,
-				},
-				function( data ) {
-					loading = false;
-					btnStopLoading($('.help-block.with-errors'))
-					var t = Math.min(max, data.recordsTotal);
-					$('input[name="exportShippingCSVTotal"]').val(t);
-					$('.help-block.with-errors').html('未出貨數量:' + data.recordsTotal);
-					var html = '';
-					if (data.data != null && data.data.length > 0) {
-						html += '<div class="row">';
-						html += '<div class="col-sm-12 px-1"><legend>快速預覽部分訂單</legend></div>';
-	
-						for (var i = 0; i < data.data.length; i++) {
-							html += '<div class="col-sm-3">';
-							var so = data.data[i];
-							html += so.uuid;
-							html += "</div>";
-							html += '<div class="col-sm-9"><p class="small">';
-							var items = '';
-							for (var j = 0; j < so.sortedOrderItems.length; j++ ) {
-								items += so.sortedOrderItems[j].shortName + 'x' + so.sortedOrderItems[j].total + ', ';
-							}
-							if ($('input[name="itemTitle"]').val().length > 0) {
-								var x = $('input[name="itemTitle"]').val().split(',');
-								for (var y = 0; y < x.length; y++) {
-									var word = x[y].replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\\$&");
-									if (word.length == 0) continue;
-									items = items.replace(new RegExp(word, 'g'), '<mark><b>' + x[y] + '</b></mark>');
-								}
-							}
-							html += items + "</p></div>";
-						}
-						html += '</div>';
-					}
-					$('#preview').html(html);
-					if (showFarthest && data.dateFarthest) {
-						var momentFarthest = moment(data.dateFarthest);
-						var datePaidBegin = momentFarthest.format('YYYY-MM-DD');
-						dataFarthestDateStr = datePaidBegin;
-						$('#date-farthest').text('半年內最早尚未出貨日期：'+datePaidBegin);
-						if (isUnspecifiedGroupBuy()) {
-
-							const shippingExportDateBy =  $('select[name=shippingExportDateBy] :selected').val();
-							const MAX_DAYS = shippingExportDateBy == 'DATE_PAID' ? 7 : 31;
-							var momentNow = moment();
-							momentNow.set('hour', 0);
-							momentNow.set('minute', 0);
-							momentNow.set('second', 0);
-							momentNow.set('millisecond', 0);
-							momentFarthest.set('hour', 0);
-							momentFarthest.set('minute', 0);
-							momentFarthest.set('second', 0);
-							momentFarthest.set('millisecond', 0);
-							var days = momentNow.diff(momentFarthest, 'days');
-							days = Math.min(days, MAX_DAYS);
-
-							var datePaidEnd = momentFarthest.add(days, 'days').format('YYYY-MM-DD');
-							$('#datePaidBegin').val(datePaidBegin);
-							$('#datePaidEnd').val(datePaidEnd);
-							updateDatePaidMinMax();
-							$('#datePaidEnd').trigger("change");
-						}
-					}
-				}
-		);
-	};
-
-	$('label[for="exportShippingCSVTotal-help"]').text('匯出上限:'+max+'筆');
-	
-	if (isUnspecifiedGroupBuy()) {
-		$('input[name*="datePaid"]').val(moment().format('YYYY-MM-DD'));
-	}
-	var purposePreview = function() {
-		$('input[name="prepareShipping"]').addClass('disabled');
-		$('label[for=prepareShipping]').prop('for','prepareShipping_');
-		$('#ignorePrepareShippingLocker').hide();
-		$('#row-oneShippingRecord').hide();
-	};
-	var purposeShipping = function() {
-		$('input[name="prepareShipping"]').prop('checked',true);
-		$('input[name="prepareShipping"]').addClass('disabled');
-		$('label[for=prepareShipping]').prop('for','prepareShipping_');
-		$('input[name="ignorePrepareShipping"]').prop('checked',true);
-		$('input[name="ignorePrepareShipping"]').addClass('disabled');
-		$('label[for=ignorePrepareShipping]').prop('for','ignorePrepareShipping_');
-		console.log('restricted:' + restricted)
-		if (multipleGroupBuys || restricted) {
-			$('#row-oneShippingRecord').show();
-		} else {
-			$('#row-oneShippingRecord').hide();
-		}
-	}
-	
-
-	$('#ignorePrepareShippingLocker').click(function(){
-		var $this = $(this);
-		if ($this.hasClass('fa-lock') && !confirm('確定要能修改此設定？有可能會造成重複出貨')) return false;
-		if ($this.hasClass('fa-lock')) {
-			$this.removeClass('fa-lock');
-			$this.addClass('fa-lock-open');
-			$('input[name="ignorePrepareShipping"]').removeClass('disabled');
-			$('label[for=ignorePrepareShipping_]').prop('for','ignorePrepareShipping');
-		} else {
-			$this.addClass('fa-lock');
-			$this.removeClass('fa-lock-open');
-			$('input[name="ignorePrepareShipping"]').addClass('disabled');
-			$('label[for=ignorePrepareShipping]').prop('for','ignorePrepareShipping_');
-		}
-	});
-	
-	$('#ShippingCSVForm').hide();
-	$('.modal-footer').hide();
-	$('.card-wizard').on('click', function(e){
-		var $this = $(this);
-		$('.container-wizard').hide();
-		$('#ShippingCSVForm').show().animateCss('fadeIn ');
-		$('.modal-footer').show().animateCss('fadeIn ');
-		$('.purpose-label').text($(this).find('.card-header').text()); 
-		switch ($this.data('purpose')) {
-		case 'preview':
-			purposePreview();
-			break;
-		case 'shipping':
-			purposeShipping();
-			break;
-		}
-	});
-	
-	$('.form-control, .form-check-input').on('change', function() {
-		if ($(this).attr("name") == 'exportShippingCSVTotal') {
-			var v = $(this).val();
-			var iv = parseInt(v);
-			if (iv > max) {
-				iv = Math.min(max, iv);
-				$(this).val(iv);
-			}
-			return;
-		}
-		if ($(this).attr("name") == 'shippingExportDateBy') {
-			var maxDayDurationOri = maxDayDuration;
-			var v = $(this).val();
-			if (v == 'DATE_PAID') {
-				maxDayDuration = 7;
-			} else {
-				maxDayDuration = 31;
-			}
-			if (maxDayDuration != maxDayDurationOri) {
-				$('input[name="datePaidBegin"]').trigger('change');
-			}
-		}
-		
-		if (!$(this).hasClass('nocount')) {
-			getCount();
-		}
-	});
-	
-	$('input[name*="splitOrderBy"]:radio').on('change', function () {
-		var v = $('input:radio:checked[name*="splitOrderBy"]').val();
-		if (v== "SHIPPING_TAG") {
-			$('#shippingTag_div').show();
-			$('#backOrder_div').hide();
-		} else {
-			$('#shippingTag_div').hide();
-			$('#backOrder_div').show();
-		}
-	});
-
-	$('input[name*="datePaid"]').on("change", function () {
-		var $this = $(this);
-		var v = $this.val();
-		if (v.length) {
-			$('input[name*="datePaid"]')
-			.filter(function(i,obj){return !$(obj).val().length})
-			.val(v);
-		}
-
-		if (isUnspecifiedGroupBuy()) {
-			var beginVal = $('#datePaidBegin').val();
-			var endVal = $('#datePaidEnd').val();
-			var todayStr = moment().format('YYYY-MM-DD');
-
-			if ($this.attr('id') === 'datePaidBegin' && beginVal) {
-				// 若 datePaidBegin 大於 datePaidEnd，自動連動調整 datePaidEnd（加天數，但不超過今日）
-				if (endVal && moment(beginVal).isAfter(moment(endVal))) {
-					var targetEnd = moment(beginVal).add(maxDayDuration, 'days').format('YYYY-MM-DD');
-					if (moment(targetEnd).isAfter(moment(todayStr))) {
-						targetEnd = todayStr;
-					}
-					$('#datePaidEnd').val(targetEnd);
-				}
-			} else if ($this.attr('id') === 'datePaidEnd' && endVal) {
-				// 若 datePaidEnd 小於 datePaidBegin，自動連動調整 datePaidBegin（減天數，但不低於最早日期）
-				if (beginVal && moment(endVal).isBefore(moment(beginVal))) {
-					var targetBegin = moment(endVal).subtract(maxDayDuration, 'days').format('YYYY-MM-DD');
-					if (dataFarthestDateStr && moment(targetBegin).isBefore(moment(dataFarthestDateStr))) {
-						targetBegin = dataFarthestDateStr;
-					}
-					$('#datePaidBegin').val(targetBegin);
-				}
-			}
-			updateDatePaidMinMax();
-		}
-
-		const diffInDays = moment($('#datePaidEnd').val()).diff(moment($('#datePaidBegin').val()), 'days');
-		console.log('d:' + diffInDays);
-		if (diffInDays < 0) {
-			$('input[name*="datePaid"]').val(v);
-			$('#date-error').html('');
-		} else if (diffInDays > maxDayDuration) {
-			$('#datePaidEnd').val($('#datePaidBegin').val());
-			$('#date-error').html('訂單區間最多為'+maxDayDuration+'日');
-		} else {
-			$('#date-error').html('');
-		}
-		
-		getCount();
-	});
-
-	$('input[name*="dateExpectedShipping"]').on("change", function () {
-		if (isUnspecifiedGroupBuy()) {
-			var expBeginVal = $('#dateExpectedShippingBegin').val();
-			var expEndVal = $('#dateExpectedShippingEnd').val();
-
-			if ($(this).attr('id') === 'dateExpectedShippingBegin' && expBeginVal) {
-				if (expEndVal && moment(expBeginVal).isAfter(moment(expEndVal))) {
-					$('#dateExpectedShippingEnd').val(expBeginVal);
-				}
-			} else if ($(this).attr('id') === 'dateExpectedShippingEnd' && expEndVal) {
-				if (expBeginVal && moment(expEndVal).isBefore(moment(expBeginVal))) {
-					$('#dateExpectedShippingBegin').val(expEndVal);
-				}
-			}
-			updateDatePaidMinMax();
-		}
-		getCount();
-	});
-	
-	$('#ShippingCSVForm a[data-toggle="collapse"]').on('click', function() {
-		$(this).find('i').toggleClass('fa-square-chevron-up fa-square-chevron-down');
-	});
-	
-	$('#submitButton').click(function() {
-		
-		if (restricted && 
-				(!$('input[name=datePaidBegin]').val().length 
-				|| !$('input[name=datePaidEnd]').val().length)
-			) {
-			$('.help-block.submit-error').html('未指定匯出表單時，需指定日期區間');
-			return false;
-		} else {
-			$('.help-block.submit-error').html('');
-		}
-		
-		$form = $('#ShippingCSVForm');
-		var url = $form.prop('action');
-		var data = $form.serialize();
-		var $this = $(this);
-		btnStartLoading($('#submitButton'));
-		 $.ajax({
-			type: "GET",
-			url: url,
-			data: data,
-			async:true,
-			success: function(html) {
-				btnStopLoading($this);
-				$('#myModalContent').html(html);
-			}
+	var resultHtml = function (res) {
+		var recs = (res.data && res.data.records) || [];
+		var html = '<div class="alert alert-success">' + res.error + '</div><table class="table table-sm"><thead><tr><th>出貨紀錄</th><th>團購</th><th>訂單數</th><th>下載</th></tr></thead><tbody>';
+		$.each(recs, function (i, r) {
+			html += '<tr><td>#' + r.shippingRecordId + '</td><td>' + esc(r.groupBuyTitle) + '</td><td>' + r.orderCount + '</td><td>'
+				+ '<button type="button" class="btn btn-primary btn-sm my-0" data-download="downloadShippingCsv" data-id="' + r.shippingRecordId + '">貨運清單</button>'
+				+ '<button type="button" class="btn btn-default btn-sm my-0" data-download="exportItems" data-id="' + r.shippingRecordId + '">出貨商品</button>'
+				+ '<button type="button" class="btn btn-default btn-sm my-0" data-download="exportLabel" data-id="' + r.shippingRecordId + '">地址單</button>'
+				+ '<button type="button" class="btn btn-default btn-sm my-0" data-download="EXPORT_ERP" data-id="' + r.shippingRecordId + '">ERP報表1</button>'
+				+ '</td></tr>';
 		});
-		return false;
-	})
-	loading = false;
-	getCount();
+		var gbIds = String({{json groupBuyId}} || '');
+		html += '</tbody></table><a href="/backend/ShippingRecord/export' + (gbIds && gbIds.indexOf(',') < 0 ? '?groupBuyId=' + encodeURIComponent(gbIds) : '') + '">前往匯出紀錄</a>';
+		return html;
+	};
+	$form.on('change', 'input, select', function () {
+		if (this.name === 'purpose') syncPurpose();
+		refreshCount();
+	});
+	$form.on('click', '[data-download]', function () {
+		var $f = $('<form method="POST" style="display:none"></form>').attr('action', '/backend/ShippingRecord/downloadFile');
+		$f.append($('<input type="hidden" name="action">').val($(this).attr('data-download')));
+		$f.append($('<input type="hidden" name="shippingRecordId">').val($(this).attr('data-id')));
+		$f.appendTo('body').submit();
+		setTimeout(function () { $f.remove(); }, 1000);
+	});
+	$('#btnExportShipping').on('click', function () {
+		var $btn = $('#btnExportShipping');
+		var ship = $form.find('input[name=purpose]:checked').val() === 'SHIP';
+		if (ship && !confirm('匯出後符合條件的訂單會設為「已出貨」，是否繼續？')) return;
+		$('.submit-error').text('');
+		btnStartLoading($btn);
+		$.post('{{baseUrl}}/ajax/ShippingCSV/exportOrders.do', $form.find(':input').prop('disabled', false).end().serialize(), null, 'json').done(function (res) {
+			$form.find('.modal-body').html(resultHtml(res));
+			$btn.hide();
+			if (window.shippingRecordTable) window.shippingRecordTable.ajax.reload(null, false);
+		}).fail(function (xhr) {
+			$('.submit-error').text((xhr.responseJSON && xhr.responseJSON.error) || '匯出失敗');
+			syncPurpose();
+		}).always(function () {
+			btnStopLoading($btn);
+		});
+	});
+	syncPurpose();
+	refreshCount();
 }());
 </script>

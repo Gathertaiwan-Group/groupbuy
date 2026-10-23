@@ -4,227 +4,44 @@
 							padding: 8px !important
 						}
 					</style>
-					{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
-
-	var salesOrderCVSTraceTable;
-	$(document).ready(function() {
-		
-		var tableName = '#salesOrderCVSTraceTable';
-		editor = new $.fn.dataTable.Editor( {
-			ajax: {
-				create: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/SalesOrderCVSTrace/save.do?'
-				},
-				edit: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/SalesOrderCVSTrace/update.do?salesOrderCVSTraceId=_id_'
-				},
-				remove: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/SalesOrderCVSTrace/action.do?salesOrderId=_id_',
-					data: function(data) {
-						data.action = editor._action;
-						return data;
-					}
-				}
+					{{> core/partials/dte-style.html}}{{> shipping/partials/cvs-trace-table.html}}<script type="text/javascript" class="init">
+	$(document).ready(function () {
+		var table = cvsTracePage.build({
+			url: '{{baseUrl}}/ajax/SalesOrderCVSTrace/list.do',
+			extraParams: function (params) {
+				params.ignoreNotified = $('#ignoreNotified').is(':checked');
+				params.shippingStatus = $('#shippingStatus').val() || 'ARRIVED';
 			},
-			table: tableName,
-			idSrc: 'salesOrderId',
-			fields: [
-					DataTableConfig.field_input('???SalesOrderCVSTrace.relation???','relation'),
-					DataTableConfig.field_input('???SalesOrderCVSTrace.status???','status'),
-					DataTableConfig.field_input('???SalesOrderCVSTrace.groupBuyId???','groupBuyId'),
-					DataTableConfig.field_input('???SalesOrderCVSTrace.groupBuyAccountId???','groupBuyAccountId'),
+			columns: [
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('dateArrivedString'),
+				DataTableConfig.data_input('uuid'),
+				DataTableConfig.data_input('trackingNumber'),
+				DataTableConfig.data_input('daysSinceArrivedAndNotPicked'),
+				DataTableConfig.data_input('daysSinceReturning'),
+				DataTableConfig.data_input('dateNotifiedString', '')
 			],
-			//template: '#custom_rp_form',
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
-		} );
-
-		var table = $(tableName).DataTable( {
-			dom: 'lBrtip',
-			serverSide:true,
-			processing:true,
-			scrollX:true,
-			"lengthMenu": [10, 25, 50, 100, 250],
-			ajax: {
-				url:'{{baseUrl}}/ajax/SalesOrderCVSTrace/list.do',
-				type: "GET",
-				data: function(data) {
-					appendExtra(data);
-					return data;
-				}
-						},
-						language: DataTableConfig.i18n,
-						columns: [
-							DataTableConfig.data_select_checkbox,
-							DataTableConfig.data_input('dateArrivedString'),
-							DataTableConfig.data_input('uuid'),
-							DataTableConfig.data_input('trackingNumber'),
-							DataTableConfig.data_input('daysSinceArrivedAndNotPicked'),
-							DataTableConfig.data_input('daysSinceReturning'),
-							DataTableConfig.data_input('dateNotifiedString', ''),
-							{
-								data: null,
-								'class': 'inline-disabled',
-								orderable: false,
-								render: function (data, type, row) {
-									var html = '';
-									//	html += '<button class="btn btn-default text-nowrap" data-action="item">商品</button>';
-					
-						html += '<button class="btn btn-default text-nowrap" data-action="viewItems">商品</button>'
-
-						if (row.state == 'CANCELED' || row.state == 'COMPLETE') {
-						
-						} else if (row.relation == 'RETURN') {
-							switch (row.status) {
-								case 'INQUIRED_RETURN':
-									html += '<button class="btn btn-default text-nowrap" data-action="pickupReturn">退貨取件中</button>'
-									html += '<button class="btn btn-warning text-nowrap" data-action="returned">完成退貨(可銷售)</button>'
-									html += '<button class="btn btn-warning text-nowrap" data-action="returned_nosale">完成退貨(不可銷售)</button>'
-									html += '<button class="btn btn-danger text-nowrap" data-action="cancel_return">取消退貨</button>'
-									break;
-								case 'PICKUP_RETURN':
-									html += '<button class="btn btn-default text-nowrap" data-action="verifyReturn">退貨檢核中</button>'
-									html += '<button class="btn btn-warning text-nowrap" data-action="returned">完成退貨(可銷售)</button>'
-									html += '<button class="btn btn-warning text-nowrap" data-action="returned_nosale">完成退貨(不可銷售)</button>'
-									html += '<button class="btn btn-danger text-nowrap" data-action="cancel_return">取消退貨</button>'
-									break;
-								case 'PICKUP_RETURN':
-									html += '<button class="btn btn-default text-nowrap" data-action="verifyReturn">退貨檢核中</button>'
-									html += '<button class="btn btn-warning text-nowrap" data-action="returned_nosale">完成退貨(不可銷售)</button>'
-							}
-						} else if (row.relation == 'REPLACE') {
-							if (row.status !='REPLACED') {
-								html += '<button class="btn btn-warning text-nowrap" data-action="replaced">完成換貨</button>'
-								html += '<button class="btn btn-danger text-nowrap" data-action="cancel_replace">取消換貨</button>'
-							}
-						} else if (row.relation == 'RESHIPMENT') {
-							if (row.status !=' RESHIPMENTED') {
-								html += '<button class="btn btn-warning text-nowrap" data-action="reshipmented">完成補寄</button>'
-							}
-						}
-						return '<div class="d-block">'+html+'</div>';
-					}
-				},
-			],
-			keys: DataTableConfig.keysInlineTab,
-			"order": [[ 1, "asc" ]],
-			columnDefs: [
-				{ orderable: false, targets: [0,2,3,4,5,6] }
-			],
-			select: DataTableConfig.selectOptionsOS,
+			columnDefs: [ { orderable: false, targets: [0, 2, 3, 4, 5, 6] } ],
 			buttons: [
-			//	{ extend: 'create', editor: editor },
-			//	{ extend: 'edit',   editor: editor },
-			//	{ extend: 'remove', editor: editor, className:'btn-danger' },
 				{
-					extend: "edit",
-					text:'發送簡訊',
-					action: function ( e, dt, node, config ) {
-						var url = GBF.baseUrl + '/ajax/SalesOrderCVSTrace/sendSMS'
-						smsManager.prepareSms(url, dt, 'uuid');
+					extend: 'edit',
+					text: '發送簡訊',
+					action: function (e, dt) {
+						smsManager.prepareSms(GBF.baseUrl + '/ajax/SalesOrderCVSTrace/sendSMS', dt, 'uuid');
 					}
 				},
 				DataTableConfig.actionButton({
-					text:'設為已收貨',
-					confirm:'將訂單設為已收貨，是否繼續？',
-					url:'{{baseUrl}}/ajax/SalesOrderCVSTrace/markAsPicked',
-				}),
-			],
-			initComplete: function () {
-				DataTableConfig.initFooterSearch(this, [],[]);
-			},
-			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
-			}
-		} );
-		
-		//DataTableHelper.initEditorOnCallback(table,editor);
-		//DataTableHelper.inlineModePlugin(table);
-		//DataTableHelper.injectInline(table,editor);
-		injectDetailsControl(tableName, table);
-					salesOrderCVSTraceTable = table;
-
-					// Initial column visibility
-					salesOrderCVSTraceTable.column(5).visible(false); // daysSinceReturned
-
-					$(tableName + ' tbody').on('click', 'button', function (e) {
-						e.stopPropagation();
-						var tr = $(this).closest('tr');
-						var row = table.row(tr);
-						var id = row.data().salesOrderId;
-						var action = $(this).attr('data-action');
-			if (action == null) return;
-			
-			var msg = '';
-			
-			switch (action) {
-			case 'viewItems':
-				viewItems(row, tr);
-				return;
-			};
-			
-			editor._action = action;
-			editor
-			.title('確定執行')
-			.message(msg)
-			.buttons('確定')
-			.remove(tr);
-		} );
-		
-		$('.filters').on('change', function() {
+					text: '設為已收貨',
+					confirm: '將訂單設為已收貨，是否繼續？',
+					url: '{{baseUrl}}/ajax/SalesOrderCVSTrace/markAsPicked'
+				})
+			]
+		});
+		table.column(5).visible(false); // 退件天數（逾期未取退回中頁籤才顯示）
+		$('.filters').on('change', function () {
 			table.clear().ajax.reload();
 		});
-		
-		function viewItems(row, tr) {
-			var uuid = row.data().uuid;
-			if ( row.child.isShown()) {
-				// This row is already open - close it
-				row.child.hide();
-				tr.removeClass('shown');
-			}
-			else {
-				// Open this row
-				format(row, uuid, null);
-				// row.child( format(row.data()) ).show();
-				tr.addClass('shown');
-			}
-		}
-		
-		function format ( row, uuid, parent ) {
-			$.ajax({
-				url: '/x/ajax/SalesOrder/orderItems.do?uuid='+uuid,
-				dataType: 'json',
-					success: function(json) {
-						json = json.data;
-						var body = '<table class="table-detail">';
-						$.each(json, function(i, obj) {
-							var bo = (obj.backOrder) ? '<span class="mr-2 badge badge-sm badge-success z-depth-0">預購</span>' : '';
-							body += '<tr><td class="small">'+bo + obj.title  + '</td><td class="small">' +obj.total + '</td></tr>';
-						});
-						body += '</table>';
-						if (parent) {
-							parent.html(body);
-						} else {
-							row.child( body ).show();
-						}
-				},
-				error: function (xhr, ajaxOptions, thrownError) {
-					alert(xhr.status + " "+ thrownError);
-				}
-			});
-		}
-	} ); // end ready
-	
-
-	var appendExtra = function (d) {
-		d.ignoreNotified = $("#ignoreNotified").prop('checked')
-					d.shippingStatus = $("#shippingStatus").val();
-		return d;
-	}
-
+	});
 </script>
 <!--#body--><div class="container-fluid ">
 	<div class="card mt-4" id="cvsReturnStats" style="display:none">
@@ -309,98 +126,29 @@
 							</div>
 						</div>
 					</div>
-
-					<script>
-						var updateFilterEnable = function () {
-							var days = $('#days').val();
-							if (days == -1) {
-								var dateCreatedBegin = $('#dateCreatedBegin').val();
-								var dateCreatedEnd = $('#dateCreatedEnd').val();
-								var a = moment(dateCreatedBegin);
-								var b = moment(dateCreatedEnd);
-								days = b.diff(a, 'days');
-							}
-						}
-
-						$(document).ready(function () {
-							// Handle tab switching
-							$('#orderTypeTabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
-								var status = $(e.target).data('status');
-								$('#shippingStatus').val(status);
-
-								if (status == 'ARRIVED') {
-									salesOrderCVSTraceTable.column(4).visible(true); // daysSinceArrivedAndNotPicked
-									salesOrderCVSTraceTable.column(5).visible(false); // daysSinceReturned
-									salesOrderCVSTraceTable.column(6).visible(true); // dateNotifiedString
-									$('#ignoreNotified-group').show();
-									$(salesOrderCVSTraceTable.button(0).node()).show();
-									$(salesOrderCVSTraceTable.button(1).node()).show();
-								} else {
-									salesOrderCVSTraceTable.column(4).visible(false); // daysSinceArrivedAndNotPicked
-									salesOrderCVSTraceTable.column(5).visible(true); // daysSinceReturned
-									salesOrderCVSTraceTable.column(6).visible(false); // dateNotifiedString
-									$('#ignoreNotified-group').hide();
-									$(salesOrderCVSTraceTable.button(0).node()).hide();
-									$(salesOrderCVSTraceTable.button(1).node()).hide();
-								}
-
-								salesOrderCVSTraceTable.clear().ajax.reload();
-							});
-
-							$('#days').on('change', function () {
-								var val = $(this).val();
-								if (val == -1) {
-									$('#dateCreatedBegin').show();
-								} else {
-									$('#dateCreatedBegin').hide();
-									$('#dateCreatedEnd').hide();
-									$('#dateCreatedBegin').val('');
-									$('#dateCreatedEnd').val('');
-								}
-							});
-
-							var shouldReloadDateCreated = function (date, obj) {
-								if ($('#dateCreatedBegin').val() != ''
-									&& $('#dateCreatedEnd').val() != '') {
-									table.clear().ajax.reload();
-								}
-							}
-
-							initDatetimePicker('#dateCreatedBegin', 'YYYY-MM-DD', 'months', function (date, obj) {
-								var now = moment(date, 'YYYY-MM-DD');
-								var maxDate = now.add('61', 'days').format('YYYY-MM-DD');
-								if ($('#dateCreatedEnd').data("DateTimePicker") != null) {
-									$('#dateCreatedEnd').data("DateTimePicker").destroy()
-								}
-								initDatetimePicker('#dateCreatedEnd', 'YYYY-MM-DD', 'months');
-								$('#dateCreatedEnd').data("DateTimePicker").minDate(date);
-								$('#dateCreatedEnd').data("DateTimePicker").maxDate(maxDate);
-								$('#dateCreatedEnd').data("DateTimePicker").defaultDate('');
-								$('#dateCreatedEnd').show();
-							});
-
-							$('[data-type=dateCreated]').on("dp.hide", function () {
-								if ($('#dateCreatedBegin').val() != ''
-									&& $('#dateCreatedEnd').val() != '') {
-									updateFilterEnable();
-									salesOrderCVSTraceTable.clear().ajax.reload();
-								}
-							});
+				<script>
+					$(function () {
+						// 頁籤：到店未取（ARRIVED）／逾期未取退回中（RETURNING）；依頁籤切換欄位與按鈕
+						$('#orderTypeTabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+							var status = $(e.target).attr('data-status') || 'ARRIVED';
+							var arrived = status !== 'RETURNING';
+							var t = window.salesOrderCVSTraceTable;
+							$('#shippingStatus').val(status);
+							t.column(4).visible(arrived);
+							t.column(5).visible(!arrived);
+							t.column(6).visible(arrived);
+							$('#ignoreNotified-group').toggle(arrived);
+							$(t.buttons().nodes()).toggle(arrived);
+							t.clear().ajax.reload();
 						});
-						var loadCvsReturnStats = function () {
-							$.ajax({
-								url: GBF.baseUrl + '/ajax/SalesOrderCVSTrace/getCvsReturnStats',
-								type: 'GET',
-								success: function (bj) {
-									if (bj.data) {
-										$('#thisMonthRate').text(bj.data.thisMonthRate);
-										$('#lastMonthRate').text(bj.data.lastMonthRate);
-										$('#cvsReturnStats').show();
-									}
-								}
-							});
-						};
-						loadCvsReturnStats();
+						// 本月／上月 CVS 未取退貨率
+						$.getJSON(GBF.baseUrl + '/ajax/SalesOrderCVSTrace/getCvsReturnStats', function (res) {
+							if (!res || !res.data) return;
+							$('#thisMonthRate').text(res.data.thisMonthRate);
+							$('#lastMonthRate').text(res.data.lastMonthRate);
+							$('#cvsReturnStats').show();
+						});
+					});
 					</script>
 				</div>
 <!--#foot--><script src="/public/scripts/sms.min.js?v=1"></script>

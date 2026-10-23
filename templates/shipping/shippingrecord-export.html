@@ -3,266 +3,155 @@
 .dataTables_scrollBody{min-height:480px;}
 </style>
 {{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
-
-	var prepareForm = function() {
-		var $form = $('#downloadForm');
-		if ($form.length == 0) {
-			var url = '/backend/ShippingRecord/download';
-			$form = $("<form id='downloadForm'" + " style='display: none;' method='POST' action='" + url + "'></form>");
-			$form.appendTo("body"); 
+	// 匯出出貨紀錄（本站撰寫）：欄位／按鈕依 SPEC 與 runtime；檔案下載、列印、訂單清單走本站端點。
+	var shippingRecordPage = {
+		groupBuyId: {{json gbParam}},
+		escape: function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); },
+		postDownload: function (action, ids) {
+			var $f = $('<form method="POST" style="display:none"></form>').attr('action', '/backend/ShippingRecord/downloadFile');
+			$f.append($('<input type="hidden" name="action">').val(action));
+			$f.append($('<input type="hidden" name="shippingRecordId">').val(ids));
+			$f.appendTo('body').submit();
+			setTimeout(function () { $f.remove(); }, 1000);
+		},
+		openWindow: function (path, id) {
+			window.open(path + '?shippingRecordId=' + encodeURIComponent(id), '_blank');
+		},
+		undo: function (id, table) {
+			if (!confirm('將此紀錄中由匯出設為「已出貨」、且尚未完成的訂單還原為匯出前的狀態，是否繼續？＊請先確認貨品尚未寄出，避免重複出貨＊')) return;
+			$.ajax({
+				url: '{{baseUrl}}/ajax/ShippingRecord/undo',
+				data: { shippingRecordId: id },
+				dataType: 'json'
+			}).done(function (res) {
+				messagebox('還原訂單狀態', res.error || res.message || '完成', '關閉');
+				table.ajax.reload(null, false);
+			}).fail(function (xhr) {
+				messagebox('還原訂單狀態', (xhr.responseJSON && xhr.responseJSON.error) || ('連線失敗 ' + xhr.status), '關閉');
+			});
 		}
-		$form.html("");
-		return $form;
-	}
-	var download = function(shippingRecordId, action) {
-		var $form = prepareForm();
-		$form.append('<input type="hidden" name="action" value="' + action + '">');
-		$form.append('<input type="hidden" name="shippingRecordId" value="' + shippingRecordId + '">');
-		$form.submit();
-	}
-	var printOrders = function(shippingRecordId, action) {
-		var href = '/backend/ShippingRecord/printOrders?shippingRecordId=' + shippingRecordId;
-		window.open(href, '_blank');
-	}
-	var printItems = function(shippingRecordId, action) {
-		var href = '/backend/ShippingRecord/printItems?shippingRecordId=' + shippingRecordId;
-		window.open(href, '_blank');
-	}
-	var showSalesOrders = function(shippingRecordId, action) {
-		var href = '/backend/ShippingRecordSalesOrder/list?groupBuyId=' + {{json gbParam}} + '&shippingRecordId=' + shippingRecordId;
-		window.open(href, '_blank');
-	}
-	var undo = function(shippingRecordId) {
-		if (!confirm('將此批訂單狀態還原至先前狀態。僅當前訂單狀態為「準備出貨中」會被還原，已出貨或是其他狀態之訂單將不在此列。如果還原後沒有出貨訂單，此出貨記錄將會被刪除。＊請謹慎使用此功能以免重複出貨＊')) return;
-		
-		$.ajax({
-			url: '{{baseUrl}}/ajax/ShippingRecord/undo',
-			data:{
-				'shippingRecordId':shippingRecordId,
-			},
-			dataType: 'json',
-			success: function(json) {
-				messagebox('還原出貨狀態', json.error, '關閉');
-				shippingRecordTable.ajax.reload( null, false );
-			},
-			error: function (xhr, ajaxOptions, thrownError) {
-				var msg = '';
-				if (xhr.responseJSON && xhr.responseJSON.error) {
-					msg =xhr.responseJSON.error;
-				} else {
-					msg = xhr.status + ' ' + thrownError;
-				}
-				messagebox('還原出貨狀態', msg, '關閉');
-			}
-		});
-	}
-
+	};
 	var shippingRecordTable;
 	$(document).ready(function() {
-		
-		var tableName = '#shippingRecordTable';
+		var page = shippingRecordPage;
+		var tableSelector = '#shippingRecordTable';
+		var erpLabels = ['ERP報表1', 'ERP報表2', 'ERP報表3', 'ERP報表4', 'ERP報表5', 'ERP報表6'];
 		editor = new $.fn.dataTable.Editor( {
 			ajax: {
-				create: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShippingRecord/save.do?'
-				},
-				edit: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShippingRecord/update.do?shippingRecordId=_id_'
-				},
-				remove: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShippingRecord/delete.do?shippingRecordId=_id_'
-				}
+				create: { type: 'POST', url: '{{baseUrl}}/ajax/ShippingRecord/save.do' },
+				edit: { type: 'POST', url: '{{baseUrl}}/ajax/ShippingRecord/update.do?shippingRecordId=_id_' },
+				remove: { type: 'POST', url: '{{baseUrl}}/ajax/ShippingRecord/delete.do?shippingRecordId=_id_' }
 			},
-			table: tableName,
+			table: tableSelector,
 			idSrc: 'shippingRecordId',
 			fields: [
-					DataTableConfig.field_input('標籤','tag'),
+				DataTableConfig.field_input('標籤','tag')
 			],
-			//template: '#custom_rp_form',
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n
 		} );
-
-		var erpTitles = [
-'ERP報表1',
-'ERP報表2',
-'ERP報表3',
-'ERP報表4',
-'ERP報表5',
-'ERP報表6',
-
-		];
-		
-		var table = $(tableName).DataTable( {
+		var table = $(tableSelector).DataTable( {
 			dom: 'lBrtip',
-			serverSide:true,
-			processing:true,
-			scrollX:true,
-			"lengthMenu": [10, 25, 50, 100, 250],
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			lengthMenu: [10, 25, 50, 100, 250],
 			ajax: {
-				type: "POST",
-				url:'{{baseUrl}}/ajax/ShippingRecord/list.do',
-				data: function ( d ) {
-					d.groupBuyId = {{json gbParam}};
-					d.excludeStateCompleted = $('#excludeStateCompleted').prop("checked");
-					return d;
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/ShippingRecord/list.do',
+				data: function (params) {
+					params.groupBuyId = page.groupBuyId;
+					params.excludeStateCompleted = $('#excludeStateCompleted').is(':checked');
+					return params;
 				}
 			},
-			language:DataTableConfig.i18n,
-			columns:[
+			language: DataTableConfig.i18n,
+			columns: [
 				DataTableConfig.data_select_checkbox,
 				{
-					data:'dateExportedString',
-					render: function ( data, type, row ) {
-						data += '<br><span style="min-width:320px;max-width:640px;" class="text-wrap text-left ml-1 mt-1 badge badge-default badge-light">'+row.groupBuyTitle+'</span>';
-						data += '<br><span class="ml-1 mt-1 badge badge-default">訂單數:'+row.orderTotal+'</span>';
-						var done = row.orderTotalPicking == 0 && row.orderTotalPrepareShipping == 0;
-						if (row.orderTotalPicking > 0) {
-							data += '<br><span class="ml-1 mt-1 badge badge-default">撿貨中:'+row.orderTotalPicking+'</span>';
-						} 
-						if (row.orderTotalPrepareShipping > 0) {
-							data += '<span class="ml-1 mt-1 badge badge-default">準備出貨中:'+row.orderTotalPrepareShipping+'</span>';
-						}
-						
-						if (done) {
-							data += '<span class="ml-1 mt-1 badge badge-info">已完成出貨</span>';
-						}
-						if (row.backOrder) {
-							var backOrder = renderOption(table, row.backOrder, 'backOrder');
-							data += '<span class="ml-1 badge badge-default">'+backOrder+'</span>';
-						}
-						if (row.shippingType) {
-							var shippingType = renderOption(table, row.shippingType, 'shippingType');
-							data += '<span class="ml-1 badge badge-default">'+shippingType+'</span>';
-						}
-						if (row.shippingTag) {
-							data += '<span class="ml-1 badge badge-default">'+row.shippingTag+'</span>';
-						}
-						return data;
+					data: 'dateExportedString',
+					render: function (data, type, row) {
+						if (type !== 'display') return data;
+						var badge = function (text, cls) { return '<span class="ml-1 mt-1 badge ' + (cls || 'badge-default') + '">' + page.escape(text) + '</span>'; };
+						var html = page.escape(data);
+						html += '<br><span style="min-width:320px;max-width:640px;" class="text-wrap text-left ml-1 mt-1 badge badge-light">' + page.escape(row.groupBuyTitle || '多團彙整') + '</span><br>';
+						html += badge('訂單數:' + (row.orderTotal || 0));
+						html += badge(row.purpose === 'EXPORT_ONLY' ? '回壓訂單' : '出貨', row.purpose === 'EXPORT_ONLY' ? 'badge-light' : 'badge-primary');
+						if (row.orderTotalShipped) html += badge('已出貨:' + row.orderTotalShipped);
+						if (row.shippingDone) html += badge('已完成出貨', 'badge-info');
+						if (row.backOrder !== null && row.backOrder !== undefined && String(row.backOrder) !== '-1') html += badge(renderOption(table, row.backOrder, 'backOrder'));
+						if (row.shippingType) html += badge(renderOption(table, row.shippingType, 'shippingType'));
+						if (row.shippingTag) html += badge(row.shippingTag);
+						return html;
 					}
 				},
 				DataTableConfig.data_input('tag', true, ''),
 				{
-					sortable:false,
-					render: function ( data, type, row ) {
-						var html 
-							= '<div class="btn-group" role="group">'
-							+ '<div class="btn-group" role="group">'
-							+ '<button id="btnGroupDownload" type="button" class="btn btn-info dropdown-toggle" data-toggle="dropdown">匯出</button>'
-							+ '<div class="dropdown-menu" aria-labelledby="btnGroupDownload">'
-							+ '<button class="dropdown-item" data-action="download">下載貨運清單</button>'
-							+ '<button class="dropdown-item" data-action="exportItems">下載出貨商品</button>'
-							+ '<button class="dropdown-item" data-action="exportLabel">下載地址單</button>'
-							+ '<button class="dropdown-item" data-action="printItems">列印出貨商品</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_CSV">匯出csv</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_ERP">'+erpTitles[0]+'</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_ERP2">'+erpTitles[1]+'</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_ERP3">'+erpTitles[2]+'</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_ERP4">'+erpTitles[3]+'</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_ERP5">'+erpTitles[4]+'</button>'
-							+ '<button class="dropdown-item" data-action="EXPORT_ERP6">'+erpTitles[5]+'</button>'
-							+ '</div>'
-							+ '</div>'
-						//	+ '<button class="btn btn-default text-nowrap my-0" data-action="printOrders">列印(訂單)</button>'
-							+ '<button class="btn btn-default text-nowrap mt-0" data-action="showSalesOrders">訂單</button>'
-
-							;
-						if (row.canUndo) {
-							html += '<button class="btn btn-warning text-nowrap mt-0" data-action="undo">還原出貨狀態</button>';
-						}
-						html += '</div>';
-						return html;
+					sortable: false,
+					render: function (data, type, row) {
+						var items = [
+							['downloadShippingCsv', '下載貨運清單'], ['exportItems', '下載出貨商品'], ['exportLabel', '下載地址單'],
+							['printItems', '列印出貨商品'], ['EXPORT_CSV', '匯出csv']
+						];
+						$.each(erpLabels, function (i, label) { items.push([i ? 'EXPORT_ERP' + (i + 1) : 'EXPORT_ERP', label]); });
+						var menu = $.map(items, function (it) { return '<button class="dropdown-item" data-action="' + it[0] + '">' + it[1] + '</button>'; }).join('');
+						var html = '<div class="btn-group" role="group"><div class="btn-group" role="group">'
+							+ '<button type="button" class="btn btn-info dropdown-toggle" data-toggle="dropdown">匯出</button>'
+							+ '<div class="dropdown-menu">' + menu + '</div></div>'
+							+ '<button class="btn btn-default text-nowrap mt-0" data-action="showSalesOrders">訂單</button>';
+						if (row.canUndo) html += '<button class="btn btn-warning text-nowrap mt-0" data-action="undo">還原訂單狀態</button>';
+						return html + '</div>';
 					}
 				}
 			],
 			keys: DataTableConfig.keysInlineTab,
-			"order": [[ 1, "desc" ]],
+			order: [[ 1, 'desc' ]],
 			select: DataTableConfig.selectOptionsOS,
 			buttons: [
 				{
-					className:'btn-primary buttons-export',
+					className: 'btn-primary buttons-export',
 					text: '匯出貨運清單',
-					action: function ( e, dt, node, config ) {
-						openFormF('/backend/ShippingCSV/exportShippingCSV','groupBuyId=' + {{json gbParam}});
+					action: function () {
+						openFormF('/backend/ShippingCSV/exportShippingCSV', 'groupBuyId=' + encodeURIComponent(page.groupBuyId || ''));
 					}
 				},
 				{ extend: 'edit', editor: editor },
 				{ extend: 'remove', editor: editor },
 				{
-					extend: "selected",
+					extend: 'selected',
 					text: '下載出貨商品',
-					action: function ( e, dt, node, config ) {
-						var dd = joinIds('shippingRecordId', dt, false);
-						download(dd,'exportItems');
+					action: function (e, dt) {
+						var ids = $.map(dt.rows({ selected: true }).data().toArray(), function (r) { return r.shippingRecordId; });
+						page.postDownload('exportItems', ids.join(','));
 					}
-				},
-
+				}
 			],
 			initComplete: function () {
-				DataTableConfig.initFooterSearch(this, [2],[16]);
+				DataTableConfig.initFooterSearch(this, [2], [16]);
 			},
-			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
+			drawCallback: function () {
+				$('.dataTables_scrollBody').floatingScroll();
 			}
 		} );
-		
 		DataTableHelper.injectInline(table, editor, true);
-		injectDetailsControl(tableName, table);
-		shippingRecordTable = table;
-		
-		$(tableName +' tbody').on('click', 'button', function (e) {
-			var td = $(this).closest('td');
-			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-			var data = row.data();
-			var action = $(this).attr('data-action');
-			if (action == null) return;
-			var $btn = $(this);
-			$btn.addClass('disabled');
-			setTimeout(function () {
-				$btn.removeClass('disabled');
-			}, 2000);
-			switch (action) {
-			case 'download':
-				download(data.shippingRecordId, 'downloadShippingCsv');
-				break;
-			case 'exportItems':
-			case 'exportLabel':
-			case 'EXPORT_CSV':
-			case 'EXPORT_ERP':
-			case 'EXPORT_ERP2':
-			case 'EXPORT_ERP3':
-			case 'EXPORT_ERP4':
-			case 'EXPORT_ERP5':
-			case 'EXPORT_ERP6':
-				download(data.shippingRecordId, action);
-				break;
-			case 'printItems':
-				printItems(data.shippingRecordId);
-				break;
-			case 'printOrders':
-				printOrders(data.shippingRecordId);
-				break;
-			case 'showSalesOrders':
-				showSalesOrders(data.shippingRecordId);
-				break;
-			case 'undo':
-				undo(data.shippingRecordId);
-				break;
-
-			}
+		injectDetailsControl(tableSelector, table);
+		window.shippingRecordTable = table;
+		$(tableSelector + ' tbody').on('click', 'button[data-action]', function () {
+			var clicked = $(this);
+			var row = table.row(clicked.closest('tr')).data();
+			if (!row) return;
+			clicked.addClass('disabled');
+			setTimeout(function () { clicked.removeClass('disabled'); }, 2000);
+			var action = clicked.attr('data-action');
+			if (action === 'printItems') page.openWindow('/backend/ShippingRecord/printShippingItems', row.shippingRecordId);
+			else if (action === 'showSalesOrders') page.openWindow('/backend/ShippingRecord/orders', row.shippingRecordId);
+			else if (action === 'undo') page.undo(row.shippingRecordId, table);
+			else page.postDownload(action, row.shippingRecordId);
 		});
-		$(document).on('download.success', function(){
-			table.ajax.reload();
-		});
-		
-		$('.filters').on('change', function() {
+		$('.filters').on('change', function () {
 			table.clear().ajax.reload();
 		});
-	} ); // end ready
+	} );
 </script>
 <!--#body--><div class="container-fluid ">
 	<nav aria-label="breadcrumb">

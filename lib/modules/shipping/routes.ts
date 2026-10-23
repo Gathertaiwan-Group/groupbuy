@@ -4,5 +4,15 @@ import { groupBuyShippingRoutes } from "./groupbuy-shipping";
 import { shippingTagRoutes } from "./shipping-tag";
 import { pickupStoreRoutes } from "./pickup-store";
 import { cvsTraceRoutes } from "./cvs-trace";
+import { shippingRecordRoutes } from "./shipping-record";
+import { shippingCsvRoutes } from "./shipping-csv";
 
-export const routes: RouteDef[] = [...flatRateRoutes, ...groupBuyShippingRoutes, ...shippingTagRoutes, ...pickupStoreRoutes, ...cvsTraceRoutes];
+export const routes: RouteDef[] = [
+  ...flatRateRoutes,
+  ...groupBuyShippingRoutes,
+  ...shippingTagRoutes,
+  ...pickupStoreRoutes,
+  ...cvsTraceRoutes,
+  ...shippingRecordRoutes,
+  ...shippingCsvRoutes,
+];

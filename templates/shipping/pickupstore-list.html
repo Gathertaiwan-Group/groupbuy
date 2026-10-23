@@ -78,11 +78,19 @@
 							justify-content: center;
 							z-index: 9999;
 						}
+						/* 本站補：取代行內樣式 */
+						.pickup-spinner { width: 3rem; height: 3rem; }
+						.pickup-icon-upload { font-size: 2.2rem; }
+						.pickup-icon-empty { font-size: 4rem; }
+						#storesTable th.col-seq { width: 50px; }
+						#storesTable th.col-code { width: 150px; }
+						#storesTable th.col-postal { width: 100px; }
+						#storesTable th.col-action { width: 60px; }
 					</style>
 <!--#body--><div class="container-fluid ">
 	<!-- Loading 遮罩 -->
 					<div id="loadingOverlay" class="loading-overlay d-none">
-						<div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+						<div class="spinner-border text-primary pickup-spinner" role="status">
 							<span class="sr-only">處理中...</span>
 						</div>
 					</div>
@@ -190,8 +198,7 @@
 									<div class="card-body">
 										<!-- 拖曳上傳預覽區 -->
 										<div id="dragDropArea" class="drag-drop-area mb-3">
-											<i class="fa fa-cloud-upload text-primary mb-2"
-												style="font-size: 2.2rem;"></i>
+											<i class="fa fa-cloud-upload text-primary mb-2 pickup-icon-upload"></i>
 											<h6 class="font-weight-bold mb-1">拖曳 Excel 檔案至此快速匯入與覆蓋</h6>
 											<p class="text-muted small mb-0">支援檔案格式：.xlsx, .xls。上傳後將進行欄位對應並載入編輯表格。</p>
 											<input type="file" id="fileInput" class="d-none" accept=".xlsx,.xls">
@@ -203,14 +210,12 @@
 												id="storesTable">
 												<thead class="thead-light">
 													<tr class="text-center">
-														<th style="width: 50px;">序</th>
-														<th style="width: 150px;">門市代碼</th>
+														<th class="col-seq">序</th>
+														<th class="col-code">門市代碼</th>
 														<th>門市名稱 <span class="text-danger">*</span></th>
 														<th>詳細自取地址 <span class="text-danger">*</span></th>
-														<th style="width: 100px;">郵遞區號</th>
-													<!--	<th style="width: 120px;">經度 (Lon)</th>
-														<th style="width: 120px;">緯度 (Lat)</th> -->
-														<th style="width: 60px;">操作</th>
+														<th class="col-postal">郵遞區號</th>
+														<th class="col-action">操作</th>
 													</tr>
 												</thead>
 												<tbody id="storesTableBody">
@@ -226,7 +231,7 @@
 							<div class="col-12 mb-4" id="emptyEditorPlaceholder">
 								<div class="card shadow-sm py-5 text-center">
 									<div class="card-body">
-										<i class="fa fa-map-o text-muted mb-3" style="font-size: 4rem;"></i>
+										<i class="fa fa-map-o text-muted mb-3 pickup-icon-empty"></i>
 										<h5 class="font-weight-bold text-muted">請選擇自取通路設定</h5>
 										<p class="text-muted">點擊上方清單中的「自取通路名稱」即可開啟在線門市編輯器進行編輯、上傳或下載定位門市檔案。</p>
 									</div>
@@ -308,7 +313,8 @@
 
 					<!-- JS 核心邏輯 -->
 					<script>
-						var ctx = '';
+						// list.js 以 ctx 當網址前綴（本站沒有 context path）
+						window.ctx = (window.GBF && GBF.ctx) ? GBF.ctx : '';
 						var preSelectedId = {{json preSelectedId}};
 					</script>
 					<script src="/backend/PickupStore/list.js"></script>

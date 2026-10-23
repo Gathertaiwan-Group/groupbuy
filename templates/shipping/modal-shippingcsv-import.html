@@ -2,7 +2,7 @@
 				<h5>
 					團購 &raquo;
 					匯入貨運清單</h5>
-				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+				<button type="button" class="close" data-dismiss="modal" aria-label="關閉"><span aria-hidden="true">&times;</span></button>
 			</div>
 			<div class="modal-body">
 				<div class="form-group row">
@@ -15,7 +15,8 @@
 					<label class="col-lg-4" for="shippingTag">
 						貨運標籤</label>
 					<div class="col-lg-8">
-						<select name="shippingTag" id="shippingTag" class="form-control"><option value="">選擇</option></select></div>
+						<select name="shippingTag" id="shippingTag" class="form-control"><option value="">選擇</option>{{#each shippingTags}}
+<option value="{{this}}">{{this}}</option>{{/each}}</select></div>
 				</div>
 				<div class="form-group row" id="shippingProvider_div">
 					<label class="col-lg-4" for="shippingProvider">
@@ -164,29 +165,23 @@ var showLast8 = function() {
 	}
 }
 
-var loadShippingTag = function(wh) {
-	$('input[name=columnShippingReceiptNumber]').val(wh.salesOrderShippingReceiptNumber);
-	$('input[name=columnUuid]').val(wh.salesOrderUuid);
-	$('input[name=columnDateShipped]').val(wh.salesOrderDateShipped);
-	$('input[name=columnShippingProvider]').val(wh.shippingProviderCode);
-}	
+// 依貨運標籤帶入匯入檔的標頭名稱（貨運標籤設定：訂單編號標頭、貨運編號標頭）
+var loadShippingTag = function(tagInfo) {
+	tagInfo = tagInfo || {};
+	var $form = $('#ShippingCSVForm');
+	$form.find('#columnUuid').val(tagInfo.salesOrderUuid || '');
+	$form.find('#columnShippingReceiptNumber').val(tagInfo.salesOrderShippingReceiptNumber || '');
+};
 var load = function() {
-	shippingTag = $('select[name=shippingTag]').val();
-	jQuery.get(
-			'{{baseUrl}}/ajax/ShippingTag/getByTag.do',
-			{
-				'tag':shippingTag
-			},
-			function(data) {
-				json = data.data;
-				loadShippingTag(json);
-			}
-			).fail(function(data) {
-				json = data.responseJSON;
-				$('#ShippingCSVForm .modal-message').show();
-				$('#ShippingCSVForm .modal-message-alert-text').html(json.error);
-			});
-}
+	$.getJSON('{{baseUrl}}/ajax/ShippingTag/getByTag.do', { tag: $('#shippingTag').val() || '' })
+		.done(function(res) {
+			loadShippingTag(res ? res.data : null);
+		})
+		.fail(function(xhr) {
+			var msg = (xhr.responseJSON && xhr.responseJSON.error) || '讀取貨運標籤失敗';
+			modalShowDanger($('#ShippingCSVForm'), msg);
+		});
+};
 
 $('#serialNumberLast8_div').hide();
 $(document).ready(function() {

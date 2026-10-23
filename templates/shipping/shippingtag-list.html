@@ -8,8 +8,7 @@
 		"pageLength":20,
 	} );
 	$(document).ready(function() {
-		
-		var tableName = '#example';
+		var tableId = 'example', tableName = '#' + tableId; // 本頁 <table id="example">
 		editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
@@ -108,35 +107,20 @@
 			//	editor.field( 'seq' ).disable();
 				editor.field('salesOrderShippingReceiptNumber').message($('#tag-export').html());
 			} )
-			.on( 'preSubmit', function ( e, data, action ) {
-				const keys = Object.keys(data.data);
-				keys.forEach(function(key) {
-					var obj = data.data[key];
-					const tagInput = obj.tagInput;
-					const isNewTag = obj.isNewTag;
-					if ( Boolean( Number(isNewTag) ) ) {
-						if (tagInput && tagInput.length) {
-							obj.tag = tagInput;
-						}
+			// 勾「使用新標籤」時，以「新標籤」欄位的值作為標籤送出（後端同樣會處理）
+			.on( 'preSubmit', function ( e, payload ) {
+				$.each(payload.data || {}, function (rowKey, row) {
+					if (Number(row.isNewTag) && row.tagInput) {
+						row.tag = row.tagInput;
 					}
 				});
 				return true;
 			})
-			.dependent( 'isNewTag', function (val, data, callback) {
-				const isNewTag = Boolean(Number(val));
-				if (isNewTag) {
-					return { show: 'tagInput', hide: 'tag' };
-				} else {
-					return { show: 'tag', hide: 'tagInput' };
-				}
+			.dependent( 'isNewTag', function (val) {
+				return Number(val) ? { show: 'tagInput', hide: 'tag' } : { show: 'tag', hide: 'tagInput' };
 			})
-			.dependent( 'shippingTagSettings.largeItem', function (val, data, callback) {
-				const b = Boolean(Number(val));
-				if (b) {
-					return { show: 'shippingTagSettings.spacePerBox' };
-				} else {
-					return { hide: 'shippingTagSettings.spacePerBox' };
-				}
+			.dependent( 'shippingTagSettings.largeItem', function (val) {
+				return Number(val) ? { show: 'shippingTagSettings.spacePerBox' } : { hide: 'shippingTagSettings.spacePerBox' };
 			})
 
 		injectDetailsControl(tableName, table);
@@ -148,7 +132,7 @@
 			'tagInput':'','isNewTag':0,
 		});
 		
-		shippingTagTable = table;
+		window.shippingTagTable = table;
 
 	} ); // end ready
 </script>
@@ -372,33 +356,21 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 			$('#DTE_Field_prefValue').insertAtCaret($(this).attr('id')+",");
 		});
 	});
-	jQuery.fn.extend({
-	insertAtCaret: function(myValue){
-		return this.each(function(i) {
-		if (document.selection) {
-			//For browsers like Internet Explorer
-			this.focus();
-			sel = document.selection.createRange();
-			sel.text = myValue;
-			this.focus();
-		}
-		else if (this.selectionStart || this.selectionStart == '0') {
-			//For browsers like Firefox and Webkit based
-			var startPos = this.selectionStart;
-			var endPos = this.selectionEnd;
-			var scrollTop = this.scrollTop;
-			this.value = this.value.substring(0, startPos)+myValue+this.value.substring(endPos,this.value.length);
-			this.focus();
-			this.selectionStart = startPos + myValue.length;
-			this.selectionEnd = startPos + myValue.length;
-			this.scrollTop = scrollTop;
-		} else {
-			this.value += myValue;
-			this.focus();
-		}
-		})
-	}
-	});
+	// 在游標位置插入代碼（點代碼按鈕時）
+	$.fn.insertAtCaret = function (text) {
+		return this.each(function () {
+			var el = this;
+			if (typeof el.selectionStart === 'number') {
+				var from = el.selectionStart, to = el.selectionEnd, top = el.scrollTop;
+				el.value = el.value.slice(0, from) + text + el.value.slice(to);
+				el.selectionStart = el.selectionEnd = from + text.length;
+				el.scrollTop = top;
+			} else {
+				el.value += text;
+			}
+			el.focus();
+		});
+	};
 </script></div>
 </div>
 </div>

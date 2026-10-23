@@ -11,7 +11,7 @@
 //   POST /ajax/SalesOrderCVSTrace/sendSMS         smsManager（/scripts/sms.js）：uuid（換行多筆）、body、confirm、groupBuyId → 簡訊【未串接】
 //   POST /ajax/SalesOrderCVSTrace/save|update|action  頁面 Editor 的 create/edit/remove（原站按鈕皆已註解；列按鈕只有「商品」）→ 不支援
 //   GET  /ajax/SalesOrderCVSTrace/getCvsReturnStats  {data:{thisMonthRate,lastMonthRate}}（本月／上月 CVS 未取退貨率 %）
-//   GET  /x/ajax/SalesOrder/orderItems?uuid=      列展開「商品」：{data:[{title,total,backOrder}]}
+//   列展開「商品」：三個列表的每列都帶 orderItems:[{title,total,backOrder}]（本站設計，前端不另外請求）
 //   GET  /ajax/Sms/getBalance                     sms.js 開啟簡訊視窗時查點數 →【未串接】
 //
 // 推導（原站未擷取到資料，records=0）：各列表的篩選條件、已收貨／已完成對訂單的影響、未取退貨率公式 —— 見 docs/modules/shipping.md。
@@ -112,6 +112,36 @@ export const trackingBadges: Record<string, (session: AdminSession) => Promise<n
 
 /* ─────────────────────────── 列表 ─────────────────────────── */
 
+/** 每列附上訂單商品（列展開「商品」用；組合商品只列主商品） */
+async function attachItems(ctx: RequestContext, rows: Row[]): Promise<Record<string, unknown>> {
+  const session = requireSession(ctx);
+  const ids = [...new Set(rows.map((r) => Number(r.salesOrderId)).filter((x) => x > 0))];
+  const byOrder = new Map<number, Row[]>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db()
+      .from("order_items")
+      .select("sales_order_id, title, specifications_label, total, back_order, bundle_child, seq, id")
+      .eq("tenant_id", session.tenantId)
+      .in("sales_order_id", ids.slice(i, i + 200))
+      .order("seq")
+      .order("id");
+    if (error) throw new Error(`[shipping] 讀取訂單商品失敗：${error.message}`);
+    for (const it of (data ?? []) as Row[]) {
+      if (it.bundle_child) continue;
+      const k = Number(it.sales_order_id);
+      byOrder.set(k, [...(byOrder.get(k) ?? []), it]);
+    }
+  }
+  for (const r of rows) {
+    r.orderItems = (byOrder.get(Number(r.salesOrderId)) ?? []).map((it) => ({
+      title: [str(it.title), str(it.specifications_label)].filter(Boolean).join(" "),
+      total: Number(it.total ?? 0),
+      backOrder: !!it.back_order,
+    }));
+  }
+  return {};
+}
+
 const truthy = (v: unknown) => ["true", "1", "on"].includes(str(v).toLowerCase());
 
 function listCvs(ctx: RequestContext): Promise<Response> {
@@ -120,6 +150,7 @@ function listCvs(ctx: RequestContext): Promise<Response> {
     where: (q, dt) => cvsWhere(q, str(dt.extra.shippingStatus).toUpperCase() || "ARRIVED", truthy(dt.extra.ignoreNotified)),
     defaultOrder: [{ key: "dateArrivedString", ascending: true }],
     options: () => enumOptionsFor({ status: "SalesOrderCVSTrace.status" }),
+    extra: attachItems,
   });
 }
 
@@ -135,6 +166,7 @@ function listPickup(ctx: RequestContext): Promise<Response> {
     defaultOrder: [{ key: "dateCreatedString", ascending: true }],
     mapRow: (api) => orderRow(api),
     options: orderOptions,
+    extra: attachItems,
   });
 }
 
@@ -145,6 +177,7 @@ function listUnshipped(ctx: RequestContext): Promise<Response> {
     defaultOrder: [{ key: "dateCreatedString", ascending: true }],
     mapRow: (api) => orderRow(api),
     options: orderOptions,
+    extra: attachItems,
   });
 }
 
@@ -314,31 +347,6 @@ async function getCvsReturnStats(ctx: RequestContext): Promise<Response> {
   return json({ code: 200, data: { thisMonthRate, lastMonthRate } });
 }
 
-/** 列展開「商品」：訂單商品（不含組合子項）{title,total,backOrder} */
-async function orderItems(ctx: RequestContext): Promise<Response> {
-  const session = requireSession(ctx);
-  const uuid = str(await ctx.param("uuid"));
-  if (!uuid) throw badRequest("缺少訂單編號");
-  const { data: order } = await db().from("sales_orders").select("id").eq("tenant_id", session.tenantId).eq("uuid", uuid).maybeSingle();
-  if (!order) throw notFound("找不到訂單");
-  const { data, error } = await db()
-    .from("order_items")
-    .select("title, specifications_label, total, back_order, bundle_child, seq, id")
-    .eq("tenant_id", session.tenantId)
-    .eq("sales_order_id", Number((order as Row).id))
-    .order("seq")
-    .order("id");
-  if (error) throw new Error(`[shipping] 讀取訂單商品失敗：${error.message}`);
-  const items = ((data ?? []) as Row[])
-    .filter((r) => !r.bundle_child)
-    .map((r) => ({
-      title: [str(r.title), str(r.specifications_label)].filter(Boolean).join(" "),
-      total: Number(r.total ?? 0),
-      backOrder: !!r.back_order,
-    }));
-  return json({ code: 200, data: items });
-}
-
 /** sms.js getBalance：簡訊點數屬外部簡訊服務（未串接） */
 async function smsBalance(ctx: RequestContext): Promise<Response> {
   requireSession(ctx);
@@ -372,7 +380,5 @@ export const cvsTraceRoutes: RouteDef[] = [
   post("/ajax/SalesOrderCVSTrace/update", unsupported),
   post("/ajax/SalesOrderCVSTrace/action", unsupported),
   get("/ajax/SalesOrderCVSTrace/getCvsReturnStats", getCvsReturnStats),
-  // /x/ 不是 /ajax/ 開頭（預設 public）→ 明確要求後台登入
-  { path: "/x/ajax/SalesOrder/orderItems", method: "GET", auth: "admin", handler: orderItems },
   get("/ajax/Sms/getBalance", smsBalance),
 ];

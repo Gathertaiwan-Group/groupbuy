@@ -1,0 +1,96 @@
+<style>
+.cvs-items td { padding: 4px 8px !important; }
+</style>
+<script type="text/javascript">
+// 超商未取／自取未取／超時出貨 三頁共用（本站撰寫）：建立 #salesOrderCVSTraceTable 與 Editor（actionButton 確認窗用）。
+// 欄位、按鈕、確認文字依 SPEC／runtime；列展開的「商品」直接使用列表回傳的 orderItems。
+var cvsTracePage = {
+	tableSelector: '#salesOrderCVSTraceTable',
+	escape: function (s) {
+		return $('<div>').text(s == null ? '' : String(s)).html();
+	},
+	actionColumn: {
+		data: null,
+		'class': 'inline-disabled',
+		orderable: false,
+		render: function (data, type, row) {
+			return '<div class="d-block"><button class="btn btn-default text-nowrap" data-action="viewItems">商品</button></div>';
+		}
+	},
+	itemsHtml: function (items) {
+		var self = this;
+		var rows = $.map(items || [], function (it) {
+			var badge = it.backOrder ? '<span class="mr-2 badge badge-sm badge-success z-depth-0">預購</span>' : '';
+			return '<tr><td class="small">' + badge + self.escape(it.title) + '</td><td class="small text-right">' + self.escape(it.total) + '</td></tr>';
+		});
+		if (!rows.length) rows.push('<tr><td class="small text-muted" colspan="2">（沒有商品）</td></tr>');
+		return '<table class="table-detail cvs-items">' + rows.join('') + '</table>';
+	},
+	build: function (opts) {
+		var self = this;
+		var editor = new $.fn.dataTable.Editor({
+			ajax: {
+				create: { type: 'POST', url: GBF.baseUrl + '/ajax/SalesOrderCVSTrace/save.do' },
+				edit: { type: 'POST', url: GBF.baseUrl + '/ajax/SalesOrderCVSTrace/update.do?salesOrderCVSTraceId=_id_' },
+				remove: { type: 'POST', url: GBF.baseUrl + '/ajax/SalesOrderCVSTrace/action.do?salesOrderId=_id_' }
+			},
+			table: self.tableSelector,
+			idSrc: 'salesOrderId',
+			fields: [
+				DataTableConfig.field_input('???SalesOrderCVSTrace.relation???', 'relation'),
+				DataTableConfig.field_input('???SalesOrderCVSTrace.status???', 'status'),
+				DataTableConfig.field_input('???SalesOrderCVSTrace.groupBuyId???', 'groupBuyId'),
+				DataTableConfig.field_input('???SalesOrderCVSTrace.groupBuyAccountId???', 'groupBuyAccountId')
+			],
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n
+		});
+		var table = $(self.tableSelector).DataTable({
+			dom: 'lBrtip',
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			lengthMenu: opts.lengthMenu || [10, 25, 50, 100, 250],
+			pageLength: opts.pageLength || 10,
+			ajax: {
+				url: opts.url,
+				type: 'GET',
+				data: function (params) {
+					if (opts.extraParams) opts.extraParams(params);
+					return params;
+				}
+			},
+			language: DataTableConfig.i18n,
+			columns: opts.columns.concat([self.actionColumn]),
+			keys: DataTableConfig.keysInlineTab,
+			order: [[1, 'asc']],
+			columnDefs: opts.columnDefs || [],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: opts.buttons,
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [], []);
+			},
+			drawCallback: function () {
+				$('.dataTables_scrollBody').floatingScroll();
+			}
+		});
+		injectDetailsControl(self.tableSelector, table);
+		$(self.tableSelector + ' tbody').on('click', 'button[data-action]', function (e) {
+			e.stopPropagation();
+			if ($(this).attr('data-action') !== 'viewItems') return;
+			var $tr = $(this).closest('tr');
+			var dtRow = table.row($tr);
+			if (dtRow.child.isShown()) {
+				dtRow.child.hide();
+				$tr.removeClass('shown');
+			} else {
+				dtRow.child(self.itemsHtml((dtRow.data() || {}).orderItems)).show();
+				$tr.addClass('shown');
+			}
+		});
+		window.salesOrderCVSTraceTable = table;
+		window.editor = editor;
+		return table;
+	}
+};
+</script>

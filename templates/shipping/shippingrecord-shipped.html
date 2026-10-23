@@ -3,200 +3,155 @@
 .dataTables_scrollBody{min-height:300px;}
 </style>
 {{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
-
-	var appendExtra = function (d) {
-		d.dateMonth = $('#dateMonth').val();
-		d.month = $('#month').val();
-	}
-	var prepareForm = function(url) {
-		var $form = $('#downloadForm');
-		if ($form.length == 0) {
-			$form = $("<form id='downloadForm'" + " style='display: none;' method='POST' action='" + url + "'></form>");
-			$form.appendTo("body"); 
+	// 月份紀錄（本站撰寫）：每個團購每個月一筆已出貨彙總；「重新整理」重算所選月份。
+	var shippedPage = {
+		groupBuyId: {{json gbParam}},
+		monthParams: function (params) {
+			params.month = $('#month').val();
+			params.dateMonth = $('#dateMonth').val();
+			return params;
+		},
+		escape: function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); },
+		// 匯出出貨商品 ERP 總表：沿用「匯出銷售商品總表」下載（依出貨日期、ERP 格式），日期＝該月份
+		exportShipped: function (groupBuyId, yearMonth) {
+			var parts = String(yearMonth || '').split('-');
+			var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+			if (!y || !m) return;
+			var last = new Date(y, m, 0).getDate();
+			var pad = function (n) { return (n < 10 ? '0' : '') + n; };
+			var fields = {
+				groupBuyId: groupBuyId,
+				dateStart: y + '-' + pad(m) + '-01',
+				dateEnd: y + '-' + pad(m) + '-' + pad(last),
+				exportBy: 'SHIPPED',
+				shipped: 'true',
+				toErpFormat: 'true'
+			};
+			var $f = $('<form method="POST" style="display:none"></form>').attr('action', '/backend/Item/exportItemSalesReport.do');
+			$.each(fields, function (k, v) { $f.append($('<input type="hidden">').attr('name', k).val(v)); });
+			$f.appendTo('body').submit();
+			setTimeout(function () { $f.remove(); }, 1000);
 		}
-		$form.html("");
-		return $form;
-	}
-	var exportShipped = function(groupBuyId, dateMonth) {
-		var url = '/backend/Item/exportItemSalesReport.do?toErpFormat=true&shipped=true&exportBy=SHIPPED'
-		var $form = prepareForm(url);
-		$form.append('<input type="hidden" name="groupBuyId" value="' + groupBuyId + '">');
-		$form.append('<input type="hidden" name="dateMonth" value="' + dateMonth + '">');
-		$form.submit();
-	}
-
+	};
 	var shippingRecordTable;
 	$(document).ready(function() {
-		
-		var tableName = '#shippingRecordTable';
+		var page = shippedPage;
+		var tableSelector = '#shippingRecordTable';
 		editor = new $.fn.dataTable.Editor( {
 			ajax: {
-				create: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShippingRecord/save.do?'
-				},
-				edit: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShippingRecord/update.do?shippingRecordId=_id_'
-				},
-				remove: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/ShippingRecord/delete.do?shippingRecordId=_id_'
-				}
+				create: { type: 'POST', url: '{{baseUrl}}/ajax/ShippingRecord/save.do' },
+				edit: { type: 'POST', url: '{{baseUrl}}/ajax/ShippingRecord/update.do?shippingRecordId=_id_' },
+				remove: { type: 'POST', url: '{{baseUrl}}/ajax/ShippingRecord/delete.do?shippingRecordId=_id_' }
 			},
-			table: tableName,
+			table: tableSelector,
 			idSrc: 'shippingRecordId',
 			fields: [
-					DataTableConfig.field_input('標籤','tag'),
+				DataTableConfig.field_input('標籤','tag')
 			],
-			//template: '#custom_rp_form',
-			formOptions:DataTableConfig.formOptions,
-			i18n:DataTableConfig.i18n,
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n
 		} );
-
-		var table = $(tableName).DataTable( {
+		var table = $(tableSelector).DataTable( {
 			dom: 'lBrtip',
-			serverSide:true,
-			processing:true,
-			scrollX:true,
-			"lengthMenu": [10, 25, 50, 100, 250],
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			lengthMenu: [10, 25, 50, 100, 250],
 			ajax: {
-				url:'{{baseUrl}}/ajax/ShippingRecord/list.do',
-				type: "POST",
-				data:function ( d ) {
-					d.category = 'SHIPPED';
-					d.groupBuyId = {{json gbParam}};
-					appendExtra(d);
-					return d;
+				url: '{{baseUrl}}/ajax/ShippingRecord/list.do',
+				type: 'POST',
+				data: function (params) {
+					params.monthly = 1;
+					params.groupBuyId = page.groupBuyId;
+					return page.monthParams(params);
 				}
 			},
-			language:DataTableConfig.i18n,
-			columns:[
+			language: DataTableConfig.i18n,
+			columns: [
 				DataTableConfig.data_select_checkbox,
 				{
-					data:'dateExportedString',
-					render: function ( data, type, row ) {
-						data = row.groupBuyTitle + '<br>'
-						+ '<span class="ml-1 mt-1 badge badge-info">出貨月份：'+row.dateExportedString.substring(0,7)+'</span>'
-						+ '<span class="ml-1 mt-1 badge badge-default">更新日期：'+row.dateModifiedString+'</span>'
-						data = '<div class="text-wrap" style="min-width:320px;max-width:640px;">' + data + '</div>';
-						return data;
+					data: 'dateExportedString',
+					render: function (data, type, row) {
+						if (type !== 'display') return data;
+						var ym = String(data || '').substring(0, 7);
+						var html = page.escape(row.groupBuyTitle) + '<br>'
+							+ '<span class="ml-1 mt-1 badge badge-info">出貨月份：' + page.escape(ym) + '</span>'
+							+ '<span class="ml-1 mt-1 badge badge-default">訂單數：' + (row.orderCount || 0) + '</span>'
+							+ '<span class="ml-1 mt-1 badge badge-default">商品數：' + (row.itemCount || 0) + '</span>'
+							+ '<span class="ml-1 mt-1 badge badge-default">更新日期：' + page.escape(row.dateModifiedString) + '</span>';
+						return '<div class="text-wrap" style="min-width:320px;max-width:640px;">' + html + '</div>';
 					}
 				},
 				{
-					sortable:false,
-					render: function ( data, type, row ) {
-						var html 
-							= '<div class="btn-group" role="group">'
-							+ '<button id="btnGroupDownload" type="button" class="btn btn-info dropdown-toggle" data-toggle="dropdown">匯出</button>'
-							+ '<div class="dropdown-menu" aria-labelledby="btnGroupDownload">'
-							+ '<button class="dropdown-item" data-action="exportShipped">匯出出貨商品ERP總表</button>'
-							+ '</div>'
-							;
-						
-						html += '</div>';
-						return html;
+					sortable: false,
+					render: function (data, type, row) {
+						return '<div class="btn-group" role="group">'
+							+ '<button type="button" class="btn btn-info dropdown-toggle" data-toggle="dropdown">匯出</button>'
+							+ '<div class="dropdown-menu"><button class="dropdown-item" data-action="exportShipped">匯出出貨商品ERP總表</button></div>'
+							+ '</div>';
 					}
 				}
 			],
 			keys: DataTableConfig.keysInlineTab,
-			"order": [[ 1, "desc" ]],
+			order: [[ 1, 'desc' ]],
 			select: DataTableConfig.selectOptionsOS,
 			buttons: [
 				{
 					text: '重新整理',
-					action: function ( e, dt, node, config ) {
+					action: function (e, dt, node) {
 						btnStartLoading($(node));
 						$.ajax({
 							type: 'POST',
 							url: '{{baseUrl}}/ajax/ShippingRecord/refreshShipped',
-							data: {
-								dateMonth:$('#dateMonth').val(),
-								month:$('#month').val()
-							},
-							async: true,
-							success: function (json){
-								dt.ajax.reload(null, false);
-							},
-							complete:function(jqXHR, textStatus) {
-								btnStopLoading($(node));	
-							}
+							data: page.monthParams({}),
+							dataType: 'json'
+						}).always(function () {
+							btnStopLoading($(node));
+							dt.ajax.reload(null, false);
 						});
 					}
 				},
-				{ extend: 'remove', editor: editor },
+				{ extend: 'remove', editor: editor }
 			],
 			initComplete: function () {
-				DataTableConfig.initFooterSearch(this, [],[]);
+				DataTableConfig.initFooterSearch(this, [], []);
 			},
-			drawCallback: function (settings) {
-				$(".dataTables_scrollBody").floatingScroll();
+			drawCallback: function () {
+				$('.dataTables_scrollBody').floatingScroll();
 			}
 		} );
-		
-		DataTableHelper.injectInline(table,editor, true);
-		injectDetailsControl(tableName, table);
-		shippingRecordTable = table;
-		
-		$(tableName +' tbody').on('click', 'button', function () {
-			var td = $(this).closest('td');
-			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-			var data = row.data();
-			var action = $(this).attr('data-action');
-			if (action == null) return;
-			var $btn = $(this);
-			$btn.addClass('disabled');
-			setTimeout(function () {
-				$btn.removeClass('disabled');
-			}, 2000);
-			switch (action) {
-			case 'exportShipped':
-				exportShipped(data.groupBuyId, data.dateExportedString.substring(0,7));
-				break;
-			}
+		DataTableHelper.injectInline(table, editor, true);
+		injectDetailsControl(tableSelector, table);
+		window.shippingRecordTable = table;
+		$(tableSelector + ' tbody').on('click', 'button[data-action]', function () {
+			var row = table.row($(this).closest('tr')).data();
+			if (row && $(this).attr('data-action') === 'exportShipped') page.exportShipped(row.groupBuyId, String(row.dateExportedString || '').substring(0, 7));
 		});
-		$(document).on('download.success', function(){
-			table.ajax.reload();
+		// 篩選月份：選「指定月份」時顯示月份輸入，選好月份才重新查詢
+		$('#month').on('change', function () {
+			var custom = $(this).val() === '-1';
+			$('#dateMonth').toggle(custom);
+			if (!custom) $('#dateMonth').val('');
 		});
-		
-		$('#month').on('change', function() {
-			var val = $(this).val();
-			if (val == -1) {
-				$('#dateMonth').show();
-			} else {
-				$('#dateMonth').hide();
-				$('#dateMonth').val('');
-			}
-		});
-		
-		$('.filters').on('change', function() {
-			var id = $(this).prop('id');
-			var val = $(this).val();
-			if ((id == 'month')
-				&& val == -1) {
-				return;
-			}
+		$('.filters').on('change', function () {
+			if (this.id === 'month' && $(this).val() === '-1') return;
 			table.clear().ajax.reload();
 		});
-		
 		initDatetimePicker('#dateMonth', 'YYYY-MM', 'months');
-		var now = moment(new Date(), 'YYYY-MM');
-		var maxDate = now.format('YYYY-MM');
-		var minDate = now.add('-6', 'months').format('YYYY-MM');
-		$('#dateMonth').data("DateTimePicker").minDate(minDate);
-		$('#dateMonth').data("DateTimePicker").maxDate(maxDate);
-		$('#dateMonth').data("DateTimePicker").defaultDate('');
-		
-		$('#dateMonth').on("dp.hide", function () {
-			$this = $(this);
-			var val = $this .val();
-			if (val != '' && val != $this .data('month')) {
-				$this .data('month', val);
-				$this .change();
+		var picker = $('#dateMonth').data('DateTimePicker');
+		if (picker) {
+			picker.maxDate(moment().format('YYYY-MM'));
+			picker.minDate(moment().subtract(6, 'months').format('YYYY-MM'));
+			picker.defaultDate('');
+		}
+		$('#dateMonth').on('dp.hide', function () {
+			var picked = $(this).val();
+			if (picked && picked !== $(this).data('lastMonth')) {
+				$(this).data('lastMonth', picked);
+				table.clear().ajax.reload();
 			}
 		});
-	} ); // end ready
+	} );
 </script>
 <!--#body--><div class="container-fluid ">
 	<nav aria-label="breadcrumb">
