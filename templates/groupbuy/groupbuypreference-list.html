@@ -1,0 +1,1206 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	var editor;
+	var groupBuyPreferenceTable;
+	var groupBuyId = {{groupBuyId}};
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":25,
+	} );
+	var groupBuyTagEditor = new GroupBuyTagEditor();
+	$(document).ready(function() {
+		var tableName = '#example';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyPreference/save.do?groupBuyId={{groupBuyId}}'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyPreference/update.do?groupBuyId={{groupBuyId}}&groupBuyPreferenceId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyPreference/removeAll?groupBuyId={{groupBuyId}}&groupBuyPreferenceId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'groupBuyPreferenceId',
+			template: '#customForm',
+			fields: [
+				DataTableConfig.field_input('內容', 'prefValue'),
+				DataTableConfig.field_ckeditor5('內容', 'prefValueCkEditor'),
+			],
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var last_name = '';
+		var type = '';
+		var showTag = true;
+		$(tableName).on( 'click', 'tbody td:not(:first-child)', function (e) {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var data = row.data();
+			var id = data.groupBuyPreferenceId;
+			type = data.fieldType;
+			showTag = type == 'ckeditor';
+			if (type.startsWith('ckeditor')) {
+				type = 'ckeditor';
+			}
+			// if (type=='textarea') type='ckeditor';
+			switch (data.name) {
+			case 'BLACKLIST_MESSAGE':
+				showTag = false;
+				break;
+			case 'INVOICE_SETTINGS_ECPAY':
+			case 'FUNBIZ':
+			case 'BANK_SETTINGS':
+			case 'PRICE_DISABLE_SETTINGS':
+			case 'ITEM_SHORT_DESCR_SETTINGS':
+			case 'CHECKOUT_DESCR_SETTINGS':
+			case 'LOGIN_MESSAGE_SETTINGS':
+			case 'THEME_SETTINGS':
+			case 'PROFILE_MESSAGE_SETTINGS':
+			case 'DATA_SYSTEMS_SETTINGS':
+			case 'SHOPPING_CART_RULE_SETTINGS':
+			case 'COMMISSION_SETTINGS':
+				groupBuyPreferenceSettings(table, groupBuyId, id, data.name)
+				.show();
+				return;
+			case 'BILLING_ADDRESS_SETTINGS':
+				groupBuyPreferenceSettings(table, groupBuyId, id, data.name)
+				.init()
+				.editor()
+				.dependent('countryMode', function(val, data, callback) {
+					var hide = [];
+					var show = [];
+					switch (val) {
+					case '':
+					case 'NATIVE':
+					case 'UNSPECIFIED':
+						return {
+							hide:['countryCodes'],
+							values:{
+								countryCodes:''
+							}
+						}
+					case 'SPECIFIED':
+						return {
+							show:['countryCodes']
+						}
+					}
+					return {};
+				})
+				.open();
+				return;
+			case 'ACTIVITY_POPUP_SETTINGS':
+				new ActivityPopupSettings(groupBuyId)
+				.bind(table, id)
+				.show();
+				return;
+			case 'CUSTOM_NOTE_SETTINGS':
+				window.open('/backend/GroupBuyPreference/customNoteSettings.do?groupBuyId='+groupBuyId, '_blank');
+				return;
+			case 'DELIVERY_TIME_SETTINGS':
+				window.open('/backend/GroupBuyPreference/deliveryTimeSettings.do?groupBuyId='+groupBuyId, '_blank');
+				/*const delivery = new DeliveryTimeSettings({
+					table: table,
+					id: id,
+					preferencePrefix: 'GroupBuy',
+					groupBuyId: groupBuyId,
+					row: row,
+				});
+				delivery.openEditor();*/
+				return;
+			}
+			//if (data.fieldType != 'select' || editor.s.fields["prefValue"].s.opts.type != 'select') {
+			if (last_name != data.name) {
+				//alert(data.prefValue)
+				var options = [];
+				if (type == 'select' || type == 'checkbox') {
+					var tmpOptions = table.ajax.json().options[data.name];
+					tmpOptions.forEach(o => {
+						var o1 = (type == 'checkbox') ? {attr: {'class':'form-check-input'}} : {};
+						o1.label = o.label;
+						o1.value = o.value;
+						options.push(o1);
+					});
+				}
+				editor.clear('prefValue');
+
+				if (type == 'upload') {
+					editor.add(DataTableConfig.field_upload('內容', 'prefValue'));
+				} else if (type == 'checkbox_bool') {
+					editor.add(DataTableConfig.field_checkbox_bool('確定請打勾', 'prefValue'));
+				} else {
+					var placeholder = (type == 'textarea') ? '':'';
+					if (data.name == 'SEO_DESCR') {
+						placeholder = 'Meta description(上限160字元)';
+					}
+					editor.add( {
+						label: data.displayName,
+						name: 'prefValue',
+						type: type,
+						options:options,
+						attr:{rows:10, placeholder:placeholder},
+						className:'full block'
+					} );
+				}
+			}
+			last_name = data.name;
+			if (type == 'checkbox' && data.prefValues != null) {
+				data.prefValue = data.prefValues;
+			}
+			if (type == 'ckeditor') {
+				if (data.prefValueCkEditor == null) {
+					data.prefValueCkEditor = data.prefValue;
+				}
+				editor.hide('prefValue').show('prefValueCkEditor').edit( row, {buttons: '確定'} );
+				var _cke = editor.field('prefValueCkEditor').s.opts._ckeditor;
+				$('.btn-tag').on('click', function () {
+					//CKEDITOR.instances.DTE_Field_prefValueCkEditor.insertText('##'+$(this).attr('id')+'##');
+					var txt = '##'+$(this).attr('id')+'##';
+					_cke.model.change( writer => {
+						const insertPosition = _cke.model.document.selection.getFirstPosition();
+						writer.insertText( txt, insertPosition );
+					} );
+				});
+
+			} else if (type == 'textarea') {
+				editor.show('prefValue').hide('prefValueCkEditor').edit( row, {buttons: '確定'} );
+			} else {
+				editor.inline( this, {
+					buttons: { label: '確定', fn: function () { this.submit(); } }
+				} )
+			};
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			//scrollX:true,
+			ajax: '{{baseUrl}}/ajax/GroupBuyPreference/list.do?groupBuyId={{groupBuyId}}',
+			language:DataTableConfig.i18n,
+			columns:[
+				{ data: 'displayName' },
+				{ data: 'prefValue',
+					render: function ( data, type, row ) {
+						var more = (row.groupBuyPreferenceId >= 10000000 && row.groupBuyPreferenceId < 20000000) ? '<<更多內容(來自系統設定)>>' : '<<更多內容>>';
+						data = (data == undefined || data.length == 0) ? '' :
+							row.fieldType == 'textarea' ? more :
+							row.fieldType == 'json' ? more :
+							row.fieldType.startsWith('ckeditor') ? more :
+							row.fieldType == 'select' ? renderOption(table, data, row.name) :
+							row.fieldType == 'checkbox' ? renderOption(table, row.prefValues, row.name) : data;
+						return DataTableConfig.editIcon(data, type, row, false);
+				} },
+			],
+			buttons: [
+				]
+		} );
+
+		DataTableHelper.initEditorOnCallback(table,editor);
+		editor
+		.on( 'submitComplete', function () {
+			console.log('postEdit');
+			table.ajax.reload( null, false );
+		} )
+		.on( 'open', function (e,mode,action) {
+			$('#tag').hide();
+			$('#tag-export').hide();
+			$('#tag-resetPassword').hide();
+			if (type == 'ckeditor') {
+				if (showTag) {
+					switch(last_name) {
+					case 'EMAIL_RESET_PASSWORD_BODY':
+					case 'EMAIL_LP_UPGRADE_BODY':
+					case 'EMAIL_LP_ACTIVATED_BODY':
+						$('#tag-resetPassword').show();
+						break;
+					default:
+						$('#tag').show();
+						break;
+					}
+
+					$('#col-prefValue').attr('class', 'col-sm-6 col-md-8');
+				} else {
+					$('#col-prefValue').attr('class', 'col-12');
+				}
+			} else if (type == 'textarea') {
+				//$('#tag-export').show();
+			}
+		})
+		.on( 'close', function (e,mode,action) {
+			$('.btn-tag').unbind('click');
+		})
+
+		$('#example tbody').on('click', 'td.details-control', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+
+			if ( row.child.isShown() ) {
+				// This row is already open - close it
+				row.child.hide();
+				tr.removeClass('shown');
+			}
+			else {
+				// Open this row
+				row.child( format(row.data()) ).show();
+				tr.addClass('shown');
+			}
+		} );
+
+		var removeAll = function() {
+			editor.remove();
+		};
+
+		$('button[data-action]').on('click', function() {
+			var action = $(this).attr('data-action');
+			switch(action) {
+			case 'goTag':
+				window.open( '/backend/GroupBuyTag/list', '_blank');
+				break;
+			case 'tag':
+				groupBuyTagGroupBuyManager.tag();
+				break;
+			case 'untag':
+				groupBuyTagGroupBuyManager.unTag();
+				groupBuyTagEditor.reloadWhenSuccess(groupBuyTagGroupBuyManager.editor);
+				break;
+			case 'deleteTag':
+				const gbtId = $(this).data('gbtId');
+				groupBuyTagEditor.remove( gbtId );
+				break;
+			case 'removeAll':
+				editor
+				.title( '清除所有設定' )
+				.buttons( { text: '確認', className: 'btn-danger', action: function ( e, dt, node, config ){editor.submit()}} )
+				.message( '確定要清除所有設定?' )
+				.remove( 0 );
+				break;
+			case 'feed':
+				openForm('/ajax/Feed/feed.do?groupBuyId='+groupBuyId)
+				break;
+			case 'tagWizard':
+				openForm('/backend/GroupBuyTag/wizard.do?groupBuyId='+groupBuyId)
+				break;
+			}
+		});
+
+		groupBuyPreferenceTable = table;
+		groupBuyTagGroupBuyManager
+		.setGroupBuyId(groupBuyId)
+		.init();
+	} ); // end ready
+
+	function ActivityPopupSettings () {}
+	ActivityPopupSettings.prototype.bind = function(table, groupBuyPreferenceId) {
+		this.table = table;
+		this.id = groupBuyPreferenceId
+		return this;
+	}
+	ActivityPopupSettings.prototype.show = function () {
+		var _this = this;
+		$.ajax( {
+			url: '{{baseUrl}}/ajax/GroupBuyPreference/activityPopupSettings?groupBuyId={{groupBuyId}}',
+			dataType: 'json',
+			success: function ( json ) {
+				var data = json.data;
+				var options = json.options;
+				var _id = data.groupBuyPreferenceId ? data.groupBuyPreferenceId : _this.id;
+				var cEditor = _this.editor();
+				cEditor
+				.title('前台-官網彈出活動設定')
+				.message('圖片以及小圖示必須提供才會生效。可透過上傳圖片或是提供連結設定')
+				.buttons({label:'更新', className:'btn-primary', action: function () {this.submit();}})
+				.edit( _id, false );
+
+				$.each(data, function ( name, value ) {
+					if (typeof value == 'object') {
+						Object.keys(value).forEach(function(o,i){
+							var fname = name+'.'+o;
+							if (cEditor.s.fields[fname] != null) {
+								cEditor.set(fname, value[o]);
+							}
+						});
+					} else {
+						if (cEditor.s.fields[name] != null) {
+							cEditor.set(name, value);
+						}
+					}
+				} );
+
+				cEditor.open();
+			}
+		} );
+	}
+	ActivityPopupSettings.prototype.editor = function () {
+		if (!!this._editor) {
+			return this._editor;
+		}
+		const _this = this;
+		const editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/GroupBuyPreference/activityPopupSettings?groupBuyId={{groupBuyId}}'
+			},
+			idSrc: 'groupBuyPreferenceId',
+			name:'activityPopupSettings',
+			fields:[
+				DataTableConfig.field_upload('圖片(預設)'			,'image'),
+				DataTableConfig.field_input ('圖片連結(預設)'			,'imageUrl'),
+				DataTableConfig.field_upload('圖片(手機版)'		,'imageMobile'),
+				DataTableConfig.field_input ('圖片連結(手機版)'	,'imageMobileUrl'),
+				DataTableConfig.field_upload('小圖示'				,'icon'),
+				DataTableConfig.field_input ('圖示連結'			,'iconUrl', '', '', '', '48x48'),
+				DataTableConfig.field_input ('點擊連結'				,'link'),
+				DataTableConfig.field_datetime('開始時間'					,'startDateString', 'YYYY-MM-DD HH:mm'),
+				DataTableConfig.field_datetime('結束時間'						,'endDateString', 'YYYY-MM-DD HH:mm'),
+			],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} ).on( 'submitComplete', function () {
+			_this.table.ajax.reload( null, false );
+		} )/* .on( 'open', function () {
+			_this.loadAjax();
+		} ) */
+		;
+
+		['image', 'imageMobile', 'icon'].forEach(function (name) {
+			$( editor.field( name ).input() ).on( 'upload.editor', function (e, val) {
+				editor.field( name + 'Url' ).val(val);
+			} );
+		});
+		this._editor = editor;
+		return this._editor;
+	}
+
+	function GroupBuyTagEditor () {
+		this.editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  GBF.baseUrl + '/ajax/GroupBuyTag/save.do?groupBuyAccount={{tenantCode}}'
+				},
+				remove: {
+					type: 'POST',
+					url:  GBF.baseUrl + '/ajax/GroupBuyTag/delete.do?groupBuyTagId=_id_'
+				}
+			},
+			idSrc: 'groupBuyTagId',
+			fields: [
+				DataTableConfig.field_input_f('標籤','tag'),
+				DataTableConfig.field_select('標籤用途','category'),
+				DataTableConfig.field_select2('團購設定來源:','groupBuyId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/groupBuy', false),
+			],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+		{{!-- 推導（相容修補）：原站「標籤用途」select 沒有選項，set('category','PREFERENCE') 選不到值；本系統 /ajax/GroupBuyTag/save 會驗證標籤用途，故補上列舉選項讓隱藏欄位能帶出 PREFERENCE --}}
+		this.editor.field('category').update({{json tagCategoryOptions}});
+	}
+	GroupBuyTagEditor.prototype.create = function () {
+		this.editor
+		.title('設定成標籤')
+		.buttons({label:'新增', className:'btn-primary', action: function () {this.submit();}})
+		.create()
+		.set('groupBuyId', groupBuyId)
+		.set('category', 'PREFERENCE')
+		.hide('groupBuyId')
+		.hide('category')
+		;
+		this.reloadWhenSuccess();
+	}
+	GroupBuyTagEditor.prototype.remove = function ( gbtId ) {
+		this.editor
+		.title( '刪除標籤設定' )
+		.message( '刪除作為主標籤設定，會同時解除其他綁定到此標籤的團購設定，確定要刪除？' )
+		.buttons( { text: '確認', className: 'btn-danger', action: function () {this.submit();}} )
+		.remove( gbtId )
+		;
+		this.reloadWhenSuccess();
+	}
+	GroupBuyTagEditor.prototype.reloadWhenSuccess = function (editor) {
+		if (!editor) editor = this.editor;
+		editor.one('submitSuccess', function (e, json, data, action) {
+			groupBuyTagGroupBuyManager.setGroupBuyId(groupBuyId).init();
+		});
+	}
+</script><style>
+.btn-group .btn {
+padding: 0.5rem 1rem;
+margin:1px !important;
+-webkit-box-shadow: none!important;box-shadow: none!important;
+}
+.btn-group .text-default {min-width:104px;}
+table.dataTable td {word-break:break-all}
+.small-ckeditor .ck-editor__editable {height: 250px;}
+</style>
+{{!-- 推導（相容修補）：原版 Editor bootstrap4 樣式讓 className 含 block 的欄位（本頁「內容」full block）標籤在上、輸入佔整列；editor-shim.css 尚未提供此規則，先在本頁補上 --}}
+<style>
+div.DTE_Body div.DTE_Body_Content div.DTE_Field.block > label, div.DTE_Body div.DTE_Body_Content div.DTE_Field.block > div {max-width:100%;flex:0 0 100%;}
+</style>
+<!--#body-->
+<div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">進階設定</div>
+<div class="card-body">
+<p>團購標籤：<span id='lbGroupBuyTag' class="badge"></span></p>
+<p><small class="text text-info">當有使用團購標籤時，進階設定若不設定會以標籤內的設定為主</small></p>
+<button type="button" data-action="tagWizard" class="btn btn-primary">標籤精靈 <i class="fa-solid fa-sparkles"></i></button>
+<button type="button" data-action="untag" class="btn btn-warning">解除標籤</button>
+<button type="button" data-action="deleteTag" class="btn btn-warning">刪除標籤</button>
+<!-- <button type="button" data-action="tag" class="btn btn-primary">綁定標籤</button> -->
+<!-- <button type="button" data-action="goTag" class="btn btn-info">前往設定標籤</button> -->
+<button type="button" data-action="removeAll" class="btn btn-danger">重置所有設定</button>
+</div>
+<div class="card-body container-gbp-list-hide-note" style="display: none;">
+<p class="card-text">綁定標籤時，目前的「進階設定」將會關閉編輯，以綁定者設定的「進階設定」為主</p>
+</div>
+<div class="container-gbp-list">
+<div class="card-body" style="overflow-x:scroll">
+	<div class="btn-group">
+		<a class="btn btn-default sp_selector" data='前台-'>網站前台</a>
+		<a class="btn btn-default sp_selector" data='分潤設定'>分潤設定</a>
+		<a class="btn btn-default sp_selector" data='自定義'>自定義</a>
+		<a class="btn btn-default sp_selector" data='系統信'>系統信</a>
+		<a class="btn btn-default sp_selector" data='電子發票'>電子發票</a>
+		<a class="btn btn-default sp_selector" data='subscription'>訂閱</a>
+		<a class="btn btn-default sp_selector" data='其他'>其他</a>
+</div>
+</div>
+<div class="card-body">
+	<table id="example" class="table table-striped display w-100">
+		<thead>
+			<tr>
+				<th width=300px>欄位名稱</th>
+				<th>內容</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>欄位名稱</th>
+				<th>內容</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
+
+<div style="display:none">
+<div id="customForm" class="dtForm row">
+	<div class="col-sm-6 col-md-8" id="col-prefValue">
+	<fieldset >
+		<editor-field name="prefValue"></editor-field>
+		<editor-field name="prefValueCkEditor"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6 col-md-4" id="col-tag">
+	<style>
+.tag-container {
+max-height:calc(100vh - 200px);overflow-y:scroll;
+-webkit-box-shadow: none!important;box-shadow: none!important;
+}
+.tag-container .card-body {padding:0.25rem 0}
+.tag-container .btn {
+padding:0.5rem !important; margin:0.25rem 0px !important;
+-webkit-box-shadow: none!important;box-shadow: none!important;
+}
+</style>
+	<div id="tag-export" class='card tag-container sticky-top'>
+	<div class="card-header"><a target="_blank" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i>csv編輯器</a>
+	<br><span class="small">可透過csv編輯器，透過匯出功能複製貼回</span>
+	</div>
+	<div class="card-header">標籤</div>
+	<div class="card-header">訂單資訊</div>
+	<div class="card-body">
+	<button type="button" id="groupbuy.id" class="btn btn-blue-grey btn-sm btn-tag-export">團購ID</button>
+	<button type="button" id="groupbuy.title" class="btn btn-blue-grey btn-sm btn-tag-export">團購名稱</button>
+	<button type="button" id="groupbuy.title.short" class="btn btn-blue-grey btn-sm btn-tag-export">團購短名稱</button>
+	<button type="button" id="order.uuid" class="btn btn-blue-grey btn-sm btn-tag-export">訂單號碼</button>
+	<button type="button" id="apiOrderNo" class="btn btn-blue-grey btn-sm btn-tag-export">訂單號碼x4碼</button>
+	<button type="button" id="order.seq" class="btn btn-blue-grey btn-sm btn-tag-export">訂單流水號</button>
+	<button type="button" id="order.seq.groupbuy" class="btn btn-blue-grey btn-sm btn-tag-export">訂單流水號(團購短名稱+流水號)</button>
+	<button type="button" id="order.dateCreatedYYMMDD" class="btn btn-blue-grey btn-sm btn-tag-export">訂單日期(年月日)</button>
+	<button type="button" id="order.dateCreatedYMDHMS" class="btn btn-blue-grey btn-sm btn-tag-export">訂單時間日期(年月日時分秒)</button>
+	<!-- <button type="button" id="order.dateCreatedYYMMDDSlash" class="btn btn-blue-grey btn-sm btn-tag-export">訂單日期(格式：2017/07/07)</button> -->
+	<button type="button" id="order.state" class="btn btn-blue-grey btn-sm btn-tag-export">訂單階段</button>
+	<button type="button" id="order.status" class="btn btn-blue-grey btn-sm btn-tag-export">訂單狀態</button>
+	<button type="button" id="paymentMethod" class="btn btn-blue-grey btn-sm btn-tag-export">付款方式</button>
+	<button type="button" id="paymentMethodCode" class="btn btn-blue-grey btn-sm btn-tag-export">付款方式代號</button>
+	<button type="button" id="payStatus" class="btn btn-blue-grey btn-sm btn-tag-export">付款狀態</button>
+	<button type="button" id="order.datePaymentDue" class="btn btn-blue-grey btn-sm btn-tag-export">繳款截止日期</button>
+	<button type="button" id="order.datePaid" class="btn btn-blue-grey btn-sm btn-tag-export">付款日期</button>
+	<button type="button" id="order.grandTotal" class="btn btn-blue-grey btn-sm btn-tag-export">訂單總計(含運費)</button>
+	<button type="button" id="order.discount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單折扣金額</button>
+	<button type="button" id="order.itemTotalPriceWithoutDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總金額(未折扣)</button>
+	<button type="button" id="order.itemTotalCostPriceWithoutDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總成本(未折扣)</button>
+	<button type="button" id="order.totalPaid" class="btn btn-blue-grey btn-sm btn-tag-export">已付金額</button>
+	<button type="button" id="order.totalPaidBeforeSplit" class="btn btn-blue-grey btn-sm btn-tag-export">分割前已付金額</button>
+	<button type="button" id="order.shippingAmount" class="btn btn-blue-grey btn-sm btn-tag-export">運費（總金額）</button>
+	<button type="button" id="order.shippingFee" class="btn btn-blue-grey btn-sm btn-tag-export">運費（物流費）</button>
+	<button type="button" id="order.codFee" class="btn btn-blue-grey btn-sm btn-tag-export">運費（貨到付款費）</button>
+	<button type="button" id="payOnDelivery" class="btn btn-blue-grey btn-sm btn-tag-export">代收金額</button>
+	<button type="button" id="order.coupon" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷（標題＋折扣碼）</button>
+	<button type="button" id="order.coupon.title" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷標題</button>
+	<button type="button" id="order.coupon.code" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷折扣碼</button>
+	<button type="button" id="order.salesRules" class="btn btn-blue-grey btn-sm btn-tag-export">優惠條件</button>
+	<button type="button" id="apiTradeNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方金流訂單編號</button>
+	<button type="button" id="cvsTradeNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商取貨訂單編號</button>
+	<button type="button" id="cvsStoreId" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商代號</button>
+	<button type="button" id="cvsStoreName" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商名稱</button>
+	<button type="button" id="cvsShipmentNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商出貨單號</button>
+	<button type="button" id="order.totalSuccessTimes" class="btn btn-blue-grey btn-sm btn-tag-export">定期]扣款次數</button>
+	<button type="button" id="order.frequency" class="btn btn-blue-grey btn-sm btn-tag-export">定期]配送週期</button>
+	<button type="button" id="order.dns" class="btn btn-blue-grey btn-sm btn-tag-export">定期]下次扣款日</button>
+	<button type="button" id="order.dnd" class="btn btn-blue-grey btn-sm btn-tag-export">定期]下次配達日</button>
+	</div>
+	<div class="card-header">客戶資訊</div>
+	<div class="card-body">
+	<button type="button" id="billing.name" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人姓名</button>
+	<button type="button" id="billing.fbNickname" class="btn btn-blue-grey btn-sm btn-tag-export">臉書暱稱</button>
+	<button type="button" id="billing.postcode" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人郵遞區號</button>
+	<button type="button" id="billing.address" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人地址</button>
+	<button type="button" id="billing.email" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人Email</button>
+	<button type="button" id="billing.phone" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人電話</button>
+	<button type="button" id="billing.birthday" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人生日</button>
+	<button type="button" id="shipping.name.only" class="btn btn-blue-grey btn-sm btn-tag-export">收件人姓名</button>
+	<button type="button" id="shipping.name" class="btn btn-blue-grey btn-sm btn-tag-export">收件人姓名(訂購人不同時顯示)</button>
+	<button type="button" id="shipping.postcode" class="btn btn-blue-grey btn-sm btn-tag-export">收件人郵遞區號</button>
+	<button type="button" id="shipping.address" class="btn btn-blue-grey btn-sm btn-tag-export">收件人地址</button>
+	<button type="button" id="shipping.email" class="btn btn-blue-grey btn-sm btn-tag-export">收件人Email</button>
+	<button type="button" id="shipping.phone" class="btn btn-blue-grey btn-sm btn-tag-export">收件人電話</button>
+	<button type="button" id="note" class="btn btn-blue-grey btn-sm btn-tag-export">客戶備註</button>
+	<button type="button" id="staff.note" class="btn btn-blue-grey btn-sm btn-tag-export">員工備註</button>
+	<button type="button" id="billing.bank.name" class="btn btn-blue-grey btn-sm btn-tag-export">銀行名稱</button>
+	<button type="button" id="billing.bank.account" class="btn btn-blue-grey btn-sm btn-tag-export">虛擬帳號/後五碼</button>
+	</div>
+	<div class="card-header">客戶(登入)資訊</div>
+	<div class="card-body">
+	<button type="button" id="customer.firstname" class="btn btn-blue-grey btn-sm btn-tag-export">姓名</button>
+	<button type="button" id="customer.username" class="btn btn-blue-grey btn-sm btn-tag-export">會員ID</button>
+	<button type="button" id="customer.merchantUserId" class="btn btn-blue-grey btn-sm btn-tag-export">第三方會員ID</button>
+	<button type="button" id="customer.nid" class="btn btn-blue-grey btn-sm btn-tag-export">身分證字號</button>
+	<button type="button" id="order.pointAmount" class="btn btn-blue-grey btn-sm btn-tag-export">點數折抵訂單金額</button>
+	<button type="button" id="order.point.gain" class="btn btn-blue-grey btn-sm btn-tag-export">訂單獲取點數</button>
+	<button type="button" id="order.point.use" class="btn btn-blue-grey btn-sm btn-tag-export">訂單使用點數</button>
+	</div>
+	<div class="card-header">發票資訊</div>
+	<div class="card-body">
+	<button type="button" id="receiptType" class="btn btn-blue-grey btn-sm btn-tag-export">發票類型(二/三聯)</button>
+	<button type="button" id="receiptCategory" class="btn btn-blue-grey btn-sm btn-tag-export">發票種類(電子/紙本/捐贈)</button>
+	<button type="button" id="receiptTitle" class="btn btn-blue-grey btn-sm btn-tag-export">發票抬頭</button>
+	<button type="button" id="receiptTitleOrFirstname" class="btn btn-blue-grey btn-sm btn-tag-export">發票抬頭(無時改顯示訂購人姓名)</button>
+	<button type="button" id="receiptVatId" class="btn btn-blue-grey btn-sm btn-tag-export">統一編號</button>
+	<button type="button" id="invoiceNumber" class="btn btn-blue-grey btn-sm btn-tag-export">發票號碼</button>
+	<button type="button" id="dateEinvoice" class="btn btn-blue-grey btn-sm btn-tag-export">預約發票日期</button>
+	<button type="button" id="card4No" class="btn btn-blue-grey btn-sm btn-tag-export">信用卡號</button>
+	<button type="button" id="invoice.barcode" class="btn btn-blue-grey btn-sm btn-tag-export">手機載具</button>
+	<button type="button" id="invoice.taxType" class="btn btn-blue-grey btn-sm btn-tag-export">稅別</button>
+	<button type="button" id="invoice.amount.beforeTax" class="btn btn-blue-grey btn-sm btn-tag-export">訂單稅前金額</button>
+	<button type="button" id="invoice.amount.b2borb2c" class="btn btn-blue-grey btn-sm btn-tag-export">訂單(三聯：稅前金額/二聯：含稅金額)</button>
+	<button type="button" id="invoice.taxAmount" class="btn btn-blue-grey btn-sm btn-tag-export">稅額</button>
+	</div>
+	<div class="card-header">貨運資訊</div>
+	<div class="card-body">
+	<button type="button" id="order.shippingProvider" class="btn btn-blue-grey btn-sm btn-tag-export">貨運公司</button>
+	<button type="button" id="order.shippingTag" class="btn btn-blue-grey btn-sm btn-tag-export">貨運標籤</button>
+	<button type="button" id="shippingReceiptNumber" class="btn btn-blue-grey btn-sm btn-tag-export">貨運單號</button>
+	<button type="button" id="deliver.time" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(代號)</button>
+	<button type="button" id="deliver.time.shortCode" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(文字)</button>
+	<button type="button" id="deliver.time.custom" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(自定義)</button>
+	<button type="button" id="shipping.shippingType" class="btn btn-blue-grey btn-sm btn-tag-export">配送種類(宅配/超取/自取)</button>
+	<button type="button" id="order.preferredDeliveryDates" class="btn btn-blue-grey btn-sm btn-tag-export">期望配達日期</button>
+	<button type="button" id="order.restrictedDeliveryDates" class="btn btn-blue-grey btn-sm btn-tag-export">不期望配達日期</button>
+	<button type="button" id="order.dateShipped" class="btn btn-blue-grey btn-sm btn-tag-export">出貨日期</button>
+	</div>
+	<div class="card-header">商品資訊</div>
+	<div class="card-body">
+	<button type="button" id="order.itemsList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要</button>
+	<button type="button" id="order.itemsList.br" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(斷行)</button>
+	<button type="button" id="order.itemsList.100.1" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-1)</button>
+	<button type="button" id="order.itemsList.100.2" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-2)</button>
+	<button type="button" id="order.itemsList.100.3" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-3)</button>
+	<button type="button" id="order.itemsList.100.4" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-4)</button>
+	<button type="button" id="order.itemsList.100.5" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-5)</button>
+	<button type="button" id="order.itemsListAndNote" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要＋客戶備註</button>
+	<button type="button" id="order.itemsUidList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(商品代碼)</button>
+	<button type="button" id="order.itemsTitleList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(完整名稱)</button>
+	<button type="button" id="order.itemsTotal" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總數量</button>
+	<button type="button" id="order.itemKinds" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總類數</button>
+	<button type="button" id="items.uid.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品代號(逗點隔開)</button>
+	<button type="button" id="items.shortName.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品出貨短名稱(逗點隔開)</button>
+	<button type="button" id="items.total.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品數量(逗點隔開)</button>
+	</div>
+	<div class="card-header">其他（固定資料用法：#符號加上內容，如：#1000。每一行該欄位均會顯示1000</div>
+	<div class="card-body">
+	<button type="button" id="#" class="btn btn-blue-grey btn-sm btn-tag-export">固定資料欄位</button>
+	</div>
+	<div class="card-header">樣式二（當選擇樣式二標籤時，訂單將依各商品將獨立顯示)</div>
+	<div class="card-body">
+	<button type="button" id="item.uid" class="btn btn-blue-grey btn-sm btn-tag-export">商品代碼</button>
+	<button type="button" id="item.upc" class="btn btn-blue-grey btn-sm btn-tag-export">國際條碼</button>
+	<button type="button" id="item.title" class="btn btn-blue-grey btn-sm btn-tag-export">商品名稱</button>
+	<button type="button" id="item.shortName" class="btn btn-blue-grey btn-sm btn-tag-export">商品出貨短名稱</button>
+	<button type="button" id="item.cateTag" class="btn btn-blue-grey btn-sm btn-tag-export">商品分類</button>
+	<button type="button" id="item.total" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量</button>
+	<button type="button" id="item.retailPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品原價</button>
+	<button type="button" id="item.price" class="btn btn-blue-grey btn-sm btn-tag-export">商品團購價</button>
+	<button type="button" id="item.costPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品成本</button>
+	<button type="button" id="item.discount.price" class="btn btn-blue-grey btn-sm btn-tag-export">商品單價折扣後</button>
+	<button type="button" id="item.discount" class="btn btn-blue-grey btn-sm btn-tag-export">商品折價</button>
+	<button type="button" id="item.totalPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品金額小計</button>
+	<button type="button" id="item.totalPriceNoneDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">商品金額小計(未折扣)</button>
+	<button type="button" id="item.totalCostPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品成本小計</button>
+	<button type="button" id="item.grossMargin" class="btn btn-blue-grey btn-sm btn-tag-export">毛利率(%)</button>
+	<button type="button" id="item.grossMargin.amount" class="btn btn-blue-grey btn-sm btn-tag-export">毛利金額</button>
+	<button type="button" id="item.shipping.status" class="btn btn-blue-grey btn-sm btn-tag-export">商品出貨狀態</button>
+	<button type="button" id="item.backOrderStatus" class="btn btn-blue-grey btn-sm btn-tag-export">商品預購狀態</button>
+	<button type="button" id="item.virtualCode" class="btn btn-blue-grey btn-sm btn-tag-export">商品虛擬序號</button>
+	<button type="button" id="item.shippingTag" class="btn btn-blue-grey btn-sm btn-tag-export">商品貨運標籤</button>
+	<button type="button" id="item.dateExpired" class="btn btn-blue-grey btn-sm btn-tag-export">有效期限</button>
+	<button type="button" id="item.taxType" class="btn btn-blue-grey btn-sm btn-tag-export">商品稅別</button>
+	<button type="button" id="item.commission" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤總金額</button>
+	<button type="button" id="item.commissionRate" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤(%)</button>
+	<button type="button" id="item.commissionDollar" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤(單件$)</button>
+	<button type="button" id="item.weight" class="btn btn-blue-grey btn-sm btn-tag-export">商品重量</button>
+	<button type="button" id="item.note" class="btn btn-blue-grey btn-sm btn-tag-export">商品備註</button>
+	</div>
+	<div class="card-header">特殊標籤（僅限xls使用，第一行及第二行均須使用標籤）</div>
+	<div class="card-body">
+	<button type="button" id="itemset.cols" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量明細(僅顯示有出貨商品)</button>
+	<button type="button" id="itemset.cols.all" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量明細(顯示所有商品)</button>
+	<button type="button" id="uid.cols" class="btn btn-blue-grey btn-sm btn-tag-export">商品貨號數量明細</button>
+	</div>
+</div>
+<script type="text/javascript">
+	$('.btn-tag-export').each(function(i, obj) {
+		$(obj).on('click', function () {
+			$('#DTE_Field_shippingExportFormat').insertAtCaret($(this).attr('id')+",");
+			$('#DTE_Field_prefValue').insertAtCaret($(this).attr('id')+",");
+		});
+	});
+	jQuery.fn.extend({
+	insertAtCaret: function(myValue){
+		return this.each(function(i) {
+		if (document.selection) {
+			//For browsers like Internet Explorer
+			this.focus();
+			sel = document.selection.createRange();
+			sel.text = myValue;
+			this.focus();
+		}
+		else if (this.selectionStart || this.selectionStart == '0') {
+			//For browsers like Firefox and Webkit based
+			var startPos = this.selectionStart;
+			var endPos = this.selectionEnd;
+			var scrollTop = this.scrollTop;
+			this.value = this.value.substring(0, startPos)+myValue+this.value.substring(endPos,this.value.length);
+			this.focus();
+			this.selectionStart = startPos + myValue.length;
+			this.selectionEnd = startPos + myValue.length;
+			this.scrollTop = scrollTop;
+		} else {
+			this.value += myValue;
+			this.focus();
+		}
+		})
+	}
+	});
+</script><div id="tag" class='card tag-container'>
+	<div class="card-header">標籤</div>
+	<div class="card-body">
+	<button type="button" id="GROUP_BUY" class="btn btn-default btn-sm btn-tag">#團購名稱</button>
+	<button type="button" id="GROUP_BUY_SHORT_TITLE" class="btn btn-default btn-sm btn-tag">#團購短名稱</button>
+	<button type="button" id="BILLING_NAME" class="btn btn-default btn-sm btn-tag">#訂購人姓名</button>
+	<button type="button" id="SHIPPING_NAME" class="btn btn-default btn-sm btn-tag">#收件人姓名</button>
+	<button type="button" id="SHIPPING_ADDRESS" class="btn btn-default btn-sm btn-tag">#收件人地址</button>
+	<button type="button" id="SHIPPING_PHONE" class="btn btn-default btn-sm btn-tag">#收件人電話</button>
+	<button type="button" id="SHIPPING_DETAIL" class="btn btn-default btn-sm btn-tag">#出貨資訊（物流名稱＋單號）</button>
+	<button type="button" id="SHIPPING_RECEIPT_NUMBER" class="btn btn-default btn-sm btn-tag">#寄貨單號</button>
+	<button type="button" id="SHIPPING_DESCR" class="btn btn-default btn-sm btn-tag">#運費敘述</button>
+	<!-- <button type="button" id="SHIPPING_RECEIPT_NUMBER_BASE64" class="btn btn-default btn-sm btn-tag">#寄貨單號64</button> -->
+	<button type="button" id="ORDER_ID" class="btn btn-default btn-sm btn-tag">#訂單編號</button>
+	<button type="button" id="ORDERS" class="btn btn-default btn-sm btn-tag">#商品明細</button>
+	<button type="button" id="PAYMENT_DETAIL" class="btn btn-default btn-sm btn-tag">#匯款資訊</button>
+	<!-- <button type="button" id="BANK_NAME" class="btn btn-default btn-sm btn-tag">#銀行名稱</button>
+	<button type="button" id="BANK_CODE" class="btn btn-default btn-sm btn-tag">#銀行代號</button>
+	<button type="button" id="BANK_ACCOUNT_TITLE" class="btn btn-default btn-sm btn-tag">#銀行戶名</button>
+	<button type="button" id="BANK_ACCOUNT_NUMBER" class="btn btn-default btn-sm btn-tag">#銀行帳號</button>
+	<button type="button" id="BANK_VIRTUAL_ACCOUNT" class="btn btn-default btn-sm btn-tag">#銀行虛擬帳號</button> --> 
+	<button type="button" id="SHIPPING_PERSON_DETAIL" class="btn btn-default btn-sm btn-tag">#收件資訊</button>
+	<button type="button" id="SHIPPING_FEE_DETAIL" class="btn btn-default btn-sm btn-tag">#運費明細</button>
+	<button type="button" id="SHIPPING_AMOUNT" class="btn btn-default btn-sm btn-tag">#運費</button>
+	<button type="button" id="AMOUNT_TOTAL" class="btn btn-default btn-sm btn-tag">#總金額（不含運）</button>
+	<button type="button" id="GRAND_TOTAL" class="btn btn-default btn-sm btn-tag">#總金額含運</button>
+	<button type="button" id="TOTAL_PAID" class="btn btn-default btn-sm btn-tag">#已付金額</button>
+	<button type="button" id="REFUND_AMOUNT" class="btn btn-default btn-sm btn-tag">#退款金額</button>
+	<button type="button" id="DATE_PAID" class="btn btn-default btn-sm btn-tag">#已付款日期</button>
+	<button type="button" id="DATE_SHIPPED" class="btn btn-default btn-sm btn-tag">#出貨日期</button>
+	<button type="button" id="DATE_EXPECTED_SHIPPING" class="btn btn-default btn-sm btn-tag">#期望配送日期</button>
+	<button type="button" id="DATE_PAYMENT_DUE" class="btn btn-default btn-sm btn-tag">#繳款截止日期</button>
+	<button type="button" id="DATE_REFUND" class="btn btn-default btn-sm btn-tag">#退款日期</button>
+	<button type="button" id="PRINT_NOTE" class="btn btn-default btn-sm btn-tag">#列印備註</button>
+	<button type="button" id="NOTE" class="btn btn-default btn-sm btn-tag">#訂單備註</button>
+	<button type="button" id="INVOICE_NUMBER" class="btn btn-default btn-sm btn-tag">#發票號碼</button>
+	<button type="button" id="PICKUP_QRCODE" class="btn btn-default btn-sm btn-tag">#自取QRCODE</button>
+	</div>
+</div><div id="tag-resetPassword">
+	<h5>標籤</h5>
+	<button type="button" id="FIRSTNAME" class="btn btn-default btn-sm btn-tag">#顧客姓名</button>
+	<button type="button" id="USERNAME" class="btn btn-default btn-sm btn-tag">#會員ID</button>
+	<button type="button" id="TELEPHONE" class="btn btn-default btn-sm btn-tag">#電話</button>
+	<button type="button" id="EMAIL" class="btn btn-default btn-sm btn-tag">#EMAIL</button>
+	<button type="button" id="RESET_PASSWORD_LINK" class="btn btn-default btn-sm btn-tag">#重設密碼連結(有效1日)</button>
+	<button type="button" id="RESET_PASSWORD_LINK_3DAYS" class="btn btn-default btn-sm btn-tag">#重設密碼連結(有效3日)</button>
+	<button type="button" id="STORE_NAME" class="btn btn-default btn-sm btn-tag">#商店名稱</button>
+	<button type="button" id="CUSTOMER_LP" class="btn btn-default btn-sm btn-tag">#會員方案</button>
+	<button type="button" id="LP_UPGRADE_POINT" class="btn btn-default btn-sm btn-tag">#升等點數</button>
+</div></div>
+</div>
+</div>	
+
+<script type="text/javascript">
+	$('.sp_selector').on('click', function() {
+		if ($(this).attr('data') == 'subscription') {
+			subscriptionSettings.show();
+		} else if ($(this).attr('data') == 'invoiceEcpay') {
+			groupBuyPreferenceSettings(groupBuyPreferenceTable, groupBuyId, -1, 'INVOICE_SETTINGS_ECPAY')
+			.show();
+		} else {
+			$('input[type=search]').val($(this).attr('data'));
+			$('input[type=search]').keyup();
+		}
+	});
+
+	var subscriptionSettings = {
+		show:function() {
+			var _this = this;
+			$.ajax( {
+				url: '{{baseUrl}}/ajax/GroupBuyPreference/subscriptionSettings?groupBuyId={{groupBuyId}}',
+				dataType: 'json',
+				success: function ( json ) {
+					console.log('j=:%o', json);
+					var data = json.data;
+					var options = json.options;
+					var cEditor = _this.editor();
+					cEditor
+					.title('訂閱設定')
+					.buttons({label:'更新', className:'btn-primary', action: function () {this.submit();}})
+					.edit( data.groupBuyPreferenceId, false );
+
+					DataTableHelper.setFieldOptions(cEditor, 'periodType', options);
+					DataTableHelper.setFieldOptions(cEditor, 'frequencies', options);
+					DataTableHelper.setFieldOptions(cEditor, 'weekdays', options);
+
+					$.each(data, function ( name, value ) {
+						if (cEditor.s.fields[name] != null) {
+							cEditor.set(name, value);
+						}
+					} );
+
+
+					cEditor
+					.open();
+				}
+			} );
+		},
+		editor:function() { 
+			if (this._editor != null) return this._editor;
+			this._editor = new $.fn.dataTable.Editor( {
+				ajax: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyPreference/subscriptionSettings?groupBuyId={{groupBuyId}}'
+				},
+				idSrc: 'groupBuyPreferenceId',
+				fields: [
+					DataTableConfig.field_select('訂閱-週期種類','periodType'),
+					DataTableConfig.field_checkbox('訂閱-執行頻率(多久執行一次) ','frequencies'),
+					DataTableConfig.field_input('訂閱-執行次數','execTimes',0),
+					DataTableConfig.field_checkbox('訂閱-可配達日','weekdays'),
+					DataTableConfig.field_input('訂閱-第一次配達日間隔天數','daysToFirstDeliver',0),
+				],
+				formOptions:DataTableConfig.formOptions,
+				i18n:DataTableConfig.i18n,
+			} );
+
+			return this._editor;
+		}
+	};
+
+	var groupBuyPreferenceSettings = function(table, groupBuyId, groupBuyPreferenceId, name) {
+		var i = {
+			table: table,
+			groupBuyId: groupBuyId,
+			id: groupBuyPreferenceId,
+			name: name,
+			fs: {
+				'INVOICE_SETTINGS_ECPAY':{
+					name:'invoiceSettingsEcpay',
+					title:'電子發票-綠界',
+					message:'只有表單需要使用不同綠界發票設定時才需獨立設定，一般綠界發票設定請至系統設定內設置',
+					fields:[
+						DataTableConfig.field_input('歐付寶/綠界-發票-商店代號 (若與ALL IN ONE 相同可不填)','merchantId'),
+						DataTableConfig.field_input('歐付寶/綠界-發票-介接 HashKey (若與ALL IN ONE 相同可不填)','hashKey'),
+						DataTableConfig.field_input('歐付寶/綠界-發票-介接 HashIV (若與ALL IN ONE 相同可不填)','hashIV'),
+					]
+				},
+				'FUNBIZ':{
+					name:'funBIZSettings',
+					title:'豐收款(永豐)',
+					fields:[
+						DataTableConfig.field_input('豐收款(永豐)-商店編號','merchantId'),
+						DataTableConfig.field_input('豐收款(永豐)-雜湊值','hashKey'),
+					]
+				},
+				'BANK_SETTINGS':{
+					name:'bankSettings',
+					title:'銀行帳戶',
+					fields:[
+						DataTableConfig.field_input('匯款轉帳-銀行名稱','name'),
+						DataTableConfig.field_input('匯款轉帳-銀行代號','code'),
+						DataTableConfig.field_input('匯款轉帳-銀行戶名','title'),
+						DataTableConfig.field_input('匯款轉帳-銀行帳號','account'),
+					]
+				},
+				'PRICE_DISABLE_SETTINGS':{
+					name:'priceDisableSettings',
+					title:'前台-登入後可見價格',
+					fields:[
+						DataTableConfig.field_checkbox_bool('啟用登入後可見價格','priceDisable'),
+						DataTableConfig.field_input('價格提示文字','priceDisableLabel'),
+					]
+				},
+				'ITEM_SHORT_DESCR_SETTINGS':{
+					name:'itemShortDescrSettings',
+					title:'前台-商品頁-商品-全站短敘述',
+					fields:[
+						DataTableConfig.field_input('商品-全站短敘述1-標題','shortDescr1.title'),
+						DataTableConfig.field_ckeditor5_s('商品-全站短敘述1-內容','shortDescr1.body'),
+						DataTableConfig.field_input('商品-全站短敘述2-標題','shortDescr2.title'),
+						DataTableConfig.field_ckeditor5_s('商品-全站短敘述2-內容','shortDescr2.body'),
+					]
+				},
+				'CHECKOUT_DESCR_SETTINGS':{
+					name:'checkoutDescrSettings',
+					title:'前台-結帳頁-結賬提醒項目敘述',
+					fields:[
+						DataTableConfig.field_ckeditor5_s('購物車內容說明','items'),
+						DataTableConfig.field_ckeditor5_s('優惠碼說明','coupon'),
+						DataTableConfig.field_ckeditor5_s('訂購人資訊說明','billing'),
+						DataTableConfig.field_ckeditor5_s('付款資訊說明','payment'),
+						DataTableConfig.field_ckeditor5_s('收件資訊說明','shipping'),
+						DataTableConfig.field_ckeditor5_s('備註說明','note'),
+					]
+				},
+				'LOGIN_MESSAGE_SETTINGS':{
+					name:'loginMessageSettings',
+					title:'前台-登入-敘述設定',
+					fields:[
+						DataTableConfig.field_ckeditor5_s('前台-登入-敘述說明','hintText'),
+						DataTableConfig.field_input('錯誤提示-帳號不存在','accountNotFoundErrorMessage'),
+						DataTableConfig.field_input('錯誤提示-密碼錯誤','incorrectAccountOrPasswordErrorMessage'),
+						DataTableConfig.field_input('標題-登入-帳號','accountPlaceholder'),
+						DataTableConfig.field_input('標題-登入-密碼','passwordPlaceholder'),
+						DataTableConfig.field_ckeditor5_s('前台-登入-忘記密碼敘述說明','forgetPasswordHintText'),
+						DataTableConfig.field_input('標題-忘記密碼-電子信箱','forgetPasswordEmailPlaceholder'),
+					]
+				},
+				'THEME_SETTINGS': {
+					name:'themeSettings',
+					title:'佈景主題設定',
+					fields:[
+						DataTableConfig.field_input('文字顏色 1', 'textColor1'),
+						DataTableConfig.field_input('文字顏色 2', 'textColor2'),
+						DataTableConfig.field_input('文字顏色 3', 'textColor3'),
+						DataTableConfig.field_input('文字顏色 4', 'textColor4'),
+						DataTableConfig.field_input('背景顏色 1', 'bgColor1'),
+						DataTableConfig.field_input('背景顏色 2', 'bgColor2'),
+						DataTableConfig.field_input('背景顏色 3', 'bgColor3'),
+						DataTableConfig.field_input('背景顏色 4', 'bgColor4'),
+					]
+				},
+				'PROFILE_MESSAGE_SETTINGS':{
+					name:'profileMessageSettings',
+					title:'前台-個人資料-敘述設定',
+					fields:[
+						DataTableConfig.field_ckeditor5_s('前台-個人資料-敘述說明','hintText'),
+					]
+				},
+				'BILLING_ADDRESS_SETTINGS':{
+					name:'billingAddressSettings',
+					title:'前台-結帳頁-訂購人設定',
+					fields:[
+						{
+							type:  "select",
+							label: "國家/區域模式",
+							name:  "countryMode",
+							options: [
+								{ label: "選擇", value: '' },
+								{ label: "本國", value: 'NATIVE' },
+								{ label: "任何國家", value: 'UNSPECIFIED' },
+								{ label: "限制國家", value: 'SPECIFIED' }
+							]
+						},
+						DataTableConfig.field_select2('僅限國家','countryCodes','','選擇', GBF.baseUrl + '/ajax/Lookup/country', true),
+					]
+				},
+				'DATA_SYSTEMS_SETTINGS':{
+					name:'dataSystemsSettings',
+					title:'鼎新設定',
+					fields:[
+						DataTableConfig.field_input('URL','url'),
+						DataTableConfig.field_input('API KEY','apiKey'),
+						DataTableConfig.field_input('PlatformId','platformId'),
+						DataTableConfig.field_input('SiteNo','siteNo'),
+						DataTableConfig.field_checkbox_bool('排除回拋','excluded'),
+					]
+				},
+				'SHOPPING_CART_RULE_SETTINGS':{
+					name:'shoppingCartRuleSettings',
+					title:'下單限制設定',
+					fields:[
+						DataTableConfig.field_input('會員每日下單數量上限','dailyOrderLimits'),
+					]
+				},
+				'COMMISSION_SETTINGS':{
+					name:'commissionSettings',
+					title:'分潤設定',
+					fields:[
+						{
+							type:  "select",
+							label: "分潤方式",
+							name:  "methodType",
+							options: [
+							//	{ label: "固定", value: 'FIXED' },
+								{ label: "級距分潤", value: 'FLAT' },
+								{ label: "階梯分潤", value: 'TIERED' },
+							]
+						},
+						DataTableConfig.field_input('預設分潤(%)','rate','','20'),
+						DataTableConfig.field_textarea('分級分潤(%)','tieredRatesString','格式:分級金額,分潤%\n範例:\n1000000,25\n2000000,30',6,'','<p>級距分潤：<br>以固定的比例計算銷售金額，但隨著銷售達到特定門檻，分潤比例會逐步提高。例如，初始為20%，當銷售金額超過10萬時提高至25%，超過20萬時再提高至30%。</p><p>階梯分潤：<br>以固定的比例計算銷售金額，但超過每個階段門檻後，僅對超過該門檻的部分應用新的分潤比例。例如，初始為20%，當銷售金額超過10萬時，超過的部分使用25%比例，超過20萬時，再使用30%比例。</p>'),
+					]
+				},
+			},
+			buildOpts: function(name) {
+				this.opts = this.fs[name];
+			},
+			init: function() {
+				this.buildOpts(name);
+				return this;
+			},
+			open: function() {
+				this.editor().open();
+				return this;
+			},
+			show: function() {
+				this.init();
+				var cEditor = this.editor();
+				cEditor
+				.open();
+			},
+			loadAjax: function() {
+				var _this = this;
+				$.ajax( {
+					url: '{{baseUrl}}/ajax/GroupBuyPreference/'+_this.opts.name+'?groupBuyId='+groupBuyId,
+					dataType: 'json',
+					success: function ( json ) {
+						var data = json.data;
+						var options = json.options;
+						var _id = data.groupBuyPreferenceId ? data.groupBuyPreferenceId : _this.id;
+						var cEditor = _this.editor();
+						cEditor
+						.title(_this.opts.title)
+						.message(_this.opts.message)
+						.buttons([
+							{label:'更新', className:'btn-primary', tabIndex:0, action: function () {this.submit();}},
+							{label:'關閉', className:'btn-default', tabIndex:1, action: function () {this.close();}}
+						])
+						.edit( _id, false );
+
+						$.each(data, function ( name, value ) {
+							if (typeof value == 'object' && !Array.isArray(value)) {
+								Object.keys(value).forEach(function(o,i){
+									var fname = name+'.'+o;
+									if (cEditor.s.fields[fname] != null) {
+										cEditor.set(fname, value[o]);
+									}
+								});
+							} else {
+								if (cEditor.s.fields[name] != null) {
+									cEditor.set(name, value);
+								}
+							}
+						} );
+
+					}
+				} );
+			},
+			editor:function() { 
+				if (this._editor != null) return this._editor;
+				var _this = this;
+				this._editor = new $.fn.dataTable.Editor( {
+					ajax: {
+						type: 'POST',
+						url:  '{{baseUrl}}/ajax/GroupBuyPreference/'+_this.opts.name+'?groupBuyId=' + _this.groupBuyId
+					},
+					idSrc: 'groupBuyPreferenceId',
+					fields: _this.opts.fields,
+					formOptions:DataTableConfig.formOptions,
+					i18n:DataTableConfig.i18n,
+				} ).on( 'submitComplete', function () {
+					_this.table.ajax.reload( null, false );
+				} ).on( 'open', function () {
+					_this.loadAjax();
+				} )
+
+				return this._editor;
+			}
+		};
+		return i;
+	}
+
+	var groupBuyTagGroupBuyManager = {
+		setGroupBuyId:function(groupBuyId) {
+			this.groupBuyId = groupBuyId;
+			return this;
+		},
+		init:function() {
+			var $this = this;
+			$.ajax({
+				type: 'GET',
+				url: GBF.baseUrl+'/ajax/GroupBuyTag/get',
+				data: {
+					groupBuyId:$this.groupBuyId,
+				},
+				async: true,
+			})
+			.done(function(data) {
+				$this.json = data.data;
+				$this.showResultForGroupBuyTag();
+			})
+			.fail(function(data) {
+				$this.json = null;
+				var json = data.responseJSON;
+				$this.fetchGroupBuyTagGroupBuy();
+			})
+			.always(function(x) {
+			})
+		},
+		fetchGroupBuyTagGroupBuy:function() {
+			var $this = this;
+			$.ajax({
+				type: 'GET',
+				url: GBF.baseUrl+'/ajax/GroupBuyTagGroupBuy/get',
+				data: {
+					groupBuyId:$this.groupBuyId,
+				},
+				async: true,
+			})
+			.done(function(data) {
+				$this.json = data.data;
+				$('.container-gbp-list').hide();
+				$('.container-gbp-list-hide-note').show();
+			})
+			.fail(function(data) {
+				$this.json = null;
+				var json = data.responseJSON;
+				$('.container-gbp-list').show();
+				$('.container-gbp-list-hide-note').hide();
+			})
+			.always(function(x) {
+				//$this.showEditor()
+				$this.showResult();
+			})
+		},
+		showResultForGroupBuyTag:function() {
+			var $b = $('#lbGroupBuyTag');
+			if (this.json) {
+				$b.text(this.json.tag).removeClass('badge-default').addClass('badge-primary');
+				$('button[data-action=tag]').hide();
+				$('button[data-action=untag]').hide();
+				$('button[data-action=tagWizard]').hide();
+				$('button[data-action=deleteTag]').show().data('gbtId', this.json.groupBuyTagId);
+			} else {
+				$b.text('無標籤').removeClass('badge-primary').addClass('badge-default');
+				$('button[data-action=untag]').hide();
+				$('button[data-action=deleteTag]').hide().removeData('gbtId');
+				$('button[data-action=tagWizard]').show();
+			}
+		},
+		showResult:function() {
+			var $b = $('#lbGroupBuyTag');
+			if (this.json) {
+				$b.text(this.json.tag).removeClass('badge-default').addClass('badge-warning');
+				var $t = $('#groupBuyTagGroupBuyEditorId');
+				if (!$t.length) {
+					$t = $('<div id="groupBuyTagGroupBuyEditorId">');
+					$t.appendTo('body');
+				}
+				$t.attr('data-editor-id', this.json.groupBuyTagGroupBuyId);
+				$('button[data-action=untag]').show();
+				$('button[data-action=tagWizard]').hide();
+			} else {
+				$b.text('無標籤').removeClass('badge-warning').removeClass('badge-primary').addClass('badge-default');
+				$('button[data-action=untag]').hide();
+				$('button[data-action=tagWizard]').show();
+			}
+			$('button[data-action=deleteTag]').hide().removeData('gbtId');
+		},
+		tag:function() {
+			if (this.editor == null) {
+				this.editor = this.createEditor();
+			}
+			var rpEditor = this.editor;
+			rpEditor
+			.title( '設定標籤' )
+			.buttons( { text: '確認', className: 'btn-primary', action: function ( e, dt, node, config ){rpEditor.submit()}} )
+			.message( '設定標籤後，若團購無設定該設定，會優先使用標籤團購內的設定' )
+			.create( );
+		},
+		unTag:function() {
+			if (this.editor == null) {
+				this.editor = this.createEditor();
+			}
+			var rpEditor = this.editor;
+			rpEditor
+			.title( '解除標籤' )
+			.buttons( { text: '確認', className: 'btn-danger', action: function ( e, dt, node, config ){rpEditor.submit()}} )
+			.message( '確定要解除標籤?' )
+			.remove( this.json.groupBuyTagGroupBuyId );
+		},
+		createEditor:function() {
+			var $this = this; 
+			return new $.fn.dataTable.Editor( {
+				ajax: {
+					create: {
+						type: 'POST',
+						url: GBF.baseUrl+ '/ajax/GroupBuyTagGroupBuy/save?',
+					},
+					remove: {
+						type: 'POST',
+						url:GBF.baseUrl + '/ajax/GroupBuyTagGroupBuy/delete?groupBuyTagGroupBuyId=_id_',
+					},
+				},
+				idSrc: 'groupBuyTagGroupBuyId',
+				fields: [
+					DataTableConfig.field_hidden('groupBuyId', $this.groupBuyId),
+					DataTableConfig.field_select2('標籤','groupBuyTagId','','選擇', GBF.baseUrl + '/ajax/Lookup/groupBuyTag?category=PREFERENCE'),
+				],
+				formOptions:DataTableConfig.formOptions,
+				i18n:DataTableConfig.i18n,
+			} )
+			.on( 'postCreate', function (e, json, data, id) {
+				$this.json = json.data[0];
+				$this.showResult();
+			} )
+			.on( 'postRemove', function () {
+				$this.json = null;
+				$this.showResult();
+			} )
+		},
+	}
+</script>
+</div>

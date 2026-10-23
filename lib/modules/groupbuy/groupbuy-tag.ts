@@ -57,17 +57,22 @@ const tagWrite: WriteSpec = {
       if (!tag) errors.push({ name: "tag", status: "需要填寫內容" });
       else if (tag.length > 100) errors.push({ name: "tag", status: "最多 100 個字" });
     }
-    if (action === "create" || "category" in values) {
+    // 標籤用途空白時視為「團購進階設定」（進階設定頁的標籤精靈不送 category；DB 預設亦為 PREFERENCE）
+    if ("category" in values && String(values.category ?? "") !== "") {
       const allowed = (await enumOptions(CATEGORY_ENUM)).map((o) => String(o.value));
-      if (!allowed.includes(String(values.category ?? ""))) errors.push({ name: "category", status: "請選擇標籤用途" });
+      if (!allowed.includes(String(values.category))) errors.push({ name: "category", status: "請選擇標籤用途" });
     }
     if (values.groupBuyId !== undefined && values.groupBuyId !== null && values.groupBuyId !== "") {
       if (!(await groupBuyBelongs(ctx, values.groupBuyId))) errors.push({ name: "groupBuyId", status: "找不到此團購" });
     }
     return errors;
   },
-  beforeWrite(dbRow) {
+  beforeWrite(dbRow, values, action) {
     if (typeof dbRow.tag === "string") dbRow.tag = dbRow.tag.trim();
+    if (!dbRow.category) {
+      if (action === "create") dbRow.category = "PREFERENCE";
+      else delete dbRow.category;
+    }
     return dbRow;
   },
 };
