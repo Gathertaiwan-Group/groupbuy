@@ -9,13 +9,14 @@
 //   POST /ajax/SalesOrderReservation/save                    Editor create：新增保留單；mode=bind 為「轉保留」（既有訂單編號 uuid）
 //   POST /ajax/SalesOrderReservation/update?relationId=      Editor edit：業務名稱/保留對象/保留期限/員工備註
 //   POST /ajax/SalesOrderReservation/action?relationId=      Editor remove＋action=unbind（轉銷售）｜cancel（釋放保留）
-//   ANY  /ajax/SalesOrderReservation/unbind?relationId=1,2   轉銷售（原站已註解的 actionButton 端點，保留相容）
+//   POST /ajax/SalesOrderReservation/unbind?relationId=1,2   轉銷售（原站已註解的 actionButton 端點〔ajaxPost〕，保留相容）
 //   POST /backend/SalesOrderReservation/batchAction          匯出 EXPORT_CSV／EXPORT_ERP～ERP6（jquery.fileDownload）
 //
 // 推導（原站保留單 0 筆，無法觀察寫入結果；依列舉、頁面文字與 SPEC 第 7 章推導）：
 //   新增   ：建 sales_orders（state HOLDED、status RESERVATION、date_payment_due＝保留期限、staff_note）
 //            ＋ sales_order_relations（relation RESERVATION、sales_name、target_name、date_payment_due、staff_note）。
-//   轉保留 ：既有訂單（NEW/PROCESSING、未出貨、非保留中）→ HOLDED/RESERVATION，新增 RESERVATION 關聯（mode=bind）。
+//   轉保留 ：既有訂單（NEW/PROCESSING、未出貨、非保留中）→ HOLDED/RESERVATION，新增 RESERVATION 關聯（mode=bind）；
+//            曾為保留單（已轉銷售）的訂單沿用原關聯、重設為進行中（建立時間＝本次轉保留）。
 //   轉銷售 ：訂單 → PROCESSING/ORDER_EMAIL_SENT（＝一般訂單；同 resetSalesOrder），關聯 is_done=true。
 //   釋放保留：訂單 → CANCELED/RESERVATION_CANCELED（date_canceled），關聯 is_done=true，訂單商品可售庫存補回。
 //   狀態異動一律走 adminUpdateOrders（觸發器寫歷程 actor=ADMIN）。
@@ -143,6 +144,7 @@ function resQuerySpec(session: AdminSession, f: ResFilters, uidOrderIds: number[
     likeColumns: ["uuid", "sales_name", "target_name"],
     where: (q) => applyResFilters(q, f, uidOrderIds, salesOrderIds),
     defaultOrder: [{ column: "created_at", ascending: false }],
+    tieBreaker: "relation_id",
   };
 }
 
@@ -204,6 +206,7 @@ async function listReservationItems(ctx: RequestContext): Promise<Response> {
     likeColumns: ["title", "uid", "sales_name"],
     where: (q) => (uid ? q.ilike("uid", `%${uid}%`) : q),
     defaultOrder: [{ column: "sales_name", ascending: false }],
+    tieBreaker: "order_item_id",
   });
   const rows = result.rows.map((r) => {
     const api = rowToApi(salesOrderReservationItem, r);
@@ -319,16 +322,38 @@ async function bindReservation(session: AdminSession, v: Row): Promise<number> {
 
   const patch: Row = { state: "HOLDED", status: "RESERVATION" };
   if (due) patch.date_payment_due = due;
+  // 曾經是保留單（已轉銷售後又轉保留）：沿用原關聯並重設為進行中，一張訂單在保留單列表只佔一列
+  //（否則舊列會帶著訂單目前的 RESERVATION 狀態顯示「轉銷售／釋放保留」按鈕）
+  const { data: prev, error: prevErr } = await db()
+    .from("sales_order_relations")
+    .select("id")
+    .eq("tenant_id", session.tenantId)
+    .eq("sales_order_id", orderId)
+    .eq("relation", "RESERVATION")
+    .order("id", { ascending: false })
+    .limit(1);
+  if (prevErr) throw new Error(`[reservation] 讀取保留單失敗：${prevErr.message}`);
+  const relRow: Row = {
+    sales_order_id: orderId,
+    sales_name: salesName,
+    target_name: targetName,
+    date_payment_due: due ?? order.date_payment_due ?? null,
+    staff_note: staffNote,
+    mode: "bind",
+  };
   await adminUpdateOrders(session, [orderId], patch, "轉保留（既有訂單轉成保留單）");
   try {
-    return await insertRelation(session, {
-      sales_order_id: orderId,
-      sales_name: salesName,
-      target_name: targetName,
-      date_payment_due: due ?? order.date_payment_due ?? null,
-      staff_note: staffNote,
-      mode: "bind",
-    });
+    const prevId = Number((prev ?? [])[0]?.id ?? 0);
+    if (prevId) {
+      const { error: upErr } = await db()
+        .from("sales_order_relations")
+        .update({ ...relRow, is_done: false, created_at: new Date().toISOString() })
+        .eq("tenant_id", session.tenantId)
+        .eq("id", prevId);
+      if (upErr) throw new Error(`[reservation] 更新保留單關聯失敗：${upErr.message}`);
+      return prevId;
+    }
+    return await insertRelation(session, relRow);
   } catch (e) {
     await adminUpdateOrders(session, [orderId], { state: order.state, status: order.status }, "轉保留失敗，還原狀態");
     throw e;
@@ -475,7 +500,7 @@ async function reservationAction(ctx: RequestContext): Promise<Response> {
   return editorResponse([]);
 }
 
-/** ANY /ajax/SalesOrderReservation/unbind?relationId=1,2（原站 actionButton「轉銷售」，頁面上已註解） */
+/** POST /ajax/SalesOrderReservation/unbind?relationId=1,2（原站 actionButton「轉銷售」，頁面上已註解；actionButton 以 POST 送出） */
 async function unbindAction(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ids = parseIds([...(await ctx.params_all("relationId")), ...(await ctx.params_all("relationIds"))]);
@@ -625,7 +650,7 @@ export const reservationRoutes: RouteDef[] = [
   post("/ajax/SalesOrderReservation/save", saveReservation),
   post("/ajax/SalesOrderReservation/update", updateReservation),
   post("/ajax/SalesOrderReservation/action", reservationAction),
-  any("/ajax/SalesOrderReservation/unbind", unbindAction),
+  post("/ajax/SalesOrderReservation/unbind", unbindAction),
   post("/backend/SalesOrderReservation/batchAction", batchAction),
   get("/backend/SalesOrderReservation/batchAction", async () => redirect(LIST_PAGE, 303)),
 ];

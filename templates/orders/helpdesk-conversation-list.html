@@ -81,6 +81,7 @@ $(document).ready(function() {
 						if (data.length != 14) {
 							data = row.title
 						}
+						data = $('<div>').text(data == null ? '' : data).html(); // 標題來自前台公開表單：輸出前跳脫（防 XSS）
 						return data + html;
 					}
 				},

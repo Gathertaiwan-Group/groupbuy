@@ -1,7 +1,8 @@
 <!--#head-->
 {{!-- 推導：原站列表「檢視」→ /backend/helpdesk/Conversation/toUrl?uuid=… 會在新分頁開啟外部客服系統的對話畫面（未擷取）。
       本頁依原站後台卡片風格推導：對話資訊、訊息串（顧客靠左、商家靠右）、回覆框與「已回覆／已結案」按鈕；
-      開啟時顧客訊息標為已讀；回覆寫 conversation_messages（ADMIN）、狀態→已回覆、寄信通知顧客【未串接】。 --}}
+      開啟後以 POST /ajax/helpdesk/Conversation/read 將顧客訊息標為已讀（GET 頁面本身不寫資料）；
+      回覆寫 conversation_messages（ADMIN）、狀態→已回覆、寄信通知顧客【未串接】。 --}}
 <style type="text/css" class="init">
 .conversation-thread{max-height:60vh;overflow-y:auto;background-color:#fafafa;}
 .conversation-message{display:flex;margin-bottom:1rem;}
@@ -26,6 +27,17 @@ $(document).ready(function() {
 		$('#replyNotice').html('<div class="alert alert-' + css + ' py-2 mb-2">' + $('<div>').text(msg).html() + '</div>');
 	};
 	scrollBottom();
+
+	// 開啟對話＝讀取顧客訊息：以 POST 標為已讀，有更新才重新載入訊息串
+	$.ajax({
+		type: 'POST',
+		url: GBF.baseUrl + '/ajax/helpdesk/Conversation/read',
+		data: { conversationId: conversationId },
+		dataType: 'json'
+	})
+	.done(function(json) {
+		if (json && json.updated > 0) $('#conversationThread').load(threadUrl, scrollBottom);
+	});
 
 	$('#replyForm').on('submit', function(e) {
 		e.preventDefault();

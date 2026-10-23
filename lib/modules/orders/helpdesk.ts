@@ -7,12 +7,13 @@
 //   GET  /backend/helpdesk/Conversation/list                  頁面
 //   POST /ajax/helpdesk/Conversation/list                      列表（serverSide；status＝WAITING_FOR_REPLY/REPLIED/CLOSED；表尾搜尋訂單編號）
 //   POST /ajax/helpdesk/Conversation/update?conversationId=    Editor edit（對話狀態）
-//   POST /ajax/helpdesk/Conversation/action?conversationId=    Editor remove＋batchAction=replied（已回覆）｜closed（已結案）
+//   POST /ajax/helpdesk/Conversation/action?conversationId=    Editor remove（只收 action=remove）＋batchAction=replied（已回覆）｜closed（已結案）
 //   GET  /ajax/helpdesk/Conversation/status                    { data: { waitingForReply } }（頁首「尚未回覆數量」）
 //   GET  /backend/helpdesk/Conversation/toUrl?uuid=            列表「檢視」→ 302 對話明細
 //   ── 以下為推導（原站「檢視」導向外部客服畫面，未擷取）──
-//   GET  /backend/helpdesk/Conversation/show?conversationId=   對話明細頁：訂單/顧客資訊、訊息串、回覆框（開啟時顧客訊息標為已讀）
-//   GET  /backend/helpdesk/Conversation/thread?conversationId= 訊息串片段（回覆後重新載入）
+//   GET  /backend/helpdesk/Conversation/show?conversationId=   對話明細頁：訂單/顧客資訊、訊息串、回覆框（GET 不寫資料）
+//   GET  /backend/helpdesk/Conversation/thread?conversationId= 訊息串片段（回覆／標為已讀後重新載入）
+//   POST /ajax/helpdesk/Conversation/read                      明細頁開啟後以 POST 將顧客訊息標為已讀（{ updated }）
 //   POST /ajax/helpdesk/Conversation/reply                     回覆：寫 conversation_messages（ADMIN）、狀態→REPLIED、
 //                                                              寄信通知顧客【未串接】（email_messages 紀錄）
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
@@ -125,6 +126,7 @@ async function listConversations(ctx: RequestContext): Promise<Response> {
       return q;
     },
     defaultOrder: [{ column: "updated_at", ascending: false }],
+    tieBreaker: "id",
   });
   return dtResponse(
     dt,
@@ -174,6 +176,8 @@ async function updateConversation(ctx: RequestContext): Promise<Response> {
 async function conversationAction(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const body = await ctx.body();
+  // Editor 端點只收自己的 action（列表 editor.remove／明細頁按鈕皆送 action=remove）
+  if (str(body.flat.get("action")?.[0]) !== "remove") throw badRequest("不支援的動作");
   const batch = str(body.flat.get("batchAction")?.[0] ?? ctx.query.get("batchAction"));
   const target: ConvStatus | null = batch === "replied" ? "REPLIED" : batch === "closed" ? "CLOSED" : batch === "waiting" ? "WAITING_FOR_REPLY" : null;
   if (!target) throw badRequest("不支援的動作");
@@ -245,7 +249,11 @@ async function loadThread(session: AdminSession, conv: ConvRow): Promise<Row[]> 
   return msgs.map((m) => {
     const isAdmin = m.sender_type === "ADMIN";
     const isSystem = m.sender_type === "SYSTEM";
-    const attachments = Array.isArray(m.attachments) ? (m.attachments as unknown[]).map((x) => String(typeof x === "object" && x ? (x as Row).url ?? (x as Row).name ?? "" : x)).filter(Boolean) : [];
+    const attachments = Array.isArray(m.attachments)
+      ? (m.attachments as unknown[])
+          .map((x) => String(typeof x === "object" && x ? (x as Row).url ?? (x as Row).name ?? "" : x))
+          .filter((u) => /^(https?:\/\/|\/(?!\/))/i.test(u)) // 只輸出站內或 http(s) 連結（擋 javascript: 等）
+      : [];
     return {
       conversationMessageId: m.id,
       senderType: m.sender_type,
@@ -260,23 +268,25 @@ async function loadThread(session: AdminSession, conv: ConvRow): Promise<Row[]> 
   });
 }
 
-/** 開啟對話＝讀取顧客訊息：標為已讀 */
-async function markCustomerMessagesRead(session: AdminSession, conversationId: number): Promise<void> {
-  const { error } = await db()
+/** 開啟對話＝讀取顧客訊息：標為已讀，回傳更新筆數 */
+async function markCustomerMessagesRead(session: AdminSession, conversationId: number): Promise<number> {
+  const { data, error } = await db()
     .from("conversation_messages")
     .update({ is_read: true })
     .eq("tenant_id", session.tenantId)
     .eq("conversation_id", conversationId)
     .eq("sender_type", "CUSTOMER")
-    .eq("is_read", false);
+    .eq("is_read", false)
+    .select("id");
   if (error) throw new Error(`[helpdesk] 更新已讀失敗：${error.message}`);
+  return (data ?? []).length;
 }
 
 const STATUS_BADGE: Record<string, string> = { WAITING_FOR_REPLY: "badge-danger", REPLIED: "badge-success", CLOSED: "badge-secondary" };
 
+/** 明細頁／訊息串片段的資料（GET：只讀，不寫 DB） */
 async function showData(session: AdminSession, id: number | null): Promise<Record<string, unknown>> {
   const conv = await loadConversation(session, id);
-  await markCustomerMessagesRead(session, conv.id);
   let orderUuid = "";
   let groupBuyTitle = "";
   let shortUrl = "";
@@ -319,6 +329,14 @@ async function toUrl(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const conv = await loadConversation(session, idParam(ctx.query.get("uuid") ?? ctx.query.get("conversationId")));
   return redirect(`${SHOW_PAGE}?conversationId=${conv.id}`, 302);
+}
+
+/** POST /ajax/helpdesk/Conversation/read（推導：明細頁開啟後呼叫，將顧客訊息標為已讀） */
+async function readConversation(ctx: RequestContext): Promise<Response> {
+  const session = requireSession(ctx);
+  const conv = await loadConversation(session, idParam(await ctx.param("conversationId")));
+  const updated = await markCustomerMessagesRead(session, conv.id);
+  return actionOk("已讀", { updated });
 }
 
 /** POST /ajax/helpdesk/Conversation/reply（推導） */
@@ -391,5 +409,6 @@ export const helpdeskRoutes: RouteDef[] = [
     method: "GET",
     data: (ctx) => showData(ctx.session, idParam(ctx.query.get("conversationId"))),
   }),
+  post("/ajax/helpdesk/Conversation/read", readConversation),
   post("/ajax/helpdesk/Conversation/reply", replyConversation),
 ];
