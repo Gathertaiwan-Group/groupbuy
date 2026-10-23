@@ -352,7 +352,7 @@ export const routes = [
 
 | 原站（商業） | 本系統 | 你要注意 |
 |---|---|---|
-| MDB PRO 4.8.8 | cdnjs **MDB Free 4.8.8** + `public/compat/mdb-pro-compat.css/js`（側欄 side-nav/slim、collapsible、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr、materialSelect 樁）＋`backend-compat.css`（dashboard 全站改寫） | 前台頁要用時自己引用這兩個 compat 檔（不要引 backend-compat.css）；`mdb-autocomplete`、`chip`、`#mdb-preloader`、lightbox、stepper 等**前台** PRO 元件尚未補（storefront 模組自行補在 `public/modules/storefront/`，或回報 core） |
+| MDB PRO 4.8.8 | cdnjs **MDB Free 4.8.8** + `public/compat/mdb-pro-compat.css/js`（共用：側欄 side-nav/slim、collapsible、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr、materialSelect 樁、smooth-scroll、fixed-action-btn、chip 關閉、#mdb-preloader）＋後台 `backend-compat.css`（dashboard 全站改寫）＋前台 `mdb-pro-frontend.css`（前台側欄 `.side-nav.fixed`、fixed-action-btn、chip、#mdb-preloader、md-accordion） | **前台頁**引用順序：`https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css` → `/compat/mdb-pro-compat.css` → `/compat/mdb-pro-frontend.css`（不要引 backend-compat.css）；JS：`.../mdbootstrap/4.8.8/js/mdb.min.js` → `/compat/mdb-pro-compat.js`。尚未補：lightbox（建議 cdnjs PhotoSwipe，原站新路徑已用 PhotoSwipe 5）、stepper（原站頁面無標記）、`mdb-autocomplete`（原站傳入函式導致實際無作用，可省略） |
 | Font Awesome Pro 6 | cdnjs **FA Free 6.7.2** + `public/compat/fa-pro-compat.css` | `fa-light/fa-thin/fa-sharp/fa-duotone`、Pro 專屬圖示（如 `fa-analytics`）、CSS 寫死的 `"Font Awesome 6 Pro"` 都已對照；新寫的程式請只用 Free 有的圖示 |
 | DataTables Editor 1.9.2 | `public/compat/editor-shim.js/css` | 見 8.1 |
 | CKFinder | `public/compat/ckfinder-shim.js` + `/json/uploadImage/*` | 只提供上傳 |

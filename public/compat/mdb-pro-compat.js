@@ -245,6 +245,43 @@
       });
     };
   }
+  /* ── 前台：smooth-scroll、fixed-action-btn、chip 關閉、#mdb-preloader ── */
+  $(document).on('click', '.smooth-scroll a[href^="#"]', function (e) {
+    var href = $(this).attr('href');
+    if (!href || href === '#') return;
+    var $target = $(href);
+    if (!$target.length) return;
+    e.preventDefault();
+    var $container = $(this).closest('.smooth-scroll');
+    var offset = Number($container.attr('data-offset') || 0);
+    $('html, body').animate({ scrollTop: $target.offset().top - offset }, 700);
+    if ($container.attr('data-allow-hashes') !== undefined && window.history && history.replaceState) history.replaceState(null, '', href);
+    return false;
+  });
+  $(document).on('mouseenter', '.fixed-action-btn', function () {
+    var $b = $(this);
+    if ($b.find('ul').length === 0) return;
+    $b.addClass('active');
+    $b.find('ul .btn-floating').addClass('shown');
+  });
+  $(document).on('mouseleave', '.fixed-action-btn', function () {
+    var $b = $(this);
+    $b.removeClass('active');
+    $b.find('ul .btn-floating').removeClass('shown');
+  });
+  $(document).on('click', '.chip .close', function () {
+    var $chip = $(this).closest('.chip');
+    if (!$chip.closest('.chips').data('initialized')) $chip.remove();
+  });
+  $(function () {
+    var $pre = $('#mdb-preloader');
+    if (!$pre.length) return;
+    var hide = function () { $pre.fadeOut('slow'); $('body').removeAttr('aria-busy'); };
+    $('body').attr('aria-busy', 'true');
+    $(window).on('load', hide);
+    setTimeout(hide, 2000);
+  });
+
   if (!$.fn.material_select) {
     $.fn.material_select = function (options) { return this.materialSelect(options); };
   }

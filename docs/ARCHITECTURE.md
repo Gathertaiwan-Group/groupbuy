@@ -104,7 +104,7 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 
 | 原站 | 授權 | 本系統 | 位置 |
 |---|---|---|---|
-| MDB PRO 4.8.8（dashboard／main） | 商業 | MDB Free 4.8.8（cdnjs, MIT）＋自寫補丁：side-nav/slim、collapsible（350ms easeOutQuart、自動初始化）、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr（md-toast）、materialSelect 樁；dashboard 全站改寫（`body #eee`、`.table td #4f4f4f`…） | `public/compat/mdb-pro-compat.*`、`backend-compat.css` |
+| MDB PRO 4.8.8（dashboard／main） | 商業 | MDB Free 4.8.8（cdnjs, MIT）＋自寫補丁：side-nav/slim、collapsible（350ms easeOutQuart、自動初始化）、MDB 風格 checkbox/radio、btn-flat、btn-floating、classic-tabs、dropdown 配色、toastr（md-toast）、materialSelect 樁；dashboard 全站改寫（`body #eee`、`.table td #4f4f4f`…） | `public/compat/mdb-pro-compat.*`、`backend-compat.css`（後台）、`mdb-pro-frontend.css`（前台） |
 | Font Awesome Pro 6.0.0-alpha3 | 商業 | FA Free 6.7.2（cdnjs）＋對照規則（light/thin/sharp → Free solid/regular、Pro 專屬圖示 → 最接近 Free、`"Font Awesome 6 Pro"` 字型家族別名） | `public/compat/fa-pro-compat.css` |
 | DataTables Editor 1.9.2（含 bootstrap4、ckeditor 外掛） | 商業 | 自寫相容 shim（API/DOM/class/事件/協定同原版；範圍見 MODULE_GUIDE §8.1；自我測試頁 `/backend/dev/editorShimTest`） | `public/compat/editor-shim.*` |
 | CKFinder | 商業 | 上傳樁＋`/json/uploadImage/*` | `public/compat/ckfinder-shim.js` |
