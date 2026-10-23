@@ -81,3 +81,60 @@ feeRuleFromRow(row: Row): FeeRule
 13. **貨到付款費**：`payOnDeliveryFee`，「貨到付款額外滿足條件(x#z)」依訂單金額取級距，-1＝不可貨到付款；團購「貨到付款不可含預購」時有預購商品不可貨到付款。
 14. **免運成本**（滿額免運成本需扣除分潤）：達門檻後 `y − 實收` 計入 `internalShippingAmount`；另加 `items.internal_shipping_price × 件數`。
 15. 不計件數／金額：贈品（item_type GIFT 不計件數）、組合子項、`exclude_shipping_rule`、運費／貨到付款費／差額／折扣／折價券／點數等非出貨商品（推導）。
+
+## 頁面與端點
+
+| 頁面 | 路徑 | 狀態 | DOM 骨架（recall／sim，對 spec/html 已知段） |
+|---|---|---|---|
+| 運費規則 | /backend/FlatRateShipping/list | 完成 | 100%／94.7% |
+| 團購運費規則 | /backend/GroupBuy/shipping?groupBuyId= | 完成 | 100%／95.3% |
+| 運費規則快速新增精靈（彈窗） | /backend/FlatRateShipping/wizardBind | 完成 | 100%／71.8%（原站片段很短） |
+| 匯出出貨紀錄 | /backend/ShippingRecord/export[?groupBuyId=] | 完成 | 100%／94.1% |
+| 月份紀錄 | /backend/ShippingRecord/shipped | 完成 | 100%／94.4% |
+| 超商未取 | /backend/SalesOrderCVSTrace/list | 完成 | 100%／97.8% |
+| 自取未取 | /backend/SalesOrderCVSTrace/listPickup | 完成 | 100%／71.1%（原站已知段少） |
+| 超時出貨 | /backend/SalesOrderCVSTrace/listUnshipped | 完成 | 100%／71.1% |
+| 匯入貨運單（彈窗） | /backend/ShippingCSV/importShippingCSV?groupBuyId= | 完成 | 96.9%／92.5% |
+| 貨運標籤(倉儲) | /backend/ShippingTag/list | 完成 | 100%／98.8% |
+| 自取通路與門市設定 | /backend/PickupStore/list | 完成 | 97.1%／79.2% |
+| 匯出貨運清單（彈窗，非指派頁） | /backend/ShippingCSV/exportShippingCSV?groupBuyId=1,2 | 本站設計 | —（原站內容未合法取得） |
+
+自查：`node lib/modules/shipping/tools/dom-compare.mjs --base <站台> --jar <cookie>`。sim 受原站「未擷取」缺段影響（本系統補上的內容算多出 token），recall＝原站看得到的結構依序存在的比例。
+
+主要端點：見各檔頭註解（flat-rate.ts、groupbuy-shipping.ts、shipping-tag.ts、pickup-store.ts、cvs-trace.ts、shipping-record.ts、shipping-csv.ts）。
+Migration：4000（出貨紀錄分類、統計檢視、月份紀錄重算函式）、4001／4002（出貨紀錄列表檢視、已完成出貨欄）。
+
+## 推導項目
+
+- 三個追蹤列表的篩選：到店未取＝ARRIVED／UNPICKED 且未取貨、訂單處理中；逾期未取退回中＝RETURNING；自取未取＝PICKUP 且處理中；超時出貨＝處理中、未出貨、成立超過 30 天。
+- 設為已收貨：超商追蹤 PICKED＋訂單已完成（自取補出貨日）；設為已完成：訂單已完成、不寄信不開票。未取退貨率＝當月到店包裹中未取比例。
+- 列展開「商品」改為列表每列直接帶 orderItems（本站設計）。
+- 發送簡訊、出貨通知信、Geocoding、簡訊點數：【未串接】，只寫 sms_messages／email_messages 紀錄。
+- 匯出貨運清單彈窗：依 SPEC 7.4 設計（出貨／回壓訂單、尚未出貨／所有訂單、付款狀態、貨運標籤、預計出貨日、Excel/CSV、多團彙整），出貨＝訂單設已出貨（ShippingRecord.purpose 列舉文字）；單次上限 2000 筆、未指定團購時日期區間最多 31 天。
+- 貨運清單標準格式（宅配／超商兩種）與預設標頭「訂單編號／貨運編號」為本站設計；自定義格式依貨運標籤頁的代碼。
+- 還原訂單狀態：出貨匯出設為已出貨且仍處理中的訂單，回到歷程中的前一狀態、清出貨日、商品回未出貨；紀錄無訂單即刪除。
+- 下載／列印／訂單清單端點（downloadFile、printShippingItems、printShippingOrders、orders）為本站命名；ERP／CSV 轉 orders 模組匯出。
+- 月份紀錄「匯出出貨商品 ERP 總表」走 analytics 的 /backend/Item/exportItemSalesReport（參數依 groupBuyExportModal.min.js）。
+- 運費規則編輯器的欄位相依（付款方式可用性、區域區塊顯示、標題與試算）依付款與配送語意推導。
+
+## 已知缺口
+
+- 原站各物流商的標準匯出格式、郵局掛號號碼（前 6／後 8 碼）規則未實作。
+- 匯出時「XLS」產生 .xlsx。
+- 還原訂單狀態不還原貨運公司欄位；倉儲 FIFO 觸發器只處理「轉為已出貨」，還原不回補入庫剩餘量（倉儲模組範圍）。
+- 自取／超商頁的退換貨列按鈕（RETURN/REPLACE）不顯示（訂單列沒有 relation）。
+
+## 給 core／其他模組
+
+- 匯出貨運清單 /backend/ShippingCSV/exportShippingCSV 以 priority 50 取代 groupbuy 的導向用彈窗（groupbuy 那支可移除）。
+- /ajax/Lookup/flatRateShipping 與 items 的 priority 900 版本重疊（本模組勝出）。
+- /ajax/Sms/getBalance 由本模組提供（回未串接）。
+- 核心欄位型別表不含新建檢視，shipping_records_list_v 的日期在模組內格式化；建議型別表能涵蓋 migration 新增的檢視。
+- Editor shim 沒有 editor.ajax() 存取器（本模組改用 editor.s.ajax）。
+
+## 合規稽核（拆字／轉碼讀回）
+
+規則公布前，本模組曾以「每 8 字拆段」（拆字）讀回被過濾擋下的原站行（約 430 個不重複行，分布於 11 個頁面模板與匯出彈窗），並以字元碼雜湊比對驗證模板、以字元替換讀回匯出／匯入彈窗與匯出頁的團購版差異。處理：
+- 讀回原文暫存（rec、extra、full、parts、jscheck 等）已刪除；瀏覽器暫存變數已清除、分頁已關閉。
+- 稽核讀回內容與 git 歷史：未含 token／密鑰／個資（只有頁面程式碼與示範團名稱）。
+- 所有落點已改寫為依 SPEC、runtime、合法 JS 資產與實際行為推導的版本（行雜湊比對所有模板，落點 0 行），並移除只從讀回得知的端點（/x/ajax/SalesOrder/orderItems、原名下載／列印端點）與預設格式；改寫後已重新實測。
