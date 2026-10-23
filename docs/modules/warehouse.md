@@ -14,7 +14,7 @@
 | inboundrecord-list | `/backend/InboundRecord/list` | 完成 | 入庫天數超過／剩餘庫存超過 篩選、排序、`#queryForm` 匯出 Excel；剩餘數量於出貨時 FIFO 自動扣減 |
 | warehouse-inventory | `/backend/Warehouse/inventory` | 完成 | 原站 `inventory.js`（inventoryManager）原樣沿用：加入（商品代碼／名稱）、匯入檔案（Excel/CSV→選欄位）、檢視庫存（各倉明細）、盤點數量確認（兩段確認）、盤點所選倉庫（已出貨歸檔）、未盤點訂單清單（取消訂單／設為已盤點）、匯出、重設所選盤點商品 |
 
-DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.mjs <spec html> <本系統 html>`）：warehouse-list 100%、warehouserequisition-list 99.7%、inbound-list 98.2%、inboundrecord-list 100%、warehouse-inventory 96.3%（差異皆為原站擷取缺段的 inline script 文字；本系統補寫的 `<script>`／`#downloadForm` 為原站缺段內容）。
+DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.mjs <spec html> <本系統 html>`）：warehouse-list 100%、warehouserequisition-list 99.7%、inbound-list 98.2%、inboundrecord-list 100%、warehouse-inventory 96.3%（差異皆為原站擷取缺段的 inline script 文字；本系統補寫的 `<script>`／`#downloadForm` 為原站缺段內容；inbound-list 的 1 個差異 `<div class="card mt-4">` 同樣落在原站缺段內）。
 
 ## 庫存模型（重點）
 
@@ -75,7 +75,7 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 2. 取消訂單／設為已盤點送 `salesOrderId`（原站送 `uuid`）：對齊 orders 模組的 `POST /ajax/SalesOrder/cancelOrder`（參數 salesOrderId）；`queryUnarchivedOrders` 的 `value` 因此回訂單 id。
 3. 盤點確認送出時多帶 `expected`（畫面上入庫倉的原數量），伺服器比對防重送。
 4. 插入 HTML 前跳脫（`_invEsc`）：倉庫名稱、商品名稱／代碼、未盤點訂單清單（含顧客姓名）。
-5. 頁面 `#ItemForm` 補上隱藏的 `.modal-message`（原站無此節點，inventory.js 的錯誤訊息原本不會顯示）。
+5. 盤點頁執行期在 `#ItemForm` 補上隱藏的 `.modal-message`（原站無此節點，inventory.js 的錯誤訊息原本不會顯示；靜態 HTML 維持與原站相同）。
 
 ## 推導（原站未擷取／擷取工具過濾的部分）
 
