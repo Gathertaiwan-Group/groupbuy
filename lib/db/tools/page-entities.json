@@ -1,0 +1,242 @@
+{
+  "modal-adminuser-changepassword": [
+    "adminUser"
+  ],
+  "billingtransaction-list": [
+    "billingTransaction"
+  ],
+  "systempreference-panel": [
+    "systemPreference"
+  ],
+  "modal-systemnotification-list": [
+    "systemNotification"
+  ],
+  "upload-uploadvideo": [
+    "upload"
+  ],
+  "shorturl-list": [
+    "shortUrl"
+  ],
+  "groupbuy-list": [
+    "groupBuy"
+  ],
+  "groupbuy-endingsoon-ENDING_SOON": [
+    "groupBuy"
+  ],
+  "groupbuy-endingsoon-ACTIVE": [
+    "groupBuy"
+  ],
+  "groupbuy-endingsoon-NOT_STARTED": [
+    "groupBuy"
+  ],
+  "groupbuytag-list": [
+    "groupBuyTag"
+  ],
+  "groupbuysystagref-list": [
+    "groupBuySysTagRef"
+  ],
+  "fe-customer-login-modal": [
+    "customer"
+  ],
+  "blacklist-list": [
+    "blacklist"
+  ],
+  "groupbuy-show-items": [
+    "groupBuyItemSet",
+    "groupBuyCoupon",
+    "salesRule"
+  ],
+  "modal-groupbuyitemset-import": [
+    "groupBuyItemSet"
+  ],
+  "groupbuyitemset-show": [
+    "item"
+  ],
+  "itembundlev2-list": [
+    "itemBundle"
+  ],
+  "itembundlev2-create": [
+    "itemBundle"
+  ],
+  "groupbuyitemsystag-list": [
+    "groupBuyItemSysTag"
+  ],
+  "groupbuyitemcrmtag-list": [
+    "groupBuyItemCrmTag",
+    "item"
+  ],
+  "flatrateshipping-list": [
+    "flatRateShipping"
+  ],
+  "groupbuy-shipping": [
+    "groupBuyFlatRateShipping",
+    "flatRateShipping",
+    "groupBuyItemSetFlatRateShipping",
+    "groupBuy"
+  ],
+  "shippingtag-list": [
+    "shippingTag"
+  ],
+  "pickupstore-list": [
+    "pickupStoreSetting"
+  ],
+  "groupbuy-salesrule": [
+    "salesRule"
+  ],
+  "modal-salesrule-wizard": [
+    "salesRule"
+  ],
+  "coupontemplate-list": [
+    "couponTemplate"
+  ],
+  "groupbuy-coupon": [
+    "groupBuyCoupon"
+  ],
+  "lottery": [
+    "lottery"
+  ],
+  "modal-influencer-displayconfirm": [
+    "influencer"
+  ],
+  "facebookauthgroupbuy-list": [
+    "facebookAuthGroupBuy",
+    "facebookAuth"
+  ],
+  "groupbuypreference-list": [
+    "groupBuyPreference",
+    "groupBuyTagGroupBuy",
+    "groupBuyTag"
+  ],
+  "homeview-list": [
+    "homeView",
+    "homeViewSection",
+    "homeViewItem",
+    "webMenu"
+  ],
+  "fe-help-home-jranv": [
+    "post"
+  ],
+  "fe-help-menu-4411": [
+    "post"
+  ],
+  "fe-news-list": [
+    "news"
+  ],
+  "salesorder-list": [
+    "salesOrder"
+  ],
+  "salesorder-list-by-groupbuy": [
+    "salesOrder"
+  ],
+  "salesordertransaction-list": [
+    "salesOrder",
+    "salesOrderTransaction"
+  ],
+  "fe-order-query": [
+    "salesOrder"
+  ],
+  "salesorder-pickup": [
+    "salesOrder"
+  ],
+  "salesorderreservation-list": [
+    "salesOrderRelation",
+    "salesOrderReservation",
+    "salesOrderReservationItem"
+  ],
+  "salesorderreturn-list": [
+    "salesOrderReturn"
+  ],
+  "shippingrecord-export": [
+    "shippingRecord"
+  ],
+  "shippingrecord-shipped": [
+    "shippingRecord"
+  ],
+  "salesordercvstrace-list": [
+    "salesOrderCvsTraceList"
+  ],
+  "salesordercvstrace-listpickup": [
+    "salesOrderCvsTraceList"
+  ],
+  "salesordercvstrace-listunshipped": [
+    "salesOrderCvsTraceList"
+  ],
+  "invoice-list": [
+    "invoice"
+  ],
+  "groupbuy-importbanktransactioncsv": [
+    "bankTransaction"
+  ],
+  "refundrequisition-list": [
+    "refundRequisition"
+  ],
+  "preordertostock-list": [
+    "preorderToStockLog"
+  ],
+  "modal-groupbuy-displaysms": [
+    "smsMessage",
+    "groupBuy"
+  ],
+  "warehouse-list": [
+    "warehouse"
+  ],
+  "warehouserequisition-list": [
+    "warehouseRequisition",
+    "warehouseRequisitionItem"
+  ],
+  "inbound-list": [
+    "inbound",
+    "inboundItem"
+  ],
+  "inboundrecord-list": [
+    "inboundRecord"
+  ],
+  "warehouse-inventory": [
+    "warehouseInventory"
+  ],
+  "distributionchannel-list": [
+    "distributionChannel"
+  ],
+  "erp-distributionchannel-panel": [
+    "distributionChannelTransaction",
+    "distributionChannelGroupBuyTransaction",
+    "distributionChannelContact",
+    "distributionChannelGroupBuy"
+  ],
+  "distributionchannelgroupbuy-list": [
+    "distributionChannelGroupBuy",
+    "distributionChannelGroupBuyTransaction"
+  ],
+  "helpdesk-conversation-list": [
+    "conversation"
+  ],
+  "fe-onlinehelp-modal": [
+    "conversation"
+  ],
+  "groupbuydailystatistics-list": [
+    "groupBuyDailyStatistics"
+  ],
+  "groupbuydailystatistics-all": [
+    "groupBuyDailyStatistics"
+  ],
+  "groupbuy-analytics": [
+    "groupBuyDailyStatistics"
+  ],
+  "salesanalysis-panel": [
+    "groupBuyDailyStatistics"
+  ],
+  "itemdailystatistics-list": [
+    "itemDailyStatistics"
+  ],
+  "groupbuyerpmonthlystatistics-list": [
+    "groupBuyErpMonthlyStatistics",
+    "groupBuyDailyStatistics",
+    "roasDataItem"
+  ],
+  "salesordermonthlystatistics-list": [
+    "salesOrderMonthlyStatistics"
+  ],
+  "salesanalysis-show": [
+    "orderItemAnalysis"
+  ]
+}

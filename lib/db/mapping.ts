@@ -4,11 +4,15 @@
 //   1. "column"              → 實體表的實體欄位。
 //   2. "column.a.b"          → jsonb 欄位 column 內的路徑 a.b（第一個 "." 之前是欄位名，之後是 jsonb 鍵，鍵名沿用原站 camelCase）。
 //   3. 多個 JSON 鍵可對到同一欄位（例：featureTag 與 Editor 欄名 featureTag[] 都 → feature_tags）。
-//   4. 原站 *String 結尾的日期鍵對 timestamptz/date 欄位：輸出為台灣時間字串（timestamptz → "YYYY-MM-DD HH:mm"，date → "YYYY-MM-DD"）。
-//   5. dateModified → updated_at，輸出為 epoch 毫秒數字（原站樂觀鎖格式）。
-//   6. 不在 fields 內的鍵＝推導值（lib/db/derived.ts）或關聯（lib/db/relations.ts），不可直接寫入。
+//   4. 日期：鍵名以 date 開頭或 String/Str 結尾、且欄位為 timestamptz/date → 台灣時間字串
+//      （timestamptz → "YYYY-MM-DD HH:mm"，date → "YYYY-MM-DD"）。
+//   5. dateModified / dateCreated → epoch 毫秒數字（原站樂觀鎖 dateModified 格式）。
+//   6. 不在 fields 內的鍵＝推導值/動作參數（lib/db/derived-keys.ts）或巢狀關聯（lib/db/relations.ts），不可直接寫入。
+//   7. 關聯：selectWithRelations() 產生 PostgREST select 字串，rowToApiDeep() 連同關聯一起轉換。
 import type { EntityDef } from "./entity-types";
 import { columnTypes, readonlyColumns } from "./schema.generated";
+import { entities } from "./entities";
+import { relations } from "./relations";
 
 const TZ_OFFSET_MS = 8 * 3600 * 1000; // Asia/Taipei（無日光節約）
 
@@ -144,9 +148,10 @@ export function rowToApi(entity: EntityDef, row: Row | null | undefined): Row {
     let value: unknown = jsonPath ? getPath(row[column], jsonPath) : row[column];
     if (!jsonPath) {
       const t = columnType(entity.table, column);
-      if (key === "dateModified" && value != null) value = new Date(String(value)).getTime();
-      else if (key.endsWith("String") && t?.startsWith("timestamp")) value = formatDateTime(value);
-      else if (key.endsWith("String") && t === "date") value = formatDate(value);
+      const isDateKey = /^date/.test(key) || /Str(ing)?$/.test(key);
+      if ((key === "dateModified" || key === "dateCreated") && value != null) value = new Date(String(value)).getTime();
+      else if (isDateKey && t?.startsWith("timestamp")) value = formatDateTime(value);
+      else if (isDateKey && t === "date") value = formatDate(value);
       else if (t === "numeric" && value != null) value = Number(value);
     }
     if (value === undefined) continue;
@@ -186,4 +191,37 @@ export function apiToRow(entity: EntityDef, body: Row, existing?: Row | null): R
     }
   }
   return row;
+}
+
+type EntityKey = keyof typeof entities;
+
+/**
+ * 產生含關聯的 PostgREST select 字串，例：selectWithRelations("groupBuyItemSet", ["itemSet", "groupBuyItemSetSalesRules"])
+ * → "*,itemSet:item_sets!item_set_id(*),groupBuyItemSetSalesRules:group_buy_item_set_sales_rules!group_buy_item_set_id(*)"
+ * 沒有 FK（relations 無 embed）的關聯會被略過，需另查。
+ */
+export function selectWithRelations(entityName: EntityKey, relationKeys: string[]): string {
+  const rels = relations[entityName] ?? {};
+  const parts = ["*"];
+  for (const k of relationKeys) {
+    const r = rels[k];
+    if (r?.embed) parts.push(`${k}:${r.embed}(*)`);
+  }
+  return parts.join(",");
+}
+
+/** rowToApi ＋ 關聯：row 內以關聯鍵為名的內嵌物件/陣列（selectWithRelations 的結果）一併轉成原站鍵 */
+export function rowToApiDeep(entityName: EntityKey, row: Row | null | undefined): Row {
+  const entity = entities[entityName] as EntityDef;
+  const out = rowToApi(entity, row);
+  if (!row) return out;
+  const rels = relations[entityName] ?? {};
+  for (const [k, r] of Object.entries(rels)) {
+    const v = row[k];
+    if (v === undefined) continue;
+    const target = r.entity as EntityKey;
+    if (Array.isArray(v)) out[k] = r.pluck ? v.map((x) => (x as Row)[r.pluck as string]) : v.map((x) => rowToApiDeep(target, x as Row));
+    else out[k] = v == null ? null : rowToApiDeep(target, v as Row);
+  }
+  return out;
 }

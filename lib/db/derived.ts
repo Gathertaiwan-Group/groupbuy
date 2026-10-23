@@ -80,27 +80,5 @@ export function groupBuyDerived(row: Row, now: Date = new Date()) {
   };
 }
 
-/**
- * 各 entity 的推導鍵（不在 fields 內）：鍵 → 計算說明。
- * 另有原站 Java bean 的框架鍵（page/rt/rs/webRequest/ajarRequest/xmlRequest/jsonRequest）不需實作，見 FRAMEWORK_KEYS。
- */
-export const FRAMEWORK_KEYS = ["page", "rt", "rs", "webRequest", "ajarRequest", "xmlRequest", "jsonRequest"] as const;
-
-export const derivedKeys: Record<string, Record<string, string>> = {
-  groupBuy: {
-    processing: "groupBuyDerived().processing：現在介於 date_start～date_end",
-    notStarted: "groupBuyDerived().notStarted：現在 < date_start",
-    end: "groupBuyDerived().end：現在 > date_end",
-    endingSoon: "groupBuyDerived().endingSoon：活動中且 3 天內結束 → 1，否則 0（門檻推導）",
-    timeRemaining: "groupBuyDerived().timeRemaining：剩餘時間文字",
-    statusV2: "groupBuyDerived().statusV2：NOT_STARTED/ACTIVE/ENDING_SOON/ENDED/SHIPPABLE",
-    paymentMethod: "payment_methods 位元 → 代碼陣列（paymentBitsToCodes）",
-    "paymentMethod[]": "Editor 送出代碼陣列 → payment_methods 位元和（paymentCodesToBits）",
-    paymentMethodBankAccountSupported: "payment_methods & 1",
-    paymentMethodVirtualBankSupported: "payment_methods & 2",
-    paymentMethodAllpayCreditcardSupported: "payment_methods & 4",
-    needLogin: "group_buy_settings.viewForMember",
-    groupBuyFlatRateShippings: "關聯 group_buy_flat_rate_shippings（見 relations.ts）",
-    "groupBuyFlatRateShippings[].flatRateShippingId": "關聯 group_buy_flat_rate_shippings.flat_rate_shipping_id",
-  },
-};
+// 各實體的推導鍵 / 動作參數清單（自動產生）見 ./derived-keys
+export { derivedKeys, transientKeys, FRAMEWORK_KEYS } from "./derived-keys";

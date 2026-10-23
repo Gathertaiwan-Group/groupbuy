@@ -1,0 +1,45 @@
+import type { EntityDef } from "../entity-types";
+
+// 電子發票（Invoice；含作廢、折讓）
+// 表：groupbuy.invoices
+// 原站頁面：invoice-list
+export const invoice: EntityDef = {
+  table: "invoices",
+  idKey: "invoiceId",
+  idColumn: "id",
+  tenantScoped: true,
+  fields: {
+    invoiceId: "id",
+    salesOrderId: "sales_order_id",
+    groupBuyId: "group_buy_id",
+    merchantOrderId: "merchant_order_id",
+    invoiceStatus: "invoice_status",
+    provider: "provider",
+    invoiceNumber: "invoice_number",
+    randomNumber: "random_number",
+    amount: "amount",
+    salesAmount: "sales_amount",
+    taxAmount: "tax_amount",
+    taxType: "tax_type",
+    buyerVatId: "buyer_vat_id",
+    buyerTitle: "buyer_title",
+    carrierType: "carrier_type",
+    carrierNum: "carrier_num",
+    donationCode: "donation_code",
+    printFlag: "print_flag",
+    items: "items",
+    dateEinvoiceString: "date_einvoice",
+    dateInvalidatedString: "date_invalidated",
+    invalidReason: "invalid_reason",
+    allowanceNumber: "allowance_number",
+    allowanceAmount: "allowance_amount",
+    dateAllowanceString: "date_allowance",
+    allowanceReason: "allowance_reason",
+    errorMessage: "error_message",
+    groupBuyAccountId: "tenant_id",
+    dateCreated: "created_at",
+    dateCreatedString: "created_at",
+    dateModified: "updated_at",
+    dateModifiedString: "updated_at",
+  },
+};

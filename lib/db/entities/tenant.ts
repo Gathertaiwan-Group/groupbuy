@@ -1,6 +1,7 @@
 import type { EntityDef } from "../entity-types";
 
 // 租戶（原站 GroupBuyAccount；路徑前綴 /{groupBuyAccount}，如 guest_ep）
+// 表：groupbuy.tenants
 export const tenant: EntityDef = {
   table: "tenants",
   idKey: "groupBuyAccountId",
@@ -11,5 +12,6 @@ export const tenant: EntityDef = {
     groupBuyAccount: "code",
     name: "name",
     dateCreated: "created_at",
+    dateCreatedString: "created_at",
   },
 };
