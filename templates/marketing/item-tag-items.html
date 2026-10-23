@@ -33,10 +33,10 @@
 			language:DataTableConfig.i18n,
 			columns:[
 				DataTableConfig.data_select_checkbox,
-				{ data: 'itemSetTitle' },
-				{ data: 'title' },
-				{ data: 'uid' },
-				{ data: 'price' },
+				{ data: 'itemSetTitle', render: $.fn.dataTable.render.text() },
+				{ data: 'title', render: $.fn.dataTable.render.text() },
+				{ data: 'uid', render: $.fn.dataTable.render.text() },
+				{ data: 'price', render: $.fn.dataTable.render.text() },
 				{ data: 'tagged', render: function (data, type) {
 					if (type !== 'display') return data ? 1 : 0;
 					return data ? '<i class="fa fa-check text-success"></i>' : '';

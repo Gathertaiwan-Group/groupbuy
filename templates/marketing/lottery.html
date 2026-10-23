@@ -11,6 +11,8 @@ $.extend( true, $.fn.dataTable.defaults, {
 
 var timerId = -1;
 var timerCount = 0;
+{{!-- 原站把獎項名稱與得獎者（消費者填的姓名/電話/Email）直接串進 HTML；這裡先跳脫，避免消費者資料在後台被當成 HTML 執行（顯示結果相同） --}}
+var lotteryEsc = function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); };
 var drawLottery = function () {
 	$('#drawResultTitle').html('抽獎中...');
 	var ajaxurl = '{{baseUrl}}/ajax/Lottery/draw.do';
@@ -26,7 +28,7 @@ var drawLottery = function () {
 			var table = '';
 			for (var i = 0 ; i < data.data.length; i++) {
 				var lottery = data.data[i];
-				html += '<h4>' + lottery.title + '</h4>';
+				html += '<h4>' + lotteryEsc(lottery.title) + '</h4>';
 				if (lottery.winners.length == 0) {
 					html += '<p class="badge badge-warning">從缺</p>';
 					continue;
@@ -70,11 +72,11 @@ var drawLottery = function () {
 						;
 					*/
 					table += '<tr">'
-						+ '<td>'+ winner.uuid + '</td>'
-						+ '<td class="tableexport-string">'+ dt + '</td>'
-						+ '<td>'+ winner.customerFirstname + '</td>'
-						+ '<td class="tableexport-string">'+ winner.customerTelephone + '</td>'
-						+ '<td>'+ winner.customerEmail + '</td>'
+						+ '<td>'+ lotteryEsc(winner.uuid) + '</td>'
+						+ '<td class="tableexport-string">'+ lotteryEsc(dt) + '</td>'
+						+ '<td>'+ lotteryEsc(winner.customerFirstname) + '</td>'
+						+ '<td class="tableexport-string">'+ lotteryEsc(winner.customerTelephone) + '</td>'
+						+ '<td>'+ lotteryEsc(winner.customerEmail) + '</td>'
 						+ '<td class="tableexport-string">$'+ winner.totalPaid + '</td>'
 						+ '</tr>'
 						;

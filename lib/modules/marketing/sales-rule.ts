@@ -146,6 +146,8 @@ export async function salesRuleRow(api: Row, row: Row, ctx: EntityCtx): Promise<
     levelItemSet: flags.levelItemSet,
     categoryAllowExcludeItemTag: flags.categoryAllowExcludeItemTag,
     salesRuleRoyaltyPrograms: rp.map((x) => ({ royaltyProgramId: x.royalty_program_id })),
+    // 「複製優惠至其他表單」對話框標題用 row.seq + "." + row.title（原站 dataTable.api.js）；取顯示順序
+    seq: (row.sales_rule_settings as { seq?: unknown } | null)?.seq ?? "",
   };
 }
 
@@ -421,7 +423,8 @@ async function cloneFrom(ctx: RequestContext): Promise<Response> {
     }
     stat[await copyRule(db, session.tenantId, r, to.id, sameName)]++;
   }
-  return editorResponse([], { code: 200, message: `複製完成：新增 ${stat.copied}、覆蓋 ${stat.replaced}、略過 ${stat.skipped}` });
+  // 不回 code：原站對話框 submitComplete 在 code==200 時呼叫不存在的 l._editor.close() 會丟例外；成功後表單由 Editor 預設 onComplete 自動關閉
+  return editorResponse([], { message: `複製完成：新增 ${stat.copied}、覆蓋 ${stat.replaced}、略過 ${stat.skipped}` });
 }
 
 /** 複製優惠至其他表單：salesRuleId=1,2（選取列）→ toGroupBuyId[] */
@@ -451,7 +454,8 @@ async function cloneTo(ctx: RequestContext): Promise<Response> {
       stat[await copyRule(db, session.tenantId, r, to.id, sameName)]++;
     }
   }
-  return editorResponse([], { code: 200, message: `複製完成：新增 ${stat.copied}、覆蓋 ${stat.replaced}、略過 ${stat.skipped}` });
+  // 不回 code：原站對話框 submitComplete 在 code==200 時呼叫不存在的 l._editor.close() 會丟例外；成功後表單由 Editor 預設 onComplete 自動關閉
+  return editorResponse([], { message: `複製完成：新增 ${stat.copied}、覆蓋 ${stat.replaced}、略過 ${stat.skipped}` });
 }
 
 /** select2：優惠條件（未指定團購時只列結團 3 個月內的團購的優惠） */

@@ -33,16 +33,16 @@
 			language:DataTableConfig.i18n,
 			columns:[
 				DataTableConfig.data_select_checkbox,
-				{ data: 'code' },
-				{ data: 'usedCount' },
-				{ data: 'maxUsesString' },
-				{ data: 'customerName', defaultContent: '' },
+				{ data: 'code', render: $.fn.dataTable.render.text() },
+				{ data: 'usedCount', render: $.fn.dataTable.render.text() },
+				{ data: 'maxUsesString', render: $.fn.dataTable.render.text() },
+				{ data: 'customerName', defaultContent: '', render: $.fn.dataTable.render.text() },
 				{ data: 'status', render: function (data, type, row) {
 					if (type !== 'display') return data;
 					return data == 'DISABLED' ? '<span class="badge badge-danger">停用中</span>' : '<span class="badge badge-success">已啟用</span>';
 				} },
-				{ data: 'dateCreatedString' },
-				{ data: 'dateUsedString', defaultContent: '' },
+				{ data: 'dateCreatedString', render: $.fn.dataTable.render.text() },
+				{ data: 'dateUsedString', defaultContent: '', render: $.fn.dataTable.render.text() },
 			],
 			"order": [[ 6, "desc" ]],
 			select: DataTableConfig.selectOptionsOS,

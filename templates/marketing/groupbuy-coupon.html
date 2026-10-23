@@ -313,6 +313,10 @@ groupBuyCouponEditor
 				) {
 			return {};
 		}
+		{{!-- 選項更新（每次列表重整）時 Editor 會對下拉觸發 change，此時可能沒有選中的類型；原站在下方 couponMeta[val] 會丟例外而中止，這裡直接略過（結果相同） --}}
+		if (!couponMeta[val]) {
+			return {};
+		}
 		var show = [
 			'title',
 			'category',

@@ -34,16 +34,16 @@
 			DataTableConfig.data_select_checkbox,
 		];
 		if (level == 'ItemSet') {
-			columns.push({ data: 'seq' }, { data: 'title' });
+			columns.push({ data: 'seq' }, { data: 'title', render: $.fn.dataTable.render.text() });
 		} else {
-			columns.push({ data: 'itemSetTitle' }, { data: 'title' }, { data: 'uid' }, { data: 'price' });
+			columns.push({ data: 'itemSetTitle', render: $.fn.dataTable.render.text() }, { data: 'title', render: $.fn.dataTable.render.text() }, { data: 'uid', render: $.fn.dataTable.render.text() }, { data: 'price' });
 		}
 		columns.push(
 			{ data: 'bound', render: function (data, type, row) {
 				if (type !== 'display') return data ? 1 : 0;
 				return data ? '<i class="fa fa-check text-success"></i>' : '';
 			} },
-			{ data: 'tags', defaultContent: '' }
+			{ data: 'tags', defaultContent: '', render: $.fn.dataTable.render.text() }
 		);
 		var table = $(tableName).DataTable( {
 			dom: 'lBfrtip',

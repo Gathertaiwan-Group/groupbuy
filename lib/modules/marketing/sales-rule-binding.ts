@@ -226,7 +226,7 @@ async function copyPackage(ctx: RequestContext): Promise<Response> {
   const ins = await db.from("sales_rules").insert(src).select("id").single();
   if (ins.error) throw badRequest(`複製失敗：${ins.error.message}`);
   const newRuleId = Number((ins.data as { id: number }).id);
-  const copyItem = async (itemId: number, tag: string): Promise<{ uuid: string; result: string }> => {
+  const copyItem = async (itemId: number, tag: string): Promise<{ uuid: string; result: string; itemId?: number }> => {
     const r = ((await db.from("items").select("*").eq("tenant_id", session.tenantId).eq("id", itemId).single()).data ?? null) as Record<string, unknown> | null;
     if (!r) return { uuid: String(itemId), result: "找不到商品" };
     for (const k of ["id", "created_at", "updated_at"]) delete r[k];
@@ -236,9 +236,9 @@ async function copyPackage(ctx: RequestContext): Promise<Response> {
     if (c.error) return { uuid: String(itemId), result: c.error.message };
     const newId = Number((c.data as { id: number }).id);
     await bindItems(db, session.tenantId, rule.group_buy_id, newRuleId, [newId], tag, true);
-    return { uuid: String((c.data as { uid?: string; title: string }).uid ?? (c.data as { title: string }).title), result: "OK" };
+    return { uuid: String((c.data as { uid?: string; title: string }).uid ?? (c.data as { title: string }).title), result: "OK", itemId: newId };
   };
-  const results: { uuid: string; result: string }[] = [];
+  const results: { uuid: string; result: string; itemId?: number }[] = [];
   results.push(await copyItem(pkg.mainItemId, newTags[0]));
   for (const [i, opt] of pkg.internalItemBundleOptions.entries()) {
     for (const it of opt.internalItemBundleOptionItems) {

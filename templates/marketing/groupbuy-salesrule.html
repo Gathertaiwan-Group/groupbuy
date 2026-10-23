@@ -1,6 +1,8 @@
 {{!-- 優惠條件（單一團購）/backend/GroupBuy/salesRule?groupBuyId=：原站 spec/html/groupbuy-salesrule.html；缺段已依原站頁面原始碼補齊 --}}
 <!--#head-->
 {{> core/partials/dte-style.html}}
+{{!-- 「複製組合」彈窗（/ajax/SalesRule/displayCopyPackage）用到 salesRuleManager（原站 /scripts/salesRule.js，原站在「團購品項」頁才引用）；單頁版補上 --}}
+<script src="/scripts/salesRule.js"></script>
 <script type="text/javascript" class="init">
 	var table; // gbis table
 	var editor; // use a global for the submit and return data rendering in the examples
