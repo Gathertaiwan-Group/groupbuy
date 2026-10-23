@@ -80,7 +80,8 @@ async function go(ctx: RequestContext): Promise<Response> {
   const row = data as { id: number; tenant_id: number; url: string; views: number } | null;
   if (!row || !isHttpUrl(row.url)) throw notFound("找不到短網址");
   await db.from("short_urls").update({ views: Number(row.views ?? 0) + 1 }).eq("tenant_id", row.tenant_id).eq("id", row.id);
-  return redirect(row.url, 302);
+  // Location 標頭只能是 ASCII：非 ASCII 字元（中文路徑／參數）先轉成百分比編碼
+  return redirect(new URL(row.url).href, 302);
 }
 
 export const shortUrlRoutes: RouteDef[] = [

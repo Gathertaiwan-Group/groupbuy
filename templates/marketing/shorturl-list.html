@@ -93,7 +93,8 @@
 					$('#shortUrl-result-error').text((res && res.error) || '新增失敗');
 					return;
 				}
-				$('#shortUrl').val('https://' + res.domain + '/' + res.code);
+				var scheme = String(res.domain).indexOf(location.host + '/') === 0 ? location.protocol + '//' : 'https://';
+				$('#shortUrl').val(scheme + res.domain + '/' + res.code);
 				$('#shortUrl-result-body').removeClass('d-none');
 				$('#ShortUrlForm input[name=url]').val('');
 				table.ajax.reload(null, false);
