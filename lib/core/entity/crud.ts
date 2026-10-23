@@ -79,6 +79,7 @@ export async function listEntity(ctx: RequestContext, entity: EntityDef, spec: L
       ascending: o.ascending ?? true,
     })),
     maxRows: spec.maxRows,
+    tieBreaker: entity.idColumn,
   });
   const rows: Row[] = [];
   for (const r of result.rows) {
@@ -184,14 +185,16 @@ export async function editorEntity(ctx: RequestContext, entity: EntityDef, spec:
   const existingRows = await fetchRows(db, entity, session, ids);
   const byId = new Map(existingRows.map((r) => [Number(r[entity.idColumn]), r]));
   const lockMs = Number(req.extra.dateModified);
+  const CONFLICT = "此資料已被其他人修改，請重新整理頁面後再編輯";
   for (const row of req.rows.length ? req.rows : ids.map((id) => ({ id: String(id), values: {} }))) {
     const id = Number(row.id);
     const existing = byId.get(id);
     if (!existing) throw notFound("找不到資料（可能已被刪除）");
-    if (spec.optimisticLock !== false && Number.isFinite(lockMs) && lockMs > 0 && existing.updated_at) {
-      const rowMs = new Date(String(existing.updated_at)).getTime();
-      if (rowMs > lockMs + 1000) throw new HttpError(409, "此資料已被其他人修改，請重新整理頁面後再編輯");
-    }
+    // 樂觀鎖：請求帶 dateModified（毫秒）且資料表有 updated_at 時，
+    // 先比對一次（快速回 409），再把條件放進 UPDATE（並行的兩個編輯只有一個會成功）
+    const locked = spec.optimisticLock !== false && Number.isFinite(lockMs) && lockMs > 0 && !!existing.updated_at;
+    const lockUntil = locked ? new Date(lockMs + 1000).toISOString() : "";
+    if (locked && new Date(String(existing.updated_at)).getTime() > lockMs + 1000) throw new HttpError(409, CONFLICT);
     const values = flattenDotted(row.values);
     await runValidate(spec, values, "edit", ectx, existing);
     let dbRow = apiToRow(entity, values, existing);
@@ -200,8 +203,13 @@ export async function editorEntity(ctx: RequestContext, entity: EntityDef, spec:
     if (Object.keys(dbRow).length === 0) continue;
     let q = db.from(entity.table).update(dbRow).eq(entity.idColumn, id);
     if (entity.tenantScoped) q = q.eq("tenant_id", session.tenantId);
-    const { error } = await q;
+    if (locked) q = q.lte("updated_at", lockUntil);
+    const { data: updated, error } = await q.select(entity.idColumn);
     if (error) throw dbError(error, "更新");
+    if (!updated || updated.length === 0) {
+      if (locked) throw new HttpError(409, CONFLICT);
+      throw notFound("找不到資料（可能已被刪除）");
+    }
   }
   const fresh = await fetchRows(db, entity, session, ids, select);
   const order = new Map(ids.map((id, i) => [id, i]));
@@ -212,7 +220,9 @@ export async function editorEntity(ctx: RequestContext, entity: EntityDef, spec:
 
 function dbError(error: { code?: string; message: string; details?: string | null }, verb: string): Error {
   if (error.code === "23505") return badRequest("資料重複（已存在相同的資料）");
-  if (error.code === "23503") return badRequest(`無法${verb}：此資料仍被其他資料使用中`);
+  if (error.code === "23503") {
+    return badRequest(verb === "刪除" ? "無法刪除：此資料仍被其他資料使用中" : `無法${verb}：關聯的資料不存在（可能已被刪除）`);
+  }
   if (error.code === "23514" || error.code === "22P02" || error.code === "23502") return badRequest(`資料格式錯誤，無法${verb}`);
   return new Error(`[crud] ${verb}失敗：${error.message}`);
 }
@@ -229,7 +239,17 @@ export interface CrudRoutesSpec {
   writeSpec?: WriteSpec;
   /** 權限旗標（admin_users.permissions） */
   permission?: string;
+  /**
+   * 各端點接受的 Editor action（防止例如對 save 端點送 action=remove）。預設：
+   * - save 收 create、update 收 edit、delete 收 remove；
+   * - 某個動作沒有自己的端點時，由其他已登錄的端點代收（相容原站「單一網址處理全部動作」的頁面，
+   *   例 crudRoutes(x, { list, save }) → save 收 create/edit/remove）。
+   * 要更嚴格時明寫，例：actions: { save: ["create"] }（只開放新增）。
+   */
+  actions?: Partial<Record<"save" | "update" | "delete", EditorAction[]>>;
 }
+
+type EditorAction = "create" | "edit" | "remove";
 
 /**
  * 原站標準四端點：list / save / update / delete（.do 可省略、可帶 /{租戶}/ 前綴）。
@@ -240,9 +260,20 @@ export function crudRoutes(entity: EntityDef, spec: CrudRoutesSpec): RouteDef[] 
   const out: RouteDef[] = [];
   const opts = spec.permission ? { permission: spec.permission } : {};
   if (spec.list) out.push({ ...opts, path: spec.list, method: ["GET", "POST"], handler: (ctx) => listEntity(ctx, entity, spec.listSpec) });
-  const write = (ctx: RequestContext) => editorEntity(ctx, entity, spec.writeSpec);
-  if (spec.save) out.push(post(spec.save, write, opts));
-  if (spec.update) out.push(post(spec.update, write, opts));
-  if (spec.delete) out.push(post(spec.delete, write, opts));
+
+  // 每個動作由哪個端點負責：有自己的端點就只走自己的；沒有的話由第一個已登錄的端點代收
+  const endpoints = (["save", "update", "delete"] as const).filter((k) => !!spec[k]);
+  const own: Record<EditorAction, "save" | "update" | "delete"> = { create: "save", edit: "update", remove: "delete" };
+  const allowed = (ep: "save" | "update" | "delete"): EditorAction[] => {
+    const explicit = spec.actions?.[ep];
+    if (explicit) return explicit;
+    return (Object.keys(own) as EditorAction[]).filter((a) => (spec[own[a]] ? own[a] === ep : endpoints[0] === ep));
+  };
+  const write = (acts: EditorAction[]) => async (ctx: RequestContext) => {
+    const req = await parseEditorRequest(ctx);
+    if (!acts.includes(req.action)) throw badRequest(`此端點不接受 ${req.action} 動作`);
+    return editorEntity(ctx, entity, spec.writeSpec);
+  };
+  for (const ep of endpoints) out.push(post(spec[ep]!, write(allowed(ep)), opts));
   return out;
 }

@@ -28,6 +28,8 @@ export interface AdminSession {
   expiresAt: Date;
   /** 是否勾選「讓我保持登入(24小時)」 */
   persistent: boolean;
+  /** 用「切換至 [租戶]帳號」切換過時，原本輸入帳密登入的管理員 id（未切換為 null） */
+  loginAdminUserId?: number | null;
 }
 
 export interface RequestContext {

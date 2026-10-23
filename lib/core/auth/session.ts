@@ -8,6 +8,8 @@ import type { AdminSession } from "@/lib/core/http/types";
 export const SESSION_COOKIE = "GBSID";
 const PERSISTENT_MS = 24 * 60 * 60 * 1000;
 const IDLE_MS = 12 * 60 * 60 * 1000;
+/** 非保持登入的 session：距上次延長超過這段時間才寫 DB 延長（避免每個請求都寫） */
+const SLIDE_EVERY_MS = 10 * 60 * 1000;
 
 export function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -93,6 +95,7 @@ type SessionRow = {
   expires_at: string;
   admin_user_id: number;
   tenant_id: number;
+  login_admin_user_id: number | null;
   admin_users: {
     id: number;
     tenant_id: number;
@@ -114,7 +117,7 @@ export async function readSession(req: Request): Promise<AdminSession | null> {
   const { data, error } = await db
     .from("admin_sessions")
     .select(
-      "id, expires_at, admin_user_id, tenant_id, admin_users(id, tenant_id, account, display_name, role, permissions, is_active), tenants(id, code, name)",
+      "id, expires_at, admin_user_id, tenant_id, login_admin_user_id, admin_users(id, tenant_id, account, display_name, role, permissions, is_active), tenants(id, code, name)",
     )
     .eq("id", id)
     .maybeSingle<SessionRow>();
@@ -131,11 +134,25 @@ export async function readSession(req: Request): Promise<AdminSession | null> {
   }
   const u = data.admin_users;
   if (u.is_active === false || u.tenant_id !== data.tenant_id) return null;
+  // 切換過身分的 session：原登入者被停用（或刪除、換租戶）時一併失效
+  const loginId = data.login_admin_user_id;
+  if (loginId != null && loginId !== u.id) {
+    const { data: orig, error: oErr } = await db
+      .from("admin_users")
+      .select("id, tenant_id, is_active")
+      .eq("id", loginId)
+      .maybeSingle<{ id: number; tenant_id: number; is_active: boolean | null }>();
+    if (oErr) {
+      console.error("[session] 查詢原登入者失敗", oErr.message);
+      return null;
+    }
+    if (!orig || orig.is_active === false || orig.tenant_id !== data.tenant_id) return null;
+  }
 
   const persistent = isPersistentToken(token);
   let effectiveExpiry = expiresAt;
-  if (!persistent && expiresAt.getTime() - now < IDLE_MS / 2) {
-    // 滑動延長（只在剩不到一半時寫入，避免每個請求都寫 DB）
+  if (!persistent && expiresAt.getTime() - now < IDLE_MS - SLIDE_EVERY_MS) {
+    // 滑動延長：閒置 12 小時才過期（距上次延長超過 10 分鐘才寫 DB）
     effectiveExpiry = new Date(now + IDLE_MS);
     await db.from("admin_sessions").update({ expires_at: effectiveExpiry.toISOString() }).eq("id", id);
   }
@@ -152,6 +169,7 @@ export async function readSession(req: Request): Promise<AdminSession | null> {
     tenantName: data.tenants.name,
     expiresAt: effectiveExpiry,
     persistent,
+    loginAdminUserId: loginId ?? null,
   };
 }
 
@@ -159,18 +177,42 @@ export async function destroySession(req: Request): Promise<void> {
   const token = readCookie(req, SESSION_COOKIE);
   if (!token) return;
   const db = getServiceClient();
-  await db.from("admin_sessions").delete().eq("id", hashToken(token));
+  const { error } = await db.from("admin_sessions").delete().eq("id", hashToken(token));
+  // 刪不掉就不能回「已登出」：token 仍有效
+  if (error) throw new Error(`登出失敗：${error.message}`);
 }
 
-/** 切換到同租戶另一位管理員（switchAdmin）：沿用同一個 session token，只改 admin_user_id */
-export async function switchSessionUser(sessionId: string, adminUserId: number): Promise<void> {
+/**
+ * 切換到同租戶另一位管理員（switchAdmin）：沿用同一個 session token，只改 admin_user_id；
+ * login_admin_user_id 記住「原本輸入帳密登入的人」（多次切換仍保留最初那位），
+ * 原登入者改密碼／被停用時這個 session 會一起失效。
+ */
+export async function switchSessionUser(sessionId: string, adminUserId: number, loginAdminUserId: number): Promise<void> {
   const db = getServiceClient();
-  const { error } = await db.from("admin_sessions").update({ admin_user_id: adminUserId }).eq("id", sessionId);
+  const { error } = await db
+    .from("admin_sessions")
+    .update({ admin_user_id: adminUserId, login_admin_user_id: loginAdminUserId })
+    .eq("id", sessionId);
   if (error) throw new Error(`切換管理員失敗：${error.message}`);
 }
 
-/** 清掉某管理員全部 session（改密碼後使用；保留目前這個） */
+/** 清掉某管理員（含以他登入後切換成別人的）全部 session，保留目前這個（改密碼後使用） */
 export async function destroyOtherSessions(adminUserId: number, keepSessionId: string): Promise<void> {
   const db = getServiceClient();
-  await db.from("admin_sessions").delete().eq("admin_user_id", adminUserId).neq("id", keepSessionId);
+  const { error } = await db
+    .from("admin_sessions")
+    .delete()
+    .or(`admin_user_id.eq.${Number(adminUserId)},login_admin_user_id.eq.${Number(adminUserId)}`)
+    .neq("id", keepSessionId);
+  if (error) throw new Error(`清除其他登入失敗：${error.message}`);
+}
+
+/** 清掉某管理員（含以他登入後切換成別人的）全部 session：管理者重設他人密碼、停用帳號時使用 */
+export async function destroyAllSessions(adminUserId: number): Promise<void> {
+  const db = getServiceClient();
+  const { error } = await db
+    .from("admin_sessions")
+    .delete()
+    .or(`admin_user_id.eq.${Number(adminUserId)},login_admin_user_id.eq.${Number(adminUserId)}`);
+  if (error) throw new Error(`清除登入失敗：${error.message}`);
 }

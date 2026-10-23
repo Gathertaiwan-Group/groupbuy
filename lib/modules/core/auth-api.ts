@@ -17,8 +17,10 @@ import { DUMMY_HASH, hashPassword, verifyPassword } from "@/lib/core/auth/passwo
 import { requireSession } from "@/lib/core/http/route-helpers";
 import { parseEditorRequest, editorResponse } from "@/lib/core/editor/protocol";
 
-const MAX_FAILURES = 5;
+const MAX_FAILURES = 5; // 同帳號 15 分鐘內失敗上限
+const IP_MAX_FAILURES = 30; // 同 IP 15 分鐘內失敗上限（跨帳號猜密碼）
 const LOCK_WINDOW_MS = 15 * 60 * 1000;
+const RETENTION_DAYS = 90; // 登入紀錄保存天數
 
 type AdminRow = {
   id: number;
@@ -28,42 +30,102 @@ type AdminRow = {
   is_active: boolean | null;
 };
 
-async function recordAttempt(ctx: RequestContext, account: string, success: boolean, reason: string | null, user?: AdminRow | null) {
-  const db = getServiceClient();
-  const { error } = await db.from("admin_login_attempts").insert({
-    account: account.slice(0, 100),
-    admin_user_id: user?.id ?? null,
-    tenant_id: user?.tenant_id ?? null,
-    ip: clientIp(ctx.req),
-    user_agent: (ctx.req.headers.get("user-agent") || "").slice(0, 500),
-    success,
-    reason,
-  });
-  if (error) console.error("[login] 寫入登入紀錄失敗", error.message);
+type AttemptRow = { id: number; success: boolean; reason: string | null; created_at: string };
+
+const busy = () => new HttpError(503, "系統忙碌，請稍後再試");
+
+/** 依「最近 limit 筆失敗」算出還要等幾秒；未達上限回 0 */
+function waitSeconds(failures: AttemptRow[], limit: number): number {
+  if (failures.length < limit) return 0;
+  const unlockAt = new Date(failures[limit - 1].created_at).getTime() + LOCK_WINDOW_MS;
+  return Math.max(1, Math.ceil((unlockAt - Date.now()) / 1000));
 }
 
-/** 15 分鐘內同帳號失敗 ≥5 次 → 鎖定，回傳剩餘秒數 */
-async function lockedSeconds(account: string): Promise<number> {
+/**
+ * 登入（與改密碼的舊密碼驗證）限流閘門。
+ * 先寫一筆 PENDING 紀錄、再計數（把自己算進去）：同時送 N 個請求，也只有前 MAX_FAILURES 個能進到密碼比對。
+ * - 同帳號：最近一次成功之後、15 分鐘內的失敗（含驗證中）達 5 次 → 鎖定，倒數以第 5 新的失敗 + 15 分鐘計
+ * - 同 IP：15 分鐘內失敗達 30 次 → 鎖定
+ * - 被鎖定的請求刪掉自己那筆（不累積、不延長鎖定）；查詢失敗一律拒絕（fail-closed）
+ * 回傳 attemptId（之後用 finishAttempt 寫結果）或 wait 秒數。
+ */
+async function openAttempt(ctx: RequestContext, account: string): Promise<{ attemptId: number; wait: 0 } | { attemptId: null; wait: number }> {
   const db = getServiceClient();
-  const since = new Date(Date.now() - LOCK_WINDOW_MS).toISOString();
-  const { data, error } = await db
+  const ip = clientIp(ctx.req);
+  const { data: ins, error: insErr } = await db
     .from("admin_login_attempts")
-    .select("success, created_at")
-    .eq("account", account)
+    .insert({
+      account: account.slice(0, 100),
+      ip,
+      user_agent: (ctx.req.headers.get("user-agent") || "").slice(0, 500),
+      success: false,
+      reason: "PENDING",
+    })
+    .select("id")
+    .single<{ id: number }>();
+  if (insErr || !ins) {
+    console.error("[login] 寫入登入紀錄失敗", insErr?.message);
+    throw busy();
+  }
+  const since = new Date(Date.now() - LOCK_WINDOW_MS).toISOString();
+
+  const { data: acc, error: accErr } = await db
+    .from("admin_login_attempts")
+    .select("id, success, reason, created_at")
+    .eq("account", account.slice(0, 100))
     .gte("created_at", since)
     .order("created_at", { ascending: false })
-    .limit(MAX_FAILURES + 1);
-  if (error || !data) return 0;
-  let failures = 0;
-  let oldestFailure: string | null = null;
-  for (const r of data as { success: boolean; created_at: string }[]) {
-    if (r.success) break; // 最近一次成功之後才算
-    failures++;
-    oldestFailure = r.created_at;
+    .order("id", { ascending: false })
+    .limit(100);
+  if (accErr || !acc) {
+    await db.from("admin_login_attempts").delete().eq("id", ins.id);
+    throw busy();
   }
-  if (failures < MAX_FAILURES || !oldestFailure) return 0;
-  const unlockAt = new Date(oldestFailure).getTime() + LOCK_WINDOW_MS;
-  return Math.max(1, Math.ceil((unlockAt - Date.now()) / 1000));
+  const accFailures: AttemptRow[] = [];
+  for (const r of acc as AttemptRow[]) {
+    if (r.success) break; // 最近一次成功之前的失敗不算
+    if (r.reason === "LOCKED") continue; // 舊版寫入的鎖定紀錄不算失敗
+    accFailures.push(r);
+  }
+  let wait = accFailures.length > MAX_FAILURES ? waitSeconds(accFailures.filter((r) => r.id !== ins.id), MAX_FAILURES) : 0;
+
+  if (!wait && ip) {
+    const { data: byIp, error: ipErr } = await db
+      .from("admin_login_attempts")
+      .select("id, success, reason, created_at")
+      .eq("ip", ip)
+      .eq("success", false)
+      .gte("created_at", since)
+      .order("created_at", { ascending: false })
+      .limit(IP_MAX_FAILURES + 1);
+    if (ipErr || !byIp) {
+      await db.from("admin_login_attempts").delete().eq("id", ins.id);
+      throw busy();
+    }
+    const ipFailures = (byIp as AttemptRow[]).filter((r) => r.reason !== "LOCKED");
+    if (ipFailures.length > IP_MAX_FAILURES) wait = waitSeconds(ipFailures.filter((r) => r.id !== ins.id), IP_MAX_FAILURES);
+  }
+
+  if (wait > 0) {
+    await db.from("admin_login_attempts").delete().eq("id", ins.id);
+    return { attemptId: null, wait };
+  }
+  // 偶爾清掉過期的登入紀錄（約每 50 次一次）
+  if (Math.random() < 0.02) {
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 86400_000).toISOString();
+    await db.from("admin_login_attempts").delete().lt("created_at", cutoff);
+  }
+  return { attemptId: ins.id, wait: 0 };
+}
+
+/** 寫入驗證結果（成功、或失敗原因） */
+async function finishAttempt(attemptId: number, success: boolean, reason: string | null, user?: { id: number; tenant_id: number } | null) {
+  const db = getServiceClient();
+  const { error } = await db
+    .from("admin_login_attempts")
+    .update({ success, reason, admin_user_id: user?.id ?? null, tenant_id: user?.tenant_id ?? null })
+    .eq("id", attemptId);
+  if (error) console.error("[login] 更新登入紀錄失敗", error.message);
 }
 
 /** POST /ajax/AdminUser/login（原站表單 AdminUserForm：username、password、kmsi、wtoken、g-recaptcha-response-v3） */
@@ -74,11 +136,11 @@ export async function login(ctx: RequestContext): Promise<Response> {
   if (!username || !password) {
     return json({ code: 401, error: "請輸入帳號及密碼" }, { status: 401 });
   }
-  const wait = await lockedSeconds(username);
-  if (wait > 0) {
-    await recordAttempt(ctx, username, false, "LOCKED");
-    return json({ code: 429, error: `登入失敗次數過多，請於 ${wait} 秒後再試`, data: wait }, { status: 429 });
+  const gate = await openAttempt(ctx, username);
+  if (gate.attemptId === null) {
+    return json({ code: 429, error: `登入失敗次數過多，請於 ${gate.wait} 秒後再試`, data: gate.wait }, { status: 429 });
   }
+  const attemptId = gate.attemptId;
 
   const db = getServiceClient();
   const { data: user, error } = await db
@@ -86,22 +148,25 @@ export async function login(ctx: RequestContext): Promise<Response> {
     .select("id, tenant_id, account, password_hash, is_active")
     .eq("account", username)
     .maybeSingle<AdminRow>();
-  if (error) throw new Error(`查詢管理員失敗：${error.message}`);
+  if (error) {
+    await finishAttempt(attemptId, false, "ERROR");
+    throw new Error(`查詢管理員失敗：${error.message}`);
+  }
 
   const ok = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
   if (!user || !ok) {
-    await recordAttempt(ctx, username, false, user ? "BAD_PASSWORD" : "NO_ACCOUNT", user);
+    await finishAttempt(attemptId, false, user ? "BAD_PASSWORD" : "NO_ACCOUNT", user);
     return json({ code: 401, error: "帳號或密碼錯誤" }, { status: 401 });
   }
   if (user.is_active === false) {
-    await recordAttempt(ctx, username, false, "INACTIVE", user);
+    await finishAttempt(attemptId, false, "INACTIVE", user);
     return json({ code: 403, error: "此帳號已停用" }, { status: 403 });
   }
 
   const { cookie } = await createSession({ adminUserId: user.id, tenantId: user.tenant_id, persistent: kmsi, req: ctx.req });
   ctx.cookies.set.push(cookie);
   await db.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
-  await recordAttempt(ctx, username, true, null, user);
+  await finishAttempt(attemptId, true, null, user);
 
   // 在 /backend/AdminUser/login 頁登入 → 導回首頁；其他網址 → 前端 reload 回到原頁
   const referer = ctx.req.headers.get("referer") || "";
@@ -147,8 +212,9 @@ export async function recaptchaVerify(): Promise<Response> {
 }
 
 /**
- * GET /ajax/AdminUser/switchAdmin?username=X
+ * POST /ajax/AdminUser/switchAdmin（username=X）
  * 只能切換到「目前管理員 permissions.switchAccounts 清單內」且同租戶、啟用中的帳號。
+ * 只收 POST：GET 會被跨站連結（頂層導覽會帶 SameSite=Lax cookie）靜默觸發。
  */
 export async function switchAdmin(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
@@ -162,7 +228,7 @@ export async function switchAdmin(ctx: RequestContext): Promise<Response> {
     .eq("account", username)
     .maybeSingle<{ id: number; tenant_id: number; is_active: boolean | null }>();
   if (!target || target.tenant_id !== session.tenantId || target.is_active === false) throw forbidden("無權限切換至此帳號");
-  await switchSessionUser(session.sessionId, target.id);
+  await switchSessionUser(session.sessionId, target.id, session.loginAdminUserId ?? session.adminUserId);
   return json({ code: 200 });
 }
 
@@ -185,14 +251,21 @@ export async function changePassword(ctx: RequestContext): Promise<Response> {
   const db = getServiceClient();
   const { data: user, error } = await db
     .from("admin_users")
-    .select("id, password_hash")
+    .select("id, tenant_id, password_hash")
     .eq("id", session.adminUserId)
     .eq("tenant_id", session.tenantId)
-    .maybeSingle<{ id: number; password_hash: string }>();
+    .maybeSingle<{ id: number; tenant_id: number; password_hash: string }>();
   if (error || !user) throw new HttpError(404, "找不到管理員");
+  // 舊密碼驗證與登入共用同一個失敗次數上限（同帳號 15 分鐘 5 次），避免拿到 session 的人無限次猜密碼
+  const gate = await openAttempt(ctx, session.account);
+  if (gate.attemptId === null) {
+    throw new FieldErrors([{ name: "oldPassword", status: `嘗試次數過多，請於 ${gate.wait} 秒後再試` }]);
+  }
   if (!(await verifyPassword(oldPassword, user.password_hash))) {
+    await finishAttempt(gate.attemptId, false, "BAD_OLD_PASSWORD", user);
     throw new FieldErrors([{ name: "oldPassword", status: "舊密碼錯誤" }]);
   }
+  await finishAttempt(gate.attemptId, true, "CHANGE_PASSWORD", user);
   const hash = await hashPassword(password);
   const { error: upErr } = await db.from("admin_users").update({ password_hash: hash }).eq("id", user.id).eq("tenant_id", session.tenantId);
   if (upErr) throw new Error(`更新密碼失敗：${upErr.message}`);

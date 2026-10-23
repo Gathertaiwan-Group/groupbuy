@@ -31,6 +31,11 @@ function isAjaxRequest(req: Request, path: string): boolean {
   return accept.includes("application/json") && !accept.includes("text/html");
 }
 
+/** 瀏覽器標示為「其他網站發起」的請求（Sec-Fetch-Site: cross-site；舊瀏覽器沒有此標頭 → 不判定） */
+function isCrossSite(req: Request): boolean {
+  return (req.headers.get("sec-fetch-site") || "").toLowerCase() === "cross-site";
+}
+
 function safeDecode(p: string): string {
   try {
     return decodeURIComponent(p);
@@ -177,6 +182,10 @@ export async function dispatch(req: Request): Promise<Response> {
       if (ctx.isAjax || method !== "GET") return jsonError(401, "系統偵測到已登出，請重新登入");
       return renderLoginPage(ctx);
     }
+    // 跨站請求防護（CSRF）：後台 AJAX 與寫入請求不接受其他網站發起的。
+    // SameSite=Lax 已讓跨站 POST 不帶 cookie，但跨站「頂層 GET 導覽」仍會帶 → 以 GET 做事的 AJAX 端點也擋。
+    // 後台頁面本身（GET、非 AJAX）仍可從外部連結（Email、書籤）開啟。
+    if (isCrossSite(req) && (ctx.isAjax || method !== "GET")) return jsonError(403, "不接受跨站請求");
     // 網址帶的租戶前綴必須與登入者相同（資料一律以 session.tenantId 為準）
     if (tenantPrefix && tenantPrefix !== ctx.session.tenantCode && tenantPrefix !== "demo") {
       return ctx.isAjax ? jsonError(403, "無權限") : renderNoPermission(ctx);

@@ -116,7 +116,8 @@ npm run typecheck
    | `[guest_ep]guest1_a` | 殼已處理（`{{session.tenantCode}}`、`{{session.account}}`） |
    | `groupBuyId=405167` | `groupBuyId={{groupBuyId}}`（或 `{{groupBuy.groupBuyId}}`） |
    | 團購名稱、`ak98i` | `{{groupBuy.title}}`、`{{groupBuy.shortUrl}}` |
-   | 伺服器塞進 JS 的資料 | `var x = {{json x}};`（已處理 `</script>` 與 U+2028） |
+   | 伺服器塞進 JS 的資料 | `var x = {{json x}};`（已處理 `</script>` 與 U+2028）——**只能用在 `<script>` 內** |
+   | 放進 `onclick="…"` 等屬性的值 | `onclick="f({{jsattr x}})"`（JSON 再 HTML escape），或 `data-x="{{x}}"` + `this.getAttribute('data-x')`。**不可**寫成 `'{{x}}'`（屬性裡的 `&#x27;` 會被解回 `'`，使用者可編輯的值＝XSS） |
 
    Handlebars：`{{x}}` 會 HTML escape；`{{{x}}}` 原樣輸出（只用在你自己產生的安全 HTML）；`{{#if}}`/`{{#each}}`/`{{eq a b}}`/`{{selected a b}}`/`{{checked a}}`。原站 HTML 沒有 `{{`，不會衝突；**你在 inline JS 裡若真的要寫 `{{`，改寫成 `{ {`**。
 6. 資源路徑：
@@ -239,6 +240,10 @@ post("/ajax/SalesOrder/markAsPaid", async (ctx) => {
 
 `ctx`：`param(name)`（先 query 後 body，等同 Java getParameter）、`params_all(name)`、`body()`（`{flat, nested, files, json}`；支援 urlencoded 巢狀鍵 `a[b][]`、multipart、JSON）、`query`、`params`、`session`、`isAjax`、`cookies.set.push(…)`。
 
+- **會改資料的端點一律用 `post()`**（不要 `get()`／`any()`）：SameSite=Lax cookie 在跨站「頂層 GET 導覽」仍會送出。原站若用 `$.get` 呼叫動作端點，把模板裡的呼叫改成 `$.post`。
+- dispatch 已對後台 AJAX 與所有非 GET 請求擋 `Sec-Fetch-Site: cross-site`（403「不接受跨站請求」）；後台頁面本身仍可從外部連結開啟。
+- 管理者重設他人密碼、停用管理員帳號時，呼叫 `destroyAllSessions(adminUserId)`（`lib/core/auth/session.ts`）讓對方（含切換過身分的）session 立即失效。
+
 ### 4.3 回應慣例（原站前端依賴，務必照用）
 
 | 情境 | 用法 | 格式 |
@@ -281,7 +286,7 @@ const tagWrite: WriteSpec = {
   beforeWrite(dbRow, values, action, ctx, existing) { return dbRow; },   // 寫入前調整（預設值、換算）
   // beforeRemove(ids, ctx) { … 被引用時 throw badRequest('…') },
   // afterWrite(rows, action, ctx, req) { … 同步子表 … },
-  // optimisticLock: true（預設）：請求頂層帶 dateModified 時檢查資料是否被他人修改
+  // optimisticLock: true（預設）：請求頂層帶 dateModified 時檢查資料是否被他人修改（條件寫進 UPDATE，並行編輯只有一個成功，另一個 409）
 };
 
 export const routes = [
@@ -293,9 +298,13 @@ export const routes = [
     listSpec: tagList,
     writeSpec: tagWrite,
     // permission: "…",
+    // actions: { save: ["create"] },     // 見下方「端點與 action」
   }),
 ];
 ```
+
+- **端點與 action**：`save` 只收 `create`、`update` 只收 `edit`、`delete` 只收 `remove`（例：對 save 送 `action=remove` → 400）。某個動作沒有自己的端點時，由第一個已登錄的端點代收——原站「Editor `ajax` 只有一個網址」的頁面（例 groupbuypreference-list、inbound-list）只給 `save` 即可收全部動作。頁面根本沒有某動作時用 `actions` 收緊，例：`actions: { save: ["create"] }`（團購標籤的「套用中團購」只有新增/刪除）。
+- 列表排序最後一律補 `entity.idColumn`（排序值相同的列在分頁時不會重複或漏掉）；直接呼叫 `dtQuery` 時請傳 `tieBreaker: "id"`。
 
 - 列表自動處理：原站 **legacy DataTables 參數**（`sEcho`、`iDisplayStart`、`iDisplayLength`、`mDataProp_N`、`sSearch`、`sSearch_N`、`iSortCol_K`、`sSortDir_K`；全站 `dataTable.config.min.js` 設了 `legacy.ajax=true`）、serverSide 分頁/排序/全域搜尋/表尾欄位篩選（值以 `?` 開頭＝結尾比對「搜尋末幾碼」）、serverSide=false 一次回全部（上限 10000）、租戶過濾。
 - 寫入自動處理：Editor 協定解析（`action` + `data[id][欄位]`、巢狀 `a[b]`、陣列 `a[]`、`-many-count`）、`apiToRow`（型別轉換、jsonb 子鍵合併、台灣時間）、租戶欄位、unique/FK 違反轉成友善錯誤、回傳最新列。
@@ -401,11 +410,12 @@ const mod: ModuleDef = {
 ## 11. 交付前自查清單
 
 1. `npm run typecheck` 綠（本機 build 依 §2 的磁碟守則，或交給 CI；push 後 CI 的 build 必須綠）。
-2. 本機登入後實際點過：列表（排序/搜尋/分頁）、每個按鈕、Editor 新增/編輯/刪除/行內、匯出、彈窗；`scripts/dev/shot.mjs` 的輸出沒有 `[exception]`、沒有非預期的 `[http 4xx/5xx]`。
-3. 畫面與 `spec/html`（必要時原站 m4 armand 分頁）比對：欄位順序、按鈕文字、class、顏色、間距。
-4. 所有查詢都有租戶過濾；換一個租戶前綴打 AJAX 應 403。
-5. 沒有引用商業授權檔、沒有金鑰、沒有寫死 `guest_ep`/`405167`。
-6. `git fetch && git rebase origin/main` → 再跑一次 typecheck/build → `git push origin HEAD:main`；推完確認 CI 綠、Vercel READY，正式網址 https://groupbuy-delta.vercel.app 用 curl/headless 實測。
+2. 會改資料的端點都是 `post()`；模板屬性內的插值用 `{{jsattr}}` 或 `data-*`，沒有 `'{{x}}'` 寫法。
+3. 本機登入後實際點過：列表（排序/搜尋/分頁）、每個按鈕、Editor 新增/編輯/刪除/行內、匯出、彈窗；`scripts/dev/shot.mjs` 的輸出沒有 `[exception]`、沒有非預期的 `[http 4xx/5xx]`。
+4. 畫面與 `spec/html`（必要時原站 m4 armand 分頁）比對：欄位順序、按鈕文字、class、顏色、間距。
+5. 所有查詢都有租戶過濾；換一個租戶前綴打 AJAX 應 403。
+6. 沒有引用商業授權檔、沒有金鑰、沒有寫死 `guest_ep`/`405167`。
+7. `git fetch && git rebase origin/main` → 再跑一次 typecheck/build → `git push origin HEAD:main`；推完確認 CI 綠、Vercel READY，正式網址 https://groupbuy-delta.vercel.app 用 curl/headless 實測。
 
 ## 12. 常見問題
 

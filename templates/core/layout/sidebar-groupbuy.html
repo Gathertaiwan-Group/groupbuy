@@ -11,10 +11,10 @@
 				<li><a target="_blank" href="/backend/GroupBuyItemSet/show?groupBuyId={{groupBuy.groupBuyId}}" >
 				<i class="sv-slim-icon fa-light fa-box"></i>所有商品</a>
 				</li>
-<li><a target="_blank" href="/{{groupBuy.shortUrl}}?preview=true" >
+<li><a target="_blank" href="/{{urlencode groupBuy.shortUrl}}?preview=true" >
 				<i class="sv-slim-icon fa-light fa-eye"></i>預覽</a>
 				</li>
-				<li><a href="javascript: void(0)" onclick="GBAPI.showShortUrl('{{groupBuy.shortUrl}}',{{groupBuy.groupBuyId}},'https://groupbuyforms.tw')" >
+				<li><a href="javascript: void(0)" onclick="GBAPI.showShortUrl({{jsattr groupBuy.shortUrl}},{{jsattr groupBuy.groupBuyId}},'https://groupbuyforms.tw')" >
 				<i class="sv-slim-icon fa-light fa-share-alt"></i>賣場網址</a>
 				</li>
 <li><a href="javascript: void(0)" onclick="openFormF('/backend/GroupBuy/clone', 'groupBuyId={{groupBuy.groupBuyId}}')" >

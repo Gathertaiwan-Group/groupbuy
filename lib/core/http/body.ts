@@ -19,6 +19,9 @@ export interface ParsedBody {
 
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
 
+/** 只看自有屬性：避免 `toString[x]=…` 這類鍵取到繼承來的內建函式並在其上寫入（跨請求共用的全域物件） */
+const hasOwn = (o: object, k: string): boolean => Object.prototype.hasOwnProperty.call(o, k);
+
 /** 'a[b][c]' → ['a','b','c']；'a[]' → ['a','']；'a' → ['a'] */
 export function splitKey(key: string): string[] {
   const first = key.indexOf("[");
@@ -56,7 +59,7 @@ function assignNested(target: Nested, path: string[], value: string) {
     }
     if (last) {
       if (seg === "") return; // 不合法
-      const existing = cur[seg];
+      const existing = hasOwn(cur, seg) ? cur[seg] : undefined;
       if (existing === undefined) cur[seg] = value;
       else if (Array.isArray(existing)) existing.push(value);
       else if (typeof existing === "string") cur[seg] = [existing, value];
@@ -64,7 +67,7 @@ function assignNested(target: Nested, path: string[], value: string) {
       return;
     }
     const nextSeg = path[i + 1];
-    let child = cur[seg];
+    let child = hasOwn(cur, seg) ? cur[seg] : undefined;
     if (child === undefined || typeof child === "string") {
       child = nextSeg === "" ? [] : {};
       cur[seg] = child;
@@ -112,15 +115,18 @@ function jsonToFlat(obj: unknown, prefix: string, flat: Map<string, string[]>) {
   else flat.set(prefix, [s]);
 }
 
-const EMPTY: ParsedBody = { flat: new Map(), nested: {}, files: new Map() };
+/** 每次回傳新物件（handler 若改動 body 不會影響其他請求） */
+function emptyBody(): ParsedBody {
+  return { flat: new Map(), nested: {}, files: new Map() };
+}
 
 export async function parseBody(req: Request): Promise<ParsedBody> {
-  if (req.method === "GET" || req.method === "HEAD") return EMPTY;
+  if (req.method === "GET" || req.method === "HEAD") return emptyBody();
   const ct = (req.headers.get("content-type") || "").toLowerCase();
   try {
     if (ct.includes("application/json")) {
       const text = await req.text();
-      if (!text) return EMPTY;
+      if (!text) return emptyBody();
       const json = JSON.parse(text) as unknown;
       const flat = new Map<string, string[]>();
       jsonToFlat(json, "", flat);
@@ -145,12 +151,12 @@ export async function parseBody(req: Request): Promise<ParsedBody> {
     }
     // 預設：urlencoded（jQuery 預設）
     const text = await req.text();
-    if (!text) return EMPTY;
+    if (!text) return emptyBody();
     const flat = searchParamsToFlat(new URLSearchParams(text));
     return { flat, nested: buildNested(flat), files: new Map() };
   } catch (e) {
     console.warn("[body] 解析失敗", e);
-    return EMPTY;
+    return emptyBody();
   }
 }
 

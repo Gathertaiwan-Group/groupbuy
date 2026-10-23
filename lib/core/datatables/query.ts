@@ -29,6 +29,11 @@ export interface DtQuerySpec {
   defaultOrder?: { column: string; ascending?: boolean }[];
   /** 非 serverSide（前端分頁）時最多讀幾筆；預設 10000 */
   maxRows?: number;
+  /**
+   * 唯一鍵欄位，排序最後一律補上它（排序值相同的列在分頁時才不會重複/漏掉）。
+   * listEntity/crudRoutes 會自動帶 entity.idColumn；直接呼叫 dtQuery 時建議傳 'id'。
+   */
+  tieBreaker?: string;
 }
 
 export interface DtQueryResult<Row = Record<string, unknown>> {
@@ -84,18 +89,25 @@ function applyCommon(q: AnyQuery, dt: DtRequest, spec: DtQuerySpec, withSearch: 
 }
 
 function applyOrder(q: AnyQuery, dt: DtRequest, spec: DtQuerySpec): AnyQuery {
-  let ordered = false;
+  const used = new Set<string>();
   if (spec.columnMap) {
     for (const o of dt.order) {
       const dbField = spec.columnMap[o.data];
       if (!dbField) continue;
-      q = q.order(pgColumn(dbField), { ascending: o.dir === "asc", nullsFirst: o.dir === "asc" });
-      ordered = true;
+      const col = pgColumn(dbField);
+      if (used.has(col)) continue;
+      q = q.order(col, { ascending: o.dir === "asc", nullsFirst: o.dir === "asc" });
+      used.add(col);
     }
   }
-  if (!ordered && spec.defaultOrder) {
-    for (const d of spec.defaultOrder) q = q.order(d.column, { ascending: d.ascending ?? true });
+  if (used.size === 0 && spec.defaultOrder) {
+    for (const d of spec.defaultOrder) {
+      if (used.has(d.column)) continue;
+      q = q.order(d.column, { ascending: d.ascending ?? true });
+      used.add(d.column);
+    }
   }
+  if (spec.tieBreaker && !used.has(spec.tieBreaker)) q = q.order(spec.tieBreaker, { ascending: true });
   return q;
 }
 
@@ -136,7 +148,7 @@ export async function dtQuery<Row = Record<string, unknown>>(
     let q = db.from(spec.table).select(select);
     q = applyCommon(q, dt, spec, false);
     q = applyOrder(q, { ...dt, order: [] }, spec);
-    if (!spec.defaultOrder) q = q.order("id", { ascending: true });
+    if (!spec.defaultOrder && !spec.tieBreaker) q = q.order("id", { ascending: true });
     q = q.range(from, Math.min(from + PAGE, max) - 1);
     const { data, error } = await q;
     if (error) throw new Error(`[dtQuery] ${spec.table}：${error.message}`);

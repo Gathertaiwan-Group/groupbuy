@@ -2,7 +2,8 @@
 //
 //   {{name}}            HTML escape 後輸出（預設，防 XSS）
 //   {{{name}}}          原樣輸出（只用在「我們自己產生」的 HTML 片段）
-//   {{json obj}}        輸出可直接放進 <script> 的 JSON（已處理 </script>、U+2028）
+//   {{json obj}}        輸出可直接放進 <script> 的 JSON（已處理 </script>、U+2028）——只能用在 <script> 內
+//   {{jsattr obj}}      放進 on*="…" 屬性裡的 JS 值（JSON 再 HTML escape），例 onclick="f({{jsattr name}})"
 //   {{#if x}}..{{else}}..{{/if}}、{{#each list}}..{{/each}}、{{#unless}}
 //   {{> core/partials/foo.html}}   引入另一個模板檔（路徑相對於 templates/）
 //   {{eq a b}} {{ne a b}} {{selected a b}} {{checked a b}} {{default a "x"}}
@@ -31,6 +32,8 @@ function safeJson(v: unknown): string {
 
 hb.registerHelper("json", (v: unknown) => new hb.SafeString(safeJson(v)));
 hb.registerHelper("js", (v: unknown) => new hb.SafeString(safeJson(v)));
+// 不包 SafeString：交給 Handlebars 做 HTML escape（" → &quot;），屬性值解碼後就是合法的 JS 字面值
+hb.registerHelper("jsattr", (v: unknown) => safeJson(v));
 hb.registerHelper("eq", (a: unknown, b: unknown) => a === b || String(a) === String(b));
 hb.registerHelper("ne", (a: unknown, b: unknown) => !(a === b || String(a) === String(b)));
 hb.registerHelper("and", (...args: unknown[]) => args.slice(0, -1).every(Boolean));

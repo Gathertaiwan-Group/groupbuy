@@ -70,10 +70,15 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 帳號全域唯一（`groupbuy.admin_users.account`），bcrypt（`password_hash`）。
 - 登入 `POST /ajax/AdminUser/login(.do)`（原站表單：username、password、kmsi）。成功 → 32 bytes 隨機 token 放 cookie **`GBSID`**（`HttpOnly; SameSite=Lax; Path=/`；https 時 `Secure`），DB 只存 `sha256(token)`（`groupbuy.admin_sessions.id`）。
   - 勾「讓我保持登入(24小時)」：cookie `Max-Age=86400`、伺服器端固定 24 小時到期。
-  - 未勾：瀏覽器 session cookie；伺服器端閒置 12 小時到期，請求/keepalive 滑動延長。
-- 失敗鎖定：`groupbuy.admin_login_attempts`（migration 0100），15 分鐘內同帳號失敗 5 次 → 429 `{code:429, data:等待秒數}`（原站登入頁會倒數）。也作為登入日誌。
+  - 未勾：瀏覽器 session cookie；伺服器端閒置 12 小時到期，請求/keepalive 滑動延長（距上次延長超過 10 分鐘才寫 DB）。
+- 失敗鎖定：`groupbuy.admin_login_attempts`（migration 0100），也作為登入日誌（保存 90 天）。
+  - 同帳號：最近一次成功之後、15 分鐘內失敗 5 次 → 429 `{code:429, data:等待秒數}`（原站登入頁會倒數；倒數＝第 5 新的失敗 + 15 分鐘，重試不會延長）。
+  - 同 IP：15 分鐘內失敗 30 次 → 429（跨帳號猜密碼）。
+  - 先寫一筆 `PENDING` 再計數（含自己）→ 並行送 N 個請求也最多 5 次進到密碼比對；被鎖的請求刪掉自己那筆；查詢失敗一律拒絕（503）。
+  - `changePassword` 的舊密碼驗證共用同一個上限（`BAD_OLD_PASSWORD`）。
 - 登出 `GET /backend/AdminUser/logout` → 刪 session、清 cookie、導回 `/backend/panel.do`。
-- `keepalive`（每 120 秒，原站 gbs_api）、`/ajax/AdminUser/info`（徽章/鈴鐺/公告，彙整各模組 `ModuleDef`）、`switchAdmin`（僅限 `permissions.switchAccounts` 內的同租戶帳號）、`changePassword`（Editor：舊密碼驗證、6–20 碼、確認一致；成功後踢掉其他 session）。
+- `keepalive`（每 120 秒，原站 gbs_api）、`/ajax/AdminUser/info`（徽章/鈴鐺/公告，彙整各模組 `ModuleDef`）、`switchAdmin`（**只收 POST**；僅限 `permissions.switchAccounts` 內的同租戶帳號）、`changePassword`（Editor：舊密碼驗證、6–20 碼、確認一致；成功後踢掉其他 session）。
+- 切換身分：`admin_sessions.login_admin_user_id`（migration 0101）記住原本輸入帳密的人；原登入者被停用 → 該 session 失效；原登入者改密碼 → `destroyOtherSessions` 一併清掉。管理者重設他人密碼或停用帳號時呼叫 `destroyAllSessions(adminUserId)`。
 - Google reCAPTCHA、Facebook 登入、二階段驗證碼：**未串接**（畫面照原站；`/ajax/GoogleRecaptcha/verify` 直接通過、FB 按鈕顯示未串接訊息）。
 - 頂列顯示 `[租戶代碼]帳號`（例 `[guest_ep]guest1_a`）；`GBF.baseUrl = '/{租戶代碼}'`（未登入時 `/demo`，同原站）。
 
@@ -131,7 +136,9 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 ## 11. 安全注意
 
 - 所有後台 AJAX 需登入；租戶隔離在每個查詢；網址租戶前綴需與 session 相符。
-- `session` cookie HttpOnly＋SameSite=Lax；POST 端點依賴 SameSite 防 CSRF（原站同樣無 CSRF token）。
-- 模板預設 HTML escape；`{{{ }}}` 僅用於伺服器自產 HTML；`{{json}}` 安全嵌入 script。
+- `session` cookie HttpOnly＋SameSite=Lax（跨站 POST 不帶 cookie）；另外 dispatch 對後台 AJAX／非 GET 請求檢查 `Sec-Fetch-Site`，`cross-site` 一律 403（擋跨站頂層 GET 導覽觸發的動作）。原站同樣無 CSRF token。
+- 模板預設 HTML escape；`{{{ }}}` 僅用於伺服器自產 HTML；`{{json}}` 只能放 `<script>` 內；`on*="…"` 屬性內的值用 `{{jsattr x}}`（JSON 再 HTML escape）或 `data-*`。
+- 請求解析：巢狀鍵只寫自有屬性（`toString[x]` 之類不會改到內建物件）、擋 `__proto__/prototype/constructor`；DataTables `iColumns`≤500、`iSortingCols`≤50。
+- crudRoutes：save/update/delete 端點只接受各自的 Editor action（沒有專屬端點的動作才由其他端點代收；可用 `actions` 收緊）。樂觀鎖條件放進 UPDATE（並行編輯只有一個成功）；列表排序最後補唯一鍵。
 - 密碼只存 bcrypt；登入失敗鎖定；帳號不存在時仍跑一次 bcrypt（避免時間差探測）。
 - 對外服務（簡訊、Email、金流、物流、電子發票、FB、reCAPTCHA）一律未串接，回應帶 `【未串接】`。

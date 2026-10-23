@@ -169,6 +169,8 @@ export const groupBuyTagRoutes: RouteDef[] = [
     list: "/ajax/GroupBuyTagGroupBuy/list",
     save: "/ajax/GroupBuyTagGroupBuy/save",
     delete: "/ajax/GroupBuyTagGroupBuy/delete",
+    // 這頁只有新增與刪除：save 只收 create（不寫的話沒有 update 端點時 save 也會代收 edit）
+    actions: { save: ["create"] },
     listSpec: applyList,
     writeSpec: applyWrite,
   }),

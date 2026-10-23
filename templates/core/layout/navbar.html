@@ -24,7 +24,7 @@
 		<a href="javascript: void(0)" type="button" class="nav-link dropdown-toggle" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
 		<i class="fa-light fa-user"></i> [{{session.tenantCode}}]{{session.account}}</a>
 		<div class="dropdown-menu">
-{{#each switchableAdmins}}			<a class="dropdown-item" href='javascript:void(0)' onClick="switchAdminUser({{json this.account}})">切換至 [{{../session.tenantCode}}]{{this.account}}</a>
+{{#each switchableAdmins}}			<a class="dropdown-item" href='javascript:void(0)' onClick="switchAdminUser({{jsattr this.account}})">切換至 [{{../session.tenantCode}}]{{this.account}}</a>
 {{/each}}			<a class="dropdown-item" href='javascript:void(0)' onClick="prepareCompanyEditor()">編輯廠商資料</a>
 			<a class="dropdown-item" href='javascript:void(0)' onClick="loadAjax('/backend/AdminUser/changePassword')">修改密碼</a>
 			<a class="dropdown-item" href='/backend/AdminUser/logout'>登出</a>
@@ -37,7 +37,7 @@
 
 <script>
 function switchAdminUser(username) {
-	$.get(
+	$.post(
     		{{json baseUrl}} + "/ajax/AdminUser/switchAdmin",
     		{
     			username:username

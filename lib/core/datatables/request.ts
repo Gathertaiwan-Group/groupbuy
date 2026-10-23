@@ -46,6 +46,9 @@ export interface DtRequest {
   extraAll: Record<string, string[]>;
 }
 
+const MAX_COLUMNS = 500;
+const MAX_SORTS = 50;
+
 const LEGACY_KEY = /^(sEcho|iColumns|sColumns|iDisplayStart|iDisplayLength|mDataProp_\d+|sSearch(_\d+)?|bRegex(_\d+)?|bSearchable_\d+|bSortable_\d+|iSortCol_\d+|sSortDir_\d+|iSortingCols|_)$/;
 const MODERN_KEY = /^(draw|start|length|search\[|order\[|columns\[)/;
 
@@ -72,7 +75,8 @@ export async function parseDtRequest(ctx: RequestContext): Promise<DtRequest> {
   let req: Omit<DtRequest, "extra" | "extraAll">;
   if (merged.has("sEcho") || merged.has("iDisplayStart")) {
     // ── legacy（原站實際使用）──
-    const n = Number(get("iColumns") ?? 0) || 0;
+    // 上限：欄數／排序數由用戶端決定，不設限會被拿來耗盡記憶體或卡住 event loop
+    const n = Math.min(MAX_COLUMNS, Math.max(0, Math.trunc(Number(get("iColumns") ?? 0) || 0)));
     const names = (get("sColumns") ?? "").split(",");
     const columns: DtColumn[] = [];
     for (let i = 0; i < n; i++) {
@@ -85,7 +89,7 @@ export async function parseDtRequest(ctx: RequestContext): Promise<DtRequest> {
         search: get(`sSearch_${i}`) ?? "",
       });
     }
-    const sortCount = Number(get("iSortingCols") ?? 0) || 0;
+    const sortCount = Math.min(MAX_SORTS, Math.max(0, Math.trunc(Number(get("iSortingCols") ?? 0) || 0)));
     const order: DtOrder[] = [];
     for (let k = 0; k < sortCount; k++) {
       const column = Number(get(`iSortCol_${k}`));
@@ -126,6 +130,7 @@ export async function parseDtRequest(ctx: RequestContext): Promise<DtRequest> {
         data: "",
       }))
       .filter((o) => Number.isInteger(o.column) && o.column >= 0)
+      .slice(0, MAX_SORTS)
       .map((o) => ({ ...o, data: columns[o.column]?.data ?? "" }));
     const searchObj = nested.search;
     req = {
@@ -148,8 +153,10 @@ export async function parseDtRequest(ctx: RequestContext): Promise<DtRequest> {
   merged.forEach((vals, k) => {
     if (LEGACY_KEY.test(k) || MODERN_KEY.test(k)) return;
     const key = k.endsWith("[]") ? k.slice(0, -2) : k;
-    if (!(key in extra)) extra[key] = vals[0];
-    (extraAll[key] ??= []).push(...vals);
+    if (key === "__proto__") return;
+    if (!Object.prototype.hasOwnProperty.call(extra, key)) extra[key] = vals[0];
+    if (!Object.prototype.hasOwnProperty.call(extraAll, key)) extraAll[key] = [];
+    extraAll[key].push(...vals);
   });
   return { ...req, extra, extraAll };
 }

@@ -31,7 +31,7 @@ export const routes: RouteDef[] = [
   post("/ajax/AdminUser/resendWtoken", authApi.resendWtoken, { auth: "public" }),
   any("/ajax/AdminUser/keepalive", authApi.keepalive),
   get("/ajax/AdminUser/info", system.adminInfo),
-  any("/ajax/AdminUser/switchAdmin", authApi.switchAdmin),
+  post("/ajax/AdminUser/switchAdmin", authApi.switchAdmin),
 
   // ── 修改密碼（loadAjax 載入片段 → Editor.create()）─────────
   fragment("/backend/AdminUser/changePassword", { template: "core/change-password.html", method: "GET" }),
