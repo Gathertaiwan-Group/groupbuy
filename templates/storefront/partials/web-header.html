@@ -1,0 +1,34 @@
+{{!-- 官網型頁面 <header>：有團購（網站）情境時輸出側欄 #slide-out（小螢幕）＋導覽列；無團購（系統公告 /News/list、403）時只留註解，與原站相同。
+     選單由 web_menus / web_menu_nodes 組成（lib/modules/storefront/web-site.ts）。 --}}
+<header>
+{{#if webNav}}<!-- Sidebar navigation -->
+	<div id="slide-out" class="side-nav side-nav-1 fixed z-depth-0  {{#if slideOutHideMd}}d-md-none {{/if}}">
+		<ul class="custom-scrollbar">
+			<!-- Logo -->
+			<!--
+			<li>
+				<div class="logo-wrapper waves-light waves-effect waves-light">
+					<a href="#"><img src="" class="img-fluid flex-center"></a>
+				</div>
+			</li>-->
+			<!--/. Logo -->
+			<!-- Side navigation links -->
+			<li>
+<!-- /.use new menu -->
+{{> storefront/partials/web-menu-side.html}}
+</li>
+			<!--/. Side navigation links -->
+		</ul>
+		<div class="sidenav-bg mask-strong"></div>
+	</div>
+	<!--/. Sidebar navigation -->
+<!-- Navbar -->
+	<nav class="navbar ep-nav {{navStyleClass}} fixed-top navbar-expand-sm navbar-light scrolling-navbar no-marquee navbar-custom"><!--Nav Container--><div class="container"><!--Bars button--><div class="float-left mr-2 d-md-none d-block"><a href="#" data-activates="slide-out" class="button-collapse"><i class="fa-regular fa-bars"></i></a></div><!--/.Bars button--><!--Brand-->
+<div class="navbar-brand mr-2 d-flex align-items-center">
+<a href="/{{navShortUrl}}"><img src="{{logoUrl}}"></a>
+</div>
+<!--/.Brand-->
+{{> storefront/partials/web-menu-top.html}}<ul id="nav-menu-social" class="nav navbar-nav nav-flex-icons ml-auto flex-nowrap"><li class="nav-item dropdown"><a class="h-100 d-table nav-link waves-effect waves-light" data-toggle="dropdown" onclick="openSearchForm()"><i class="d-table-cell align-middle fa-light fa-search"></i> <span class="clearfix d-none d-sm-inline-block"></span></a></li><li class="nav-item dropdown"><a class="h-100 d-table nav-link waves-effect waves-light" data-toggle="dropdown" onclick="getUserMenu()"><i class="d-table-cell align-middle fa-light fa-user"></i> <span class="clearfix d-none d-sm-inline-block"></span></a><div class="dropdown-menu dropdown-primary dropdown-menu-right nav-item-usermenu-context"></div></li><li class="nav-item mega-dropdown"><a class="h-100 d-table nav-link waves-effect waves-light" data-toggle="dropdown"><i class="d-table-cell align-middle fa-light fa-shopping-cart"></i> <span class="badge danger-color mr-1 bag-total"></span><span class="clearfix d-none d-xl-inline-block"></span></a><div class="dropdown-menu mega-menu v-3 row z-depth-0 " id="mega-menu-bag"><div class="container"><div class="card border col-md-6 px-0 float-right bag"><div class="card-header">Cart details</div><div class="card-body bag-body">Cart is empty</div><div class="card-footer sticky-bottom white"><div class="d-flex"><div><div class="d-table h-100"><div class=" d-table-cell align-middle">Total Amount<span class="ml-2 text-success bag-amount"></span></div></div></div><div class="btn-group ml-auto"><a class="btn border border-info rounded z-depth-0 mr-2 text-info" data-toggle="modal" data-target="#myModal" onclick="openForm('{{gbfBaseUrl}}/ajax/web/Customer/showLoginForm')"><i class="fa-light fa-sign-in-alt mr-1"></i>Login</a><a href="/{{navShortUrl}}/bag" id="btn-checkout" class="btn rounded border border-primary text-primary z-depth-0">Check Out</a></div></div><!-- row --></div><!-- card-footer --></div><!-- card --></div></div></li></ul><div id="nav-menu-search" class="d-none ml-auto"><form name="searchForm" method="get" class="form-inline" action="/{{navShortUrl}}/search"><input type="text" class="form-control" size="14" placeholder="Enter search keywords" name="t" required><div class="input-group-append"><button class="btn p-1 z-depth-0 waves-effect"><i class="fa-light fa-search"></i></button></div><button class="btn p-1 z-depth-0 waves-effect" onclick="cancelSearch()"><i class="fa-light fa-xmark"></i></button></form></div></div><!--/.Nav Container--></nav><!-- /.Navbar -->
+{{else}}<!-- Navbar -->
+	<!-- /.Navbar -->
+{{/if}}</header>

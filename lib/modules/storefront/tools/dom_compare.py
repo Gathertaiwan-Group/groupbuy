@@ -8,7 +8,7 @@
 相似度 = difflib.SequenceMatcher(token 序列).ratio()；並列出差異段落。
 
 用法：
-  python3 dom_compare.py <原站.html> <我們的.html 或 http(s)://網址> [--root body|main#main|div#id] [--show 40] [--no-text]
+  python3 dom_compare.py <原站.html> <我們的.html 或 http(s)://網址> [--root body|main#main|div#id|all] [--show 40] [--no-text]
 """
 import argparse
 import difflib
@@ -73,6 +73,8 @@ def parse(html):
 
 
 def find_root(node, spec):
+    if spec in ("#root", "all"):  # 彈窗片段：整份比對
+        return node
     tag, _, ident = spec.partition("#")
     stack = [node]
     while stack:

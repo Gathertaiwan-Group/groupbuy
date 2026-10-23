@@ -1,0 +1,50 @@
+{{!-- 推導：原站 editProfile.do 片段未擷取（需登入會員）。欄位依註冊表單；成功後以 ias_v5 refreshGBFV4 更新導覽列姓名並回填訂購人資料。 --}}
+<!--Header-->
+<div class="modal-header light-blue darken-3 white-text">
+	<h5 class="title">
+		<i class="fa-light fa-edit mr-1"></i>更新個人資料</h5>
+	<button type="button" class="close waves-effect waves-light"
+		data-dismiss="modal" aria-label="Close">
+		<span aria-hidden="true"><i class="fa-light fa-xmark"></i></span>
+	</button>
+</div>
+<!--Body-->
+<div class="modal-body mb-0">
+{{#if customer}}<form name="CustomerForm" method="post" action="{{gbfBaseUrl}}/ajax/web/Customer/editProfile.do" class="form-horizontal" id="editProfileForm">
+	<div class="md-form form-sm">
+		<i class="fa-light fa-envelope prefix"></i>
+		<input type="text" id="editProfile.email" class="form-control" value="{{customer.customer.email}}" readonly>
+		<label for="editProfile.email" class="active">電子信箱 / 會員ID</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-tag prefix"></i>
+		<input type="text" name="firstname" maxlength="20" id="editProfile.firstname" class="form-control" value="{{customer.customer.firstname}}" required>
+		<label for="editProfile.firstname" class="active">姓名</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-phone prefix"></i>
+		<input type="text" name="telephone" maxlength="20" id="editProfile.telephone" class="form-control" value="{{customer.customer.telephone}}" required>
+		<label for="editProfile.telephone" class="active">電話</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-cake-candles prefix"></i>
+		<input type="date" name="birthdayString" id="editProfile.birthday" class="form-control browser-default" value="{{customer.customer.birthday}}">
+		<label for="editProfile.birthday" class="active">生日</label>
+	</div>
+	<div id="modal-message"></div>
+	<div class="text-center mt-1-half">
+		<button class="btn btn-default mb-2" data-dismiss="modal">關閉<i class="fa-light fa-xmark ml-1"></i></button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-info mb-2" value="送出" />
+	</div>
+</form>
+<script>
+$(document).ready(function() {
+	$('#editProfileForm').validate();
+	initAjaxForm('editProfileForm', function(json) {
+		if (typeof refreshGBFV4 === 'function') { refreshGBFV4(json); }
+		modalShowSuccess($('#editProfileForm').closest('.modal-content'), json.error);
+	});
+});
+</script>{{else}}<p class="text-center my-3">請先登入會員</p>
+<div class="text-center"><a class="btn btn-info" href="javascript: void(0)" onClick="openForm('{{gbfBaseUrl}}/ajax/web/Customer/showLoginForm')">登入/註冊</a></div>{{/if}}
+</div>

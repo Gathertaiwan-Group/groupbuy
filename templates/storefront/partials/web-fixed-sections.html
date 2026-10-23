@@ -1,0 +1,22 @@
+{{!-- 官網型頁面 </main> 前的浮動區（贈品 chip、回頂端鈕）；403 頁另有聯絡我們 FAB（contactFab） --}}
+<!-- Floating Button -->
+{{#if contactFab}}<section><!-- Floating Button -->
+<div class="fixed-action-btn fixed-action-btn-contact slide-out-down-scroll">
+<a class="btn-floating my-spacing orange waves-effect waves-light"  href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/OnlineHelp/show', 'v=4')">
+<i class="fa-light fa-envelope"></i>
+</a>
+</div>
+</section><!-- /.Floating Button -->
+{{/if}}
+<!-- /.Floating Button -->
+<div id='fixed-top-section' class="d-flex align-items-end flex-column">
+	<div><span class="float-right chip rgba-red-strong" id="btn-gift" style="display:none"><i class="fa-light fa-gift mr-1"></i>贈品<i class="close fa-light fa-xmark"></i></span></div>
+	<div><span id="sc_sr_cc_note" class="float-right" style="display:none"></span></div>
+</div>
+<!-- fixed-bottom-section -->
+<div id="fixed-bottom-section">
+<div class="containerx smooth-scroll" style="position:relative">
+<a href="#main" class="btn-floating btn-sm btn-up-down " id="btn-itemset-up"><i class="fa-light fa-arrow-up"></i></a>
+</div>
+</div>
+<!-- fixed-bottom-section -->

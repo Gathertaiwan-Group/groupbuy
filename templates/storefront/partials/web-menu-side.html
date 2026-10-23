@@ -1,0 +1,2 @@
+{{!-- 側欄選單（原站「use new menu」）：#slide-out 與文章列表頁 aside#sidebar 共用。sideMenu 由 web-site.ts 組好樹狀結構。 --}}
+<div class="d-xxl-none side-nav-bg"></div><ul class="collapsible collapsible-accordion caret-style side-nav-menu pl-0">{{#each sideMenu}}{{> storefront/partials/web-menu-side-node.html}}{{/each}}</ul>

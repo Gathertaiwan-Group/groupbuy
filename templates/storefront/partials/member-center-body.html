@@ -1,0 +1,41 @@
+{{!-- 推導：會員中心（訂單列表；原站登入後頁面未擷取）。版面沿用訂單明細頁 .sales-order-detail 卡片樣式。 --}}
+<div class="container sales-order-detail">
+<div class="row justify-content-center">
+	<div class="col-12 col-md-8 py-3">
+		{{#if customer}}
+		<div class="card mb-3" id="card-member">
+			<div class="card-header"><h5>會員資料</h5></div>
+			<div class="card-body"><div class="container">
+				<div class="row"><div class="col-4">姓名</div><div class="col-8">{{customer.customer.firstname}}</div></div>
+				<div class="row"><div class="col-4">電子信箱</div><div class="col-8">{{customer.customer.email}}</div></div>
+				<div class="row"><div class="col-4">電話</div><div class="col-8">{{customer.customer.telephone}}</div></div>
+				<div class="row"><div class="col-4">點數</div><div class="col-8">{{points}}</div></div>
+				<div class="row"><div class="col-12 text-center">
+					<a class="btn btn-sm btn-outline-info" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/ajax/web/Customer/editProfile.do?v=4')"><i class="fa-light fa-edit mr-1"></i>更新個人資料</a>
+					<a class="btn btn-sm btn-outline-info" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/ajax/web/Customer/changePassword.do?v=4')"><i class="fa-light fa-lock mr-1"></i>修改密碼</a>
+					<a class="btn btn-sm btn-outline-danger" href="{{gbfBaseUrl}}/Customer/logout.do"><i class="fa-light fa-arrow-right-to-bracket mr-1"></i>登出</a>
+				</div></div>
+			</div></div>
+		</div>
+		<div class="card mb-3" id="card-member-orders">
+			<div class="card-header"><h5>我的訂單<span class="subtitle">近 1 年</span></h5></div>
+			<div class="card-body table-item">
+				{{#if orders.length}}<table class="table">
+					<tbody>
+					{{#each orders}}<tr><td><div class="row"><div class="col-12 col-sm-9"><a href="{{url}}">{{uuid}}</a><br><small>{{groupBuyTitle}}</small></div><div class="col-12 col-sm-3 text-right"><span class="badge {{badgeClass}}">{{stateLabel}}</span></div></div>
+						<div class="row text-center"><div class="col-3">{{date}}</div><div class="col-3">{{statusLabel}}</div><div class="col-3">{{totalText}}</div></div></td></tr>
+					{{/each}}
+					</tbody>
+				</table>{{else}}<p class="text-center my-3">目前沒有訂單</p>{{/if}}
+			</div>
+		</div>
+		{{else}}
+		<div class="card mb-3"><div class="card-body text-center py-4">
+			<p>請先登入會員以查看訂單</p>
+			<a class="btn btn-info" href="javascript: void(0)" onClick="openForm('{{gbfBaseUrl}}/ajax/web/Customer/showLoginForm')"><i class="fa-light fa-right-to-bracket mr-1"></i>登入/註冊</a>
+		</div></div>
+		{{/if}}
+		<div class="text-center my-4"><a class="btn btn-primary" href="/{{navShortUrl}}"><i class="fa-light fa-arrow-left mr-1"></i>回到團購表單</a></div>
+	</div>
+</div>
+</div>

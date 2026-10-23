@@ -1,0 +1,20 @@
+{{!-- 文章搜尋框（即時查詢 {GBF.baseUrl}/ajax/web/Post/lookup.do；Enter/按鈕開 /{短網址}/posts?t=） --}}
+<section class="container container-search-posts">
+<div class="row">
+	<div class="col-12 mb-4">
+		<div class="search-posts-box">
+			<label for="searchPost"></label>
+			<div class="input-group">
+				<input type="text" class="form-control form-control-sm" id="searchPost" placeholder="搜索文章" value="{{searchKeyword}}" />
+				<div class="input-group-append">
+					<button type="button" class="btn btn-outline-success search-posts-box__btn js-search-posts" id="searchPostButton">
+						<i class="fa-regular fa-magnifying-glass"></i>
+					</button>
+				</div>
+			</div>
+			<div class="search-posts-box__results-container">
+				<ul class="search-posts-box__results-menu" id="searchResultsMenu"></ul>
+			</div>
+		</div>
+	</div>
+</div></section><!-- /.search posts box -->

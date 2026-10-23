@@ -1,0 +1,1127 @@
+{{!-- 官網型頁面共用：導覽列管理 JS、購物袋/會員選單 JS、版面樣式（原站 web layout，<main> 之前） --}}
+</header>
+<script>
+var navStyle = function () {
+	if ($('nav.nav-4').length > 0) {
+		return 'nav-4';
+	} else if ($('nav.nav-5').length > 0) {
+		return 'nav-5';
+	} else if ($('nav.nav-6').length > 0) {
+		return 'nav-6';
+	} else {
+		return 'nav';
+	}
+}
+
+var isNav4 = function() {
+	return (navStyle() === 'nav-4');
+}
+
+var isHomePage = function() {
+	if ($('.home-body').length) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+function navbarTogglerAnimation(x) {
+	x.classList.toggle("change");
+}
+
+$.NavbarManager = function () {};
+
+$.NavbarManager.prototype = {
+	init: function () {
+		this.social = $('#nav-menu-social');
+		this.socialBarAtBottom = $('#nav-menu-social-items-row');
+		this.moveTarget = $('#js-move-target');
+		this.rightSpacer = $('.spacer-right');
+		this.leftSpacer = $('.spacer-left');
+		this.navbarBrand = $('.navbar-brand');
+		this.navMarquee = $('.nav-marquee-info');
+		this.isExpanded = true;
+	},
+	shrinkNavbar: function () {
+		this.navbarBrand.addClass('navbar-brand-none');
+		this.navbarBrand.parent().parent().css('height', '0px');
+		//this.navbarBrand.parent().parent().css('opacity', '0');
+		this.navbarBrand.parent().parent().hide()
+		.find('.col-lg-9').removeClass('d-none d-lg-block').hide();
+		//this.navMarquee.css('opacity', '0');
+		this.navMarquee.hide();
+		this.social.hide();
+		this.socialBarAtBottom.show();
+		this.leftSpacer.css('width', this.rightSpacer.width() + 'px');
+		this.isExpanded = false;
+	},
+	expandNavbar: function () {
+		this.navbarBrand.removeClass('navbar-brand-none');
+		this.navbarBrand.parent().parent().css('height', '');
+		//this.navbarBrand.parent().parent().css('opacity', '');
+		this.navbarBrand.parent().parent().show()
+		.find('.col-lg-9').addClass('d-none d-lg-block').show();
+		//this.navMarquee.css('opacity', '');
+		this.navMarquee.show();
+		this.social.show();
+		this.socialBarAtBottom.hide();
+		this.leftSpacer.css('width', '');
+		this.isExpanded = true;
+	},
+	isExpanded: function () {
+		return this.isExpanded;
+	},
+};
+
+$.SpacerTopManager = function () {};
+
+$.SpacerTopManager.prototype = {
+	init: function () {
+		this.main = $('main');
+		this.slideOut = $('#slide-out');
+		this.marqueeInfo = $('.nav-marquee-info');
+		this.navbarMenuRow = $('.nav-4-menu-row');
+		this.navbarLargeBrand = $('.navbar-brand-lg');
+		this.navbar = $('nav');
+		this.previousSlideOutMarginTop = 0;
+	},
+	update: function () {
+		this.updateSlideOutPerfectScroll();
+		this.updateSlideOutMarginTop();
+		this.updateMainPaddingTop();
+	},
+	updateMainPaddingTop: function (paddingTop) {
+		switch (navStyle()) {
+		case 'nav-4':
+			var value = (paddingTop > 0) ? paddingTop : this.maxHeightOfNav4();
+			this.main.css('padding-top', value + 'px');
+			break;
+		case 'nav-5':
+			var pt = $('nav').height();
+			this.main.css('padding-top',  pt);
+			break;
+		case 'nav-6':
+			if (isHomePage() === true) {
+				this.main.css('padding-top',  '0px');
+			} else {
+				var w = document.documentElement.clientWidth;
+				var pt = (w < 992) ? 76 : $('nav').outerHeight();
+				this.main.css('padding-top',  pt + 'px');
+			}			
+			break;
+		default:
+			setTimeout(function() {
+				var value = (paddingTop > 0) ? paddingTop : $('nav').outerHeight();
+				$('main').css('padding-top', value + 'px');
+			}, 300);
+			
+			break;
+		}
+	},
+	updateSlideOutMarginTop: function() {
+		switch (navStyle()) {
+		case 'nav-4':
+			//updateSlideOutPerfectScrollForNav4();
+			break;
+		case 'nav-5':
+			var slideOutPaddingTop = parseInt(this.slideOut.css('padding-top'));
+			var navbarHeight = this.navbar.outerHeight();
+			var marginTop = navbarHeight - slideOutPaddingTop;
+			this.slideOut.css('margin-top', marginTop + 'px');
+			break;
+		case 'nav-6':
+			var slideOutPaddingTop = parseInt(this.slideOut.css('padding-top'));
+			var navbarHeight = this.navbar.outerHeight();
+			var marginTop = navbarHeight - slideOutPaddingTop;
+			this.slideOut.css('margin-top', marginTop + 'px');
+			break;
+		default:
+			break;
+		}
+	},
+	updateSlideOutPerfectScroll: function () {
+		switch (navStyle()) {
+		case 'nav-4':
+			updateSlideOutPerfectScrollForNav4(function() {
+				if ($('#slide-out').hasClass('d-none')) {
+					$('#slide-out').removeClass('d-none');
+					$('#slide-out').animateCss('fadeIn');	
+				}
+			});
+			break;
+		case 'nav-6':
+			if (isHomePage() === false) {
+				this._updateSlideOutPerfectScroll();
+				if ($('#slide-out').hasClass('d-none')) {
+					$('#slide-out').removeClass('d-none');
+					$('#slide-out').animateCss('fadeIn');	
+				}
+			}
+			break;
+		default: // 1,2,3,5
+			setTimeout(function() {
+				spacerTopManager._updateSlideOutPerfectScroll();
+				if ($('#slide-out').hasClass('d-none')) {
+					$('#slide-out').removeClass('d-none');
+					$('#slide-out').animateCss('fadeIn');	
+				}
+			}, 1000);
+			break;
+		}
+	},
+	_updateSlideOutPerfectScroll: function() {
+		var w = document.documentElement.clientWidth;
+		var marginTopSpacer = (w < 1440) ? 0 : 15;
+		var marginTop = this.navbar.outerHeight() + marginTopSpacer;
+		var height = window.innerHeight - marginTop;
+		
+		this.slideOut.css('max-height', height + 'px');
+		this.slideOut.css('margin-top', marginTop + 'px');
+		this.slideOut.css('padding-top', '0px');
+		this.slideOut.find('ul.custom-scrollbar').css('max-height', height + 'px');
+	},
+	maxHeightOfNav4: function () {
+		const w = window.innerWidth;
+		
+		var marqueeHeight = this.marqueeInfo.outerHeight();
+		var brandHeight = 0;
+		var menuHeight = this.navbarMenuRow.height();
+		
+		var isLargeBrand = this.navbarLargeBrand.length > 0;
+		
+		if (w >= 1200) { // Large
+			marqueeHeight = 40;
+			brandHeight = isLargeBrand ? 120 : 80;
+		} else if (w >= 992) { // Medium
+			marqueeHeight = 32;
+			brandHeight = 80;
+		} else if (w >= 768) {
+			marqueeHeight = (marqueeHeight == undefined) ? 0 : 32;
+			brandHeight = 60;
+		} else { // Small
+			marqueeHeight = (marqueeHeight == undefined) ? 0 : 32;
+			brandHeight = 60;
+			menuHeight = 0;
+		}
+		var totalHeight = brandHeight + menuHeight + marqueeHeight;
+		return totalHeight;
+	}
+};
+
+// scroll
+
+var isInRightSpacer = false;
+function scrollHandlerForNav4 () {
+	var w = document.documentElement.clientWidth;
+	if (w < 992) {
+		return;
+	}
+	
+	if (document.body.scrollTop > 80 ||
+		document.documentElement.scrollTop > 80) {
+		// Hide seach bar in maquee box.
+		hideSearchBar();
+		
+		navbarManager.shrinkNavbar();
+		isInRightSpacer = true;
+		spacerTopManager.update();
+	} else {
+		// Hide the dropdown search bar
+		$('#nav-menu-social-items-row li.show').click();
+		
+		navbarManager.expandNavbar();
+		isInRightSpacer = false;
+		spacerTopManager.update();
+	}
+}
+
+function scrollFunction() {
+	if (isNav4()) {
+		scrollHandlerForNav4();
+	}
+}
+
+function toggleSearchForm() {
+	$('#collapseSearch').toggleClass('d-none');
+	$('#collapseSocialMenu').toggleClass('d-none');
+}
+
+// resize
+
+function windowResizeHandler () {
+	if (isNav4()) {
+		windowResizeHandlerForNavbarWithStyle4();
+	}
+	$('#slide-out').addClass('d-none');
+	setTimeout(function() {
+		spacerTopManager.update();
+	}, 500);
+	
+}
+
+var nav4MarginTopMax = 0;
+var nav4MarginTopMin = 0;
+var previousScreenSize = 0;
+
+function updateSlideOutPerfectScrollForNav4 (callback) {
+	var w = document.documentElement.clientWidth;
+	if (previousScreenSize === 0 || w !== previousScreenSize) {
+		if (w < 992) { // mobile UI
+			var height = $('nav').outerHeight();
+			if (height < 80 && $('.nav-marquee-info').length > 0) {
+				setTimeout(function() {
+					updateSlideOutPerfectScrollForNav4();
+				}, 1000);
+				return;
+			}
+			nav4MarginTopMin = height;
+			nav4MarginTopMax = nav4MarginTopMin;
+		} else { // Desktop UI
+			nav4MarginTopMin = $('.nav-4-menu-row').outerHeight();
+			var topHeight = ($('.nav-marquee-info').length === 0) ? 32 : $('.nav-marquee-info').outerHeight();
+			var brandHeight = (w > 1200) ? 120 : 80; 
+			nav4MarginTopMax = nav4MarginTopMin + topHeight + brandHeight;	
+		}
+		previousScreenSize = w;
+	}
+	
+	var marginTopSpacerForLG = (w < 1440) ? 0 : 15;
+	var marginTop = (navbarManager.isExpanded)? nav4MarginTopMax : nav4MarginTopMin;
+	marginTop += marginTopSpacerForLG;
+	var maxHeight = window.innerHeight - marginTop;
+	var slideOut = $('#slide-out');
+	slideOut.css('max-height', maxHeight + 'px');
+	slideOut.css('margin-top', marginTop + 'px');
+	slideOut.css('padding-top', '0px');
+	slideOut.find('ul.custom-scrollbar').css('max-height', maxHeight + 'px');
+	
+	if (callback) {
+		callback();
+	}
+}
+
+var onceTokenOriginal = false;
+var onceTokenLG = false;
+var onceTokenXL = false;
+
+function updateOnceTokenWhenResize(screenWidth) {
+	var w = document.documentElement.clientWidth;
+	
+	if (screenWidth < 992 && onceTokenOriginal == true) {
+		onceTokenOriginal = false
+	}
+	if (screenWidth >= 1200 && onceTokenXL == true) {
+		onceTokenXL = false;
+	}
+	if (screenWidth >= 992 && screenWidth < 1200 && onceTokenLG == true) {
+		onceTokenLG = false
+	}
+}
+
+function windowResizeHandlerForNavbarWithStyle4 () {
+	hideSearchBar();
+	
+	var w = document.documentElement.clientWidth;
+	
+	updateOnceTokenWhenResize(w);
+	
+	if (w >= 1200) {
+		if (onceTokenXL == false) {
+			if (document.body.scrollTop > 80 ||
+				document.documentElement.scrollTop > 80) {
+				navbarManager.shrinkNavbar();
+				isInRightSpacer = true;
+			}
+			onceTokenXL = true;
+		}
+	} else if (w >= 992 && w < 1200) {
+		if (isInRightSpacer == true) {
+			// Update left spacer width
+			var rightSpacer = $('.spacer-right');
+			var leftSpacer = $('.spacer-left');
+			leftSpacer.css('width', rightSpacer.width() + 'px');
+		}
+		
+		if (onceTokenLG == false) {
+			if (document.body.scrollTop > 80 ||
+				document.documentElement.scrollTop > 80) {
+				navbarManager.shrinkNavbar();
+				isInRightSpacer = true;
+			}
+			onceTokenLG = true;
+		}
+	} else {
+		if (onceTokenOriginal == false) {
+			navbarManager.expandNavbar(); // Avoid to mess up layout.
+			isInRightSpacer = false;
+			onceTokenOriginal = true;
+		}
+	}
+}
+
+var dropdownMenuHintArrow = function() {
+	$('nav ul.navbar-nav:not([id])').each(function() {
+		const ul = $(this);
+		const liArray = ul.children('li');
+		const totalLi = liArray.length;
+		const totalFlatLi = liArray.filter(function(index) {
+			const $li = $(this);
+			return !$li.hasClass('dropdown') && !$li.hasClass('mega-dropdown');
+		}).length;
+		if (totalFlatLi > 0 && totalLi > totalFlatLi) {
+			liArray
+			.filter(function(index) {
+				const $li = $(this);
+				return $li.hasClass('dropdown') || $li.hasClass('mega-dropdown');
+			})
+			.each(function(index, item) {
+				const $li = $(item);
+				if ($li.children('a').children('div').length > 0) {
+					$li.children('a').children('div').children('div').last().addClass('dropdown-hint-arrow');
+				} else {
+					$li.children('a').addClass('dropdown-hint-arrow');
+				}
+			});
+		}
+	});
+}
+
+// search
+
+function toggleSearchBar () {
+	var searchBar;
+	var w = document.documentElement.clientWidth;
+	if (w >= 992) {
+		searchBar = $('#nav-search-in-marquee');
+	} else {
+		searchBar = $('#nav-menu-search-bar');
+	} 
+	var isHidden = (searchBar.css('display') == 'none');
+	if (isHidden == true) {
+		showSearchBar();
+	} else {
+		hideSearchBar();
+	}
+}
+
+function showSearchBar () {
+	var w = document.documentElement.clientWidth;
+	if (w >= 992) {
+		$('.nav-marquee-wrapper').hide('fast');
+		$('#js-lg-social-menu').addClass('disable-hidden');
+		$('#nav-search-in-marquee').show('fast');
+	} else {
+		$('.js-nav-brand-row').css('height', '60px');
+		$('.navbar-brand').hide();
+		$('#nav-menu-bars').removeClass('d-flex');
+		$('#nav-menu-bars').hide();
+		
+		$('#nav-menu-search-bar').show();
+		$('#nav-menu-social').hide();
+	}
+}
+
+function hideSearchBar () {
+	var w = document.documentElement.clientWidth;
+	if (w >= 992) {
+		$('.nav-marquee-wrapper').show();
+		$('#js-lg-social-menu').removeClass('disable-hidden');
+		$('#nav-search-in-marquee').hide();
+	} else {
+		$('.js-nav-brand-row').css('height', '');
+		$('.navbar-brand').show();
+		$('#nav-menu-bars').addClass('d-flex');
+		$('#nav-menu-bars').show();
+		
+		$('#nav-menu-search-bar').hide();
+		$('#nav-menu-social').show();
+	}
+	
+	$('[name*=searchForm]').find('input').each( function () {
+		this.value = '';
+	});
+}
+
+function hideSearchMegaMenu() {
+	$('#nav-menu-social-items-row li.show.dropdown-animating').removeClass('show').removeClass('dropdown-animating');
+	$('#nav-menu-social-items-row div.search-bar-mega-menu.show.animated.fadeOut').removeClass('show').removeClass('animated').removeClass('fadeOut');
+}
+
+// In the beginning, hide the slide-out, calculate the correct
+// margin-top and then show it with fadeIn.
+$('#slide-out').addClass('d-none');
+
+var navbarManager = new $.NavbarManager();
+var spacerTopManager = new $.SpacerTopManager();
+$(function() {
+	navbarManager.init();
+	spacerTopManager.init();
+
+	window.onscroll = scrollFunction;
+
+	//window.addEventListener("resize", windowResizeHandler);
+	window.onresize = windowResizeHandler; 
+	
+	spacerTopManager.update();
+});
+
+function adjustHomeGallery () {
+	var count = $('.gallery .animation').length;
+	if ( count == 6 ) {
+		$('.gallery').not('.mdb-lightbox.carousel-lightbox')
+		.find('.animation').each( function (index) {
+			if (index == 3) {
+				$('<div class="animation spacer" style="height: 10px;"></div>').insertAfter(this);
+			}
+		});
+	}
+};
+
+function closeSlideOut() {
+	if ($('#sidenav-overlay').length) {
+		$('#sidenav-overlay').click();
+	}
+}
+
+var navDropdownMenu = (function() {
+	var updateMenuAlignment = function(dropdown, toggle) {
+		const $menu = $(dropdown).find('.dropdown-menu');
+		
+		if ($menu.hasClass('show') === false) {
+			// Reset alignment of menu.
+			$menu.removeClass('dropdown-menu-right');	
+		}
+		
+		// If the toggle is closed to the right side of viewport,
+		// the menu is aligned to the right side of drodpown.
+		const bounding = toggle.getBoundingClientRect();
+		if ((bounding.right + 100) > (window.innerWidth || document.documentElement.clientWidth)) {
+			$menu.addClass('dropdown-menu-right');
+		} else {
+			$menu.removeClass('dropdown-menu-right');
+		}
+	}
+	
+	return {
+		event: {
+			show: function(event) {
+				const dropdown = event.target;
+				const toggle = event.relatedTarget;
+				updateMenuAlignment(dropdown, toggle);
+			},
+			resize: function(event) {
+				if ($('.navbar-dropdown__menu.show').length === 0) return;
+				
+				const dropdown = $('.navbar-dropdown__item.show')[0];
+				const toggle = $(dropdown).find('.dropdown-toggle')[0];
+				updateMenuAlignment(dropdown, toggle);
+			}
+		}
+	}
+})();
+
+$(function() {
+	adjustHomeGallery();
+	
+	$('#nav-menu-social li a').on('click', closeSlideOut);
+
+	dropdownMenuHintArrow();
+
+	var Accordion = function(el, multiple) {
+		this.el = el || {};
+		this.multiple = multiple || false;
+
+		var links = this.el.find('.link');
+
+		links.on('click', {el: this.el, multiple: this.multiple}, this.dropdown);
+	}
+
+	Accordion.prototype.dropdown = function(e) {
+		var $el = e.data.el,
+			$accordion = $(this).closest('.accordion.dropdown-accordion'),
+			$link = $(this),
+			$submenu = $link.next();
+
+		$submenu.slideToggle();
+		$link.parent().toggleClass('open');
+
+		if (!e.data.multiple) { // not allow multiple opened submenus.
+			$accordion.find('.submenu')
+			.not(function(index, element) {
+				return element === $submenu[0] || $(element).find($submenu).length > 0;
+			})
+			.slideUp()
+			.parent().removeClass('open');
+		}
+
+		if ($submenu.length) {
+			e.preventDefault();
+			e.stopPropagation();
+		}
+	}
+
+	var accordion = new Accordion($('.dropdown-accordion'), false);
+	
+	$('.dropdown.navbar-dropdown__item').on('show.bs.dropdown', navDropdownMenu.event.show);
+	$( window ).resize(navDropdownMenu.event.resize);
+});
+
+</script>
+
+<script>
+/* Nav 5 Script */
+  
+var nav5Wrapper = {
+		isNav5: function () {
+			var nav5 = $('.nav-5');
+			if (nav5.length > 0) {
+				return true;
+			} else {
+				return false;
+			}
+		},
+		updateUserMenu: function () {
+			if (!nav5Wrapper.isNav5()) {
+				return;
+			}
+			var ajaxurl = (typeof baseUrl == 'undefined')  ? '..' : baseUrl;
+			ajaxurl += '/ajax/web/ShoppingCart/getUserMenu.do';
+			jQuery.get( 
+				ajaxurl, 
+				{'navStyle' : 5},
+				function( data ) {
+					if (data) {
+						if (!!data.menuItems && data.menuItems.length > 0) {
+							if (data.menuItems.length === 1) { // not login
+								$('#nav-item-usermenu-context-mobile').html(data.menuItems[0]);
+								$('#nav-item-usermenu-context-desktop').html(data.menuItems[0]);
+							} else {
+								$('#nav-item-usermenu-context-desktop').html(data.menuItems[0]);
+			    	  			$('#nav-item-usermenu-context-mobile').html(data.menuItems[1]);	
+							}
+		    	  		}
+						
+						var uuid = data.uuid;
+						if (uuid) {
+							$('input[name=customerUuid]').val(uuid);
+						}	
+					}
+		     	}
+			);
+
+			jQuery.get(ajaxurl,
+				function( data ) {
+					if (!!data && typeof data.menuItems !== 'undefined'
+							&& data.menuItems !== null
+							&& data.menuItems.length !== null
+							&& data.menuItems.length > 0) {
+						
+						const html = data.menuItems.reduce(function (accu, curr) {
+							return accu + curr;
+						}, '');
+		    	  		if (html.length > 0) {
+							$('.nav-item-usermenu-context:not([id])').html(html);	
+						}
+					}	
+		     	}
+			);
+		},
+		ready: function () {
+			if (nav5Wrapper.isNav5() === false) return;
+			
+			nav5Wrapper.updateUserMenu();
+			
+			$('.js-nav-5-search-btn-mobile').on('click', nav5SearchBtnMobileOnClick);
+		}
+}
+
+function nav5SearchBtnMobileOnClick(event) {
+	const $searchBar = $('#nav-5-search-bar-nav-mobile');
+	const isSearchBarShown = $searchBar.hasClass('show');
+	
+	// Toggle search 
+	$searchBar.toggleClass('show', !isSearchBarShown);
+
+	// Toggle nav
+	const navDisplayVal = isSearchBarShown ? '' : 'none';
+	$('.navbar-mobile-wrapper').css({'display' : navDisplayVal});
+}
+
+$(function() {
+	nav5Wrapper.ready();
+});
+
+/* Nav 5 Script End */
+</script><style>
+.ep-nav.has-marquee { padding-top: 40px; padding-bottom: 0; }
+.ep-nav.no-marquee { padding-top: 0; padding-bottom: 0; }
+@media (min-width: 600px) {
+	.navbar.scrolling-navbar.top-nav-collapse.has-marquee {
+		padding-top: 40px;
+	}
+}
+
+</style>
+
+<style>
+
+.disable-hidden {
+	transform: translate(5000px);
+	transition: .2s
+}
+
+#slide-out {
+	transition: .4s;
+}
+
+.marquee-spacer {
+	height: 32px;
+}
+
+/* Light mode */
+.nav-marquee-info {
+	color: #FFFFFF;
+	background-color: #AAAAAA;
+	position: fixed;
+	top: 0;
+	padding-top: .25rem;
+	height: 32px;
+	text-align: center;
+	font-size: .875rem;
+	transition: .4s;
+}
+.nav-5 .nav-marquee-info { background-color: #ffebee; }
+
+.nav-4 .col-lg-9.d-none.d-lg-block {
+	transition: height linear 0.4s;
+	pointer-events: none;
+}
+
+#js-lg-social-menu ul {
+	height: 100%;
+}
+
+.nav-marquee-info ~ .js-nav-brand-row {
+	margin-top: 32px;
+}
+
+/* Height of marquee must be the same as the line of social div. */
+@media only screen and (min-width: 1200px) {
+	.nav-marquee-info {
+		height: 40px;
+		padding-top: .5rem;
+	}
+	.nav-4 .col-lg-9.d-none.d-lg-block {
+		height: 40px;
+	}
+	#js-lg-social-menu {
+		height: 40px;
+	}
+}
+
+.nav-marquee-text {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin-left: auto;
+	margin-right: auto;
+	color: #FFFFFF;
+}
+
+.nav-marquee-slide {
+	overflow: hidden;
+}
+
+/* The marquee will be at the same line with social menu in nav 4. */
+@media only screen and (min-width: 992px) {
+	.nav-4 .nav-marquee-text {
+		margin-left: 120px;
+		margin-right: 120px;
+	}
+	.nav-marquee-info ~ .js-nav-brand-row {
+		margin-top: 0;
+	}
+}
+
+@media only screen and (min-width: 1200px) {
+	.nav-4 .nav-marquee-text {
+		margin-left: 150px;
+		margin-right: 150px;
+	}
+}
+
+/* Cover whole nav with top spacing 40px to marquee box. */
+.nav-4 #nav-menu-search-bar {
+	position: absolute;
+	right: 0rem;
+	left: 0rem;
+}
+
+@media only screen and (min-width: 576px) {
+	.nav-4 #nav-menu-search-bar {
+		right: 1rem;
+		left: 1rem;
+	}
+}
+
+.top-for-marquee {
+	top: 40px;
+}
+
+#nav-search-in-marquee {
+	position: absolute;
+	top: 0;
+	left: 1rem;
+	right: 1rem;
+}
+
+#nav-menu-search input {
+	width: auto !important;
+}
+
+@media only screen and (min-width: 992px) {
+	#nav-search-in-marquee input {
+		height: 28px;
+	}
+}
+
+@media only screen and (min-width: 1200px) {
+	#nav-search-in-marquee input {
+		height: 35px;
+	}
+}
+
+/* Place the marquee div at top of navbar. */
+.padding-marquee {
+	padding-top: 40px !important;
+}
+
+</style>
+
+<style>
+.dropdown-hint-arrow::after {
+	font-family: "Font Awesome 6 Pro";
+	content: "\f0d7";
+	font-weight: 300;
+	font-size: 10px;
+	margin-left: 4px;
+	vertical-align: 0;
+	display: inline;
+	border: none;
+}
+</style>
+
+<style>
+/* Nav 5 */
+.navbar-row {
+	margin-left: -1rem;
+	margin-right: -1rem;
+}
+
+ul.my-list li {
+	background-color: transparent;
+}
+
+nav.nav-5 {
+	padding: 0;
+}
+@media (min-width: 992px) {
+	nav.nav-5 {
+		padding-top: .5rem;
+	}
+}
+
+.ep-nav.nav-5 .main-web-menu {
+	display: flex;
+	flex: 1 1 auto;
+	background-color: white;
+}
+
+.main-web-menu ul.text-nowrap .sub-menu a,
+.main-web-menu ul.text-nowrap .dropdown-item {
+	white-space: initial;
+}
+
+/* Navbar Toggler Bars */
+
+.navbar-toggler-container {
+	display: inline-block;
+	cursor: pointer;
+}
+
+.navbar-toggler-bar1, .navbar-toggler-bar2, .navbar-toggler-bar3 {
+	width: 22px;
+	height: 2px;
+	background-color: {{theme.toggler}};
+	border-radius: 1px;
+	margin: 4px 0;
+	transition: 0.2s;
+}
+
+.change .navbar-toggler-bar1 {
+	-webkit-transform: rotate(-45deg) translate(-3px, 4px);
+	transform: rotate(-45deg) translate(-3px, 4px);
+}
+
+.change .navbar-toggler-bar2 {opacity: 0;}
+
+.change .navbar-toggler-bar3 {
+	-webkit-transform: rotate(45deg) translate(-4px, -6px);
+	transform: rotate(45deg) translate(-4px, -6px);
+}
+
+.search-keywords {font-size: .8em;text-align:center;}
+
+.nav-5 .side-nav-bg {background-color: transparent;}
+
+@media (max-width: 992px) {
+	.nav-5.navbar.fixed-top .navbar-collapse {
+		max-height: calc(100vh - 60px) !important;
+		overflow-y:auto;
+	}
+}
+
+/* Nav5 : collapse-menu-nav */
+/* It is like the .side-nav defined by mdbootstrap. */
+.collapse-menu-nav ul {
+	list-style: none;
+}
+.collapse-menu-nav .collapsible a {
+	color: #fff;
+	font-weight: 300;
+	font-size: .8rem;
+	height: auto;
+	line-height: 36px;
+}
+.collapse-menu-nav .collapsible a {
+	color: rgb(64,64,64);
+}
+.collapse-menu-nav .fa-angle-down.rotate-icon,
+.collapse-menu-nav .fa-angle-up.rotate-icon {
+	position: absolute;
+	right: 0;
+	top: 0;
+	margin-right: 1.25rem;
+	margin-left: 1.25rem;
+}
+.collapse-menu-nav a {
+	display: block;
+	font-size: 1rem;
+	height: 56px;
+	line-height: 56px;
+	padding-left: 20px;
+	padding-right: 30px;
+}
+
+#sideNavMainMenu .collapsible .collapsible-header > span {
+	text-overflow: ellipsis;
+	word-break: break-all;
+	overflow: hidden;
+}
+
+#sideNavMainMenu .collapsible > li >.collapsible-header > span {
+	max-width: calc(100vw - 40px - 20px - 44px);
+}
+#sideNavMainMenu .collapsible .collapsible > li >.collapsible-header > span {
+	max-width: calc(100vw - 40px - 20px - 20px - 44px);
+}
+#sideNavMainMenu .collapsible .collapsible .collapsible > li >.collapsible-header > span {
+	max-width: calc(100vw - 40px - 20px - 20px - 20px - 44px);
+}
+#sideNavMainMenu .collapsible .collapsible .collapsible .collapsible > li >.collapsible-header > span {
+	max-width: calc(100vw - 40px - 20px - 20px - 20px - 20px - 44px);
+}
+#sideNavMainMenu .collapsible .collapsible .collapsible .collapsible .collapsible > li >.collapsible-header > span {
+	max-width: calc(100vw - 40px - 20px - 20px - 20px - 20px - 20px - 44px);
+}
+
+.side-nav-menu__collapsible-body {
+	padding-left: 20px;
+}
+
+.ep-nav.nav-5 #nav-item-points.dropdown-item,
+.ep-nav.nav-5 #nav-item-user-id.dropdown-item {
+	padding: 10px;
+}
+.ep-nav.nav-5 #nav-item-points.dropdown-item-mobile,
+.ep-nav.nav-5 #nav-item-user-id.dropdown-item-mobile {
+	padding: 0 10px;
+}
+
+</style>
+
+<style>
+/* Nav 6 */
+.nav-6.navbar-custom .navbar-nav > li > a:hover {
+	text-decoration: none; 
+	background-color: transparent !important;
+	color: white !important;
+	font-weight: bold;
+}
+
+.nav-6.navbar-custom .navbar-nav > li > a {
+	font-weight: bold;
+	color: lightgray !important;
+}
+
+.nav-6.navbar-custom .navbar-nav > li > a {
+	text-align:center;
+}
+
+.nav-6 {
+	background-color: rgba(0,0,0,0.5) !important;
+}
+
+.nav-6 #nav-menu-search .btn {
+	color:white !important;
+}
+
+.nav-6 #nav-menu-search {
+	margin-left: auto !important;
+}
+
+@media (max-width: 767px) and (min-width: 400px), (max-width: 850px) and (min-width: 800px) {
+	.nav-6.navbar.fixed-top .navbar-collapse {
+		max-height: none !important;
+		overflow-x: visible !important;
+		overflow-y: visible !important;
+	}
+}
+
+</style>
+
+<style>
+.ep-nav.nav-8 .navbar-nav.main-web-menu {flex:initial !important;margin-right:initial !important;margin-left:auto !important;}
+.ep-nav.nav-8 #nav-menu-social {margin-left:initial !important;}
+</style>
+
+<style>
+
+.accordion {
+	max-width: 400px;
+	margin: 30px auto 20px;
+	background: #FFF;
+	-webkit-border-radius: 4px;
+	-moz-border-radius: 4px;
+	border-radius: 0px;
+}
+
+.accordion .link {
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	padding: 15px 15px 15px 42px;
+	color: #4D4D4D;
+	font-size: 14px;
+	font-weight: 700;
+	/* border-bottom: 1px solid #CCC; */
+	position: relative;
+	-webkit-transition: all 0.4s ease;
+	-o-transition: all 0.4s ease;
+	transition: all 0.4s ease;
+}
+
+.accordion .link > span {
+	flex: 1 1 auto;
+}
+.accordion li i {
+	font-size: 18px;
+	color: #595959;
+	-webkit-transition: all 0.4s ease;
+	-o-transition: all 0.4s ease;
+	transition: all 0.4s ease;
+}
+
+.accordion li i.fa-chevron-down {
+	top: 12px;
+	right: 12px;
+	left: auto;
+	font-size: 16px;
+}
+
+.accordion li.open > .link {
+	color: #fff;
+	background: #4285f4;
+	box-shadow: 0 5px 11px 0 rgb(0 0 0 / 18%), 0 4px 15px 0 rgb(0 0 0 / 15%);
+}
+.accordion li.open > .link > i {
+	color: #fff;
+}
+
+
+.accordion li > .link:hover > i {
+	color: #d9d9d9;
+}
+
+.accordion li.open > a > i.fa-chevron-down {
+	-webkit-transform: rotate(180deg);
+	-ms-transform: rotate(180deg);
+	-o-transform: rotate(180deg);
+	transform: rotate(180deg);
+}
+
+.submenu {
+	display: none;
+	font-size: 14px;
+	list-style: none;
+}
+
+.submenu a {
+	display: block;
+	text-decoration: none;
+	padding: 12px;
+	padding-left: 42px;
+	min-width: 160px;
+	-webkit-transition: all 0.25s ease;
+	-o-transition: all 0.25s ease;
+	transition: all 0.25s ease;
+}
+
+.submenu a:hover {
+	background: #4285f4;
+	color: #FFF;
+	box-shadow: 0 5px 11px 0 rgb(0 0 0 / 18%), 0 4px 15px 0 rgb(0 0 0 / 15%);
+}
+
+.gm-scrollbar.dropdown-menu {
+	max-height: calc(100vh - 160px);overflow-y: auto;
+}
+.gm-scrollbar.dropdown-menu::-webkit-scrollbar-track {
+	-webkit-box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.1);
+	background-color: #F5F5F5;
+	border-radius: 10px;
+}
+.gm-scrollbar.dropdown-menu::-webkit-scrollbar {
+	background-color: #F5F5F5;
+}
+.gm-scrollbar.dropdown-menu::-webkit-scrollbar-thumb {
+	border-radius: 10px;
+	-webkit-box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.1);
+	background-image: -webkit-linear-gradient(330deg, #f093fb 0%, #f5576c 100%);
+	background-image: linear-gradient(120deg, #f093fb 0%, #f5576c 100%);
+}
+.gm-scrollbar.dropdown-menu::-webkit-scrollbar {
+	width:6px;
+}
+
+.nav-3 .navbar-dropdown__item {
+	border-right: 1px solid #dee2e6;
+	flex: 1 1 auto;
+}
+.nav-3 .navbar-dropdown__item:last-child {
+	border-right: none;
+}
+.nav-3 .navbar-dropdown__link {
+	text-align: center;
+	letter-spacing: 2px;
+}
+
+.nav-4 .dropdown-toggle.navbar-dropdown__link {
+	white-space: initial;
+}
+
+.nav-6 .navbar-dropdown__link::after {
+	display: none;
+}
+
+</style>

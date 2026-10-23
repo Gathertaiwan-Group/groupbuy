@@ -1,0 +1,60 @@
+{{!-- 文章搜尋框的即時查詢／搜尋結果頁 JS（原站輸出在 </html> 之後，照抄） --}}
+<script>
+$(document).ready(function() {
+	let timer;
+	$('#searchPost').on('input', function() {
+		let query = $('#searchPost').val();
+		if (query === '') {
+			$('#searchResultsMenu').html('').removeClass('active');
+			clearTimeout(timer);
+			return;
+		}
+
+		clearTimeout(timer);
+		timer = setTimeout(function () {
+			$.ajax({
+				url: '' + GBF.baseUrl + '/ajax/web/Post/lookup.do?keyword=' + query +'',
+				dataType: 'json',
+				success: function (data) {
+					const posts = data.data;
+					if (posts.length === 0) {
+						$('#searchResultsMenu').html('').removeClass('active');
+					} else {
+						const menu = posts.reduce(function (a, b) {
+							return a + makeMenuItem(b.text, b.url);
+						}, '');
+						$('#searchResultsMenu').html(menu).addClass('active');
+					}
+				}
+			});
+		}, 500);
+		
+		function makeMenuItem(title, link) {
+			return '<li><a href="' + link + '" class="" target="_blank" rel="noreferrer">' + title + '<i class="fa-solid fa-arrow-right" /></a></li>'
+		}
+	})
+	.on('keydown', function (event) {
+		if (event.key === 'Enter' || event.keyCode === 13 || event.which === 13) {
+			event.preventDefault();
+			event.stopPropagation();
+			openPostSearchResultPage();
+		}
+	})
+	;
+
+	$('.js-search-posts').click(function (event) {
+		event.preventDefault();
+		event.stopPropagation();
+		openPostSearchResultPage();
+	});
+
+	function openPostSearchResultPage() {
+		const keyword = $('#searchPost').val();
+		if (!!keyword && keyword.trim().length > 0) {
+			const query = $.param({'t': keyword});
+			const searchUrl = GBF.ctx + '/' + GBF.shortUrl + '/posts?' + query;
+			window.open(searchUrl, '_self');
+		}
+	}
+});
+</script>

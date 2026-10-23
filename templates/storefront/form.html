@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+{{!-- 原站 fb:app_id 為原站 Facebook App（未串接，不輸出值） --}}<meta property="fb:app_id" content="" />
+<meta property="og:image" content="{{ogImage}}">
+<meta property="og:title" content="{{groupBuy.title}}">
+<meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta name="format-detection" content="telephone=no">
+<link rel="shortcut icon" href="/upload/images/unsort/favicon.png"/>
+<!-- Font Awesome -->
+<!-- 授權政策：原站 Font Awesome Pro 6 → Font Awesome Free 6（cdnjs）＋相容層 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link rel="stylesheet" href="/compat/fa-pro-compat.css?v={{assetVersion}}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css" >
+<!-- Latest compiled and minified CSS -->
+<!-- 授權政策：原站 MDB PRO 4.8.8 → MDB Free 4.8.8（cdnjs）＋PRO 元件補丁 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css">
+<link rel="stylesheet" href="/compat/mdb-pro-compat.css?v={{assetVersion}}">
+<link rel="stylesheet" href="/compat/mdb-pro-frontend.css?v={{assetVersion}}">
+<link rel="stylesheet" href="/modules/storefront/fe-compat.css?v={{assetVersion}}">
+<!-- Optional theme -->
+<link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.compat.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css">
+
+<link rel="stylesheet" href="/public/css/jquery.numpad.min.css">
+
+<!-- Generic page styles -->
+<link rel="stylesheet" href="/public/css/style_v4.min.css?261011">
+<link rel="stylesheet" href="/public/css/style_v6.min.css?261011">
+<link rel="stylesheet" href="/public/css/gb-theme.min.css?261012">
+<link rel="stylesheet" href="/public/css/gb-theme-japandi.min.css?261001">
+
+<!-- 
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/blueimp-file-upload/9.5.7/css/jquery.fileupload-ui.min.css">
+ -->
+ 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.2/jquery.validate.min.js" type="text/javascript"></script>
+
+<!-- date picker -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.3/moment-with-locales.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.4.0/moment-timezone-with-data-2010-2020.min.js"></script>
+<link href="/public/css/bootstrap-datetimepicker.min.css" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fancyapps-ui/5.0.22/fancybox/fancybox.umd.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancyapps-ui/5.0.22/fancybox/fancybox.min.css"/>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css" integrity="sha512-MQXduO8IQnJVq1qmySpN87QQkiR1bZHtorbJBD0tzy7/0U9+YIC93QWHeGTEoojMVHWWNkoCp8V6OzVSYrX0oQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+{{> storefront/partials/theme-style.html}}
+<script>
+if (typeof GBF  == 'undefined') {
+	GBF = {};
+}
+GBF.ctx = '';
+GBF.shortUrl = {{json gbfShortUrl}};
+GBF.baseUrl = {{json gbfBaseUrl}};
+GBF.language = 'zh-TW';
+</script><title>{{groupBuy.title}}</title>
+<style>
+.fb-comments, .fb-comments span, .fb-comments iframe {width: 100% !important;}
+.input-light.form-control,.input-light .form-control{border-color:rgba(255,255,255,0.17);background-color:transparent;color:#fff}
+.img-max-480 {max-height:480px;overflow-y:hidden;}
+
+/* Flatpickr 日曆自訂小點與按鈕樣式 */
+.event {
+	position: absolute;
+	width: 3px;
+	height: 3px;
+	border-radius: 150px;
+	bottom: 3px;
+	left: calc(50% - 1.5px);
+	content: " ";
+	display: block;
+	background: #3d8eb9;
+}
+.event.disable {
+	background: #f64747;
+}
+.disabled-day {
+	color: rgba(57, 57, 57, 0.1);
+}
+.flatpickr-disabled-date:hover {
+	cursor: not-allowed;
+	color: rgba(57, 57, 57, 0.1);
+}
+.delivery-dates-flatpickr__btn {
+	position: absolute;
+	right: 0;
+	top: 0;
+	margin: 0;
+	padding-left: 1rem;
+	padding-right: 1rem;
+}
+</style>
+</head>
+<body class=" gb-theme gb-v6">
+<div id="fb-root"></div>
+{{> storefront/partials/tracking.html}}
+
+{{> storefront/partials/navbar.html}}<main>
+{{> storefront/partials/messagebox.html}}<div id="mdb-preloader" class="flex-center" style="">
+	<div id="preloader-markup">
+		<div class="preloader-container">
+			<div class="preloader-img"></div>
+			<div class="preloader-spinner"></div>
+		</div>
+	</div>
+</div>
+<!--collapseShoppingCart-->
+<div class="modal fade bottom" id="collapseShoppingCart" tabindex="-1"
+role="dialog" aria-labelledby="myModalLabel" data-backdrop="false"
+style="display: none;" aria-hidden="true">
+<div class="modal-dialog modal-side modal-bottom modal-notify modal-info" role="document">
+<!--Content-->
+<div class="modal-content">
+<!--Header-->
+<div class="modal-header py-2">
+<p class="heading lead">購物袋</p>
+<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+<span aria-hidden="true" class="white-text">×</span>
+</button>
+</div>
+<!--Body-->
+<div class="modal-body p-0" id="shoppingCartDetail2">
+</div>
+<!--Footer-->
+<div class="modal-footer justify-content-center py-0">
+<a type="button" class="btn btn-outline-secondary-modal waves-effect" data-dismiss="modal">關閉</a>
+<button id="btn-ready-checkout" class="btn btn-outline-warning waves-effect">前往結帳</button>
+</div>
+</div>
+</div>
+</div>
+<!--collapseShoppingCart-->
+
+<div id="body-section" class="col-12 p-0">	
+
+<section class="section section-groupbuy-descr " id="banner-0">
+<div class="container">
+<div class="row">
+<div class="col-12 pt-4" id="banner-col">
+<div data-aos="fade-down">
+</div>
+<div data-aos="fade-up" class="card-body text-center theme-bg-default   section-title" id="banner-0-title">
+<h4 class="card-title h4-responsive mb-0">
+<span class="groupbuy-title">{{groupBuy.title}}</span>
+</h4>
+</div>
+<div class="text-center countdown " id="clock"></div>
+</div>
+</div><!-- row -->
+</div><!-- container -->
+<div class="container container-groupbuy-descr">
+<div class="row">
+<div class="col-12 py-4">
+<div class="card card-groupbuy-descr  ">
+<div class="card-body" id="banner-0-body">
+<div class="card-text card-text-gb ">{{{descrHtml}}}</div></div></div></div></div></div>
+</section>
+
+{{#if closedHtml}}{{!-- 推導：未開始／已結束／不可結帳時，原站以「結束敘述」或提示取代下單表單（未擷取） --}}<div class="container py-4" id="groupbuy-closed"><div class="card"><div class="card-body text-center">{{{closedHtml}}}</div></div></div>{{else}}<form name="OrderItemForm" method="post" action="{{gbfBaseUrl}}/OrderItem/confirmOrder.do" class="form-horizontal" style="" id="GroupBuyForm"><input type="hidden" name="groupBuyUUID" value="{{groupBuy.uuid}}" id="uuid">
+{{> storefront/partials/form-itemsets.html}}<section class="section section-address py-4 " id="section-address">
+<div class="container">
+	<!-- 0. 訂購須知區塊 (Order Notice / Billing Descr) -->
+	<div class="card  mb-4" id="section-order-notice" style="display: none;">
+		<!-- 訂購須知由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 依據 checkoutDescrSettings.billing 動態渲染 -->
+	</div>
+
+	<!-- 0.1 快速登入區塊 (Fast Social Login) -->
+	<div class="card  mb-4" id="section-fast-login" style="display: none;">
+		<!-- 快速登入由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 動態渲染 -->
+	</div>
+
+	<!-- 1. 配送方式區塊 (Shipping Method) -->
+	<div class="card  mb-4" id="section-shipping-method">
+		<!-- 配送方式由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 100% Client-side 動態渲染 -->
+	</div>
+
+	<!-- 2. 收件人資訊區塊 (Shipping Address / CVS Pickup) -->
+	<div class="card  mb-4" id="section-shipping-address">
+		<!-- 收件人資訊由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 100% Client-side 動態渲染 -->
+	</div>
+
+	<!-- 3. 付款方式區塊 (Payment Method) -->
+	<div class="card  mb-4" id="section-payment-method">
+		<!-- 付款方式由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 100% Client-side 動態渲染 -->
+	</div>
+
+	<!-- 4. 訂購人與發票資訊區塊 (Billing Address & Invoice) -->
+	<div class="card  mb-4" id="section-billing-address">
+		<!-- 訂購人與發票資訊由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 100% Client-side 動態渲染 -->
+	</div>
+</div>
+</section>
+<!-- 5. 備註與配送時段 (Other / Notes) -->
+<section class="section section-other py-4 " id="section-other">
+	<!-- 備註與配送時段由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 100% Client-side 動態渲染 -->
+</section>
+<div class="form-actions submit-order ">
+<div class="container">
+	<div class="row">
+	<div class="col-12">
+	<div class="md-form form-sm px-3 d-flex justify-content-start justify-content-center">
+	<input type="checkbox" class="form-check-input" id="agreement">
+	<label for="agreement" class="h-100"><p>同意 以上所有規則</p></label>
+	</div>
+	</div>
+	</div>
+</div>
+<div class="container">
+	<div class="row">
+	<div class="col-12">
+	<div class="md-form form-sm px-3 text-center">
+		<button type="submit" class="btn btn-submit" id="btnSubmit">
+		<i class='fa-light fa-check'></i> 提交訂單＊確認總金額</button>
+		
+		<div class="help-block submit"></div>
+		<div class="help-block submit-validate"></div>
+	</div>
+	</div>
+	</div>
+</div>
+</div> <!-- form-actions submit-order -->
+</form>{{/if}}</div> <!-- section-body -->
+
+<div id='fixed-top-section' class="d-flex align-items-end flex-column" style="position:fixed;z-index: 998;top: 70px; right:0px;">
+<div><span class="float-right chip rgba-red-strong" id="btn-gift" style="display:none"><i class="fa-light fa-gift mr-1"></i>贈品<i class="close fa-light fa-xmark"></i></span></div>
+<div><span id="sc_sr_cc_note" class="float-right" style="display:none"></span></div>
+</div>
+</main>
+<div id="myModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+<div class="modal-dialog modal-dialog-scrollable"" role="document">
+<div class="modal-content" id="myModalContent"></div>
+</div>
+</div>
+<div id="lightbox" class="modal animated fadeIn" tabindex="-1" role="dialog" aria-labelledby="myLargeModalLabel" aria-hidden="true">
+	<div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-no-header">
+		<div class="modal-content">
+			<div class="modal-body">
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span class="text-shadow" aria-hidden="true">&times;</span></button>
+				<img class="img-responsive w-100" src="" alt="" />
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="container-fluid color-bar clearfix">
+		<div class="row">
+			<div class="col-sm-1 col-2 bg-color-1"></div>
+			<div class="col-sm-1 col-2 bg-color-2"></div>
+			<div class="col-sm-1 col-2 bg-color-3"></div>
+			<div class="col-sm-1 col-2 bg-color-4"></div>
+			<div class="col-sm-1 col-2 bg-color-5"></div>
+			<div class="col-sm-1 col-2 bg-color-6"></div>
+			<div class="col-sm-1 bg-color-1 hidden-xs-down"></div>
+			<div class="col-sm-1 bg-color-2 hidden-xs-down"></div>
+			<div class="col-sm-1 bg-color-3 hidden-xs-down"></div>
+			<div class="col-sm-1 bg-color-4 hidden-xs-down"></div>
+			<div class="col-sm-1 bg-color-5 hidden-xs-down"></div>
+			<div class="col-sm-1 bg-color-6 hidden-xs-down"></div>
+		</div>
+	</div>
+<section id="section-groupbuy-desc-footer" class="section section-groupbuy-descr-footer ">
+	<div class='groupbuy-descr-footer'>
+	<div class="container">
+	<div class="row ">
+	<div class="col-12 ">
+	{{{descrFooterHtml}}}</div>
+	</div>
+	</div>
+	</div>
+	</section>
+<!-- Floating Button -->
+<section><!-- Floating Button -->
+<div class="fixed-action-btn fixed-action-btn-contact slide-out-down-scroll">
+<a class="btn-floating my-spacing orange waves-effect waves-light"  href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/OnlineHelp/show', 'v=4')">
+<i class="fa-light fa-envelope"></i>
+</a>
+</div>
+</section><!-- /.Floating Button -->
+
+<!-- /.Floating Button -->
+{{> storefront/partials/footer.html}}
+
+<!-- Latest compiled and minified JavaScript -->
+<script src="//cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.min.js" ></script>
+<!-- 授權政策：原站 MDB PRO JS → MDB Free 4.8.8 JS＋PRO 元件補丁 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/js/mdb.min.js"></script>
+<script src="/compat/mdb-pro-compat.js?v={{assetVersion}}"></script>
+<script src="/public/js/bootstrap-datetimepicker.min.js"></script>
+<script src="/public/js/jquery.numpad.js?v=2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/core-js/3.16.4/minified.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.form/4.2.2/jquery.form.min.js"></script>
+<script src="/public/js/jquery.twzipcode-1.7.9.min.js?v=2609307"></script>
+<script src="/public/js/mailcheck.min.js"></script>
+<script src="/public/js/taiwan-id-validator.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-autohidingnavbar/4.0.0/jquery.bootstrap-autohidingnavbar.min.js" type="text/javascript"></script>
+<script src="/public/scripts/jquery.countdown.min.js?v=2.2.0" type="text/javascript"></script>
+<script src="/public/js/jquery-simple-plugin.js?v=1" type="text/javascript"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lazysizes/5.3.0/lazysizes.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/2.2.1/js.cookie.min.js"></script>
+<script src="/public/scripts/locale/i18n.country.js?v=1"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js" integrity="sha512-K/oyQtMXpxI4+K0W7H25UopjM8pzq0yrVdFdG21Fh5dBe91I40pDd9A4lzNlHPHBIP2cwZuoxaUSX0GJSObvGA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.16.4/i18next.min.js" integrity="sha512-nU8gAqIe6O5vtOf4OCB4H9rZnHyp4s/ioafd2hcjagY2ALuwLu8t7EGmzUmEjULi9qf1TaMRNVHBYF+fK/xF1A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/zh-tw.min.js"></script>
+<script src="/public/scripts/locale/i18n.zh-tw.js?v=9"></script>
+<script src="/public/scripts/ias_v5.min.js?v=251109"></script>
+<script src="/public/scripts/gbfmain.min.js?v=1"></script>
+<script src="/public/scripts/ep.widget.min.js?v=250908"></script>
+<!-- Modernized Scripts: gb_shopping_cart.js and gbs_v6.js (Replacing legacy gbs_v5.min.js) -->
+<script src="/public/scripts/gb_shopping_cart.min.js?v=261018"></script>
+<script src="/public/scripts/gbs_v6.min.js?v=261018"></script>
+
+<script src="/public/scripts/country.min.js?v=240628"></script>
+<script src="/public/scripts/gb_checkout_form.min.js?v=2610211"></script>
+{{#if needCvsLookup}}{{!-- 原站擷取頁未載入；有超商/自取門市配送時需要門市選取元件（見 proto-checkout §10-4） --}}<script src="/public/scripts/cvslookup.min.js?v=261019"></script>{{/if}}
+<script src="/public/scripts/ep.widget.address.render.min.js?v=251001"></script>
+<script src="/public/scripts/ep.widget.address.min.js?v=260906"></script>
+<script src="/public/scripts/bundle-modal.min.js?v=261008"></script>
+
+</body>
+</html>
+<script>
+var baseUrl = {{json gbfBaseUrl}};
+
+$(document).ready(function() {
+	// 1. 初始化頁面展示、商品規格連動、倒數計時與動畫
+	gGBF.initShowPage({
+		uuid: {{json groupBuy.uuid}},
+		countryCode: {{json countryCode}},
+		languageCode: {{json languageCode}},
+		
+		itemRoom: {{#if itemRoom}}{{json itemRoom}}{{else}}null{{/if}},
+		countdown: {
+			title: '活動剩餘時間',
+			clockLabel: '活動剩餘時間',
+			clockTheme: ' ',
+			timeRemainToEnd: {{timeRemainToEnd}},
+			countdownDays: {{countdownDays}},
+			adminUser: {{#if adminUser}}true{{else}}false{{/if}},
+			labelDay: '天',
+			labelHour: '時',
+			labelMinute: '分',
+			labelSecond: '秒'
+		},
+		
+		paymentMethodLayout :{{json paymentMethodLayout}},
+		theme: {
+			addrInputSelectClass: ' '
+		}
+	});
+
+	// 2. 初始化獨立購物車模組 (綁定抽屜動畫與觸發首次狀態加載)
+	GBShoppingCart.init({{json groupBuy.uuid}}, {
+		navbarTextColor: ''
+	});
+});
+</script>
+
+

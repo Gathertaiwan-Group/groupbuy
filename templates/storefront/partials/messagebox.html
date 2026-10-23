@@ -1,5 +1,5 @@
 <div class="container">
-<div id="message">
+<div id="message">{{#if flashMessage}}<div class="alert alert-{{default flashType "warning"}} mt-3" role="alert"><button type="button" class="close" data-dismiss="alert">×</button>{{flashMessage}}</div>{{/if}}
 </div>
 </div>
 

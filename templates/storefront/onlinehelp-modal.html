@@ -1,0 +1,80 @@
+<!--Header-->
+<div class="modal-header light-blue darken-3 white-text">
+	<h5 class="title">
+		<i class="fa-light fa-comments mr-1"></i>我想問問題</h5>
+	<button type="button" class="close waves-effect waves-light"
+		data-dismiss="modal" aria-label="Close">
+		<span aria-hidden="true"><i class="fa-light fa-xmark"></i></span>
+	</button>
+</div>
+<!--Body-->
+<div class="modal-body mb-0">
+<form name="OnlineHelpForm" method="post" action="{{gbfBaseUrl}}/ajax/web/OnlineHelp/send.do" class="form-horizontal" id="OnlineHelpForm"><input type="hidden" name="groupBuyId" value="{{groupBuyIdValue}}"><input type="hidden" name="groupBuyTitle" value="{{groupBuyTitleValue}}"><div class="md-form form-sm">
+		<i class="fa-light fa-location prefix"></i>
+		<input type="text" id="title" class="form-control" name="title" value="我有問題需要協助"> 
+		<label for="title" class="active">主旨</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-image-user prefix"></i> 
+		<input type="text" class="form-control" size="30" name="name" required> 
+		<label for="name">姓名</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-envelope prefix"></i> 
+		<input type="text" class="form-control" size="30" name="email" required="true"> 
+		<label for="email">Email</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-phone prefix"></i> 
+		<input type="text" class="form-control" size="30" name="telephone"> 
+		<label for="telephone">電話</label>
+	</div>
+	<div class="md-form form-sm">
+		<i class="fa-light fa-comment-pen prefix"></i>
+		<textarea id="message" class="md-textarea mb-0 required" name="message"></textarea>
+		<label for="message">訊息</label>
+	</div>
+
+	<div class="md-form form-sm">
+	<div id="recaptcha" class="text-center"></div>
+	</div>
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div id="modal-message"></div>
+	<div class="text-center mt-1-half">
+		<button class="btn btn-default mb-2" data-dismiss="modal">關閉<i class="fa-light fa-xmark ml-1"></i></button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-info mb-2" value="送出" />
+	</div>
+</form></div>
+
+{{> storefront/partials/recaptcha-stub.html}}
+<script> 
+
+var onloadCallback = function() {
+	grecaptcha.render('recaptcha', {
+	'sitekey' : '6LfAkd4UAAAAACSnhbUSVDsB7v_xmk4spmtsXkF-',
+	'theme' : 'light',
+	'callback' : function(response) {
+		$('#OnlineHelpForm input[type=submit]').show();
+	}
+	});
+
+	$('#recaptcha div').css('width', 'auto');
+};
+</script>
+
+<script>
+var onSuccess = function(json) {
+	$('#OnlineHelpForm').find('input[type=submit]').val('已送出');
+	$('#OnlineHelpForm').find('input[type=submit]').attr('disabled', true);
+	var status = $('#OnlineHelpForm').find('#modal-message');
+	status.html("<div class=\"alert alert-success\"><a href=\"#\" class=\"close\" data-dismiss=\"alert\" aria-label=\"close\">&times;</a>" + json.error + "</div>");
+}
+
+$('#OnlineHelpForm input[type=submit]').hide();
+$(document).ready(function() { 
+    $('#OnlineHelpForm').validate();
+    initAjaxForm('OnlineHelpForm', onSuccess);
+ });     
+</script>

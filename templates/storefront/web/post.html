@@ -1,0 +1,42 @@
+{{!-- 說明中心文章內頁 /{短網址}/post/{id}/{標題}：原站未擷取，依同版面（fe-help-menu-4411 的左側欄＋麵包屑＋文章標頭樣式）推導。 --}}
+{{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
+<!-- <base href="/web/Post/show.jsp"> -->
+
+<title>{{pageTitle}}</title>
+<meta property="og:title" content="{{pageTitle}}" >{{#if seoDescr}}<meta name="description" content="{{seoDescr}}"><meta property="og:description" content="{{seoDescr}}" >{{/if}}{{#if post.image}}<meta property="og:image" content="{{post.image}}" >{{/if}}
+{{> storefront/partials/web-style.html}}{{> storefront/partials/web-custom-css.html}}
+{{> storefront/partials/web-tracking.html}}
+</head>
+<body class="fixed-snxx {{bodyClass}}">
+<script>
+</script>
+{{> storefront/partials/web-header.html}}
+{{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
+{{> storefront/partials/messagebox.html}}<section class="main-section layout-aside-left">
+		<div class="container-lg">
+			<div class="row">
+				{{> storefront/partials/web-aside.html}}
+				<div class="col-content">
+					<section>
+<div class="breadcrumb-wrapper"><div class="container"><nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/{{navShortUrl}}">首頁</a></li>{{#if post.category}}<li class="breadcrumb-item"><a href="{{post.category.href}}">{{post.category.title}}</a></li>{{/if}}<li class="breadcrumb-item active" aria-current="page">{{post.title}}</li></ol></nav></div></div>{{> storefront/partials/web-post-search.html}}
+<!-- container -->
+<section class="container" id="postContent">
+<article class="post-article" data-post-id="{{post.id}}"><div class="row"><section class="post-header col-12"><div class="post-datePost"><time>{{post.date}}</time></div>{{#if post.category}}<a href="{{post.category.href}}" target="__blank" rel="noreferrer"><span class="badge badge-warning mb-2">{{post.category.title}}</span></a>{{/if}}<h1 class="post-title">{{post.title}}</h1></section>
+<section class="post-body col-12 ck-content">{{{post.body}}}</section>
+{{#if post.tags.length}}<div class="col-12"><div class="tags-list page--post"><div class="tags-list__prefix-icon"><i class="fa-sharp fa-solid fa-tags"></i></div><ul class="tags-list__tags">{{#each post.tags}}<li class="tags-list__item"><a class="tags-list__link" href="{{href}}">{{name}}</a></li>{{/each}}</ul></div></div>{{/if}}
+</div></article>
+</section>
+<!-- container -->
+</section>
+
+</div>
+			</div><!-- /.row -->
+		</div><!-- /.container -->
+	</section><!-- /.main-section -->
+<!-- webLayout: STYLE2 -->
+{{> storefront/partials/web-fixed-sections.html}}
+</main>
+
+{{> storefront/partials/web-footer.html}}
+
+{{> storefront/partials/web-foot-scripts.html}}{{> storefront/partials/web-post-search-script.html}}

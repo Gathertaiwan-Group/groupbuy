@@ -1,0 +1,3 @@
+{{!-- 官網頁尾：HomeView「FOOTER 預設」的 html；沒有時用預設頁尾（推導，內容同原站 /jranv 擷取）；無網站情境（/News/list、403）不輸出 --}}
+<!-- Footer -->
+{{#if footerHtml}}{{{footerHtml}}}{{else}}{{#if footerDefault}}{{> storefront/partials/web-footer-default.html}}{{/if}}{{/if}}<!-- Footer -->

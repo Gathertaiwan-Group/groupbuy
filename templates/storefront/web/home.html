@@ -1,0 +1,30 @@
+{{!-- 官網首頁（render=HOME 的團購，例 /jranv 說明中心）：spec/html/fe-help-home-jranv.html。
+     區塊來自 home_views / home_view_sections / home_view_items；沒有資料時用預設區塊（近期文章＋最新文章，推導）。 --}}
+{{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
+<!-- <base href="/web/Home/show.jsp"> -->
+<title>{{pageTitle}}</title><meta property="og:title" content="{{pageTitle}}" >{{#if seoDescr}}<meta name="description" content="{{seoDescr}}"><meta property="og:description" content="{{seoDescr}}" >{{/if}}{{#if seoImage}}<meta property="og:image" content="{{seoImage}}" >{{/if}}{{#if noIndex}}<meta name="robots" content="noindex"><meta name="googlebot" content="noindex">{{/if}}<style>
+@media (min-width: 1440px) {
+	.side-nav-2, .side-nav-3, .side-nav-4, .side-nav-5, .side-nav-7, .side-nav-8 {display:none;}
+}
+@media (min-width: 786px) {
+#slide-out { display: none; }
+}
+</style>
+{{> storefront/partials/web-custom-css.html}}
+{{> storefront/partials/web-tracking.html}}
+</head>
+<body class="fixed-snxx gbf-web {{bodyClass}}">
+<script>
+</script>
+{{> storefront/partials/web-header.html}}
+{{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
+{{> storefront/partials/messagebox.html}}<div class="home-body" data-hv-id={{home.id}}>{{#if home.html}}{{{home.html}}}{{else}}{{#each home.sections}}<section class="hv-section" data-hv-section-id="{{id}}" data-hv-section-title="{{title}}" data-hv-section-hidden="{{#if hidden}}true{{else}}false{{/if}}"><div class="container py-4"><div class="row section-{{id}}-row">{{#if html}}{{{html}}}{{/if}}{{#each items}}{{> storefront/partials/web-hv-item.html}}{{/each}}</div><!-- /.row --></div><!-- /.container --></section>{{/each}}{{/if}}</div><!--/.Home-Body-->{{> storefront/partials/web-fixed-sections.html}}
+</main>
+
+{{> storefront/partials/web-footer.html}}
+
+{{> storefront/partials/web-foot-scripts.html}}<script>
+$(document).ready(function () {
+$('.mdb-select').material_select();
+});
+</script>

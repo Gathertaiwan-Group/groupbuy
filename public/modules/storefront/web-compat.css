@@ -1,0 +1,38 @@
+/*
+ * storefront 說明中心／官網型頁面（web-*.html 模板）補丁：自行撰寫，非 MDB PRO 程式碼。
+ * 只補核心 /compat/mdb-pro-compat.css、/compat/mdb-pro-frontend.css 與 fe-compat.css 尚未涵蓋、這幾頁用得到的外觀
+ * （依 MDB PRO 缺口報告 F7 與原站行為重寫）。PerfectScrollbar 本體與樣式改由 cdnjs perfect-scrollbar 1.5.5（MIT）提供。
+ */
+
+/* 導覽列上方選單（navMenuStyle 樣式1 Mega）：下拉面板要以整條導覽列為定位基準、滿版顯示。
+   Free 只有 Bootstrap 的 .dropdown{position:relative}，面板會擠在選單項目底下變成一字一行。 */
+.navbar .mega-dropdown {
+  position: static;
+}
+.navbar .mega-dropdown .dropdown-menu.mega-menu {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.navbar .mega-dropdown .dropdown-menu.mega-menu .sub-menu .sub-title {
+  border-bottom: 1px solid #e0e0e0;
+}
+.navbar .mega-dropdown .dropdown-menu.mega-menu.v-2 .sub-menu .sub-title {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+}
+.navbar .mega-dropdown .dropdown-menu.mega-menu .sub-menu ul li a {
+  width: 100%;
+  transition: 0.3s;
+}
+.navbar .mega-dropdown .dropdown-menu.mega-menu .sub-menu ul li a:hover {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+/* 平板以下面板過長時內部捲動 */
+@media (max-width: 1024px) {
+  .navbar .mega-dropdown .dropdown-menu.mega-menu {
+    max-height: 300px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}

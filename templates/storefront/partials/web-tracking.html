@@ -1,0 +1,40 @@
+{{!-- 官網型頁面 <head> 末段的追蹤碼。原站此處載入「平台自己的」GTM／Facebook Pixel／GA（原站帳號），本系統一律不載入；
+     只有團購自己設定了 facebookPixel / gaCode 時才載入（推導：團購層級追蹤碼，同 partials/tracking.html）。 --}}
+<!-- Google Tag Manager (noscript) -->
+<!-- （原站此處為已註解掉的平台 GTM noscript，本系統不保留平台 GTM 代碼） -->
+<!-- End Google Tag Manager (noscript) -->
+
+<!-- Facebook Pixel Code -->
+<script>
+{{#if tracking.facebookPixel}}
+	!function(f,b,e,v,n,t,s)
+	{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+	n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+	if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+	n.queue=[];t=b.createElement(e);t.async=!0;
+	t.src=v;s=b.getElementsByTagName(e)[0];
+	s.parentNode.insertBefore(t,s)}(window, document,'script',
+	'https://connect.facebook.net/en_US/fbevents.js');
+	fbq('init', {{json tracking.facebookPixel}});
+
+	fbq('track', 'PageView');
+{{/if}}
+</script>
+<noscript>{{#if tracking.facebookPixel}}<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id={{tracking.facebookPixel}}&ev=PageView&noscript=1"/>{{/if}}
+</noscript><!-- End Facebook Pixel Code -->
+
+{{#if tracking.gaCode}}<script async src="https://www.googletagmanager.com/gtag/js?id={{tracking.gaCode}}"></script>{{else}}<script></script>{{/if}}
+<script>
+	window.dataLayer = window.dataLayer || [];
+	function gtag(){dataLayer.push(arguments);}
+{{#if tracking.gaCode}}
+	gtag('js', new Date());
+	gtag('config', {{json tracking.gaCode}});
+{{/if}}
+</script>
+
+<script>
+$(document).ready(function() {
+	/* 未串接 Facebook：原站在此呼叫 epFbAsyncInit(app id) 載入 FB SDK（快速登入），本系統不呼叫 */
+});
+</script>

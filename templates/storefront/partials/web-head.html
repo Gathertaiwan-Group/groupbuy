@@ -1,0 +1,70 @@
+{{!-- 說明中心／官網型前台頁（原站 web/*.jsp）共用 <head> 前段：資源、佈景主題色、GBF 物件。由 spec/html/fe-news-list.html 清理而來。 --}}
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+
+<head>
+<meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
+<meta http-equiv="Cache-Control" content="no-store"/>
+<meta http-equiv="Pragma" content="no-cache"/>
+<meta http-equiv="Expires" content="0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link rel="shortcut icon" href="{{faviconUrl}}"/>
+<!-- 授權政策：原站 Font Awesome Pro 6 → Font Awesome Free 6（cdnjs）＋相容層 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link rel="stylesheet" href="/compat/fa-pro-compat.css?v={{assetVersion}}">
+<!-- Latest compiled and minified CSS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css" >
+<!-- <link rel="stylesheet" href="/public/css/mdb.land.min.css">
+<link rel="stylesheet" href="/public/css/mdb.ec.min.css?v=8"> -->
+<!-- 授權政策：原站 MDB PRO 4.8.8 → MDB Free 4.8.8（cdnjs）＋PRO 元件補丁 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css">
+<link rel="stylesheet" href="/compat/mdb-pro-compat.css?v={{assetVersion}}">
+<link rel="stylesheet" href="/compat/mdb-pro-frontend.css?v={{assetVersion}}">
+<link rel="stylesheet" href="/modules/storefront/fe-compat.css?v={{assetVersion}}">
+<!-- 授權政策：原站 MDB PRO mdb.min.js 內含的 PerfectScrollbar（側欄 .custom-scrollbar）→ cdnjs perfect-scrollbar 1.5.5（MIT），放在 head 以免改變 body 結構；說明中心頁其餘 PRO 外觀補丁在 web-compat.css -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery.perfect-scrollbar/1.5.5/css/perfect-scrollbar.min.css" integrity="sha512-ygIxOy3hmN2fzGeNqys7ymuBgwSCet0LVfqQbWY10AszPMn2rB9JY0eoG0m1pySicu+nvORrBmhHVSt7+GI9VA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<link rel="stylesheet" href="/modules/storefront/web-compat.css?v={{assetVersion}}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.perfect-scrollbar/1.5.5/perfect-scrollbar.min.js" integrity="sha512-X41/A5OSxoi5uqtS6Krhqz8QyyD8E/ZbN7B4IaBSgqPLRbWVuXJXr9UwOujstj71SoVxh5vxgy7kmtd17xrJRw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- 授權政策：MDB PRO stepper add-on CSS 不載入（頁面沒有 ul.stepper 標記） -->
+<link rel="stylesheet" href="/public/css/bootstrap-datetimepicker.min.css">
+
+<!-- Swiper -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Swiper/8.3.2/swiper-bundle.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Swiper/8.3.2/swiper-bundle.min.js"></script>
+
+<!-- Optional theme -->
+<link rel="stylesheet" href="/public/css/animate.min.css?v=250707">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css">
+
+
+<!-- Generic page styles -->
+<link rel="stylesheet" href="/public/css/style_v4_2.min.css?v=251127">
+
+<!-- 
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/blueimp-file-upload/9.5.7/css/jquery.fileupload-ui.min.css">
+ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.3/umd/popper.min.js" integrity="sha384-ZMP7rVo3mIykV+2+9J3UJ46jBk0WLaUAdn689aCwoqbBJiSnjAK/l8WvCWPIPm49" crossorigin="anonymous"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-validate/1.19.2/jquery.validate.min.js" type="text/javascript"></script>
+
+<!-- fancybox -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fancyapps-ui/5.0.22/fancybox/fancybox.umd.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancyapps-ui/5.0.22/fancybox/fancybox.min.css"/>
+
+<!-- date picker -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.10.3/moment-with-locales.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment-timezone/0.4.0/moment-timezone-with-data-2010-2020.min.js"></script>
+
+{{> storefront/partials/web-theme-style.html}}
+<script>
+if (typeof GBF  == 'undefined') {
+	GBF = {};
+}
+GBF.ctx = '';
+GBF.shortUrl = {{json gbfShortUrl}};
+GBF.baseUrl = {{json gbfBaseUrl}};
+GBF.language = 'zh-TW';
+</script>

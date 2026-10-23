@@ -1,0 +1,2 @@
+{{!-- 文章列表分頁（與原站 /jranv/menu/4411/... 的 <nav><ul class="pagination pg-blue ..."> 相同；頁碼視窗為推導） --}}
+{{#if pagination}}<nav><ul class="pagination pg-blue justify-content-center">{{#each pagination}}<li class="page-item {{cls}}"><a class="page-link" {{#if href}}href="{{href}}"{{/if}}>{{{label}}}</a></li>{{/each}}</ul></nav>{{/if}}

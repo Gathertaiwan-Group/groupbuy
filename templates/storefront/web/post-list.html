@@ -1,0 +1,50 @@
+{{!-- 說明中心文章列表：選單 /{短網址}/menu/{id}/{標題}（spec/html/fe-help-menu-4411.html）；
+     同一模板也用於文章分類 /postcategory、標籤 /post/tag、搜尋結果 /posts?t=（原站未擷取，推導）。 --}}
+{{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
+<!-- <base href="/web/Post/list.jsp"> -->
+
+<title>{{pageTitle}}</title>
+<meta property="og:title" content="{{pageTitle}}" >
+{{> storefront/partials/web-style.html}}{{> storefront/partials/web-custom-css.html}}
+{{> storefront/partials/web-tracking.html}}
+</head>
+<body class="fixed-snxx {{bodyClass}}">
+<script>
+</script>
+{{> storefront/partials/web-header.html}}
+{{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
+{{> storefront/partials/messagebox.html}}<section class="main-section layout-aside-left">
+		<div class="container-lg">
+			<div class="row">
+				{{> storefront/partials/web-aside.html}}
+				<div class="col-content">
+					<section>
+<div class="breadcrumb-wrapper"><div class="container"><nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/{{navShortUrl}}">首頁</a></li><li class="breadcrumb-item active" aria-current="page">{{listTitle}}</li></ol></nav></div></div>{{> storefront/partials/web-post-search.html}}
+<!-- container -->
+<section class="container" id="searchPostResult">
+<div class="row"><div class="col-12"><div class="tags-list page--post-list"><div class="tags-list__prefix-icon"><i class="fa-sharp fa-solid fa-tags"></i></div><ul class="tags-list__tags">{{#each tags}}<li class="tags-list__item"><a class="tags-list__link" href="{{href}}">{{name}}</a></li>{{/each}}</ul></div></div></div>
+
+<postCategory>
+<div class="postCategory-header">
+<h1 class="postCategory-title">{{listTitle}}</h1>
+</div>
+<div class="row justify-content-center" id="searchPostResult">
+{{#each posts}}<div class="col-12"><article class=""><div class="row"><section class="post-header col-12"><div class="post-datePost"><time>{{date}}</time></div>{{#if category}}<a href="{{category.href}}" target="__blank" rel="noreferrer"><span class="badge badge-warning mb-2">{{category.title}}</span></a>{{/if}}<h2 class="post-title"><a class="post-title-link" href="{{href}}">{{title}}</a></h2><div class="post-summary">{{summary}}</div><div class="post-more"><a class="text-primary-emphasis" href="{{href}}">更多內容</a></div></section></div></article></div>{{else}}<div class="col-12"><p class="text-center text-muted py-5">{{emptyText}}</p></div>{{/each}}</div><!-- /.row#searchPostResult -->
+<!-- row -->
+</postCategory>
+
+{{> storefront/partials/web-pagination.html}}</section>
+<!-- container -->
+</section>
+
+</div>
+			</div><!-- /.row -->
+		</div><!-- /.container -->
+	</section><!-- /.main-section -->
+<!-- webLayout: STYLE2 -->
+{{> storefront/partials/web-fixed-sections.html}}
+</main>
+
+{{> storefront/partials/web-footer.html}}
+
+{{> storefront/partials/web-foot-scripts.html}}{{> storefront/partials/web-post-search-script.html}}

@@ -1,0 +1,224 @@
+{{!-- 前台 403 系統提示頁（spec/html/fe-error-403.html）：匿名開 /{短網址}?preview=true（無預覽權限）時回 HTTP 403。
+     錯誤追蹤代碼每次隨機產生（ERR-XXXXXXXX）。 --}}
+{{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
+<!-- <base href="/web/Error/403.jsp"> -->
+<title>403 - 系統提示</title>
+<meta name="robots" content="noindex">
+<meta name="googlebot" content="noindex">
+<style>
+/* 隱藏母版頂部重複的 Alert 橫幅，讓視覺焦點完全集中在中央卡片 */
+#message, .alert {
+    display: none !important;
+}
+.error-page-wrapper {
+    min-height: calc(100vh - 280px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2.5rem 1rem;
+}
+.error-card {
+    max-width: 540px;
+    width: 100%;
+    background: #ffffff;
+    border-radius: 24px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.03);
+    padding: 3rem 2.25rem;
+    text-align: center;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+.error-icon-box {
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 1.75rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    color: #d97706;
+    border: 8px solid #fffdf5;
+    box-shadow: 0 8px 20px -4px rgba(245, 158, 11, 0.25);
+    animation: floatIcon 3.2s ease-in-out infinite;
+}
+@keyframes floatIcon {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+.error-title {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.02em;
+}
+.error-desc {
+    font-size: 0.95rem;
+    color: #64748b;
+    line-height: 1.65;
+    margin-bottom: 1.75rem;
+}
+.incident-badge-wrapper {
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.incident-badge-label {
+    font-size: 0.82rem;
+    color: #64748b;
+    font-weight: 500;
+}
+.incident-badge-code {
+    font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0f172a;
+    background: #e2e8f0;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    letter-spacing: 0.05em;
+}
+.btn-copy-code {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+.error-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.error-actions .btn {
+    border-radius: 12px;
+    padding: 0.65rem 1.4rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+.error-actions .btn-primary {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border: none;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+}
+.error-actions .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+.error-actions .btn-light {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    color: #475569;
+}
+.error-actions .btn-light:hover {
+    background: #e2e8f0;
+    color: #1e293b;
+    transform: translateY(-2px);
+}
+</style>
+{{> storefront/partials/web-tracking.html}}
+</head>
+<body class="fixed-snxx gbf-web ">
+{{> storefront/partials/web-header.html}}
+{{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
+{{> storefront/partials/messagebox.html}}<div class="container error-page-wrapper">
+    <div class="error-card">
+        <div class="error-icon-box">
+            <i class="fa-light fa-triangle-exclamation"></i>
+        </div>
+        <h4 class="error-title">抱歉，處理您的請求時發生異常</h4>
+        <p class="error-desc">
+            可能為暫時性的網路連線不穩或伺服器忙碌中。<br>
+            請嘗試返回上一頁重新操作，或從上方選單開啟其他網頁。
+        </p>
+
+        <div class="incident-badge-wrapper">
+                <span class="incident-badge-label"><i class="fa-light fa-fingerprint mr-1"></i>錯誤追蹤代碼：</span>
+                <code class="incident-badge-code" id="errorTrackingCode">{{errorCode}}</code>
+                <button type="button" class="btn btn-sm btn-outline-secondary btn-copy-code" onclick="copyTrackingCode()">
+                    <i class="fa-regular fa-copy mr-1"></i><span id="copyBtnText">複製</span>
+                </button>
+            </div>
+        <div class="error-actions">
+            <button type="button" class="btn btn-primary" onclick="smartGoBack()">
+                <i class="fa-regular fa-arrow-left mr-2"></i>返回上一頁
+            </button>
+            <a href="/" class="btn btn-light">
+                <i class="fa-regular fa-house mr-2"></i>前往首頁
+            </a>
+        </div>
+    </div>
+</div>
+{{> storefront/partials/web-fixed-sections.html}}
+</main>
+
+<script>
+function copyTrackingCode() {
+    var codeElem = document.getElementById('errorTrackingCode');
+    if (!codeElem) return;
+    var code = codeElem.innerText.trim();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(onCopied, fallbackCopy);
+    } else {
+        fallbackCopy();
+    }
+    function onCopied() {
+        var btnText = document.getElementById('copyBtnText');
+        if (btnText) {
+            btnText.innerText = '已複製！';
+            setTimeout(function() {
+                btnText.innerText = '複製';
+            }, 2000);
+        }
+    }
+    function fallbackCopy() {
+        var tempInput = document.createElement('input');
+        tempInput.value = code;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        onCopied();
+    }
+}
+
+function smartGoBack() {
+    // 優先精準回到送出前的來源頁面（如剛剛填表的團購頁）
+    var returnUrl = '';
+    if (returnUrl) {
+        window.location.href = decodeURIComponent(returnUrl);
+        return;
+    }
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        window.location.href = '/';
+    }
+}
+
+$(document).ready(function() {
+    // 雙保險：若網址列仍停留在 checkout.do，自動抹除替換為安全網址，避免 F5 誤觸重複提交
+    if (window.history && window.history.replaceState && window.location.pathname.indexOf('checkout.do') !== -1) {
+        var returnUrl = '';
+        var fallbackCleanUrl = returnUrl ? decodeURIComponent(returnUrl) : '/';
+        window.history.replaceState(null, document.title, fallbackCleanUrl);
+    }
+});
+</script>
+{{> storefront/partials/web-footer.html}}
+
+{{> storefront/partials/web-foot-scripts.html}}</body>
+</html>
