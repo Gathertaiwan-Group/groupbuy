@@ -11,6 +11,9 @@ const port = 9400 + Math.floor(Math.random() * 400);
 const prof = mkdtempSync(path.join(process.env.SHOT_TMP || tmpdir(), 'shotprof-'));
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--no-first-run', '--no-default-browser-check', `--remote-debugging-port=${port}`, `--user-data-dir=${prof}`, `--window-size=${W},${H}`, 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// 保底：本程式被 SIGKILL（例如工具逾時直接砍掉）時 exit handler 不會執行 → 另起一個獨立的小 shell 盯著本程序，
+// 本程序消失就砍 Chrome、刪設定檔（正常結束時下面的 cleanup 已處理，這裡只是 no-op）
+spawn('/bin/sh', ['-c', `while kill -0 ${process.pid} 2>/dev/null; do sleep 2; done; kill -9 ${chrome.pid} 2>/dev/null; sleep 1; rm -rf "${prof}"`], { detached: true, stdio: 'ignore' }).unref();
 // 結束時（正常、例外、被 timeout/Ctrl-C 中斷）一律關掉 Chrome 並刪除暫存設定檔（每個約 50–150MB，殘留會塞爆磁碟）
 let cleaned = false;
 const cleanup = () => {
