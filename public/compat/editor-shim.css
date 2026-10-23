@@ -56,6 +56,9 @@ div.DTE_Field div.DTE_Processing_Indicator { top: 10px; right: 20px; }
 
 /* 欄位 */
 div.DTE_Field { position: relative; }
+/* className 含 block 的欄位（例：進階設定「內容」full block）：標籤在上、輸入佔整列（同原版 bootstrap4 樣式） */
+div.DTE_Body div.DTE_Body_Content div.DTE_Field.block label,
+div.DTE_Body div.DTE_Body_Content div.DTE_Field.block > div { max-width: 100%; flex: 0 0 100%; }
 div.DTE_Field div.DTE_Field_InputControl { display: block; position: relative; }
 div.DTE_Field label div.DTE_Label_Info { font-size: 0.85em; margin-top: 0.25em; }
 div.DTE_Field label div.DTE_Label_Info:empty { margin-top: 0; }

@@ -305,7 +305,7 @@ export const routes = [
 ```
 
 - **端點與 action**：`save` 只收 `create`、`update` 只收 `edit`、`delete` 只收 `remove`（例：對 save 送 `action=remove` → 400）。某個動作沒有自己的端點時，由第一個已登錄的端點代收——原站「Editor `ajax` 只有一個網址」的頁面（例 groupbuypreference-list、inbound-list）只給 `save` 即可收全部動作。頁面根本沒有某動作時用 `actions` 收緊，例：`actions: { save: ["create"] }`（團購標籤的「套用中團購」只有新增/刪除）。
-- 列表排序最後一律補 `entity.idColumn`（排序值相同的列在分頁時不會重複或漏掉）；直接呼叫 `dtQuery` 時請傳 `tieBreaker: "id"`。
+- 列表排序最後一律補唯一鍵（排序值相同的列在分頁時不會重複或漏掉）：`listEntity`／`crudRoutes` 用 `entity.idColumn`；直接呼叫 `dtQuery` 時，`columnMap` 有對映到 `id` 就自動補 `id`，沒有 `id` 欄位的表／view 請傳 `tieBreaker: "<唯一鍵>"`（`false` 可關閉）。
 
 - 列表自動處理：原站 **legacy DataTables 參數**（`sEcho`、`iDisplayStart`、`iDisplayLength`、`mDataProp_N`、`sSearch`、`sSearch_N`、`iSortCol_K`、`sSortDir_K`；全站 `dataTable.config.min.js` 設了 `legacy.ajax=true`）、serverSide 分頁/排序/全域搜尋/表尾欄位篩選（值以 `?` 開頭＝結尾比對「搜尋末幾碼」）、serverSide=false 一次回全部（上限 10000）、租戶過濾。
 - 寫入自動處理：Editor 協定解析（`action` + `data[id][欄位]`、巢狀 `a[b]`、陣列 `a[]`、`-many-count`）、`apiToRow`（型別轉換、jsonb 子鍵合併、台灣時間）、租戶欄位、unique/FK 違反轉成友善錯誤、回傳最新列。
@@ -335,7 +335,7 @@ export const routes = [
 
 ### 8.1 DataTables Editor 相容 shim（`public/compat/editor-shim.js`）
 
-照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，52 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs）；改到 shim 相關行為時自己也可以跑）。
+照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，54 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
 
 原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
 
@@ -368,6 +368,7 @@ export const routes = [
 | 顯示 | Bootstrap 4 modal：`.modal.fade.DTED > .modal-dialog.modal-dialog-scrollable > .DTE.modal-content`（Header/Processing/Body/Footer 結構與 class 同原站） |
 | 已知差異 | datetime 的日曆外觀為 flatpickr（非 Editor 內建 DateTime）；bubble 定位交給原站頁面 CSS（畫面中央）；Editor 原版英文預設字串只在沒傳 `i18n` 的 Editor 出現 |
 | 設值與 dependent | `field.val(x)`／`set()` 以 API 設值時，select/checkbox/radio/select2/text 都會在 `setTimeout 0` 後 trigger `change`（同原版 `_triggerChange`），`dependent()` 隨之執行——**是非同步的**，設值後要讀 dependent 的結果請等下一個 tick；新增表單時每個欄位會觸發兩次（multiSet＋set，同原版）。`undependent(name)` 可移除 |
+| 欄位版面 | 欄位 `className: 'block'`：標籤在上、輸入佔整列（同原版 bootstrap4 的 `div.DTE_Field.block`，shim CSS 已內建，頁面不必自補） |
 
 ### 8.2 其他相容層
 

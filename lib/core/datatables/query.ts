@@ -34,9 +34,10 @@ export interface DtQuerySpec {
   maxRows?: number;
   /**
    * 唯一鍵欄位，排序最後一律補上它（排序值相同的列在分頁時才不會重複/漏掉）。
-   * listEntity/crudRoutes 會自動帶 entity.idColumn；直接呼叫 dtQuery 時建議傳 'id'。
+   * listEntity/crudRoutes 會自動帶 entity.idColumn。直接呼叫 dtQuery 沒指定時：columnMap 有對映到 "id" 欄位就用 "id"；
+   * 沒有 id 欄位的表／view（例 sales_order_reservations_v 的 relation_id）請自行傳唯一鍵；傳 false 可關閉。
    */
-  tieBreaker?: string;
+  tieBreaker?: string | false;
 }
 
 export interface DtQueryResult<Row = Record<string, unknown>> {
@@ -91,6 +92,13 @@ function applyCommon(q: AnyQuery, dt: DtRequest, spec: DtQuerySpec, withSearch: 
   return q;
 }
 
+/** 實際使用的唯一排序鍵（見 DtQuerySpec.tieBreaker） */
+function tieBreakerOf(spec: DtQuerySpec): string | undefined {
+  if (spec.tieBreaker === false) return undefined;
+  if (spec.tieBreaker) return spec.tieBreaker;
+  return spec.columnMap && Object.values(spec.columnMap).includes("id") ? "id" : undefined;
+}
+
 function applyOrder(q: AnyQuery, dt: DtRequest, spec: DtQuerySpec): AnyQuery {
   const used = new Set<string>();
   if (spec.columnMap) {
@@ -110,7 +118,8 @@ function applyOrder(q: AnyQuery, dt: DtRequest, spec: DtQuerySpec): AnyQuery {
       used.add(d.column);
     }
   }
-  if (spec.tieBreaker && !used.has(spec.tieBreaker)) q = q.order(spec.tieBreaker, { ascending: true });
+  const tb = tieBreakerOf(spec);
+  if (tb && !used.has(tb)) q = q.order(tb, { ascending: true });
   return q;
 }
 
@@ -152,7 +161,7 @@ export async function dtQuery<Row = Record<string, unknown>>(
     let q = db.from(spec.table).select(select);
     q = applyCommon(q, dt, spec, false);
     q = applyOrder(q, { ...dt, order: [] }, spec);
-    if (!spec.defaultOrder && !spec.tieBreaker) q = q.order("id", { ascending: true });
+    if (!spec.defaultOrder && spec.tieBreaker === undefined && !tieBreakerOf(spec)) q = q.order("id", { ascending: true });
     q = q.range(from, Math.min(from + PAGE, max) - 1);
     const { data, error } = await q;
     if (error) throw new Error(`[dtQuery] ${spec.table}：${error.message}`);

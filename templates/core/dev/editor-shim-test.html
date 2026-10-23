@@ -178,6 +178,14 @@ $(document).ready(async function () {
 		var t = $('#DTE_Field_groupBuyId option:selected').text();
 		return (String(v) === String({{json firstGroupBuyId}}) && t.length > 0) || ('val=' + v + ' text=' + t);
 	});
+	// 值是字串時 shim 送 value="<id>"（JSON 帶引號，同原版 editor.select2）→ 伺服器 select2Params 會先 JSON.parse
+	$('#DTE_Field_groupBuyId').empty();
+	ed.field('groupBuyId').val(String({{json firstGroupBuyId}}));
+	await wait(1500);
+	T('select2：字串值的 initialValue 查詢（value 帶引號）也取得名稱', function () {
+		var t = $('#DTE_Field_groupBuyId option:selected').text();
+		return (t.length > 0 && t !== String({{json firstGroupBuyId}})) || ('text=' + t);
+	});
 	T('ckeditor（CK4）在開啟後初始化', function () { return !!ed.field('ck4').inst() || 'CKEDITOR=' + (typeof CKEDITOR); });
 	await wait(800);
 	T('ckeditorClassic（CK5 外掛 editor.ckeditor5）可設值/取值', function () {
@@ -345,6 +353,23 @@ $(document).ready(async function () {
 		var f = $(ted2.dom.formContent);
 		return f.find('fieldset legend').length === 2 && f.find('fieldset').eq(1).find('.DTE_Field_Name_tb').length === 1;
 	});
+
+	// className: 'block'：標籤在上、輸入佔整列（原版 bootstrap4 樣式 div.DTE_Field.block）
+	var blkEd = new E({ fields: [{ name: 'blk', label: '整列', className: 'block' }, { name: 'nb', label: '一般' }] });
+	blkEd.create();
+	await wait(700);
+	T('className block：欄位標籤與輸入區佔整列（flex-basis／max-width 100%）', function () {
+		var f = $(blkEd.field('blk').node());
+		var lab = f.find('> label')[0], box = f.children('div')[0];
+		var nl = $(blkEd.field('nb').node()).find('> label')[0];
+		if (!lab || !box || !nl) return 'no node';
+		var cl = getComputedStyle(lab), cb = getComputedStyle(box), cn = getComputedStyle(nl);
+		var full = function (c) { return c.maxWidth === '100%' && c.flexBasis === '100%'; };
+		return (f.hasClass('block') && full(cl) && full(cb) && !full(cn)) || ('label=' + cl.maxWidth + '/' + cl.flexBasis + ' box=' + cb.maxWidth + '/' + cb.flexBasis + ' normal=' + cn.maxWidth + '/' + cn.flexBasis);
+	});
+	blkEd.close();
+	await wait(500);
+	blkEd.destroy();
 
 	var opt = $.fn.dataTable.ext.buttons;
 	T('ext.buttons.create/edit/remove/editSingle/removeSingle 已定義', function () { return !!(opt.create && opt.edit && opt.remove && opt.editSingle && opt.removeSingle); });
