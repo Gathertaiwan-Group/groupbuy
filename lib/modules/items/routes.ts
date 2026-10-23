@@ -2,7 +2,8 @@
 // 範圍：團購品項頁（含分頁殼）、商品明細、組合商品列表/編輯器、匯入商品XLS、複製其他團購品項
 // 原站頁面代號：groupbuy-show-items、groupbuyitemset-show、itembundlev2-list、itembundlev2-create、
 //               modal-itemtemplate-import、modal-groupbuyitemset-import（＋推導彈窗：綁定主庫存、匯入商品庫存、盤點、批次改名、複製其他品項商品…）
-import type { RouteDef } from "@/lib/core/http/types";
+import type { RequestContext, RouteDef, RouteHandler } from "@/lib/core/http/types";
+import { badRequest } from "@/lib/core/http/errors";
 import { get, post, route } from "@/lib/core/http/route-helpers";
 import { pageRoutes } from "./pages";
 import * as gbis from "./gbis";
@@ -14,14 +15,24 @@ import { extraRoutes } from "./extras";
 
 const LIST: ("GET" | "POST")[] = ["GET", "POST"];
 
+/** Editor 端點只收對應的 action（save→create、update→edit、delete→remove） */
+function only(action: "create" | "edit" | "remove", h: RouteHandler): RouteHandler {
+  return async (ctx: RequestContext) => {
+    const body = await ctx.body();
+    const a = body.flat.get("action")?.[0] ?? ctx.query.get("action") ?? "";
+    if (a !== action) throw badRequest(`此端點不接受 action=${a || "(空)"}`);
+    return h(ctx);
+  };
+}
+
 export const routes: RouteDef[] = [
   ...pageRoutes,
 
   /* 團購品項 */
   route(LIST, "/ajax/GroupBuyItemSet/list", gbis.listGbis),
-  post("/ajax/GroupBuyItemSet/save", gbis.editorGbis),
-  post("/ajax/GroupBuyItemSet/update", gbis.editorGbis),
-  post("/ajax/GroupBuyItemSet/delete", gbis.editorGbis),
+  post("/ajax/GroupBuyItemSet/save", only("create", gbis.editorGbis)),
+  post("/ajax/GroupBuyItemSet/update", only("edit", gbis.editorGbis)),
+  post("/ajax/GroupBuyItemSet/delete", only("remove", gbis.editorGbis)),
   post("/ajax/GroupBuyItemSet/batchOnline", gbis.batchOnlineGbis),
   post("/ajax/GroupBuyItemSet/reseq", gbis.reseqGbis),
   post("/ajax/GroupBuyItemSet/unbindParentItem", gbis.unbindParentItemGbis),
@@ -33,9 +44,9 @@ export const routes: RouteDef[] = [
 
   /* 商品 */
   route(LIST, "/ajax/Item/list", item.listItems),
-  post("/ajax/Item/save", item.editorItems),
-  post("/ajax/Item/update", item.editorItems),
-  post("/ajax/Item/delete", item.editorItems),
+  post("/ajax/Item/save", only("create", item.editorItems)),
+  post("/ajax/Item/update", only("edit", item.editorItems)),
+  post("/ajax/Item/delete", only("remove", item.editorItems)),
   post("/ajax/Item/unbindParentItem", item.unbindParentItem),
   post("/ajax/Item/cacheToStock", item.cacheToStock),
   post("/ajax/Item/batchOnline", item.batchOnlineItems),
