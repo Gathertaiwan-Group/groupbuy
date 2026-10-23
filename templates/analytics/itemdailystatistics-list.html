@@ -1,0 +1,225 @@
+<!--#head-->
+<style>
+tr td:first-child {max-width:240px;}
+</style>
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	function initDateInput(hasTarget) {
+		var f = hasTarget ? 7 : 1;
+		var today = new Date();
+		var fromday = new Date(today);
+		var minDate = new Date(today);
+		minDate.setMonth(today.getMonth() - 3);
+		fromday.setDate(today.getDate() - f);
+
+		var formattedDate = today.toISOString().slice(0, 10);
+		var formattedfromDate = fromday.toISOString().slice(0, 10);
+		var formattedMinDate = minDate.toISOString().slice(0, 10);
+		$("input[name=day]").val(formattedDate).attr('max', formattedDate);
+		$("input[name=fromday]").val(formattedfromDate).attr('max', formattedDate);
+		$("input[name=today]").val(formattedDate).attr('max', formattedDate);
+		$("input[name=day]").attr('data-min', formattedMinDate);
+	}
+
+	var itemDailyStatisticsTable;
+	$(document).ready(function() {
+		var uid = {{json uid}};
+		var sortSetting = [[ 0, "desc" ]];
+	//	if (uid.length) {
+			$('.input-group-day-period').removeClass('d-none');
+	//	} else {
+	//		sortSetting = [[ 3, "desc" ]];
+	//		$('.input-group-day').removeClass('d-none');
+	//	}
+		initDateInput(uid.length > 0);
+		var tableName = '#itemDailyStatisticsTable';
+		var editor;
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ItemDailyStatistics/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ItemDailyStatistics/update.do?itemDailyStatisticsId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ItemDailyStatistics/delete.do?itemDailyStatisticsId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'itemDailyStatisticsId',
+			fields: [
+					DataTableConfig.field_datetime('???ItemDailyStatistics.dateStatistics???','dateStatisticsString','YYYY-MM-DD HH:mm'),
+					DataTableConfig.field_input('???ItemDailyStatistics.amountSales???','amountSales'),
+					DataTableConfig.field_input('???ItemDailyStatistics.countSales???','countSales'),
+					DataTableConfig.field_input('???ItemDailyStatistics.groupBuyAccountId???','groupBuyAccountId'),
+					DataTableConfig.field_input('???ItemDailyStatistics.uid???','uid'),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				{{!-- 原站寫死 '/x/ajax/ItemDailyStatistics/list.do'；本系統的網址租戶前綴必須與登入租戶相同，改用 baseUrl --}}
+				url:'{{baseUrl}}/ajax/ItemDailyStatistics/list.do',
+				type: "POST",
+				data: function ( d ) {
+					d.uid = uid;
+					d.day = $('input[name=day]').val();
+					d.fromday = $('input[name=fromday]').val();
+					d.today = $('input[name=today]').val();
+					var hasUid = uid.length > 0 || (d.sSearch_2 && d.sSearch_2.length > 0);
+					d.separateByDate = $('#separateByDate').is(':checked') && hasUid;
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_input('dateStatisticsString'),
+				{
+                    data:'title',
+                    render: function ( data, type, row ) {
+                    	var btn = '<i class="fa-light fa-calendar mr-1"></i>';
+                    	return btn + data;
+                    }
+				},
+				DataTableConfig.data_input('uid'),
+				DataTableConfig.data_input('amountSales'),
+				DataTableConfig.data_input('countSales'),
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": sortSetting,
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+                {
+                    extend: 'excelHtml5',
+                    exportOptions: { orthogonal: 'export' }
+                },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [2],[16]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+				var aj = settings.oAjaxData || {};
+				var hasUid = uid.length > 0 || (aj.sSearch_2 && aj.sSearch_2.length > 0);
+				this.api().column(0).visible(hasUid);
+				if (hasUid) {
+					$('.input-group-separate-by-date').removeClass('d-none');
+				} else {
+					$('.input-group-separate-by-date').addClass('d-none');
+				}
+			},
+			footerCallback: function (row, data, start, end, display) {
+				let api = this.api();
+				let amountColumn = 3;
+				let countColumn = 4;
+				// Remove the formatting to get integer data for summation
+				let intVal = function (i) {
+				    return typeof i === 'string'
+					? i.replace(/[$,]/g, '') * 1
+					: typeof i === 'number'
+					? i
+					: 0;
+				};
+				let amountTotal = api
+				    .column(amountColumn)
+				    .data()
+				    .reduce((a, b) => intVal(a) + intVal(b), 0);
+				let countTotal = api
+				    .column(countColumn)
+				    .data()
+				    .reduce((a, b) => intVal(a) + intVal(b), 0);
+
+				// Update footer
+				api.column(amountColumn).footer().innerHTML =
+				    '總金額 ( ' + amountTotal + ' )';
+				api.column(countColumn).footer().innerHTML =
+				    '總單數 ( ' + countTotal + ' )';
+			}
+		} );
+
+		//DataTableHelper.initEditorOnCallback(table,editor);
+		//DataTableHelper.inlineModePlugin(table);
+		//DataTableHelper.injectInline(table,editor);
+		itemDailyStatisticsTable = table;
+		$('.input-group-day').change((e)=>{
+			table.clear().ajax.reload();
+		})
+		$("#btn-day-period").click(function() {
+			table.clear().ajax.reload();
+		});
+
+		$('.input-group-separate-by-date').change((e)=>{
+			table.clear().ajax.reload();
+		})
+
+		$('tbody').on('click', 'i.fa-calendar', function(e){
+			e.stopPropagation();
+			var data = table.row($(this).closest('tr')).data();
+			var url = '/backend/ItemDailyStatistics/list?uid=' + encodeURIComponent(data.uid);
+			window.open(url, '_blank');
+		});
+
+		if (!uid.length) {
+			table.column(0).visible(false);
+		}
+
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">每日銷售</div>
+<div class="card-body">
+	<div class="input-group py-2 input-group-day d-none">
+		<input type="date" class="form-control filter col-lg-3" name="day">
+	</div>
+	<div class="input-group py-2 input-group-day-period d-none">
+		<input type="date" class="form-control filter col-lg-3" name="fromday">~<input type="date" class="form-control filter col-lg-3" name="today">
+
+		<div class="input-group-append">
+			<button type="button" class="btn btn-link border-0 m-0" id="btn-day-period"><i class="fa-light fa-search"></i></button>
+		</div>
+	</div>
+	<div class="input-group py-2 input-group-separate-by-date d-none">
+		<div class="custom-control custom-checkbox">
+			<input type="checkbox" class="custom-control-input filter" id="separateByDate" name="separateByDate">
+			<label class="custom-control-label" for="separateByDate">分開顯示每日數據</label>
+		</div>
+	</div>
+</div>
+<div class="card-body">
+	<table id="itemDailyStatisticsTable" class="table table-striped display" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>總金額</th>
+				<th>數量</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>總金額</th>
+				<th>數量</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

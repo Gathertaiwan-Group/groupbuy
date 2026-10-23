@@ -1,0 +1,159 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+$.extend( true, $.fn.dataTable.defaults, {
+	"searching": false,
+	"pageLength":500,
+} );
+$(document).ready(function() {
+	var tableName = '#rpTable';
+	var colMonth = 0;
+	var colGroupBuy = 1;
+	var colGroupBuyId = 2;
+	var colState = 5;
+	var table = $(tableName).DataTable( {
+		dom: 'Brtip',
+		scrollX:true,
+		serverSide:true,
+		processing:true,
+		ajax: {
+			url:'{{baseUrl}}/ajax/SalesAnalysis/queryOrderItemAnalysis',
+			type: "POST",
+			data: function ( d ) {
+				d.uids = $('#uids').val();
+				d.dateBeginString = $('#dateBeginString').val();
+				d.dateEndString = $('#dateEndString').val();
+				d.extraSort = $('#extraSort').val();
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_input('month'),
+			DataTableConfig.data_input('groupBuyTitle'),
+			DataTableConfig.data_input('groupBuyId'),
+			DataTableConfig.data_input('title'),
+			DataTableConfig.data_input('uid'),
+			DataTableConfig.data_select('state'),
+			DataTableConfig.data_input('total'),
+			DataTableConfig.data_input('price'),
+			DataTableConfig.data_input('amount'),
+			DataTableConfig.data_input('unitPrice'),
+			DataTableConfig.data_input('shippingAmountCount'),
+
+		],
+		keys: DataTableConfig.keysInlineTab,
+		ordering: false,
+		//"order": [[ 1, "desc" ]],
+		select: false,
+		buttons: [
+			{ extend: 'excel' },
+		],
+		initComplete: function () {
+			//$(".dataTables_scrollBody").floatingScroll();
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+	table.column(colMonth).visible(false);
+	table.column(colGroupBuy).visible(false);
+	table.column(colGroupBuyId).visible(false);
+	table.column(colState).visible(false);
+
+	$('#send-btn').click(function() {
+		var $this = $(this);
+		btnStartLoading($this);
+		table.ajax.reload(function() {
+			btnStopLoading($this);
+
+			table.column(colMonth).visible(false);
+			table.column(colGroupBuy).visible(false);
+			table.column(colGroupBuyId).visible(false);
+			table.column(colState).visible(false);
+
+			switch ($('#extraSort').val()) {
+			case 'month':
+				table.column(colMonth).visible(true);
+				break;
+			case 'groupBuy':
+				table.column(colGroupBuy).visible(true);
+				table.column(colGroupBuyId).visible(true);
+				break;
+			case 'state':
+				table.column(colState).visible(true);
+				break;
+			}
+		}); // reload the datatable when the send button is clicked
+	});
+
+	$('#uids').on('input', function() {
+		var lines = $(this).val().split('\n');
+		if (lines.length > 300) {
+			$(this).val(lines.slice(0, 300).join('\n'));
+		}
+	});
+	initDatetimePicker('#dateBeginString', 'YYYY-MM-DD', 'months');
+	initDatetimePicker('#dateEndString', 'YYYY-MM-DD', 'months');
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">商品銷售</div>
+<div class="card-body">
+<div class="blue-grey lighten-5 small p-2">
+<p>使用商品代碼查詢商品銷售</p>
+<p>一次至多同時查詢300個商品</p>
+</div>
+</div>
+<div class="card-body">
+<div class="row">
+<div class="col-lg-6 input-group">
+<textarea id="uids" name="uids" class="filters form-control" rows=10 placeholder="一次最多可查詢至多300個商品代碼(一行一個)"></textarea>
+</div>
+<div class="col-lg-6"></div>
+<div class="col-lg-6 input-group py-2">
+	<div class="input-group-prepend">
+		<span class="input-group-text md-addon">銷售區間</span>
+	</div>
+	<input type="text" data-type="dateCreated" class="filters input-sm form-control" name="dateBeginString" id="dateBeginString" placeholder="起" size=12>
+	<input type="text" data-type="dateCreated" class="filters input-sm form-control" name="dateEndString" id="dateEndString" placeholder="迄" size=12>
+</div>
+<div class="col-lg-6 input-group py-2">
+	<div class="input-group-prepend">
+		<span class="input-group-text md-addon">結果分類依據</span>
+	</div>
+	<select name="extraSort" id="extraSort" class="filters custom-select">
+	<option value="">無分類</option>
+	<option value="month">依照月份分類</option>
+	<option value="groupBuy">依照團購分類</option>
+	<option value="state">依照商品銷售狀態分類</option>
+	</select>
+</div>
+<div class="col-lg-6 input-group">
+<button id="send-btn" class="btn btn-primary"><i class="fa-light fa-magnifying-glass"></i></button>
+</div>
+</div><!-- row -->
+</div><!-- card-body -->
+<div class="card-body">
+	<table id="rpTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>銷售月份</th>
+				<th>團購名稱</th>
+				<th>表單ID</th>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>階段</th>
+				<th>銷售數量</th>
+				<th>商品單價</th>
+				<th>銷售總金額</th>
+				<th>銷售單價</th>
+				<th>有運費訂單數量</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

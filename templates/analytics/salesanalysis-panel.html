@@ -1,0 +1,212 @@
+<!--#head-->
+<style>
+td.td-title {font-size:0.9rem;}
+td.td-count,td.td-amount {text-wrap:nowrap;font-size:0.9rem;}
+span.title {display: block;}
+span.uid {color:grey;font-size:0.8rem;}
+#card-emss span { display: block;}
+.btn-sm.btn-floating {width: 24px;height: 24px;}
+.btn-sm.btn-floating i {line-height: 24px;}
+#card-emss td:first-child {width: 180px;}
+td.subtitle {font-size: 0.8rem;color: gray;padding: 0px 16px !important;border: 0;}
+.dateUpdated {display: inline !important}
+</style>
+<!--#body--><div class="container-fluid ">
+	<section class="mt-3">
+	<div class="row">
+		<div class="col-xl-3 col-md-6 mb-4 mb-md-0">
+			<div class="card" id="card-daily-amount">
+				<!-- Card Data -->
+				<div class="row mt-3">
+					<div class="col-md-5 col-5 text-left pl-4">
+						<a type="button" class="btn-floating btn-lg light-blue lighten-1 ml-4 waves-effect waves-light"><i class="fas fa-dollar-sign" aria-hidden="true"></i></a>
+					</div>
+					<div class="col-md-7 col-7 text-right pr-5">
+						<h5 class="ml-4 mt-4 mb-2 font-weight-bold number1 text-nowrap"></h5>
+						<p class="font-small grey-text">銷售額</p>
+					</div>
+				</div>
+				<!-- Card Data -->
+				<!-- Card content -->
+				<div class="row my-3">
+					<div class="col-md-7 col-7 text-left pl-4">
+						<p class="font-small font-up ml-4 font-weight-bold">昨日銷售</p>
+					</div>
+					<div class="col-md-5 col-5 text-right pr-5">
+						<p class="font-small grey-text number2 text-nowrap"></p>
+					</div>
+				</div>
+				<!-- Card content -->
+			</div>
+		</div>
+
+		<div class="col-xl-3 col-md-6 mb-0">
+			<div class="card" id="card-daily-total">
+				<!-- Card Data -->
+				<div class="row mt-3">
+					<div class="col-md-5 col-5 text-left pl-4">
+						<a type="button" class="btn-floating btn-lg red accent-2 ml-4 waves-effect waves-light"><i class="fas fa-database" aria-hidden="true"></i></a>
+					</div>
+					<div class="col-md-7 col-7 text-right pr-5">
+						<h5 class="ml-4 mt-4 mb-2 font-weight-bold number1"></h5>
+						<p class="font-small grey-text">訂單數</p>
+					</div>
+				</div>
+				<!-- Card Data -->
+				<!-- Card content -->
+				<div class="row my-3">
+					<div class="col-md-7 col-7 text-left pl-4">
+						<p class="font-small font-up ml-4 font-weight-bold">昨日訂單數</p>
+					</div>
+					<div class="col-md-5 col-5 text-right pr-5">
+						<p class="font-small grey-text number2"></p>
+					</div>
+				</div>
+				<!-- Card content -->
+			</div>
+		</div>
+
+	</div>
+</section>
+
+<section class="">
+	<div class="row">
+		<div class="col-12 mb-4">
+			<div class="card mt-4" id="chartSection" style="margin-top:20px">
+				<div class="card-header white-text primary-color">近日訂單數
+				<button class="btn border-0 p-1 m-0 fa-light fa-angle-down rotate-icon pull-right" id="showChart"></button>
+				</div>
+				<div class="card-body" style="display:none" id="dailyChartCanvas"></div>
+			</div>
+			<!-- card -->
+		</div>
+	</div>
+</section>
+
+<section class="">
+	<div class="row">
+		<div class="col-12 mb-4">
+			<div class="card" id="card-emss">
+				<div class="card-header white-text primary-color">月份摘要</div>
+				<div class="card-body">
+					<div class="small">最後更新時間:<span class="dateUpdated"></span></div>
+					<div class="table-responsive">
+						<table class="table large-header">
+						<thead>
+							<tr>
+								<th class="font-weight-bold"><strong>收款月份</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">銷單數<span>(銷貨/預收)</span></strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">總金額<span>(銷貨/預收)</span></strong></th>
+							</tr>
+						</thead>
+						<tbody>
+						</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section class="section">
+	<!-- Grid row -->
+	<div class="row">
+		<div class="col-12">點擊標題旁<i class="fa-light fa-calendar m-1"></i>可看更多內容</div>
+		<!-- Grid column -->
+		<div class="col-md-12 col-lg-6 ">
+			<div class="card mb-4" id="card-groupBuy">
+				<div class="card-header primary-color"><a href="/backend/GroupBuyDailyStatistics/list" target="_blank" class="white-text"><i class="fa-light fa-calendar mr-1"></i>今日銷售</a></div>
+				<div class="card-body">
+					<div class="small">最後更新時間:<span class="dateUpdated"></span></div>
+					<div class="table-responsive">
+						<table class="table large-header">
+						<thead>
+							<tr>
+								<th class="font-weight-bold"><strong>表單名稱</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">訂單數</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">銷售額</strong></th>
+							</tr>
+						</thead>
+						<tbody>
+						</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-12 col-lg-6 ">
+			<div class="card mb-4" id="card-groupBuyY">
+				<div class="card-header white-text primary-color">昨日銷售</div>
+				<div class="card-body">
+					<div class="table-responsive">
+						<table class="table large-header">
+						<thead>
+							<tr>
+								<th class="font-weight-bold"><strong>表單名稱</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">訂單數</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">銷售額</strong></th>
+							</tr>
+						</thead>
+						<tbody>
+						</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-12 col-lg-6 ">
+			<div class="card mb-4" id="card-item">
+				<div class="card-header primary-color"><a href="/backend/ItemDailyStatistics/list" target="_blank" class="white-text"><i class="fa-light fa-calendar mr-1"></i>今日銷售</a></div>
+				<div class="card-body">
+					<div class="table-responsive">
+						<table class="table large-header">
+						<thead>
+							<tr>
+								<th class="font-weight-bold"><strong>商品名稱</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">數量</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">銷售額</strong></th>
+							</tr>
+						</thead>
+						<tbody>
+						</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div class="col-md-12 col-lg-6 ">
+			<div class="card mb-4" id="card-itemY">
+				<div class="card-header white-text primary-color">昨日銷售</div>
+				<div class="card-body">
+					<div class="table-responsive">
+						<table class="table large-header">
+						<thead>
+							<tr>
+								<th class="font-weight-bold"><strong>商品名稱</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">數量</strong></th>
+								<th class="font-weight-bold"><strong class="text-nowrap">銷售額</strong></th>
+							</tr>
+						</thead>
+						<tbody>
+						</tbody>
+						</table>
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- Grid column -->
+	</div>
+	<!-- Grid row -->
+</section>
+</div>
+<!--#foot-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="/scripts/ana.js?v=1"></script>
+<script src="/scripts/sa.js?v=1"></script>
+<script type="text/javascript" class="init">
+$(document).ready(function() {
+	dailyChart('#dailyChartCanvas', true);
+	sa.load();
+});
+</script>

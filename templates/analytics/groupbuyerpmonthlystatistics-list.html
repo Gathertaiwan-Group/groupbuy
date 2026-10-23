@@ -1,0 +1,549 @@
+<!--#head-->
+    <style>
+        body {
+            background: #f8f9fa;
+            font-size: 14px;
+        }
+        
+        .page-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .page-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .page-subtitle {
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+        
+        .stats-nav {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .nav-tabs {
+            border-bottom: none;
+            padding: 0;
+        }
+        
+        .nav-tabs .nav-link {
+            border: none;
+            padding: 15px 20px;
+            color: #666;
+            font-weight: 500;
+            background: transparent;
+            border-radius: 0;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-tabs .nav-link:hover {
+            background: #f8f9fa;
+            color: #333;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+        }
+        
+        .tab-content {
+            background: white;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .tab-pane {
+            padding: 20px;
+        }
+        
+        .filter-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .filter-title {
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .btn-search {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-weight: 500;
+            padding: 8px 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-search:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+        
+        .btn-export {
+            background: #28a745;
+            border: none;
+            color: white;
+            font-weight: 500;
+            padding: 8px 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-export:hover {
+            background: #218838;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(40, 167, 69, 0.4);
+            color: white;
+        }
+        
+        .btn-reset {
+            background: #6c757d;
+            border: none;
+            color: white;
+            font-weight: 500;
+            padding: 8px 20px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-reset:hover {
+            background: #5a6268;
+            transform: translateY(-1px);
+            color: white;
+        }
+        
+        .table-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        
+        .table thead th {
+            background: #f8f9fa;
+            border-top: none;
+            font-weight: 600;
+            color: #495057;
+            padding: 12px 8px;
+            font-size: 13px;
+        }
+        
+        .table td {
+            padding: 10px 8px;
+            vertical-align: middle;
+            font-size: 13px;
+        }
+        
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: rgba(0,0,0,0.02);
+        }
+        
+        .amount-cell {
+            text-align: right;
+            font-weight: 500;
+            color: #28a745;
+        }
+        
+        .count-cell {
+            text-align: center;
+            font-weight: 500;
+            color: #007bff;
+        }
+        
+        .title-cell {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            /*white-space: nowrap;*/
+        }
+        
+        .date-cell {
+            font-family: monospace;
+            color: #6c757d;
+            font-size: 12px;
+        }
+        
+        .alert-info {
+            border-left: 4px solid #17a2b8;
+            background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        
+        .spinner-border {
+            width: 2rem;
+            height: 2rem;
+        }
+        
+        .dataTables_wrapper .dataTables_info {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        
+        .badge {
+            font-size: 11px;
+            padding: 4px 8px;
+        }
+        
+        .status-badge {
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .nav-tabs .nav-link {
+                padding: 10px 15px;
+                font-size: 13px;
+            }
+            
+            .filter-section {
+                padding: 10px;
+            }
+            
+            .table td, .table th {
+                padding: 8px 4px;
+                font-size: 12px;
+            }
+            
+            .title-cell {
+           
+                max-width: 120px;
+            }
+        }
+    </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.css" rel="stylesheet" type="text/css" />
+<!--#body--><div class="container-fluid ">
+	<body>
+    <!-- 頁面標題 -->
+    <div class="page-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col">
+                    <h1 class="page-title">
+                        <i class="fas fa-chart-line"></i> 銷售數據分析
+                    </h1>
+                    <div class="page-subtitle">團購銷售統計與分析報表</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- 統計類型導航 -->
+        <div class="stats-nav">
+            <ul class="nav nav-tabs" id="statsTab" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="realtime-tab" data-toggle="tab" href="#realtime" role="tab">
+                        <i class="fas fa-clock"></i> 實時銷售統計
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link " id="daily-tab" data-toggle="tab" href="#daily" role="tab">
+                        <i class="fas fa-calendar-day"></i> 每日銷售統計
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="monthly-tab" data-toggle="tab" href="#monthly" role="tab">
+                        <i class="fas fa-calendar-alt"></i> 完整銷售統計
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 統計內容 -->
+        <div class="tab-content" id="statsTabContent">
+      	    <!-- 實時銷售統計 -->
+            <div class="tab-pane fade show active" id="realtime" role="tabpanel">
+                <div class="filter-section">
+                    <div class="filter-title">
+                        <i class="fas fa-filter"></i> 篩選條件
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>說明：</strong>以小時為單位呈現團購銷售統計，最多可篩選5天。
+                    </div>
+                    <form id="realtimeFilterForm" class="row">
+                        <div class="col-md-12">
+                            <label class="form-label">團購標籤</label>
+                            <div id="tagFilterContainer_realtime" class="tag-manager__filter-container"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">開始時間</label>
+                            <input type="datetime-local" class="form-control" id="realtimeFromDay" name="fromday">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">結束時間</label>
+                            <input type="datetime-local" class="form-control" id="realtimeToDay" name="today">
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="submit" class="btn btn-search mr-2">
+                                <i class="fas fa-search"></i> 查詢
+                            </button>
+                            <button type="button" class="btn btn-reset" onclick="resetRealtimeFilter()">
+                                <i class="fas fa-undo"></i> 重置
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="filter-section">
+				    <div class="filter-title">
+				        <i class="fas fa-upload"></i> ROAS 成效數據上傳
+				    </div>
+				    <div class="alert alert-warning">
+				        <i class="fas fa-info-circle"></i>
+				        <strong>說明：</strong>上傳包含團購ID、成果、花費金額的Excel或CSV檔案，系統將計算並顯示ROAS成效。
+				    </div>
+				    <div id="roas-upload-container"></div>
+				</div>
+
+                <div class="table-container">
+                    <table id="realtimeTable" class="table table-striped table-hover" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th style="display:none">團購ID</th>
+                                <th style="display:none">團購短五碼</th>
+                                <th>團購名稱</th>
+                                <th>總金額</th>
+                                <th>總單數</th>
+                                <th>已付款金額</th>
+                                <th>已付款訂單數</th>
+                                <th>未付款金額</th>
+                                <th>未付款訂單數</th>
+					            <th>廣告金額</th>
+					            <th>ROAS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- 每日銷售統計 -->
+            <div class="tab-pane fade" id="daily" role="tabpanel">
+                <div class="filter-section">
+                    <div class="filter-title">
+                        <i class="fas fa-filter"></i> 篩選條件
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>說明：</strong>以日為單位呈現團購銷售統計，最多可篩選90天。
+                    </div>
+                    <form id="dailyFilterForm" class="row">
+                        <div class="col-md-12">
+                            <label class="form-label">團購標籤</label>
+                            <div id="tagFilterContainer_daily" class="tag-manager__filter-container"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">開始日期</label>
+                            <input type="date" class="form-control" id="dailyFromDay" name="fromday">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">結束日期</label>
+                            <input type="date" class="form-control" id="dailyToDay" name="today">
+                        </div>
+					    <!-- <div class="col-md-3">
+					        <label class="form-label">團購ID</label>
+					        <input type="text" class="form-control" id="dailyGroupBuyId" name="groupBuyId" placeholder="輸入團購ID">
+					    </div> -->
+                        <div class="col-md-4">
+						    <div class="form-check" style="padding-top: 30px;">
+				        <input class="form-check-input" type="checkbox" id="dailySeparateByDate" name="separateByDate">
+						        <label class="form-check-label" for="dailySeparateByDate">
+						            <i class="fas fa-calendar-day"></i> 依日期分開顯示相同團購
+						        </label>
+						        <small class="form-text text-muted">勾選後，相同團購會按日期分別顯示，而非合併統計</small>
+						    </div>
+						</div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="submit" class="btn btn-search mr-2">
+                                <i class="fas fa-search"></i> 查詢
+                            </button>
+                            <button type="button" class="btn btn-reset" onclick="resetDailyFilter()">
+                                <i class="fas fa-undo"></i> 重置
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="table-container">
+                    <table id="dailyTable" class="table table-striped table-hover" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th>統計日期</th>
+                                <th style="display:none">團購ID</th>
+                                <th style="display:none">團購短五碼</th>
+                                <th>團購名稱</th>
+                                <th>總金額</th>
+                                <th>總單數</th>
+                                <th>已付款金額</th>
+                                <th>已付款訂單數</th>
+                                <th>未付款金額</th>
+                                <th>未付款訂單數</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 月度銷售統計 -->
+            <div class="tab-pane fade" id="monthly" role="tabpanel">
+                <div class="filter-section">
+                    <div class="filter-title">
+                        <i class="fas fa-filter"></i> 篩選條件
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>說明：</strong>以月為單位呈現團購銷售統計，顯示區間內的團購銷售數據。
+                    </div>
+                    <form id="monthlyFilterForm" class="row">
+                        <div class="col-md-12">
+                            <label class="form-label">團購標籤</label>
+                            <div id="tagFilterContainer_monthly" class="tag-manager__filter-container"></div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">開始月份</label>
+                            <input type="month" class="form-control" id="monthlyFromDay" name="fromday">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">結束月份</label>
+                            <input type="month" class="form-control" id="monthlyToDay" name="today">
+                        </div>
+					    <!-- <div class="col-md-3">
+					        <label class="form-label">團購ID</label>
+					        <input type="text" class="form-control" id="monthlyGroupBuyId" name="groupBuyId" placeholder="輸入團購ID">
+					    </div> -->
+                        <div class="col-md-6 d-flex align-items-end">
+                            <button type="submit" class="btn btn-search mr-2">
+                                <i class="fas fa-search"></i> 查詢
+                            </button>
+                            <button type="button" class="btn btn-reset" onclick="resetMonthlyFilter()">
+                                <i class="fas fa-undo"></i> 重置
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="table-container">
+                    <table id="monthlyTable" class="table table-striped table-hover" style="width:100%">
+                        <thead>
+                            <tr>
+                                <th>統計月份</th>
+                                <th style="display:none">團購ID</th>
+                                <th style="display:none">團購短五碼</th>
+                                <th>團購名稱</th>
+                                <th>總金額</th>
+                                <th>總單數</th>
+                            </tr>
+                        </thead>
+                        
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            function refreshCurrentTabTable() {
+                var activeTab = $('.tab-pane.active').attr('id');
+                if (activeTab === 'realtime' && typeof realtimeTable !== 'undefined') realtimeTable.ajax.reload();
+                else if (activeTab === 'daily' && typeof dailyTable !== 'undefined') dailyTable.ajax.reload();
+                else if (typeof monthlyTable !== 'undefined') monthlyTable.ajax.reload();
+                else if (typeof groupBuyErpMonthlyStatisticsTable !== 'undefined') groupBuyErpMonthlyStatisticsTable.ajax.reload();
+            }
+
+            function initTagManager(id) {
+                return new TagManager({
+                    filterTagsContainer: id,
+                    api: {
+                        url: {
+                        	save:'',
+                        	delete:'',
+                            getRecentlyUsedTags: '{{baseUrl}}/ajax/GroupBuySysTag/getRecentlyUsedTags',
+                            updateTagFilterUsage: '{{baseUrl}}/ajax/GroupBuySysTag/updateTagFilterUsage',
+                        },
+                        fieldName:'...'
+                    },
+                    onFilterTagAdded: function() {
+                        //refreshCurrentTabTable();
+                    },
+                    onFilterTagRemoved: function() {
+                        //refreshCurrentTabTable();
+                    },
+                    onFilterTypeChanged: function() {
+                        //refreshCurrentTabTable();
+                    }
+                });
+            }
+
+            var tmRealtime = initTagManager('#tagFilterContainer_realtime');
+            var tmDaily = initTagManager('#tagFilterContainer_daily');
+            var tmMonthly = initTagManager('#tagFilterContainer_monthly');
+
+            window.tagManagers = {
+                realtime: tmRealtime,
+                daily: tmDaily,
+                monthly: tmMonthly
+            };
+
+            // In case gbes.min.js initializes tables with these names, hook into them to send keywords
+            $(document).on('preXhr.dt', function(e, settings, data) {
+                if (window.tagManagers) {
+                    var activeTab = $('.tab-pane.active').attr('id');
+                    if (activeTab === 'realtime' && window.tagManagers.realtime) {
+                        data.keywords = window.tagManagers.realtime.getFilteredTags();
+                        data.allMatch = window.tagManagers.realtime.getIsAllMatch();
+                    } else if (activeTab === 'daily' && window.tagManagers.daily) {
+                        data.keywords = window.tagManagers.daily.getFilteredTags();
+                        data.allMatch = window.tagManagers.daily.getIsAllMatch();
+                    } else if (activeTab === 'monthly' && window.tagManagers.monthly) {
+                        data.keywords = window.tagManagers.monthly.getFilteredTags();
+                        data.allMatch = window.tagManagers.monthly.getIsAllMatch();
+                    }
+                }
+            });
+
+            // Hook into filter forms to trigger reloads
+            $('#realtimeFilterForm, #dailyFilterForm, #monthlyFilterForm').on('submit', function(e) {
+                e.preventDefault();
+                //refreshCurrentTabTable();
+            });
+        });
+    </script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="/public/scripts/epcvsuploader.min.js?v=250808"></script>
+    <script src="/public/scripts/gbes.min.js?v=260901"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.js"></script>
+</div>

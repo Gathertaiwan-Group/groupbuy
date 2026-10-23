@@ -1,0 +1,196 @@
+<!--#head-->
+<style>
+table.dataTable.nowrap th, table.dataTable.nowrap td {
+    white-space: nowrap;
+}
+table {position:relative;}
+th {position:sticky;top:40px;background:white;}
+</style>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">
+<h5>銷售分析<span id="erpDateShipped"></span></h5>
+</div>
+<div class="card-body">
+<h5>付款方式</h5>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm1" value="1" >
+<label for="pm1" class="mr-2">銀行轉帳</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm2" value="2" checked>
+<label for="pm2" class="mr-2">轉帳匯款(虛擬帳戶)</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm4" value="4" checked>
+<label for="pm4" class="mr-2">信用卡</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm8" value="8" >
+<label for="pm8" class="mr-2">自取(現場付款)</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm16" value="16" >
+<label for="pm16" class="mr-2">貨到付款</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm32" value="32" >
+<label for="pm32" class="mr-2">超商繳款</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm64" value="64" >
+<label for="pm64" class="mr-2">超商付款取貨</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm128" value="128" >
+<label for="pm128" class="mr-2">信用卡(定期定額)</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm512" value="512" >
+<label for="pm512" class="mr-2">員購</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm1024" value="1024" >
+<label for="pm1024" class="mr-2">LINE Pay</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm2048" value="2048" >
+<label for="pm2048" class="mr-2">點數</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm4096" value="4096" >
+<label for="pm4096" class="mr-2">悠遊付</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm8192" value="8192" >
+<label for="pm8192" class="mr-2">台灣Pay</label>
+<input type="checkbox" name="paymentMethod" class="form-check-input" id="pm16384" value="16384" >
+<label for="pm16384" class="mr-2">銀聯卡</label>
+<h5>不顯示標籤</h5>
+	<div class="d-inline-blok mt-2">
+	<input type="checkbox" id="featureTagMain" class="filters form-check-input" value="1" ><label for="featureTagMain" class="pl-4 mr-2">主表單</label>
+	</div>
+<button class="btn btn-primary" id="btnErpUpdate">更新</button>
+</div>
+<div class="card-body p-0">
+<table id="erpTable" class="table table-bordered dataTable w-100">
+<thead>
+<tr>
+<th class="text-nowrap">收款月份</th>
+<th>團名</th>
+<th class="text-nowrap">出貨月份</th>
+<th class="text-nowrap">付款方式</th>
+<th class="text-nowrap">出貨狀態</th>
+<th class="text-nowrap">金額</th>
+<th class="text-nowrap">銷貨金額</th>
+<th class="text-nowrap">預收金額</th>
+<th class="text-nowrap">單數</th>
+<th class="text-nowrap">銷貨單數</th>
+<th class="text-nowrap">預收單數</th>
+</tr>
+</thead>
+<tbody>
+</tbody>
+</table>
+</div>
+</div>
+
+<script>
+
+var parseErp = function(erp) {
+	$('#erpDateShipped').html(erp && erp.dateShipped ? ' ' + erp.dateShipped : '');
+	var html = '';
+	var months = (erp && erp.salesMonths) ? erp.salesMonths : [];
+	for (var i in months) {
+		var sum = months[i];
+		var datePaid = sum.datePaid;
+
+		for (var j in sum.pmAmounts) {
+			html += '<tr class="alert-info">'
+				+ '<td class="tableexport-string">' + datePaid + '</td>'
+				+ '<td>' + datePaid +' 月各付款方式總營收' + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + j + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + (sum.pmAmounts[j].salesAmount + sum.pmAmounts[j].advanceAmount) + '</td>'
+				+ '<td>' + sum.pmAmounts[j].salesAmount + '</td>'
+				+ '<td>' + sum.pmAmounts[j].advanceAmount + '</td>'
+				+ '<td>' + (sum.pmAmounts[j].salesTotal + sum.pmAmounts[j].advanceTotal) + '</td>'
+				+ '<td>' + sum.pmAmounts[j].salesTotal + '</td>'
+				+ '<td>' + sum.pmAmounts[j].advanceTotal + '</td>'
+				+ '</tr>';
+		}
+		html += '<tr class="alert-info">'
+		+ '<td class="tableexport-string">' + datePaid + '</td>'
+		+ '<td>' + datePaid +'月總營收' + '</td>'
+		+ '<td>' + '' + '</td>'
+		+ '<td>' + '' + '</td>'
+		+ '<td>' + '' + '</td>'
+		+ '<td>' + (sum.salesAmount + sum.advanceAmount) + '</td>'
+		+ '<td>' + sum.salesAmount + '</td>'
+		+ '<td>' + sum.advanceAmount + '</td>'
+		+ '<td>' + (sum.salesTotal + sum.advanceTotal) + '</td>'
+		+ '<td>' + sum.salesTotal + '</td>'
+		+ '<td>' + sum.advanceTotal + '</td>'
+		+ '</tr>';
+
+		for (var j in sum.groupBuys) {
+			var gb = sum.groupBuys[j];
+			for (var k in gb.details) {
+				var detail = gb.details[k];
+				var dp = detail.datePaid;
+				var ds = detail.dateShipped;
+				html += '<tr">'
+					+ '<td class="tableexport-string">' + dp + '</td>'
+					+ '<td class="tableexport-string">' + detail.title + '</td>'
+					+ '<td class="tableexport-string">' + ds + '</td>'
+					+ '<td>' + detail.paymentMethod + '</td>'
+					+ '<td>' + detail.shippingState + '</td>'
+					+ '<td>' + detail.amount + '</td>'
+					+ '<td>' + '' + '</td>'
+					+ '<td>' + '' + '</td>'
+					+ '<td>' + detail.orderTotal + '</td>'
+					+ '<td>' + '' + '</td>'
+					+ '<td>' + '' + '</td>'
+					+ '</tr>';
+			}
+			html += '<tr class="alert-success">'
+				+ '<td class="tableexport-string">' + datePaid + '</td>'
+				+ '<td class="tableexport-string">' + gb.title + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + gb.salesAmount + '</td>'
+				+ '<td>' + gb.advanceAmount + '</td>'
+				+ '<td>' + '' + '</td>'
+				+ '<td>' + gb.salesTotal + '</td>'
+				+ '<td>' + gb.advanceTotal + '</td>'
+				+ '</tr>';
+		}
+	}
+	$('#erpTable tbody').html(html);
+}
+
+var dailyData = function(mm) {
+	btnStartLoading($('#btnErpUpdate'));
+	var pm = $('input[name=paymentMethod]:checked').serialize();
+	$.ajax({
+		type:'POST',
+		async: true,
+		url: '{{baseUrl}}/ajax/GroupBuy/getErpSalesReport?' + pm ,
+		dataType: 'json',
+		data: {
+			yymm:mm,
+			featureTagMain:$('#featureTagMain').prop("checked"),
+		}
+	})
+	.done(function (json) {
+		if (json.code == -1) {
+			messagebox('', json.error, GBFi18n.act_close);
+			btnStopLoading($('#btnErpUpdate'));
+			return;
+		}
+		parseErp(json.data);
+		$('.tableexport-caption').remove();
+		$("#erpTable").tableExport({filename:'abc',formats:['xlsx'],position:'top'});
+		btnStopLoading($('#btnErpUpdate'));
+	})
+	.fail(function (xhr) {
+		btnStopLoading($('#btnErpUpdate'));
+		if (xhr.responseJSON) messagebox('', xhr.responseJSON.error, GBFi18n.act_close);
+	});
+}
+
+$(document).ready(function() {
+	var d = new Date();
+	dailyData(moment(d).format('YYMM'));
+
+	TableExport.prototype.formatConfig.xlsx.buttonContent = '匯出EXCEL';
+	TableExport.prototype.formatConfig.xlsx.defaultClass = 'xlsx ml-2';
+	$('#btnErpUpdate').click(function() {
+		dailyData(moment(d).format('YYMM'));
+	});
+});
+</script>
+
+</div>
+<!--#foot-->
+<script src="//cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.8/FileSaver.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/xlsx/0.15.4/xlsx.core.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/TableExport/5.2.0/js/tableexport.min.js"></script>

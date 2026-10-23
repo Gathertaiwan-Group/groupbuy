@@ -1,0 +1,273 @@
+<!--#head-->
+<style>
+.chart-legends ul {list-style:none;padding-left:0;font-size:0.8rem;}
+.chart-legends li span {display:inline-block;width:12px;height:12px;margin-right:4px;vertical-align:middle;}
+</style>
+<!--#body--><div class="container-fluid ">
+	<h5 class="mt-5">{{groupBuy.title}}</h5>
+<div class="row">
+<div class="col-12">
+<div class="card">
+<div class="card-footer">
+	<div class="input-group py-2">
+		<div class="input-group-prepend">
+			<span class="input-group-text md-addon">訂單日期</span>
+		</div>
+		<input type="text" data-type="dateCreated" class="filters input-sm form-control" name="dateCreatedBegin" id="dateCreatedBegin" placeholder="開始日期" size=12>
+		<input type="text" data-type="dateCreated" class="filters input-sm form-control" name="dateCreatedEnd" id="dateCreatedEnd" placeholder="結束日期" size=12>
+	<div class="input-group-apppend">
+			<button type="button" id="btn-search" class="btn btn-flat"><i class="fa-light fa-search"></i></button>
+		</div>
+	</div>
+</div>
+</div>
+</div>
+<!-- col begin -->
+<div class="col-md-12">
+<div class="panel panel-default">
+<div class="panel-heading" role="tab" id="headingOne">
+<a class="btn btn-primary" data-toggle="collapse" href="#collapseOne" role="button" aria-expanded="false" aria-controls="collapseOne">
+近期摘要
+</a>
+</div>
+<div id="collapseOne" class="panel-collapse collapse" role="tabpanel" aria-labelledby="headingOne">
+<div class="panel-body">
+<table id="dailyReport" class="table table-striped small">
+<thead>
+<tr><td><div class="row">
+<div class="col-3">日期</div>
+<div class="col-3">訂單數</div>
+<div class="col-3">訂單金額</div>
+<div class="col-3">已付金額</div>
+</div></td></tr>
+</thead>
+<tbody></tbody>
+</table>
+</div>
+</div> <!-- collapseOne -->
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">每日訂單數</span>
+<div class="chart-container" style="position: relative; height:320px; width:100%">
+<canvas id="dailyChart" style="width:100%;height:100%"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">均價訂單數</span>
+<div class="chart-container" style="position: relative; height:320px; width:100%">
+<canvas id="distributionChart" style="width:100%;height:100%"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">銷售商品分類</span>
+<div class="chart-container" style="position: relative; height:320px; width:100%">
+<canvas id="cateTagPortionChart" style="width:100%;height:100%"></canvas>
+</div>
+<div class="chart-legends"></div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">銷售品項</span>
+<div class="chart-container" style="position: relative; height:320px; width:100%">
+<canvas id="itemSetPortionChart" style="width:100%;height:100%"></canvas>
+</div>
+<div class="chart-legends"></div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">地區分佈訂單數</span>
+<div class="chart-container" style="position: relative; height:320px; width:100%">
+<canvas id="areaSalesOrderCountPortionChart" style="width:100%;height:100%"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">地區分佈客單價</span>
+<div class="chart-container" style="position: relative; height:320px; width:100%">
+<canvas id="areaSalesOrderAmountPortionChart" style="width:100%;height:100%"></canvas>
+</div>
+</div>
+<!-- col end -->
+</div>
+
+<script>
+
+var backgroundColors = [
+	 'rgba(255, 99, 132, 0.4)',
+	 'rgba(54, 162, 235, 0.4)',
+	 'rgba(255, 206, 86, 0.4)',
+	 'rgba(75, 192, 192, 0.4)',
+	 'rgba(153, 102, 255, 0.4)',
+	 'rgba(255, 159, 64, 0.4)',
+	'rgba(205, 99, 132, 0.4)',
+	'rgba(54, 162, 185, 0.4)',
+	'rgba(255, 156, 86, 0.4)',
+	'rgba(75, 142, 192, 0.4)',
+	'rgba(153, 102, 205, 0.4)',
+	'rgba(205, 159, 64, 0.4)',
+	];
+var borderColors = [
+	'rgba(255, 99, 132, 1)',
+	'rgba(54, 162, 235, 1)',
+	'rgba(255, 206, 86, 1)',
+	'rgba(75, 192, 192, 1)',
+	'rgba(153, 102, 255, 1)',
+	'rgba(255, 159, 64, 1)',
+	'rgba(205, 99, 132, 1)',
+	'rgba(54, 162, 185, 1)',
+	'rgba(255, 156, 86, 1)',
+	'rgba(75, 142, 192, 1)',
+	'rgba(153, 102, 205, 1)',
+	'rgba(205, 159, 64, 1)',
+	];
+
+var genData = function(label, labels, data, backgroundColor, borderColor) {
+	var tempData = {
+				labels : labels,
+				datasets : [{
+						label: label,
+						backgroundColor: backgroundColor,
+					borderColor: borderColor,
+					borderWidth: 1,
+					data : data
+				}]
+			};
+	return tempData;
+}
+var _charts = {};
+var _createChart = function(chartId, type, data, showLegend) {
+	if (_charts[chartId]) {
+		_charts[chartId].destroy();
+	}
+	var myChart = new Chart(
+			$(chartId),
+			{
+				type: type,
+				data: data,
+				options: {
+						responsive: true,
+					maintainAspectRatio: false,
+					title: {
+						display: false,
+					},
+					legend: {
+						display: showLegend,
+					},
+				}
+			});
+	_charts[chartId] = myChart;
+	window.addEventListener('resize', function () {
+		myChart.resize()
+	})
+	$(chartId).parent().parent().find('.chart-legends').html(showLegend ? '' : myChart.generateLegend());
+}
+
+var createChart = function(chartId, type, label, analysticsData, unit, colorIndex, showLegend) {
+	var labels = [];
+	var data = [];
+	for(var dc in analysticsData) {
+		labels.push(analysticsData[dc].label + unit);
+		data.push(analysticsData[dc].data);
+	}
+	var b1, b2;
+	if (colorIndex >= 0) {
+		b1 = backgroundColors[colorIndex];
+		b2 = borderColors[colorIndex];
+	} else {
+		b1 = [];
+		b2 = [];
+		for (var idx = 0; idx < data.length; idx++) {
+			b1.push(backgroundColors[idx % backgroundColors.length]);
+			b2.push(borderColors[idx % borderColors.length]);
+		}
+	}
+	data = genData(label, labels, data, b1, b2);
+	_createChart(chartId, type, data, showLegend);
+}
+
+$(document).ready(function() {
+
+	var query = {
+		groupBuyId: {{json groupBuyId}},
+	};
+	var reload = function() {
+		var $btn = $('#btn-search');
+		btnStartLoading($btn);
+		query.dateCreatedBegin = $('#dateCreatedBegin').val();
+		query.dateCreatedEnd = $('#dateCreatedEnd').val();
+		var jsonData = $.ajax({
+				url: '{{baseUrl}}/ajax/GroupBuy/analytics.do?all=1',
+				dataType: 'json',
+				data:query
+			})
+			.done(function (json) {
+				createChart('#dailyChart', 'bar', "訂單數", json.data.dailyCounts, '日', 3, true);
+				createChart('#distributionChart', 'bar', "訂單數", json.data.distributions, '元', 4, true);
+				createChart('#cateTagPortionChart', 'doughnut', "金額", json.data.cateTagPortions, '', -1, false);
+				createChart('#itemSetPortionChart', 'doughnut', "金額", json.data.itemSetPortions, '', -1, false);
+				createChart('#areaSalesOrderCountPortionChart', 'bar', "訂單數", json.data.areaSalesOrderCountPortions, '', -1, true);
+				createChart('#areaSalesOrderAmountPortionChart', 'bar', "金額", json.data.areaSalesOrderAmountPortions, '', -1, true);
+			});
+		$.ajax({
+				url: '{{baseUrl}}/ajax/GroupBuy/getDailyReport.do',
+				dataType: 'json',
+				data:query
+			})
+			.done(function (json) {
+				if (json.data) {
+					var html = '';
+					for (var k in json.data) {
+						var d = json.data[k];
+						html += '<tr><td><div class="row">'
+							 + '<div class="col-3">' + d.date + '</div>'
+							 + '<div class="col-3">' + d.count + '</div>'
+							 + '<div class="col-3">' + d.grandTotal + '</div>'
+							 + '<div class="col-3">' + d.totalPaid + '</div>'
+							 + '</div></td></tr>'
+							 ;
+					}
+					$('#dailyReport tbody').html(html);
+				}
+				btnStopLoading($btn);
+			})
+			.fail(function() {
+				btnStopLoading($btn);
+			});
+	}
+
+	var d = new Date();
+	var end = moment(d).format('YYYY-MM-DD');
+	d.setDate(d.getDate() - 7);
+	var begin = moment(d).format('YYYY-MM-DD');
+	initDatetimePicker('#dateCreatedBegin', 'YYYY-MM-DD', 'days', function(date, obj) {
+		var maxDate = moment(date).add('1', 'years').format('YYYY-MM-DD');
+		$('#dateCreatedEnd').data("DateTimePicker").minDate(date);
+		$('#dateCreatedEnd').data("DateTimePicker").maxDate(maxDate);
+		//$('#dateCreatedEnd').data("DateTimePicker").defaultDate(begin);
+		//$('#dateCreatedEnd').show();
+	});
+	initDatetimePicker('#dateCreatedEnd', 'YYYY-MM-DD', 'days');
+	$('#dateCreatedBegin').data("DateTimePicker").defaultDate(begin);
+	$('#dateCreatedEnd').data("DateTimePicker").defaultDate(end);
+	$('#btn-search').click(function() {
+		reload();
+	});
+
+	reload();
+});
+</script>
+
+</div>
+<!--#foot-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.min.js"></script>

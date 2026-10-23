@@ -1,0 +1,149 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+
+	$(document).ready(function() {
+		var tableName = '#statisticsTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/save.do?'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/update.do?salesOrderMonthlyStatisticsId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/delete.do?salesOrderMonthlyStatisticsId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'salesOrderMonthlyStatisticsId',
+			fields: [
+
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide:true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url:'{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/list.do',
+				type: "POST",
+				data:function ( d ) {
+					d.month = $('#month').val();
+					d.amountTotalGreater = $('#amountTotalGreater').val();
+					d.amountTotalLess = $('#amountTotalLess').val();
+					d.amountMaxGreater = $('#amountMaxGreater').val();
+					d.amountMaxLess = $('#amountMaxLess').val();
+					d.countOrderValidGreater = $('#countOrderValidGreater').val();
+					d.countOrderValidLess = $('#countOrderValidLess').val();
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				//DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('name'),
+				DataTableConfig.data_input('email'),
+				DataTableConfig.data_input('telephone'),
+				DataTableConfig.data_input('amountTotal'),
+				DataTableConfig.data_input('amountMax'),
+				DataTableConfig.data_input('countOrderValid'),
+			],
+			columnDefs: [
+				{ "orderable": false, "targets": [0, 1, 2] }
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 3, "desc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'excel' },
+				//{ extend: 'create', editor: editor },
+				//{ extend: 'edit',   editor: editor },
+				//{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [],[]);
+			},
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		initDatetimePicker('#month', 'YYYYMM', 'months');
+		$('#btn-search').click(function() {
+			table.clear().ajax.reload();
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">每月消費統計</div>
+<div class="card-body">
+	<form id="queryForm" method="POST" action="/backend/CustomerPointSummary/download">
+		<input type="hidden" name="query" value="" id='query'>
+		<div class="row">
+			<div class="input-group py-2 col-lg-6">
+				<div class="input-group-prepend"><span class="input-group-text md-addon">消費總金額</span></div>
+				<input type="text" class="filters input-sm form-control" name="amountTotalGreater" id="amountTotalGreater" placeholder="金額超過" size=12>
+				<input type="text" class="filters input-sm form-control" name="amountTotalLess" id="amountTotalLess" placeholder="金額少於" size=12>
+			</div>
+			<div class="input-group py-2 col-lg-6">
+				<div class="input-group-prepend"><span class="input-group-text md-addon">單筆最高金額</span></div>
+				<input type="text" class="filters input-sm form-control" name="amountMaxGreater" id="amountMaxGreater" placeholder="金額超過" size=12>
+				<input type="text" class="filters input-sm form-control" name="amountMaxLess" id="amountMaxLess" placeholder="金額少於" size=12>
+			</div>
+			<div class="input-group py-2 col-lg-6">
+				<div class="input-group-prepend"><span class="input-group-text md-addon">訂單數量</span></div>
+				<input type="text" class="filters input-sm form-control" name="countOrderValidGreater" id="countOrderValidGreater" placeholder="數量超過" size=12>
+				<input type="text" class="filters input-sm form-control" name="countOrderValidLess" id="countOrderValidLess" placeholder="數量少於" size=12>
+			</div>
+			<div class="input-group py-2 col-lg-6">
+			</div>
+			<div class="input-group py-2 col-lg-6">
+				<div class="input-group-prepend">
+					<span class="input-group-text md-addon">月份</span>
+				</div>
+				<input type="text" data-type="month" class="filters input-sm form-control" name="month" id="month" placeholder="篩選月份" size=12 autocomplete="off">
+				<div class="input-group-append">
+					<button id="btn-search" type="button" class="btn btn-primary btn-search m-0"><i class="fa fa-regular fa-search"></i></button>
+				</div>
+			</div>
+		</div>
+	</form>
+</div>
+<div class="card-body">
+	<table id="statisticsTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>姓名</th>
+				<th>電子信箱</th>
+				<th>電話</th>
+				<th>消費總金額</th>
+				<th>單筆最高金額</th>
+				<th>訂單數量</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>姓名</th>
+				<th>電子信箱</th>
+				<th>電話</th>
+				<th>消費總金額</th>
+				<th>單筆最高金額</th>
+				<th>訂單數量</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>
