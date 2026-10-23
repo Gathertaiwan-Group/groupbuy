@@ -62,9 +62,18 @@ npm ci && cp ../../.env.local .
 #    core 3101｜groupbuy 3110｜items 3111｜marketing 3112｜orders 3113｜shipping 3114｜analytics 3115｜storefront 3116｜accounting 3117｜warehouse 3118
 npx next dev -p 3110
 
-# 3) 建置驗證時用另一個輸出目錄，才不會把執行中的 next dev 弄壞
-npm run typecheck && NEXT_DIST_DIR=.next-build npm run build
+# 3) 本機驗證以 typecheck 為主（CI 與 Vercel 都會跑完整 build）
+npm run typecheck
+#    一定要本機 build 時（磁碟吃緊，二選一，且 build 完立刻清掉）：
+#    a) 先停掉自己的 next dev，再用預設輸出目錄：npm run build
+#    b) 不停 dev：NEXT_DIST_DIR=.next-build npm run build; rm -rf .next-build
 ```
+
+**磁碟／資源守則（9 個 agent 共用一台電腦，曾發生磁碟滿 ENOSPC）**
+- 每個 agent 只開**一個** `next dev`，不用時就關；不要另建 worktree、不要 `npm install` 新的大型套件。
+- headless 實測一次只開一個 Chrome。`scripts/dev/shot.mjs` 結束（含逾時 180 秒、例外、Ctrl-C）會自動關 Chrome 並刪除暫存設定檔 `shotprof-*`；舊版不會，若看到殘留的 `shotprof-*` 目錄或 `ps` 裡父行程是 1 的 headless Chrome，是自己的就刪／kill。
+- 截圖存到 scratchpad，產生縮圖後刪原圖，不要累積大量原圖。
+- 寫大檔或 build 前先看 `df -h /System/Volumes/Data`：可用 < 500MB 先清自己的暫存（`.next-build`、`shotprof-*`、截圖），清不出來就回報指揮官，**不要刪別人的檔**。
 
 - 開 `http://localhost:<port>/backend/panel.do`：未登入時顯示原站登入頁（網址不變、HTTP 200），登入後 reload 回原頁。
 - **測試帳密**在 `/Users/aimand/.gemini/File/groupbuy/.credentials.local.md`（gitignored；勿印出、勿寫進 git、勿在回報中複述）。帳號 `guest1_a`（租戶 `guest_ep`）。原站登入表單密碼 `maxlength=20`，測試密碼已是 16 碼。
@@ -72,9 +81,10 @@ npm run typecheck && NEXT_DIST_DIR=.next-build npm run build
 - **headless 瀏覽器實測**（登入→開頁→執行檢查→截圖）：
   ```bash
   . scripts/dev/creds.sh   # 匯出 GB_ACC/GB_PW，不輸出
+  export SHOT_TMP=<你的 scratchpad>   # Chrome 暫存設定檔放這裡（結束自動刪除）
   node scripts/dev/shot.mjs --login http://localhost:3110 --url http://localhost:3110/backend/GroupBuyTag/list \
-       --w 1512 --h 900 --wait 4000 --out /tmp/x.png --eval 'JSON.stringify($("#rpTable").DataTable().rows().data().toArray())'
-  sips -Z 1024 /tmp/x.png --out /tmp/preview-x.png   # 看圖前一定先縮圖（任一邊 >2000px 不可 Read）
+       --w 1512 --h 900 --wait 4000 --out $SHOT_TMP/x.png --eval 'JSON.stringify($("#rpTable").DataTable().rows().data().toArray())'
+  sips -Z 1024 $SHOT_TMP/x.png --out $SHOT_TMP/preview-x.png && rm $SHOT_TMP/x.png   # 看圖前一定先縮圖（任一邊 >2000px 不可 Read），原圖用完即刪
   ```
   `--steps steps.json` 可依序執行多步（`[{name, eval, wait, shot}]`），會同時列出頁面 console 錯誤與 HTTP ≥400 請求。範例見 core 的 `templates/core/dev/editor-shim-test.html`。
 - 對照原站：Claude in Chrome 的 m4 armand 瀏覽器（deviceId `10cf27e5-e941-45fd-bd8e-2e4b122e72b1`，已登入原站）——**只讀**，開對話框看完就關，不按儲存/送出/刪除。自己開新分頁，不要動別人的分頁。
@@ -390,7 +400,7 @@ const mod: ModuleDef = {
 
 ## 11. 交付前自查清單
 
-1. `npm run typecheck && NEXT_DIST_DIR=.next-build npm run build` 綠。
+1. `npm run typecheck` 綠（本機 build 依 §2 的磁碟守則，或交給 CI；push 後 CI 的 build 必須綠）。
 2. 本機登入後實際點過：列表（排序/搜尋/分頁）、每個按鈕、Editor 新增/編輯/刪除/行內、匯出、彈窗；`scripts/dev/shot.mjs` 的輸出沒有 `[exception]`、沒有非預期的 `[http 4xx/5xx]`。
 3. 畫面與 `spec/html`（必要時原站 m4 armand 分頁）比對：欄位順序、按鈕文字、class、顏色、間距。
 4. 所有查詢都有租戶過濾；換一個租戶前綴打 AJAX 應 403。
