@@ -644,12 +644,16 @@ export function evaluateRule(rule: FeeRule, ctx: RuleContext): RuleEvaluation {
       appliedBy = "OVERSEA";
     }
   } else if (addr.island && appliedBy !== "TAG") {
+    const ix = optNum(rule.islandFeeX);
     const iy = optNum(rule.islandFeeY);
+    const iz = optNum(rule.islandFeeZ);
     const islandTiers = parseTieredPrices(s.island?.tieredPricesString);
-    if (iy !== null || islandTiers.length) {
+    // 外島 x/y/z 皆未填或皆為 0 ＝ 未設定外島運費（原站團購運費頁也以「三者皆非 0」才顯示外島條件），沿用本島運費
+    const islandConfigured = [ix, iy, iz].some((v) => v !== null && v !== 0) || islandTiers.length > 0;
+    if (islandConfigured) {
       const r = noCoupon
         ? { fee: iy ?? 0, reached: false }
-        : thresholdFee(metric, optNum(rule.islandFeeX), iy ?? 0, num(rule.islandFeeZ, iy ?? 0), islandTiers);
+        : thresholdFee(metric, ix, iy ?? 0, iz ?? iy ?? 0, islandTiers);
       amount = replace ? r.fee : base + r.fee;
       reached = r.reached;
       appliedBy = "ISLAND";

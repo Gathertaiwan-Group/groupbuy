@@ -1,0 +1,59 @@
+<style>
+.breadcrumb-item {cursor: pointer;}
+/*.wizard-body {min-height:678px;}*/
+.card-wizard.card {border:1px solid #dee2e6;text-align:center;letter-spacing: 2px;transform: scale(1);transition-duration: 0.3s;}
+.card-wizard.card:hover {border: solid 1px #7f8c98;transform: scale(1.05);transition-duration: 0.3s;}
+.card-wizard .card-header {font-size: 16pt;font-weight: 400;}
+.card-wizard .card-body {display: flex;justify-content: center;min-height: 158px;align-items: center;flex-wrap: wrap;font-size: 14px;text-align:left;}
+.wizard-step1 .card-wizard .card-body {min-height: 232px;}
+
+.card-wizard span {display:inline-block;}
+.wizard-stepfinal .modal-footer {position: absolute;bottom: 0px;width: 100%;}
+.btn-input-check,.btn-input-check:hover,.btn-input-check.active {min-width:72px !important;background-color: #fff!important;color: black;border: 1px solid #ced4da;}
+.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;color:#10ad1d}
+.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
+label.error {display: flex;justify-content: center;align-items: center;height: 38px;margin: 0;padding: 0 2px;background-color: red;color: #fff;font-weight: 500;}
+</style>
+
+<div class="modal-header">
+	<h5>新增綁定運費規則</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+</div>
+<div class="modal-body modal-body-wizard">
+	<div class="modal-message"></div>
+	<div class="wizard-body">
+		<div class="wizard-step wizard-step1" id="wizard-step1-all" >
+			<div class="row">
+				<div class="col-6 mb-4">
+					<div class="card card-wizard" id="wizardCard1">
+						<div class="card-header">選擇</div>
+						<div class="card-body">
+							<p>從既有運費條件中挑選</p>
+						</div>
+					</div>
+				</div>
+				<div class="col-6 mb-4">
+					<div class="card card-wizard" id="wizardCard2">
+						<div class="card-header">新增</div>
+						<div class="card-body">
+							<p>新增用於綁定的運費規則</p>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div> <!-- modal-body -->
+
+<script>
+	$(document).ready(function() {
+		$('#wizardCard1').click(function() {
+			$('#myModal').modal('hide');
+			selectShippingAndBind();
+		});
+		$('#wizardCard2').click(function() {
+			$('#myModal').modal('hide');
+			createShippingAndBind();
+		});
+	});
+</script>

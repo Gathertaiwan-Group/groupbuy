@@ -1,0 +1,405 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}<script type="text/javascript" class="init">
+	
+	var shippingTagTable;
+	var editor; // use a global for the submit and return data rendering in the examples
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":20,
+	} );
+	$(document).ready(function() {
+		
+		var tableName = '#example';
+		editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ShippingTag/save.do?groupBuyAccountId={{tenantCode}}'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ShippingTag/update.do?shippingTagId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/ShippingTag/delete.do?shippingTagId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'shippingTagId',
+			template: '#customForm',
+			fields: [
+				DataTableConfig.field_input('名稱', 'title'),
+				DataTableConfig.field_select2('標籤:','tag','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/ShippingTag/lookupTag', false, '', ''),
+				DataTableConfig.field_input('新標籤:','tagInput'),
+				DataTableConfig.field_checkbox_bool('使用新標籤:','isNewTag'),
+				DataTableConfig.field_select('貨運提供商:','shippingProvider'),
+				DataTableConfig.field_input('匯入貨運表-訂單編號標頭名稱', 'salesOrderUuid'),
+				DataTableConfig.field_input('匯入貨運表-貨運編號標頭名稱', 'salesOrderShippingReceiptNumber'),
+				DataTableConfig.field_textarea('自定義匯出格式', 'shippingExportFormat','範例：\n訂單號碼,訂購人姓名\norder.uuid,billing.name', 6),
+				DataTableConfig.field_checkbox_bool('大型商品','shippingTagSettings.largeItem','0','設定為大型商品時會獨立出貨單，每箱最大單位超過會再拆單出貨'),
+				DataTableConfig.field_input_f('每箱最大單位', 'shippingTagSettings.spacePerBox','設1時，1個宅配單只能有1個單位商品，設3時最多有3個單位商品，超過會再拆單。1件商品預設單位為1，可透過商品明細內的;商品重量設定單位數。'),
+			],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+	
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			scrollX:true,
+			ajax: '{{baseUrl}}/ajax/ShippingTag/list.do',
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('title'),
+				DataTableConfig.data_input('tag'),
+				{ 
+					data: 'shippingProvider',
+					render: function ( data, type, row ) {
+						return row.shippingProviderString;
+					}
+				},
+				{ data: 'salesOrderUuid' },
+				{ data: 'salesOrderShippingReceiptNumber' },
+			],
+			"order": [[ 2, "asc" ]],
+			keys: DataTableConfig.keysInlineTab,
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',	editor: editor },
+				{
+					extend: "selectedSingle",
+					text: '複製',
+					action: function ( e, dt, node, config ) {
+						// Place the selected row into edit mode (but hidden),
+						// then get the values for all fields in the form
+						var values = editor.edit(
+							table.row( { selected: true } ).index(),
+							false
+						)
+						.val();
+						resetSalesOrder(values);
+						// Create a new entry (discarding the previous edit) and
+						// set the values from the read values
+						editor
+						.create( {
+							title: '複製',
+							buttons: {label:'複製', className:'btn-primary', action: function () {this.submit();}}
+						} )
+						.set( values );
+					}
+				},
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			initComplete: function () {
+				$(".dataTables_scrollBody").floatingScroll();
+			},
+		} );
+				
+		editor
+			.on( 'initCreate', function () {
+				// Enable order for create
+			//	editor.field( 'seq' ).enable();
+				editor.field('salesOrderShippingReceiptNumber').message($('#tag-export').html());
+			} )
+			.on( 'initEdit', function () {
+				// Disable for edit (re-ordering is performed by click and drag)
+			//	editor.field( 'seq' ).disable();
+				editor.field('salesOrderShippingReceiptNumber').message($('#tag-export').html());
+			} )
+			.on( 'preSubmit', function ( e, data, action ) {
+				const keys = Object.keys(data.data);
+				keys.forEach(function(key) {
+					var obj = data.data[key];
+					const tagInput = obj.tagInput;
+					const isNewTag = obj.isNewTag;
+					if ( Boolean( Number(isNewTag) ) ) {
+						if (tagInput && tagInput.length) {
+							obj.tag = tagInput;
+						}
+					}
+				});
+				return true;
+			})
+			.dependent( 'isNewTag', function (val, data, callback) {
+				const isNewTag = Boolean(Number(val));
+				if (isNewTag) {
+					return { show: 'tagInput', hide: 'tag' };
+				} else {
+					return { show: 'tag', hide: 'tagInput' };
+				}
+			})
+			.dependent( 'shippingTagSettings.largeItem', function (val, data, callback) {
+				const b = Boolean(Number(val));
+				if (b) {
+					return { show: 'shippingTagSettings.spacePerBox' };
+				} else {
+					return { hide: 'shippingTagSettings.spacePerBox' };
+				}
+			})
+
+		injectDetailsControl(tableName, table);
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+		
+		DataTableHelper.injectXhrForJsonDefault(table, {
+			'tagInput':'','isNewTag':0,
+		});
+		
+		shippingTagTable = table;
+
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">貨運標籤(倉儲)</div>
+<div class="card-body">
+	<table id="example" class="table table-striped display nowrap w-100">
+		<thead>
+			<tr>
+				<th></th>
+				<th>名稱</th>
+				<th>標籤</th>
+				<th>貨運提供商</th>
+				<th>匯入貨運表-訂單編號標頭名稱</th>
+				<th>匯入貨運表-貨運編號標頭名稱</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+
+<div style="display:none">
+<div id="customForm" class="dtForm row">
+	<div class="col-sm-6 col-md-8">
+	<fieldset >
+		<editor-field name="title"></editor-field>
+		<editor-field name="tag"></editor-field>
+		<editor-field name="tagInput"></editor-field>
+		<editor-field name="isNewTag"></editor-field>
+		<editor-field name="shippingProvider"></editor-field>
+		<editor-field name="shippingTagSettings.largeItem"></editor-field>
+		<editor-field name="shippingTagSettings.spacePerBox"></editor-field>
+		<editor-field name="salesOrderUuid"></editor-field>
+		<editor-field name="salesOrderShippingReceiptNumber"></editor-field>
+		<editor-field name="shippingExportFormat"></editor-field>
+	</fieldset>
+	</div>
+	<div class="col-sm-6 col-md-4">
+	<style>
+.tag-container {
+max-height:calc(100vh - 200px);overflow-y:scroll;
+-webkit-box-shadow: none!important;box-shadow: none!important;
+}
+.tag-container .card-body {padding:0.25rem 0}
+.tag-container .btn {
+padding:0.5rem !important; margin:0.25rem 0px !important;
+-webkit-box-shadow: none!important;box-shadow: none!important;
+}
+</style>
+	<div id="tag-export" class='card tag-container sticky-top'>
+	<div class="card-header"><a target="_blank" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i>csv編輯器</a>
+	<br><span class="small">可透過csv編輯器，透過匯出功能複製貼回</span>
+	</div>
+	<div class="card-header">標籤</div>
+	<div class="card-header">訂單資訊</div>
+	<div class="card-body">
+	<button type="button" id="groupbuy.id" class="btn btn-blue-grey btn-sm btn-tag-export">團購ID</button>
+	<button type="button" id="groupbuy.title" class="btn btn-blue-grey btn-sm btn-tag-export">團購名稱</button>
+	<button type="button" id="groupbuy.title.short" class="btn btn-blue-grey btn-sm btn-tag-export">團購短名稱</button>
+	<button type="button" id="order.uuid" class="btn btn-blue-grey btn-sm btn-tag-export">訂單號碼</button>
+	<button type="button" id="apiOrderNo" class="btn btn-blue-grey btn-sm btn-tag-export">訂單號碼x4碼</button>
+	<button type="button" id="order.seq" class="btn btn-blue-grey btn-sm btn-tag-export">訂單流水號</button>
+	<button type="button" id="order.seq.groupbuy" class="btn btn-blue-grey btn-sm btn-tag-export">訂單流水號(團購短名稱+流水號)</button>
+	<button type="button" id="order.dateCreatedYYMMDD" class="btn btn-blue-grey btn-sm btn-tag-export">訂單日期(年月日)</button>
+	<button type="button" id="order.dateCreatedYMDHMS" class="btn btn-blue-grey btn-sm btn-tag-export">訂單時間日期(年月日時分秒)</button>
+	<!-- <button type="button" id="order.dateCreatedYYMMDDSlash" class="btn btn-blue-grey btn-sm btn-tag-export">訂單日期(格式：2017/07/07)</button> -->
+	<button type="button" id="order.state" class="btn btn-blue-grey btn-sm btn-tag-export">訂單階段</button>
+	<button type="button" id="order.status" class="btn btn-blue-grey btn-sm btn-tag-export">訂單狀態</button>
+	<button type="button" id="paymentMethod" class="btn btn-blue-grey btn-sm btn-tag-export">付款方式</button>
+	<button type="button" id="paymentMethodCode" class="btn btn-blue-grey btn-sm btn-tag-export">付款方式代號</button>
+	<button type="button" id="payStatus" class="btn btn-blue-grey btn-sm btn-tag-export">付款狀態</button>
+	<button type="button" id="order.datePaymentDue" class="btn btn-blue-grey btn-sm btn-tag-export">繳款截止日期</button>
+	<button type="button" id="order.datePaid" class="btn btn-blue-grey btn-sm btn-tag-export">付款日期</button>
+	<button type="button" id="order.grandTotal" class="btn btn-blue-grey btn-sm btn-tag-export">訂單總計(含運費)</button>
+	<button type="button" id="order.discount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單折扣金額</button>
+	<button type="button" id="order.itemTotalPriceWithoutDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總金額(未折扣)</button>
+	<button type="button" id="order.itemTotalCostPriceWithoutDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總成本(未折扣)</button>
+	<button type="button" id="order.totalPaid" class="btn btn-blue-grey btn-sm btn-tag-export">已付金額</button>
+	<button type="button" id="order.totalPaidBeforeSplit" class="btn btn-blue-grey btn-sm btn-tag-export">分割前已付金額</button>
+	<button type="button" id="order.shippingAmount" class="btn btn-blue-grey btn-sm btn-tag-export">運費（總金額）</button>
+	<button type="button" id="order.shippingFee" class="btn btn-blue-grey btn-sm btn-tag-export">運費（物流費）</button>
+	<button type="button" id="order.codFee" class="btn btn-blue-grey btn-sm btn-tag-export">運費（貨到付款費）</button>
+	<button type="button" id="payOnDelivery" class="btn btn-blue-grey btn-sm btn-tag-export">代收金額</button>
+	<button type="button" id="order.coupon" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷（標題＋折扣碼）</button>
+	<button type="button" id="order.coupon.title" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷標題</button>
+	<button type="button" id="order.coupon.code" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷折扣碼</button>
+	<button type="button" id="order.salesRules" class="btn btn-blue-grey btn-sm btn-tag-export">優惠條件</button>
+	<button type="button" id="apiTradeNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方金流訂單編號</button>
+	<button type="button" id="cvsTradeNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商取貨訂單編號</button>
+	<button type="button" id="cvsStoreId" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商代號</button>
+	<button type="button" id="cvsStoreName" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商名稱</button>
+	<button type="button" id="cvsShipmentNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商出貨單號</button>
+	<button type="button" id="order.totalSuccessTimes" class="btn btn-blue-grey btn-sm btn-tag-export">定期]扣款次數</button>
+	<button type="button" id="order.frequency" class="btn btn-blue-grey btn-sm btn-tag-export">定期]配送週期</button>
+	<button type="button" id="order.dns" class="btn btn-blue-grey btn-sm btn-tag-export">定期]下次扣款日</button>
+	<button type="button" id="order.dnd" class="btn btn-blue-grey btn-sm btn-tag-export">定期]下次配達日</button>
+	</div>
+	<div class="card-header">客戶資訊</div>
+	<div class="card-body">
+	<button type="button" id="billing.name" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人姓名</button>
+	<button type="button" id="billing.fbNickname" class="btn btn-blue-grey btn-sm btn-tag-export">臉書暱稱</button>
+	<button type="button" id="billing.postcode" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人郵遞區號</button>
+	<button type="button" id="billing.address" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人地址</button>
+	<button type="button" id="billing.email" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人Email</button>
+	<button type="button" id="billing.phone" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人電話</button>
+	<button type="button" id="billing.birthday" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人生日</button>
+	<button type="button" id="shipping.name.only" class="btn btn-blue-grey btn-sm btn-tag-export">收件人姓名</button>
+	<button type="button" id="shipping.name" class="btn btn-blue-grey btn-sm btn-tag-export">收件人姓名(訂購人不同時顯示)</button>
+	<button type="button" id="shipping.postcode" class="btn btn-blue-grey btn-sm btn-tag-export">收件人郵遞區號</button>
+	<button type="button" id="shipping.address" class="btn btn-blue-grey btn-sm btn-tag-export">收件人地址</button>
+	<button type="button" id="shipping.email" class="btn btn-blue-grey btn-sm btn-tag-export">收件人Email</button>
+	<button type="button" id="shipping.phone" class="btn btn-blue-grey btn-sm btn-tag-export">收件人電話</button>
+	<button type="button" id="note" class="btn btn-blue-grey btn-sm btn-tag-export">客戶備註</button>
+	<button type="button" id="staff.note" class="btn btn-blue-grey btn-sm btn-tag-export">員工備註</button>
+	<button type="button" id="billing.bank.name" class="btn btn-blue-grey btn-sm btn-tag-export">銀行名稱</button>
+	<button type="button" id="billing.bank.account" class="btn btn-blue-grey btn-sm btn-tag-export">虛擬帳號/後五碼</button>
+	</div>
+	<div class="card-header">客戶(登入)資訊</div>
+	<div class="card-body">
+	<button type="button" id="customer.firstname" class="btn btn-blue-grey btn-sm btn-tag-export">姓名</button>
+	<button type="button" id="customer.username" class="btn btn-blue-grey btn-sm btn-tag-export">會員ID</button>
+	<button type="button" id="customer.merchantUserId" class="btn btn-blue-grey btn-sm btn-tag-export">第三方會員ID</button>
+	<button type="button" id="customer.nid" class="btn btn-blue-grey btn-sm btn-tag-export">身分證字號</button>
+	<button type="button" id="order.pointAmount" class="btn btn-blue-grey btn-sm btn-tag-export">點數折抵訂單金額</button>
+	<button type="button" id="order.point.gain" class="btn btn-blue-grey btn-sm btn-tag-export">訂單獲取點數</button>
+	<button type="button" id="order.point.use" class="btn btn-blue-grey btn-sm btn-tag-export">訂單使用點數</button>
+	</div>
+	<div class="card-header">發票資訊</div>
+	<div class="card-body">
+	<button type="button" id="receiptType" class="btn btn-blue-grey btn-sm btn-tag-export">發票類型(二/三聯)</button>
+	<button type="button" id="receiptCategory" class="btn btn-blue-grey btn-sm btn-tag-export">發票種類(電子/紙本/捐贈)</button>
+	<button type="button" id="receiptTitle" class="btn btn-blue-grey btn-sm btn-tag-export">發票抬頭</button>
+	<button type="button" id="receiptTitleOrFirstname" class="btn btn-blue-grey btn-sm btn-tag-export">發票抬頭(無時改顯示訂購人姓名)</button>
+	<button type="button" id="receiptVatId" class="btn btn-blue-grey btn-sm btn-tag-export">統一編號</button>
+	<button type="button" id="invoiceNumber" class="btn btn-blue-grey btn-sm btn-tag-export">發票號碼</button>
+	<button type="button" id="dateEinvoice" class="btn btn-blue-grey btn-sm btn-tag-export">預約發票日期</button>
+	<button type="button" id="card4No" class="btn btn-blue-grey btn-sm btn-tag-export">信用卡號</button>
+	<button type="button" id="invoice.barcode" class="btn btn-blue-grey btn-sm btn-tag-export">手機載具</button>
+	<button type="button" id="invoice.taxType" class="btn btn-blue-grey btn-sm btn-tag-export">稅別</button>
+	<button type="button" id="invoice.amount.beforeTax" class="btn btn-blue-grey btn-sm btn-tag-export">訂單稅前金額</button>
+	<button type="button" id="invoice.amount.b2borb2c" class="btn btn-blue-grey btn-sm btn-tag-export">訂單(三聯：稅前金額/二聯：含稅金額)</button>
+	<button type="button" id="invoice.taxAmount" class="btn btn-blue-grey btn-sm btn-tag-export">稅額</button>
+	</div>
+	<div class="card-header">貨運資訊</div>
+	<div class="card-body">
+	<button type="button" id="order.shippingProvider" class="btn btn-blue-grey btn-sm btn-tag-export">貨運公司</button>
+	<button type="button" id="order.shippingTag" class="btn btn-blue-grey btn-sm btn-tag-export">貨運標籤</button>
+	<button type="button" id="shippingReceiptNumber" class="btn btn-blue-grey btn-sm btn-tag-export">貨運單號</button>
+	<button type="button" id="deliver.time" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(代號)</button>
+	<button type="button" id="deliver.time.shortCode" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(文字)</button>
+	<button type="button" id="deliver.time.custom" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(自定義)</button>
+	<button type="button" id="shipping.shippingType" class="btn btn-blue-grey btn-sm btn-tag-export">配送種類(宅配/超取/自取)</button>
+	<button type="button" id="order.preferredDeliveryDates" class="btn btn-blue-grey btn-sm btn-tag-export">期望配達日期</button>
+	<button type="button" id="order.restrictedDeliveryDates" class="btn btn-blue-grey btn-sm btn-tag-export">不期望配達日期</button>
+	<button type="button" id="order.dateShipped" class="btn btn-blue-grey btn-sm btn-tag-export">出貨日期</button>
+	</div>
+	<div class="card-header">商品資訊</div>
+	<div class="card-body">
+	<button type="button" id="order.itemsList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要</button>
+	<button type="button" id="order.itemsList.br" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(斷行)</button>
+	<button type="button" id="order.itemsList.100.1" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-1)</button>
+	<button type="button" id="order.itemsList.100.2" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-2)</button>
+	<button type="button" id="order.itemsList.100.3" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-3)</button>
+	<button type="button" id="order.itemsList.100.4" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-4)</button>
+	<button type="button" id="order.itemsList.100.5" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-5)</button>
+	<button type="button" id="order.itemsListAndNote" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要＋客戶備註</button>
+	<button type="button" id="order.itemsUidList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(商品代碼)</button>
+	<button type="button" id="order.itemsTitleList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(完整名稱)</button>
+	<button type="button" id="order.itemsTotal" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總數量</button>
+	<button type="button" id="order.itemKinds" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總類數</button>
+	<button type="button" id="items.uid.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品代號(逗點隔開)</button>
+	<button type="button" id="items.shortName.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品出貨短名稱(逗點隔開)</button>
+	<button type="button" id="items.total.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品數量(逗點隔開)</button>
+	</div>
+	<div class="card-header">其他（固定資料用法：#符號加上內容，如：#1000。每一行該欄位均會顯示1000</div>
+	<div class="card-body">
+	<button type="button" id="#" class="btn btn-blue-grey btn-sm btn-tag-export">固定資料欄位</button>
+	</div>
+	<div class="card-header">樣式二（當選擇樣式二標籤時，訂單將依各商品將獨立顯示)</div>
+	<div class="card-body">
+	<button type="button" id="item.uid" class="btn btn-blue-grey btn-sm btn-tag-export">商品代碼</button>
+	<button type="button" id="item.upc" class="btn btn-blue-grey btn-sm btn-tag-export">國際條碼</button>
+	<button type="button" id="item.title" class="btn btn-blue-grey btn-sm btn-tag-export">商品名稱</button>
+	<button type="button" id="item.shortName" class="btn btn-blue-grey btn-sm btn-tag-export">商品出貨短名稱</button>
+	<button type="button" id="item.cateTag" class="btn btn-blue-grey btn-sm btn-tag-export">商品分類</button>
+	<button type="button" id="item.total" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量</button>
+	<button type="button" id="item.retailPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品原價</button>
+	<button type="button" id="item.price" class="btn btn-blue-grey btn-sm btn-tag-export">商品團購價</button>
+	<button type="button" id="item.costPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品成本</button>
+	<button type="button" id="item.discount.price" class="btn btn-blue-grey btn-sm btn-tag-export">商品單價折扣後</button>
+	<button type="button" id="item.discount" class="btn btn-blue-grey btn-sm btn-tag-export">商品折價</button>
+	<button type="button" id="item.totalPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品金額小計</button>
+	<button type="button" id="item.totalPriceNoneDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">商品金額小計(未折扣)</button>
+	<button type="button" id="item.totalCostPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品成本小計</button>
+	<button type="button" id="item.grossMargin" class="btn btn-blue-grey btn-sm btn-tag-export">毛利率(%)</button>
+	<button type="button" id="item.grossMargin.amount" class="btn btn-blue-grey btn-sm btn-tag-export">毛利金額</button>
+	<button type="button" id="item.shipping.status" class="btn btn-blue-grey btn-sm btn-tag-export">商品出貨狀態</button>
+	<button type="button" id="item.backOrderStatus" class="btn btn-blue-grey btn-sm btn-tag-export">商品預購狀態</button>
+	<button type="button" id="item.virtualCode" class="btn btn-blue-grey btn-sm btn-tag-export">商品虛擬序號</button>
+	<button type="button" id="item.shippingTag" class="btn btn-blue-grey btn-sm btn-tag-export">商品貨運標籤</button>
+	<button type="button" id="item.dateExpired" class="btn btn-blue-grey btn-sm btn-tag-export">有效期限</button>
+	<button type="button" id="item.taxType" class="btn btn-blue-grey btn-sm btn-tag-export">商品稅別</button>
+	<button type="button" id="item.commission" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤總金額</button>
+	<button type="button" id="item.commissionRate" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤(%)</button>
+	<button type="button" id="item.commissionDollar" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤(單件$)</button>
+	<button type="button" id="item.weight" class="btn btn-blue-grey btn-sm btn-tag-export">商品重量</button>
+	<button type="button" id="item.note" class="btn btn-blue-grey btn-sm btn-tag-export">商品備註</button>
+	</div>
+	<div class="card-header">特殊標籤（僅限xls使用，第一行及第二行均須使用標籤）</div>
+	<div class="card-body">
+	<button type="button" id="itemset.cols" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量明細(僅顯示有出貨商品)</button>
+	<button type="button" id="itemset.cols.all" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量明細(顯示所有商品)</button>
+	<button type="button" id="uid.cols" class="btn btn-blue-grey btn-sm btn-tag-export">商品貨號數量明細</button>
+	</div>
+</div>
+<script type="text/javascript">
+	$('.btn-tag-export').each(function(i, obj) {
+		$(obj).on('click', function () {
+			$('#DTE_Field_shippingExportFormat').insertAtCaret($(this).attr('id')+",");
+			$('#DTE_Field_prefValue').insertAtCaret($(this).attr('id')+",");
+		});
+	});
+	jQuery.fn.extend({
+	insertAtCaret: function(myValue){
+		return this.each(function(i) {
+		if (document.selection) {
+			//For browsers like Internet Explorer
+			this.focus();
+			sel = document.selection.createRange();
+			sel.text = myValue;
+			this.focus();
+		}
+		else if (this.selectionStart || this.selectionStart == '0') {
+			//For browsers like Firefox and Webkit based
+			var startPos = this.selectionStart;
+			var endPos = this.selectionEnd;
+			var scrollTop = this.scrollTop;
+			this.value = this.value.substring(0, startPos)+myValue+this.value.substring(endPos,this.value.length);
+			this.focus();
+			this.selectionStart = startPos + myValue.length;
+			this.selectionEnd = startPos + myValue.length;
+			this.scrollTop = scrollTop;
+		} else {
+			this.value += myValue;
+			this.focus();
+		}
+		})
+	}
+	});
+</script></div>
+</div>
+</div>
+</div>

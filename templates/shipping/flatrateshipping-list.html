@@ -1,0 +1,149 @@
+<!--#head-->
+					{{> shipping/partials/flatrate-manager.html}}<script type="text/javascript" class="init">
+	var flatRateShippingEditor; // use a global for the submit and return data rendering in the examples
+	var flatRateShippingTable;
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":20,
+	} );
+	$(document).ready(function() {
+		flatRateShippingManager.buildDataTable('#example');
+		//flatRateShippingEditor = editor;
+		//flatRateShippingTable = table;
+	} ); // end ready
+	
+	</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4" id="card-flatRateShipping">
+						<div class="card-header">
+							運費規則</div>
+						<div class="card-body">
+							<div class=" mb-3">
+								<select class="form-control d-inline-block w-auto" id="filterModeSelect">
+									<option value="">全部顯示</option>
+									<option value="showUnused">顯示未使用規則</option>
+									<option value="showExpiredUnused">顯示結團超過3個月未使用</option>
+								</select>
+							</div>
+							<table id="example" class="table table-striped display nowrap" width="100%">
+								<thead>
+			<tr>
+				<th></th>
+				<th>排序</th>
+				<th>名稱</th>
+				<th>運費類型</th>
+				<th>運費滿足條件</th>
+				<th>[滿足條件x]</th>
+				<th>[基本運費 y]</th>
+				<th>[滿足條件後基本運費 z]</th>
+				<th>貨到付款</th>
+				<th>國外運費</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>排序</th>
+				<th>名稱</th>
+				<th>運費類型</th>
+				<th>運費滿足條件</th>
+				<th>[滿足條件x]</th>
+				<th>[基本運費 y]</th>
+				<th>[滿足條件後基本運費 z]</th>
+				<th>貨到付款</th>
+				<th>國外運費</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+
+<div class="d-none">
+<div id="customForm" class="dtForm row">
+	<div class="col-12">
+		<fieldset id="customForm1">
+			<legend>基本</legend>
+			<editor-field name="shippingType"></editor-field>
+			<editor-field name="flatRateShippingSettings.cvsType"></editor-field>
+			<editor-field name="flatRateShippingSettings.tenantId"></editor-field>
+			<editor-field name="category"></editor-field>
+			<editor-field name="title"></editor-field>
+			<editor-field name="seq"></editor-field>
+			<editor-field name="quickCountry"></editor-field>
+			<editor-field name="flatRateShippingSettings.shippingCountry"></editor-field>
+			<!-- <editor-field name="flatRateShippingSettings.shippingCountryExcluded"></editor-field>-->
+		</fieldset>
+	</div>
+	<div class="col-12 col-sm-6">
+		<fieldset id="customForm2">
+			<legend>國家/區域</legend>
+			<editor-field name="x"></editor-field>
+			<editor-field name="y"></editor-field>
+			<editor-field name="z"></editor-field>
+			<editor-field name="flatRateShippingSettings.main.tieredPricesString"></editor-field>
+			<editor-field name="paymentMethods[]"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12 col-sm-6">
+		<fieldset id="customForm3">
+			<legend>外島</legend>
+			<editor-field name="islandFeeX"></editor-field>
+			<editor-field name="islandFeeY"></editor-field>
+			<editor-field name="islandFeeZ"></editor-field>
+			<editor-field name="islandFee"></editor-field>
+			<editor-field name="flatRateShippingSettings.island.tieredPricesString"></editor-field>
+			<editor-field name="islandPaymentMethods[]"></editor-field>
+			<editor-field name="islands[]"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12">
+		<fieldset id="customForm4">
+			<legend>其他運費</legend>
+			<editor-field name="flatRateShippingSettings.amountLimit"></editor-field>
+			<editor-field name="flatRateShippingSettings.weightLimit"></editor-field>
+			<editor-field name="flatRateShippingSettings.orderStockType"></editor-field>
+			<editor-field name="payOnDeliveryFee"></editor-field>
+			<editor-field name="flatRateShippingSettings.payOnDeliveryFee.tieredPricesString"></editor-field>
+			<editor-field name="overseaFee"></editor-field>
+			<editor-field name="subsetApplyFullAmount"></editor-field>
+			<editor-field name="flatRateShippingSettings.subsetApplyHighestAmount"></editor-field>
+			<editor-field name="flatRateShippingSettings.subsetApplyLowestAmount"></editor-field>
+			<editor-field name="couponX"></editor-field>
+			<editor-field name="flatRateShippingSettings.freeShippingAsInternalShipping"></editor-field>
+			<editor-field name="flatRateShippingSettings.shippingTag"></editor-field>
+			<editor-field name="flatRateShippingSettings.restrictedShippingTag"></editor-field>
+			<editor-field name="flatRateShippingTag"></editor-field>
+			<editor-field name="flatRateShippingSettings.freeShippingLabel"></editor-field>
+			<editor-field name="flatRateShippingSettings.descr"></editor-field>
+		</fieldset>
+	</div>
+	<div class="col-12">
+		<fieldset id="customForm5">
+			<legend>偏遠地區</legend>
+			<div id="form-customForm5">
+			<editor-field name="islandShippingRateType"></editor-field>
+			<editor-field name="extendedAreaFee"></editor-field>
+			<editor-field name="extendedAreas[]"></editor-field>
+				<div style="font-size:18px; font-weight: bold;">偏遠地區額外設定 <a data-toggle="collapse" class="customAreas" href="#flatRateShippingSettings-extendedAreas-cb" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></div>
+				<div class="collapse" id="flatRateShippingSettings-extendedAreas-cb">
+				<editor-field name="flatRateShippingSettings.extendedAreas[]"></editor-field>
+			</div>
+			</div>
+		</fieldset>
+	</div>
+	<div class="col-12">
+		<fieldset id="customForm6" hidden>
+			<legend>運送區域</legend>
+			<div id="form-customForm6">
+				<editor-field name="flatRateShippingSettings.shippingType"></editor-field>
+				<editor-field name="selectAllExtendedAreas"></editor-field>
+				<editor-field name="selectAllIslandAreas"></editor-field>
+				<div style="font-size:18px; font-weight: bold;">選擇區域 <a data-toggle="collapse" class="customAreas" href="#flatRateShippingSettings-shippingAreas-cb" role="button"><i class="fa-thin fa-square-chevron-up"></i></a></div>
+				<div class="collapse" id="flatRateShippingSettings-shippingAreas-cb">
+				<editor-field name="flatRateShippingSettings.shippingAreas[]"></editor-field>
+			</div>
+			</div>
+		</fieldset>
+	</div>
+</div>
+</div></div>

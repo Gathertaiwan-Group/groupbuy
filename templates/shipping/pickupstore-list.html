@@ -1,0 +1,315 @@
+<!--#head-->
+					<style>
+						.hover-card:hover {
+							transform: translateY(-2px);
+							box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1) !important;
+							transition: all 0.3s ease;
+						}
+
+						.btn-ripple {
+							position: relative;
+							overflow: hidden;
+						}
+
+						.setting-item {
+							cursor: pointer;
+							transition: background-color 0.2s ease;
+						}
+
+						.setting-item:hover {
+							background-color: #f1f3f5;
+						}
+
+						.setting-item.active-setting {
+							background-color: #e8f0fe !important;
+							border-left: 4px solid #1a73e8;
+						}
+
+						.drag-drop-area {
+							border: 2px dashed #007bff;
+							border-radius: 8px;
+							background-color: #f8f9fa;
+							padding: 20px;
+							text-align: center;
+							cursor: pointer;
+							transition: all 0.3s ease;
+						}
+
+						.drag-drop-area:hover,
+						.drag-drop-area.dragover {
+							background-color: #e9ecef;
+							border-color: #0056b3;
+						}
+
+						.table-editable input.form-control {
+							border: 1px solid transparent;
+							background: transparent;
+							box-shadow: none;
+							padding: 4px 8px;
+							border-radius: 4px;
+							transition: all 0.2s ease;
+						}
+
+						.table-editable input.form-control:focus {
+							border-color: #80bdff;
+							background: #fff;
+							box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, .25);
+						}
+
+						.table-editable tr.invalid-row input.required-field {
+							border-color: #dc3545;
+							background-color: #fdf3f4;
+						}
+
+						.table-editable tr:hover input.form-control {
+							border-color: #ced4da;
+							background: #fff;
+						}
+
+						.loading-overlay {
+							position: fixed;
+							top: 0;
+							left: 0;
+							width: 100%;
+							height: 100%;
+							background: rgba(255, 255, 255, 0.7);
+							display: flex;
+							align-items: center;
+							justify-content: center;
+							z-index: 9999;
+						}
+					</style>
+<!--#body--><div class="container-fluid ">
+	<!-- Loading 遮罩 -->
+					<div id="loadingOverlay" class="loading-overlay d-none">
+						<div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+							<span class="sr-only">處理中...</span>
+						</div>
+					</div>
+
+					<div class="container-fluid mt-4">
+						<!-- 標題與導航 -->
+						<div class="d-flex justify-content-between align-items-center mb-4">
+							<h3 class="font-weight-bold text-dark mb-0">
+								<i class="fa fa-map-marker text-primary mr-2"></i>自取門市設定與管理
+							</h3>
+						</div>
+
+						<!-- 上方區域：通路設定與切換 -->
+						<div class="row">
+							<!-- 左上：新增自取通路設定 -->
+							<div class="col-md-4 mb-4">
+								<div class="card shadow-sm hover-card h-100">
+									<div class="card-header bg-primary text-white font-weight-bold">
+										<i class="fa fa-plus-circle mr-2"></i>新增自取通路設定
+									</div>
+									<div class="card-body d-flex flex-column justify-content-between">
+										<form id="addSettingForm">
+											<div class="form-group md-form">
+												<label for="title" class="active">自取通路名稱</label>
+												<input type="text" id="title" name="title" class="form-control"
+													placeholder="例如：大樹藥局、員山廠自取" required>
+												<small class="form-text text-muted mt-2">
+													<i class="fa fa-info-circle mr-1"></i>每個帳號最多僅支援建立 3 組設定，且通路名稱不可重複。
+												</small>
+											</div>
+											<button type="submit" class="btn btn-primary btn-block btn-ripple mt-3">
+												<i class="fa fa-save mr-1"></i>建立自取設定
+											</button>
+										</form>
+									</div>
+								</div>
+							</div>
+
+							<!-- 右上：現有自取設定通路與切換 -->
+							<div class="col-md-8 mb-4">
+								<div class="card shadow-sm h-100">
+									<div class="card-header bg-dark text-white font-weight-bold">
+										<i class="fa fa-list mr-2"></i>現有自取設定通路 (點擊可編輯門市定位資料)
+									</div>
+									<div class="card-body">
+										<div class="table-responsive">
+											<table class="table table-bordered table-hover align-middle">
+												<thead class="thead-light">
+													<tr>
+														<th>自取通路名稱 (點擊切換)</th>
+														<!-- <th>租戶憑證 (tenantId)</th>
+														<th>建立時間</th> -->
+														<th class="text-right">管理操作</th>
+													</tr>
+												</thead>
+												<tbody id="settingsTableBody">
+													{{#each settings}}
+													<tr id="setting-row-{{pickupStoreSettingId}}" class="setting-item" data-id="{{pickupStoreSettingId}}" data-title="{{title}}">
+														{{!-- 推導：原站擷取時無資料，列結構依 /backend/PickupStore/list.js 的選擇器補完 --}}
+														<td class="align-middle">
+															<span class="font-weight-bold">{{title}}</span>
+															<span class="badge badge-primary ml-2 active-badge d-none">編輯中</span>
+															<span class="badge badge-light ml-1">門市 {{storeCount}} 間</span>
+														</td>
+														<td class="text-right align-middle text-nowrap">
+															<button type="button" class="btn btn-outline-primary btn-sm m-0 mr-1 btn-edit-title" data-id="{{pickupStoreSettingId}}" data-title="{{title}}"><i class="fa fa-pencil mr-1"></i>修改名稱</button>
+															<button type="button" class="btn btn-outline-danger btn-sm m-0" onclick="event.stopPropagation(); deleteSetting({{jsattr pickupStoreSettingId}});"><i class="fa fa-trash mr-1"></i>刪除</button>
+														</td>
+													</tr>
+													{{else}}
+													<tr>
+																<td colspan="4" class="text-center text-muted py-4">
+																	目前尚未建立任何自取設定通路，請於左側表單建立。
+																</td>
+															</tr>
+													{{/each}}
+														</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+
+						<!-- 下方區域：在線編輯器 (僅在點擊選取某通路後顯示) -->
+						<div class="row">
+							<div class="col-12 mb-4 d-none" id="editorContainer">
+								<div class="card shadow-sm border-primary">
+									<div
+										class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+										<span class="font-weight-bold" id="editorHeaderTitle">
+											<i class="fa fa-table mr-2"></i>在線門市編輯器
+										</span>
+										<div>
+											<button type="button" id="btnAddRow"
+												class="btn btn-light btn-sm text-dark font-weight-bold mr-2">
+												<i class="fa fa-plus mr-1"></i>新增一行
+											</button>
+											<button type="button" id="btnSaveStores"
+												class="btn btn-success btn-sm font-weight-bold">
+												<i class="fa fa-cloud mr-1"></i>儲存並同步至定位系統
+											</button>
+										</div>
+									</div>
+									<div class="card-body">
+										<!-- 拖曳上傳預覽區 -->
+										<div id="dragDropArea" class="drag-drop-area mb-3">
+											<i class="fa fa-cloud-upload text-primary mb-2"
+												style="font-size: 2.2rem;"></i>
+											<h6 class="font-weight-bold mb-1">拖曳 Excel 檔案至此快速匯入與覆蓋</h6>
+											<p class="text-muted small mb-0">支援檔案格式：.xlsx, .xls。上傳後將進行欄位對應並載入編輯表格。</p>
+											<input type="file" id="fileInput" class="d-none" accept=".xlsx,.xls">
+										</div>
+
+										<!-- 在線表格編輯器 -->
+										<div class="table-responsive">
+											<table class="table table-bordered table-editable table-hover align-middle"
+												id="storesTable">
+												<thead class="thead-light">
+													<tr class="text-center">
+														<th style="width: 50px;">序</th>
+														<th style="width: 150px;">門市代碼</th>
+														<th>門市名稱 <span class="text-danger">*</span></th>
+														<th>詳細自取地址 <span class="text-danger">*</span></th>
+														<th style="width: 100px;">郵遞區號</th>
+													<!--	<th style="width: 120px;">經度 (Lon)</th>
+														<th style="width: 120px;">緯度 (Lat)</th> -->
+														<th style="width: 60px;">操作</th>
+													</tr>
+												</thead>
+												<tbody id="storesTableBody">
+													<!-- 動態填充 -->
+												</tbody>
+											</table>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							<!-- 尚未選擇通路的空白提示狀態 -->
+							<div class="col-12 mb-4" id="emptyEditorPlaceholder">
+								<div class="card shadow-sm py-5 text-center">
+									<div class="card-body">
+										<i class="fa fa-map-o text-muted mb-3" style="font-size: 4rem;"></i>
+										<h5 class="font-weight-bold text-muted">請選擇自取通路設定</h5>
+										<p class="text-muted">點擊上方清單中的「自取通路名稱」即可開啟在線門市編輯器進行編輯、上傳或下載定位門市檔案。</p>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- 欄位對應 Modal -->
+					<div class="modal fade" id="mappingModal" data-backdrop="static" tabindex="-1" role="dialog"
+						aria-labelledby="mappingModalLabel" aria-hidden="true">
+						<div class="modal-dialog modal-dialog-centered" role="document">
+							<div class="modal-content shadow-lg">
+								<div class="modal-header bg-primary text-white text-center">
+									<h5 class="modal-title font-weight-bold w-100" id="mappingModalLabel">
+										<i class="fa fa-exchange mr-2"></i>設定匯入欄位對應
+									</h5>
+								</div>
+								<div class="modal-body">
+									<p class="text-muted small mb-3"><i class="fa fa-info-circle mr-1"></i>系統自動分析了上傳的
+										Excel 欄位，請確認目標資料欄位對應（標示 * 為必填）：</p>
+									<form id="mappingForm" class="px-2">
+										<div class="form-group row align-items-center">
+											<label
+												class="col-sm-4 col-form-label font-weight-bold text-dark text-right">門市名稱
+												<span class="text-danger">*</span></label>
+											<div class="col-sm-8">
+												<select id="mapStoreName" class="form-control required-map"
+													required></select>
+											</div>
+										</div>
+										<div class="form-group row align-items-center">
+											<label
+												class="col-sm-4 col-form-label font-weight-bold text-dark text-right">詳細地址
+												<span class="text-danger">*</span></label>
+											<div class="col-sm-8">
+												<select id="mapAddress" class="form-control required-map"
+													required></select>
+											</div>
+										</div>
+										<div class="form-group row align-items-center mt-3 pt-3 border-top">
+											<label class="col-sm-4 col-form-label text-dark text-right">門市代碼</label>
+											<div class="col-sm-8">
+												<select id="mapStoreCode" class="form-control"></select>
+											</div>
+										</div>
+										<div class="form-group row align-items-center">
+											<label class="col-sm-4 col-form-label text-dark text-right">郵遞區號</label>
+											<div class="col-sm-8">
+												<select id="mapPostalCode" class="form-control"></select>
+											</div>
+										</div>
+										<!-- 
+										<div class="form-group row align-items-center">
+											<label class="col-sm-4 col-form-label text-dark text-right">經度 (Lon)</label>
+											<div class="col-sm-8">
+												<select id="mapLongitude" class="form-control"></select>
+											</div>
+										</div>
+										<div class="form-group row align-items-center">
+											<label class="col-sm-4 col-form-label text-dark text-right">緯度 (Lat)</label>
+											<div class="col-sm-8">
+												<select id="mapLatitude" class="form-control"></select>
+											</div>
+										</div> -->
+									</form>
+								</div>
+								<div class="modal-footer bg-light">
+									<button type="button" class="btn btn-outline-secondary"
+										data-dismiss="modal">取消</button>
+									<button type="button" id="btnConfirmImport"
+										class="btn btn-primary font-weight-bold">
+										<i class="fa fa-check mr-1"></i>開始匯入
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- JS 核心邏輯 -->
+					<script>
+						var ctx = '';
+						var preSelectedId = {{json preSelectedId}};
+					</script>
+					<script src="/backend/PickupStore/list.js"></script>
+				</div>

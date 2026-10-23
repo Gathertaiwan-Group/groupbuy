@@ -1,0 +1,208 @@
+<form name="ShippingCSVForm" method="post" action="/ajax/ShippingCSV/importShippingCSV.do" class="form-horizontal" enctype="multipart/form-data" id="ShippingCSVForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><div class="modal-header">
+				<h5>
+					團購 &raquo;
+					匯入貨運清單</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+			</div>
+			<div class="modal-body">
+				<div class="form-group row">
+					<label class="col-lg-4" for="imageFile">
+						CSV/XLS檔案</label>
+					<div class="col-lg-8">
+						<input type="file" name="imageFile" value="" id="imageFile"></div>
+				</div>
+				<div class="form-group row" id="shippingTag_div">
+					<label class="col-lg-4" for="shippingTag">
+						貨運標籤</label>
+					<div class="col-lg-8">
+						<select name="shippingTag" id="shippingTag" class="form-control"><option value="">選擇</option></select></div>
+				</div>
+				<div class="form-group row" id="shippingProvider_div">
+					<label class="col-lg-4" for="shippingProvider">
+						出貨貨運</label>
+					<div class="col-lg-8">
+						<select name="shippingProvider" id="shippingProvider" class="form-control"><option value="">選擇</option>
+<option value="NONE">未提供</option>
+<option value="HCT">新竹物流</option>
+<option value="BCAT">黑貓宅急便</option>
+<option value="FSDEX">新瑞</option>
+<option value="FSE">全速配</option>
+<option value="ECAN">宅配通</option>
+<option value="SF">順豐</option>
+<option value="KTJ" selected="selected">KTJ大榮</option>
+<option value="KE">KE嘉里快遞</option>
+<option value="MAPLE">台灣便利袋</option>
+<option value="POST">郵局</option>
+<option value="SYLC">祥億貨運</option>
+<option value="CLTC">中連貨運</option>
+<option value="HIYES">新航</option>
+<option value="SLC">山隆</option>
+<option value="TON">同同</option>
+<option value="SE">7-11超商</option>
+<option value="TYING">通盈通運</option>
+<option value="LUCKY">好運袋</option>
+<option value="TC">天成貨運</option>
+<option value="SDE">鑫達</option>
+<option value="JSGO">來速捷</option>
+<option value="CTC">全統物流</option>
+<option value="FAMI">全家</option>
+<option value="WDD">穩達配</option>
+<option value="TEC">台灣快遞</option>
+<option value="RDD">全日</option>
+<option value="ALF">Alfred智能櫃</option>
+<option value="FDX">Fedex</option>
+<option value="FDE">FDE颿達</option>
+<option value="ACE">雅仕物流</option>
+<option value="EGO">易購配</option>
+<option value="SY">生洋物流</option>
+<option value="DHL">DHL</option>
+<option value="YCS">音速物流</option>
+<option value="METE">米特物流</option>
+<option value="JUH">巨航物流</option>
+<option value="MAJI">好馬吉</option>
+<option value="PPP">皮卡物流</option>
+<option value="UCF">華美航運</option>
+<option value="HSIH">喜鴻國際</option>
+<option value="UBG">國陽物流</option>
+<option value="LINEX">宇迅快遞 LINEX</option>
+<option value="GB">全球快遞</option>
+<option value="EGK">大誠物流</option>
+<option value="CARGO">司機親送</option></select></div>
+				</div>
+				<div class="form-group row" id="serialNumberLast8_div">
+					<label class="col-lg-4" for="serialNumberLast8">
+						(*郵局用)「掛號號碼」後8碼</label>
+					<div class="col-lg-8">
+						<input type="text" name="serialNumberLast8" maxlength="255" placeholder="後八碼為：收寄局碼+郵件種類碼" value="" type="text" id="serialNumberLast8" class="form-control"></div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4">
+						包含他團清單</label>
+					<div class="controls col-lg-8">
+						<input type="checkbox" name="includeOthers" value="on" checked="checked" id="includeOthers" class="form-check-input"><label class="form-check-label" for="includeOthers">
+							包含他團清單</label>
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4">
+						發送出貨信</label>
+					<div class="controls col-lg-8">
+						<input type="checkbox" name="sendShippingEmail" value="on" checked="checked" id="sendShippingEmail" class="form-check-input"><label class="form-check-label" for="sendShippingEmail">
+							發送出貨信</label>
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4">標籤為已出貨</label>
+					<div class="controls col-lg-8">
+						<input type="checkbox" name="markGroupBuyShipped" value="on" checked="checked" id="markGroupBuyShipped" class="form-check-input"><label class="form-check-label"
+							for="markGroupBuyShipped">當「已結團」且匯入完成後「無可出貨訂單」時，將此團標籤為「已出完貨」</label>
+					</div>
+				</div>
+				<div class="form-group row" id="actionWhenExists_div">
+					<label class="col-lg-4" for="actionWhenExists">
+						訂單已存在查貨單號時</label>
+					<div class="col-lg-8">
+						<select name="actionWhenExists" id="actionWhenExists" class="form-control"><option value="NONE" selected="selected">略過不處理</option>
+<option value="OVERWRITE">覆蓋原查貨單號(不發信通知)</option>
+<option value="RESEND">覆蓋原查貨單號(並發信通知)</option></select></div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4" for="columnShippingReceiptNumber">
+						匯入貨運表-貨運編號標頭名稱</label>
+					<div class="controls col-lg-8">
+						<input type="text" name="columnShippingReceiptNumber" placeholder="範例:十碼貨號" value="" type="text" id="columnShippingReceiptNumber" class="form-control"></div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4" for="columnUuid">
+						匯入貨運表-訂單編號標頭名稱</label>
+					<div class="controls col-lg-8">
+						<input type="text" name="columnUuid" placeholder="範例:訂單編號" value="" type="text" id="columnUuid" class="form-control"></div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4" for="columnDateShipped">
+						匯入貨運表-出貨日期標頭名稱</label>
+					<div class="controls col-lg-8">
+						<input type="text" name="columnDateShipped" placeholder="範例:出貨日期" value="" type="text" id="columnDateShipped" class="form-control"><div class="field-info">
+							Excel支援日期格式為：2019-09-11, 2019/09/11, 20190911</div>
+					</div>
+				</div>
+				<div class="form-group row">
+					<label class="col-lg-4" for="columnShippingProvider">
+						出貨貨運 標頭名稱
+					</label>
+					<div class="controls col-lg-8">
+						<input type="text" name="columnShippingProvider" placeholder="範例: 貨運商代碼" value="" type="text" id="columnShippingProvider" class="form-control"></div>
+				</div>
+
+				<div class="form-group row">
+					<label class="col-lg-4" for="dateShipped">
+						指定出貨日期</label>
+					<div class="controls col-lg-8">
+						<input type="text" name="dateShipped" placeholder="範例:2019-09-11" value="" type="text" id="dateShipped" class="form-control"><div class="field-info">
+							出貨日期匯入規則：<br>優先使用Excel內出貨日期欄位<br>當Excel檔案內沒有提供出貨日期時，可指定出貨日期。<br>無指定時，將會使用今日日期當作出貨日期。</div>
+					</div>
+				</div>
+			</div> <!-- modal-body -->
+
+			<script type="text/javascript">
+				$(function () {
+					$('#dateShipped').datetimepicker({ format: "YYYY-MM-DD" });
+				});
+			</script><div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="上傳" />
+	</div>
+</form><script>
+var showLast8 = function() {
+	if ($('select[name=shippingProvider]').val() == 'POST') {
+		$('#serialNumberLast8_div').show();
+	} else {
+		$('#serialNumberLast8_div').hide();
+	}
+}
+
+var loadShippingTag = function(wh) {
+	$('input[name=columnShippingReceiptNumber]').val(wh.salesOrderShippingReceiptNumber);
+	$('input[name=columnUuid]').val(wh.salesOrderUuid);
+	$('input[name=columnDateShipped]').val(wh.salesOrderDateShipped);
+	$('input[name=columnShippingProvider]').val(wh.shippingProviderCode);
+}	
+var load = function() {
+	shippingTag = $('select[name=shippingTag]').val();
+	jQuery.get(
+			'{{baseUrl}}/ajax/ShippingTag/getByTag.do',
+			{
+				'tag':shippingTag
+			},
+			function(data) {
+				json = data.data;
+				loadShippingTag(json);
+			}
+			).fail(function(data) {
+				json = data.responseJSON;
+				$('#ShippingCSVForm .modal-message').show();
+				$('#ShippingCSVForm .modal-message-alert-text').html(json.error);
+			});
+}
+
+$('#serialNumberLast8_div').hide();
+$(document).ready(function() {
+	initAjaxForm('ShippingCSVForm',
+			json=>{
+				//var html = '<span class="alert alert-success p-1 m-0 mr-2">'+json.error+'</span>'
+				var html = '<div class="card"><div class="card-header">匯入結果</div><div class="card-body">'+json.error+'</div></div>'
+				$('#ShippingCSVForm .modal-body').html(html);
+				$('#ShippingCSVForm .modal-footer input').hide();
+			});
+	
+	$('select[name=shippingProvider]').on('change', function() {
+		showLast8();
+	}).trigger('change');
+	$('select[name=shippingTag]').on('change', function() {
+		load();
+	}).trigger('change');
+});
+</script>
