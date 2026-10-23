@@ -127,6 +127,11 @@ async function redeemCoupon(ctx: RequestContext): Promise<Response> {
   if (row.customer_id && cc.customer && Number(row.customer_id) !== cc.customer.customer.id) return json({ error: "此優惠碼不適用於您的帳號" });
   await saveCheckout(cc.cart!, { coupons: [code] });
   const built = await buildCartData(cc);
+  if (!built.pricing.coupons.some((c) => c.code === code)) {
+    // 引擎判定目前購物袋不能套用（未達門檻、不可與其他優惠合併…）：不保留這組碼，回原因
+    await saveCheckout(cc.cart!, { coupons: [] });
+    return json({ error: built.pricing.couponNotes.find((n) => n && !n.startsWith("符合贈品") && !n.startsWith("可選贈品")) || "目前購物袋不符合此優惠碼的使用條件" });
+  }
   return json({ code: 200, data: { ...built.data, coupons: [{ title: String(gc.title ?? code) }] } });
 }
 

@@ -1,10 +1,11 @@
 // storefront 計價（伺服器端唯一可信的金額來源；購物袋顯示與建立訂單都呼叫這裡，絕不採用前端送來的金額）。
 // orders 模組可 import（只讀依賴）：priceCart()、型別 PricingInput / PricingResult。
 //
-// 運費正式版由 shipping 模組提供（lib/modules/shipping/shipping-fee.ts）、優惠正式版由 marketing 模組提供
-// （lib/modules/marketing/pricing-rules.ts）。兩者尚未推上 main 前，使用本檔的降級實作（fallback*），
-// 介面固定在 ShippingFeeProvider / PricingRulesProvider，正式版推上後只換 provider。
+// 優惠：marketing 模組正式版（pricing-marketing.ts 包裝 marketing 的 pricing-loader + evaluatePricing）。
+// 運費：shipping 模組尚無運費計算正式版，使用本檔的 fallbackShippingFee。
+// fallbackPricingRules 保留作為對照／緊急切回用（setPricingProviders）。
 import { getServiceClient } from "@/lib/supabase/server";
+import { marketingPricingRules } from "./pricing-marketing";
 import type { SfGroupBuy } from "./site";
 
 // ───────────────────────── 型別 ─────────────────────────
@@ -137,7 +138,20 @@ export interface PricingRulesProvider {
     lines: PricingLine[];
     couponCodes: string[];
     customerId: number | null;
-  }): Promise<{ salesRules: AppliedSalesRule[]; coupons: AppliedCoupon[]; lineDiscounts: Map<string, number>; couponNotes: string[] }>;
+    /** 收件郵遞區號（限定郵遞區號類優惠用） */
+    postcode?: string;
+  }): Promise<{
+    salesRules: AppliedSalesRule[];
+    coupons: AppliedCoupon[];
+    lineDiscounts: Map<string, number>;
+    couponNotes: string[];
+    /** 優惠條件／優惠卷達成免運 */
+    freeShipping?: boolean;
+    /** 限制類優惠（例如未達最低購買條件）不允許結帳時的原因 */
+    blockers?: string[];
+    /** 符合的贈品（目前僅顯示提示，尚未自動加入購物袋） */
+    giftNotes?: string[];
+  }>;
 }
 
 const num = (v: unknown, d = 0): number => {
@@ -422,12 +436,9 @@ export const fallbackPricingRules: PricingRulesProvider = {
 };
 
 // ───────────────────────── provider 切換點 ─────────────────────────
-// TODO(storefront)：shipping / marketing 推上正式版後，改成：
-//   import { ... } from "@/lib/modules/shipping/shipping-fee";
-//   import { ... } from "@/lib/modules/marketing/pricing-rules";
-// 並在這裡包成 ShippingFeeProvider / PricingRulesProvider。
+// 運費：shipping 模組推出運費計算正式版後，在這裡包成 ShippingFeeProvider 換掉 fallbackShippingFee。
 let shippingProvider: ShippingFeeProvider = fallbackShippingFee;
-let rulesProvider: PricingRulesProvider = fallbackPricingRules;
+let rulesProvider: PricingRulesProvider = marketingPricingRules;
 export function setPricingProviders(p: { shipping?: ShippingFeeProvider; rules?: PricingRulesProvider }): void {
   if (p.shipping) shippingProvider = p.shipping;
   if (p.rules) rulesProvider = p.rules;
@@ -444,13 +455,14 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     lines,
     couponCodes: input.couponCodes,
     customerId: input.customerId,
+    postcode: input.shippingAddress.postcode,
   });
   const ruleDiscount = applied.salesRules.reduce((s, r) => s + r.discount, 0);
   const couponDiscount = applied.coupons.reduce((s, c) => s + c.discount, 0);
   const totalDiscount = Math.min(subtotal, ruleDiscount + couponDiscount);
   const grandTotalWithoutShipping = Math.max(0, subtotal - totalDiscount);
   const rules = preloaded?.rules ?? (await loadGroupBuyShippingRules(input.tenantId, input.groupBuy.id));
-  const shipping = await shippingProvider.quote({
+  const quoted = await shippingProvider.quote({
     tenantId: input.tenantId,
     groupBuy: input.groupBuy,
     rules,
@@ -460,6 +472,7 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     paymentMethod: input.paymentMethod,
     address: input.shippingAddress,
   });
+  const shipping: ShippingQuote = applied.freeShipping ? { ...quoted, shippingAmount: 0, amountToFreeShipping: null } : quoted;
   const taxRate = num(input.groupBuy.tax_rate);
   const tax = taxRate > 0 ? round((grandTotalWithoutShipping * taxRate) / 100) : 0;
   const grandTotal = grandTotalWithoutShipping + shipping.shippingAmount + shipping.codFee + tax;
@@ -475,7 +488,7 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     tax,
     grandTotal,
     totalPieces,
-    couponNotes: applied.couponNotes,
-    errors: [],
+    couponNotes: [...applied.couponNotes, ...(applied.giftNotes ?? [])],
+    errors: applied.blockers ?? [],
   };
 }

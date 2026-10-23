@@ -326,7 +326,7 @@ export async function buildCartData(
     },
     { rules: cc.rules },
   );
-  const errors = [...(extra.errors ?? []), ...issues];
+  const errors = [...(extra.errors ?? []), ...issues, ...pricing.errors];
   if (extra.consumeFlash !== false && checkout.flashErrors?.length && cc.cart) {
     errors.unshift(...checkout.flashErrors);
     await saveCheckout(cc.cart, { flashErrors: [] });
@@ -385,7 +385,7 @@ export async function buildCartData(
       htmlNote: blocked ? blocked : "",
       targetItemSetId: 0,
       disableCheckout: !!blocked,
-      note: "",
+      note: pricing.couponNotes.join("<br>"),
     },
     gbfrss: opts,
     paymentMethods: pm.available,

@@ -16,6 +16,8 @@ import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext
 import { saveCheckout, type AddressDraft } from "./cart-store";
 import { ipOf, isEmail, isPhone, rateLimit } from "./guard";
 import { grantOrderView } from "./order-grant";
+import { appendBlacklistLog, findBlacklistMatch } from "@/lib/modules/marketing/blacklist";
+import { syncCouponTotals } from "@/lib/modules/marketing/pricing-loader";
 
 const NA = (v: string | undefined) => {
   const t = String(v ?? "").trim();
@@ -172,27 +174,26 @@ function paymentDue(gb: SfGroupBuy, pm: number): string | null {
   return new Date(base + days * 86400_000).toISOString();
 }
 
-type BlacklistHit = { id: number; type: string; note: string | null };
+type BlacklistHit = { id: number; type: string };
 
-async function blacklistHit(tenantId: number, ip: string, phones: string[], emails: string[]): Promise<BlacklistHit | null> {
-  const { data } = await getServiceClient().from("blacklists").select("id, type, telephone, email, ip, note").eq("tenant_id", tenantId).limit(2000);
-  const digits = (x: string | null | undefined) => String(x ?? "").replace(/\D/g, "");
-  const ph = new Set(phones.map(digits).filter((x) => x.length >= 6));
-  const em = new Set(emails.map((e) => e.toLowerCase()).filter(Boolean));
-  for (const r of (data ?? []) as { id: number; type: string; telephone: string | null; email: string | null; ip: string | null; note: string | null }[]) {
-    if ((r.telephone && ph.has(digits(r.telephone))) || (r.email && em.has(r.email.toLowerCase())) || (r.ip && r.ip.trim() === ip)) {
-      return { id: r.id, type: r.type, note: r.note };
-    }
+/** 黑名單：電話／Email 以 marketing 的 findBlacklistMatch 比對（訂購人、收件人各查一次）；IP 由本模組補查 */
+async function blacklistHit(tenantId: number, ip: string, contacts: { telephone?: string | null; email?: string | null }[]): Promise<BlacklistHit | null> {
+  const db = getServiceClient();
+  for (const c of contacts) {
+    if (!c.telephone && !c.email) continue;
+    const m = await findBlacklistMatch(db, tenantId, c);
+    if (m) return { id: m.blacklistId, type: m.type };
+  }
+  if (ip) {
+    const { data } = await db.from("blacklists").select("id, type").eq("tenant_id", tenantId).eq("ip", ip).limit(1).maybeSingle();
+    const r = data as { id: number; type: string } | null;
+    if (r) return { id: r.id, type: r.type };
   }
   return null;
 }
 
 async function logBlacklist(tenantId: number, hit: BlacklistHit, line: string): Promise<void> {
-  const db = getServiceClient();
-  const { data } = await db.from("blacklists").select("log").eq("id", hit.id).eq("tenant_id", tenantId).maybeSingle();
-  const prev = String((data as { log: string | null } | null)?.log ?? "");
-  const next = `${prev}${prev ? "\n" : ""}${new Date().toISOString()} ${line}`.slice(-4000);
-  await db.from("blacklists").update({ log: next }).eq("id", hit.id).eq("tenant_id", tenantId);
+  await appendBlacklistLog(getServiceClient(), tenantId, hit.id, line);
 }
 
 function orderItemsOf(gb: SfGroupBuy, lines: CartLine[], lineDiscounts: Map<string, number>) {
@@ -300,7 +301,10 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   if (err) return fail(cc, err);
 
   // 3) 黑名單
-  const hit = await blacklistHit(tenant.id, ip, [billing.telephone ?? "", shipping.telephone ?? ""], [billing.email ?? "", shipping.email ?? ""]);
+  const hit = await blacklistHit(tenant.id, ip, [
+    { telephone: billing.telephone, email: billing.email },
+    { telephone: shipping.telephone, email: shipping.email },
+  ]);
   if (hit && hit.type === "SILENT_BLOCK") {
     await logBlacklist(tenant.id, hit, `靜默封鎖：攔下訂單（${gb.short_url}，${built.pricing.grandTotal} 元，IP ${ip}）`);
     // 假下單：清空購物袋、顯示已送出，但不建立訂單
@@ -378,7 +382,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     cvs_store_name: isCvs ? f.get("cvsStoreName").replace(/[<>]/g, "").slice(0, 100) : null,
     cvs_address: isCvs ? f.get("cvsAddress").replace(/[<>]/g, "").slice(0, 200) : null,
     preferred_delivery_dates: shipping.preferredDeliveryDates || null,
-    blacklist_note: hit && hit.type === "BLOCK_PAYMENT" ? `黑名單（可下單但無法付款）${hit.note ? "：" + hit.note : ""}`.slice(0, 500) : null,
+    blacklist_note: hit && hit.type === "BLOCK_PAYMENT" ? "黑名單（可下單但無法付款）" : null,
   };
   const stock = new Map<number, { itemId: number; qty: number; backOrderQty: number }>();
   for (const l of lines) {
@@ -387,7 +391,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     e.backOrderQty += l.backOrderQty;
     stock.set(l.item.stockOwnerId, e);
   }
-  const usedCoupons = p.coupons.filter((c) => c.discount > 0);
+  const usedCoupons = p.coupons;
   const payload = {
     tenantId: tenant.id,
     cartId: cc.cart!.id,
@@ -417,6 +421,10 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   }
   const result = data as { salesOrderId: number; uuid: string };
   if (hit) await logBlacklist(tenant.id, hit, `可下單但無法付款：訂單 ${result.uuid}（IP ${ip}）`);
+  // 折扣碼使用次數已在 sf_place_order 交易內原子遞增；這裡同步優惠卷的總數／已使用／可用數（marketing）
+  for (const gcId of new Set(usedCoupons.map((c) => c.groupBuyCouponId))) {
+    await syncCouponTotals(getServiceClient(), tenant.id, gcId).catch((e) => console.warn("[storefront] 同步優惠卷總數失敗", e));
+  }
 
   // 6) 訂單成立通知信（未串接 Email：只寫紀錄）
   const to = String(order.customer_email ?? "");
