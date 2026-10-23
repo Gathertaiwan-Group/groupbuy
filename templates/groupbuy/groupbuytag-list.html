@@ -1,0 +1,135 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	
+var appendExtra = function (d) {
+	var dd = '';
+	$('input[name=royaltyProgramId]:checked').each(function(i,obj) {
+		if (i == 0) {
+			dd += $(obj).val();
+		} else {
+			dd += ',' + $(obj).val();
+		}
+	});
+	d.royaltyProgramIds = dd;
+	d.royaltyProgramId = $('input[name=royaltyProgramId]:checked').map(function() {return $(this).val();}).toArray();
+	return d;
+}
+
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":20,
+	} );
+	$(document).ready(function() {
+		
+		var tableName = '#rpTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyTag/save.do?groupBuyAccount={{tenantCode}}'
+				},
+				edit: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyTag/update.do?groupBuyTagId=_id_'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyTag/delete.do?groupBuyTagId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'groupBuyTagId',
+			fields: [
+					DataTableConfig.field_input_f('標籤','tag'),
+					DataTableConfig.field_select('標籤用途','category'),
+					DataTableConfig.field_select2('團購設定來源:','groupBuyId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/groupBuy', false),
+			],
+			//template: '#custom_rp_form',
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			scrollX:true,
+			ajax: {
+				url:'{{baseUrl}}/ajax/GroupBuyTag/list.do',
+				type: "POST",
+				data: function ( d ) {
+					appendExtra(d);
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('tag'),
+				DataTableConfig.data_select('category'),
+				{ data: 'groupBuyId',
+					render: function ( data, type, row ) {
+						return row.groupBuyTitle;
+					} },
+				{
+					data:null,
+					'class':'inline-disabled',
+					orderable:false,
+					render: function ( data, type, row ) {
+						var html = '<button class="btn btn-default text-nowrap" data-action="groupBuyTagGroupBuys">套用中團購</button>'
+						return html;
+					}
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 1, "asc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit',   editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+		
+		DataTableHelper.initEditorOnCallback(table,editor);
+		DataTableHelper.inlineModePlugin(table);
+		DataTableHelper.injectInline(table,editor);
+		$('.filters').on('change', function() {
+			table.clear().ajax.reload();
+		});
+		
+		$(tableName +' tbody').on('click', 'button', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var groupBuyTagId = row.data().groupBuyTagId;
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+			
+			switch (action) {
+			case 'groupBuyTagGroupBuys':
+				window.location = '/backend/GroupBuyTagGroupBuy/list?groupBuyTagId=' + groupBuyTagId;
+				break;
+			}
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">團購標籤</div>
+<div class="card-body">
+	<table id="rpTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>標籤</th>
+				<th>標籤用途</th>
+				<th>團購設定來源</th>
+				<th></th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

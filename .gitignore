@@ -16,3 +16,4 @@ spec/
 .worktrees/
 # 本機憑證筆記
 *.local.md
+.next-build/

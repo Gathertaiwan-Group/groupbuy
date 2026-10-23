@@ -1,0 +1,81 @@
+{{!-- 套用中團購（/backend/GroupBuyTagGroupBuy/list?groupBuyTagId=）：原站畫面未擷取（無標籤資料），依團購標籤頁風格推導 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":20,
+	} );
+	$(document).ready(function() {
+		
+		var tableName = '#rpTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyTagGroupBuy/save.do?groupBuyTagId={{groupBuyTagId}}'
+				},
+				remove: {
+					type: 'POST',
+					url:  '{{baseUrl}}/ajax/GroupBuyTagGroupBuy/delete.do?groupBuyTagGroupBuyId=_id_'
+				}
+			},
+			table: tableName,
+			idSrc: 'groupBuyTagGroupBuyId',
+			fields: [
+					DataTableConfig.field_hidden('groupBuyTagId', {{json groupBuyTagId}}),
+					DataTableConfig.field_select2('團購:','groupBuyId','','選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/groupBuy', false),
+			],
+			formOptions:DataTableConfig.formOptions,
+			i18n:DataTableConfig.i18n,
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			scrollX:true,
+			ajax: {
+				url:'{{baseUrl}}/ajax/GroupBuyTagGroupBuy/list.do?groupBuyTagId={{groupBuyTagId}}',
+				type: "POST"
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				DataTableConfig.data_select_checkbox,
+				{ data: 'groupBuyTitle',
+					render: function ( data, type, row ) {
+						if (type !== 'display') return data;
+						return '<a href="/backend/GroupBuyPreference/list?groupBuyId=' + row.groupBuyId + '">' + $('<div>').text(data || '').html() + '</a>';
+					} },
+				{ data: 'shortUrl', defaultContent: '' },
+				{ data: 'dateCreatedString', defaultContent: '' },
+			],
+			"order": [[ 3, "desc" ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'remove', editor: editor, className:'btn-danger' },
+			],
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+		
+		DataTableHelper.initEditorOnCallback(table,editor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header"><a href="/backend/GroupBuyTag/list">團購標籤</a> / 套用中團購：{{tag}}</div>
+<div class="card-body">
+	<table id="rpTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>團購</th>
+				<th>短網址</th>
+				<th>套用時間</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

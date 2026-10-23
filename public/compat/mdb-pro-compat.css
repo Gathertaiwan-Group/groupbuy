@@ -183,3 +183,12 @@
 #toast-container .md-toast-info { background-color: #33b5e5; }
 #toast-container .md-toast-warning { background-color: #fb3; }
 #toast-container .md-toast-progress { position: absolute; left: 0; bottom: 0; height: 4px; background-color: #000; opacity: 0.4; }
+
+/* ── 按鈕群組切換（原站 data-toggle="buttons"，例：一般模式／行內編輯模式）──
+   MDB PRO 會把 .btn 內的 radio/checkbox 隱藏；Bootstrap 4 只對 .btn-group-toggle 做 */
+.btn-group[data-toggle="buttons"] > .btn input[type="radio"],
+.btn-group[data-toggle="buttons"] > .btn input[type="checkbox"] {
+  position: absolute;
+  clip: rect(0, 0, 0, 0);
+  pointer-events: none;
+}

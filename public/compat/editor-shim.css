@@ -7,11 +7,9 @@
 /* ── 主表單（bootstrap modal）────────────────────────────── */
 div.DTED .modal-dialog { position: relative; }
 div.DTE.modal-content { position: relative; }
-div.DTE div.DTE_Header { position: relative; }
+/* 注意：不要替 .DTE_Body 設 position（原站頁面 .modal-dialog-quickMenu .modal-body 用 absolute 撐滿高度） */
 div.DTE div.DTE_Header .close { font-weight: 400; }
 div.DTE div.DTE_Header_Content { font-weight: 300; }
-div.DTE div.DTE_Body { position: relative; }
-div.DTE div.DTE_Body_Content { position: relative; }
 div.DTE.DTE_Action_Remove div.DTE_Body_Content > form { display: none; }
 
 /* quickMenu（原站 DataTableHelper.initEditorOnCallback 加的 class）時頁尾貼齊底部 */

@@ -10,7 +10,10 @@
 // 模板以 fs 讀取（next.config.mjs 已把 templates/** 加入 Vercel 函式檔案追蹤），正式環境快取編譯結果。
 import fs from "node:fs";
 import path from "node:path";
-import Handlebars from "handlebars";
+import type HandlebarsNS from "handlebars";
+// 直接載入 CJS 版本（handlebars 的 node 入口會註冊 require.extensions，webpack 會警告）
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const Handlebars: typeof HandlebarsNS = require("handlebars/dist/cjs/handlebars");
 
 const TEMPLATE_ROOT = path.join(process.cwd(), "templates");
 const isProd = process.env.NODE_ENV === "production";
