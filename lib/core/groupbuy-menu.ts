@@ -26,7 +26,17 @@ export async function loadGroupBuyMenu(session: AdminSession, groupBuyId: number
   return {
     groupBuyId: data.id,
     title: data.title ?? "",
-    shortUrl: data.short_url ?? "",
+    shortUrl: safeShortUrl(data.short_url),
     reportToken: groupBuyReportToken(data),
   };
+}
+
+/**
+ * 側欄「賣場網址」會把短網址交給原站 GBAPI.showShortUrl，它直接把值串進彈窗 HTML（value="…"、href="…"）。
+ * 短網址正常是 5 碼英數（groupbuy 模組自動配發）；萬一資料庫裡有其他字元，先做 URL 編碼（" < > & 空白都會被編碼），
+ * 讓它無法跳出 HTML 屬性。
+ */
+function safeShortUrl(v: string | null): string {
+  const s = v ?? "";
+  return /^[A-Za-z0-9_-]*$/.test(s) ? s : encodeURIComponent(s);
 }
