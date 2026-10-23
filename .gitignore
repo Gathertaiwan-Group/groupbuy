@@ -9,3 +9,10 @@ next-env.d.ts
 .env
 .env.*
 !.env.example
+
+# 原站擷取規格（含原始資源，僅本機）
+spec/
+# agent 工作樹
+.worktrees/
+# 本機憑證筆記
+*.local.md
