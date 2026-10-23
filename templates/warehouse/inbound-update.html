@@ -165,6 +165,11 @@ var inboundItemTable;
 		});
 		$('#ibReceive').on('click', function () {
 			var $btn = $(this);
+			if (itemEditor.display()) {
+				itemEditor.blur();
+				modalShowDanger($modal, '請先完成商品編輯，再按[確認入庫]');
+				return;
+			}
 			if (!inboundItemTable.data().count()) { modalShowDanger($modal, '請先加入入庫商品'); return; }
 			if (!confirm('確認入庫？入庫後庫存會增加，且不可再修改入庫商品。')) return;
 			btnStartLoading($btn);

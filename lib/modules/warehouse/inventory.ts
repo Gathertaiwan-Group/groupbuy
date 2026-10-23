@@ -10,7 +10,7 @@
 //   GET  /ajax/Item/addStock?itemId=&stock=&name=             盤點數量確認 → 增減所選倉庫庫存（交易函式 wms_adjust_stock，並建立盤點單紀錄）
 //   GET  /ajax/Item/archiveAndSync?itemId=1,2                 盤點所選倉庫（已出貨歸檔＋同步，wms_archive_and_sync）
 //   GET  /ajax/wms/WarehouseInventory/queryUnarchivedOrders   未盤點訂單清單
-//   GET  /ajax/wms/WarehouseInventory/markArchived?uuid=      設為已盤點
+//   POST /ajax/wms/WarehouseInventory/markArchived           設為已盤點（salesOrderId 或 uuid）
 //   POST /ajax/wms/WarehouseInventory/download                匯出（uids）
 //   POST /ajax/Item/getWarehouseItems                         倉儲商品列表（頁面中已註解的 #invTable）
 import ExcelJS from "exceljs";
@@ -249,9 +249,9 @@ async function loadItems(ctx: RequestContext): Promise<Response> {
     const errors: { name: string; status: string }[] = [];
     const uploadKey = String(v.uploadFile ?? "");
     const uploadId = toInt(uploadKey.split("/")[0]);
-    const uidCol = toInt(v.uidCol);
-    const stockCol = toInt(v.stockCol);
-    const boCol = v.stockBackOrderCol === undefined || v.stockBackOrderCol === "" ? null : toInt(v.stockBackOrderCol);
+    const uidCol = colIndex(v.uidCol);
+    const stockCol = colIndex(v.stockCol);
+    const boCol = v.stockBackOrderCol === undefined || v.stockBackOrderCol === "" ? null : colIndex(v.stockBackOrderCol);
     if (!uploadId) errors.push({ name: "uploadFile", status: "請先上傳庫存檔案" });
     if (uidCol === null) errors.push({ name: "uidCol", status: "需要選擇一個欄位" });
     if (stockCol === null) errors.push({ name: "stockCol", status: "需要選擇一個欄位" });
@@ -295,6 +295,17 @@ function colName(i: number): string {
     n = Math.floor((n - 1) / 26);
   }
   return s;
+}
+
+/** 欄位字母（A、B…AA）或 0 起算數字 → 0 起算欄位索引 */
+function colIndex(v: unknown): number | null {
+  const s = String(v ?? "").trim().toUpperCase();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s);
+  if (!/^[A-Z]{1,3}$/.test(s)) return null;
+  let n = 0;
+  for (const ch of s) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
 }
 
 function cellText(v: unknown): string {
@@ -364,7 +375,8 @@ async function uploadForLoadItems(ctx: RequestContext): Promise<Response> {
   if (error || !saved) throw new Error(`[wms inv upload] ${error?.message}`);
   const id = `${(saved as AnyRow).id}/${file.name}`;
   const width = Math.max(header.length, ...data.slice(0, 50).map((r) => r.length));
-  const options = Array.from({ length: width }, (_, i) => ({ label: `${colName(i)}: ${header[i] ?? ""}`, value: i }));
+  // 選項值用欄位字母（A、B…）：inventory.js 的 preSubmit 以 !field.val() 檢查必選，值不可為 0
+  const options = Array.from({ length: width }, (_, i) => ({ label: `${colName(i)}: ${header[i] ?? ""}`, value: colName(i) }));
   return json({ upload: { id }, files: { files: { [id]: { filename: file.name, id } } }, data: options });
 }
 
@@ -436,11 +448,11 @@ async function queryUnarchivedOrders(ctx: RequestContext): Promise<Response> {
     .eq("back_order", backOrder)
     .limit(500);
   if (error) throw new Error(`[wms inv orders] ${error.message}`);
-  const byOrder = new Map<string, { qty: number; states: Set<string>; orderState: string; name: string }>();
+  const byOrder = new Map<string, { id: number; qty: number; states: Set<string>; orderState: string; name: string }>();
   for (const r of (data ?? []) as AnyRow[]) {
     const so = r.sales_orders as AnyRow;
     if (!so || ["DRAFT", "CANCELED", "DELETED", "COMBINED", "SPLITED"].includes(String(so.state))) continue;
-    const cur = byOrder.get(so.uuid) ?? { qty: 0, states: new Set<string>(), orderState: String(so.state), name: String(so.customer_firstname ?? "") };
+    const cur = byOrder.get(so.uuid) ?? { id: Number(r.sales_order_id), qty: 0, states: new Set<string>(), orderState: String(so.state), name: String(so.customer_firstname ?? "") };
     cur.qty += Number(r.total ?? 0);
     cur.states.add(String(r.state));
     byOrder.set(so.uuid, cur);
@@ -450,17 +462,21 @@ async function queryUnarchivedOrders(ctx: RequestContext): Promise<Response> {
     const labels: string[] = [];
     for (const s of o.states) labels.push(await enumLabel("OrderItem.state", s));
     const name = o.name ? `｜${o.name}` : "";
-    out.push({ label: `訂單 ${uuid}${name}｜${labels.join("/")}｜數量 ${o.qty}`, value: uuid });
+    // value＝訂單 id：inventory.js 以它呼叫 orders 模組的 /ajax/SalesOrder/cancelOrder（參數 salesOrderId）與 markArchived
+    out.push({ label: `訂單 ${uuid}${name}｜${labels.join("/")}｜數量 ${o.qty}`, value: String(o.id) });
   }
   return json({ code: 200, data: out });
 }
 
 async function markArchived(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
+  const salesOrderId = toInt(await ctx.param("salesOrderId"));
   const uuid = String((await ctx.param("uuid")) ?? "").trim();
-  if (!uuid) throw badRequest("缺少訂單編號");
+  if (!salesOrderId && !uuid) throw badRequest("缺少訂單");
   const client = db();
-  const { data: so } = await client.from("sales_orders").select("id").eq("tenant_id", session.tenantId).eq("uuid", uuid).maybeSingle();
+  let soq = client.from("sales_orders").select("id").eq("tenant_id", session.tenantId);
+  soq = salesOrderId ? soq.eq("id", salesOrderId) : soq.eq("uuid", uuid);
+  const { data: so } = await soq.maybeSingle();
   if (!so) throw badRequest("找不到訂單");
   // 只標註倉儲商品（含共用庫存的子商品）
   const { data: ois } = await client

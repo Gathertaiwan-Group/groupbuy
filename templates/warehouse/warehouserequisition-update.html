@@ -221,6 +221,11 @@
 	$modal.find('[data-wr-action]').on('click', function () {
 		var $btn = $(this);
 		var act = $btn.attr('data-wr-action');
+		if (itemEditor.display()) {
+			itemEditor.blur();
+			modalShowDanger($modal, '請先完成商品編輯');
+			return;
+		}
 		var data = { warehouseRequisitionId: warehouseRequisitionId };
 		if (act == 'transfer') {
 			var ok = true;

@@ -866,7 +866,7 @@ var inventoryManager = {
 		jQuery.post(
 			GBF.baseUrl+'/ajax/SalesOrder/cancelOrder',
 			{
-				'uuid':uuid
+				'salesOrderId':uuid
 			},
 			function(data) {
 				$btn.parent().html('已取消')
@@ -885,7 +885,7 @@ var inventoryManager = {
 		jQuery.post(
 			GBF.baseUrl+'/ajax/wms/WarehouseInventory/markArchived',
 			{
-				'uuid':uuid
+				'salesOrderId':uuid
 			},
 			function(data) {
 				$btn.parent().html('已盤點')
