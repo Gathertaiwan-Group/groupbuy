@@ -174,6 +174,24 @@ fragment("/backend/GroupBuy/clone", {
 
 片段模板就是原站 `spec/html/modal-*.html` 的內容（不需要 `<!--#…-->` 分段）。範例：`templates/core/change-password.html`、`templates/core/system-notification-list.html`。
 
+### 3.5 前台整頁（storefront）
+
+前台不套後台版面殼：模板是完整 HTML（由 `spec/html/fe-*.html` 清理），直接渲染回傳。
+
+```ts
+import { get } from "@/lib/core/http/route-helpers";
+import { renderTemplate } from "@/lib/core/render/template";
+import { commonVars } from "@/lib/core/render/vars";
+import { html } from "@/lib/core/http/responses";
+
+get("/:shortUrl", async (ctx) => {
+  // 依 ctx.params.shortUrl 查團購（以該團購的 tenant_id 過濾後續所有查詢）
+  return html(renderTemplate("storefront/form.html", { ...commonVars(ctx), /* … */ }));
+}, { auth: "optional", priority: 1000 });   // optional：後台登入者可帶 ?preview=true 預覽
+```
+
+前台會員登入（`/ajax/web/Customer/*`）、購物車等由 storefront 自行實作（datamodel 已有 `customer_sessions` 等表）。前台用到的 MDB PRO 元件（`mdb-autocomplete`、`chip`、`#mdb-preloader`、lightbox、stepper…）見 §8.2。
+
 ---
 
 ## 4. 新增 AJAX 端點
@@ -281,6 +299,7 @@ export const routes = [
 - 原站 JSON 鍵 ↔ DB 欄位：`lib/db/entities/*.ts` + `rowToApi` / `apiToRow` / `rowToApiDeep` / `selectWithRelations`（`lib/db/mapping.ts`）；推導鍵見 `lib/db/derived*.ts`；關聯見 `lib/db/relations.ts`。缺實體或欄位 → 找 datamodel（或在自己的 migration 區段補，並通知 datamodel）。
 - 日期：原站字串格式 `YYYY-MM-DD HH:mm`（台灣時間）。`rowToApi` 已處理 `*String` 鍵；手動時用 `lib/core/time.ts` 的 `taipeiDateTime` / `taipeiDate`。`dateModified` 為毫秒數字。
 - 不要在 build 階段連 DB（route handler 都是 dynamic，沒問題；不要在模組頂層 await 查詢）。
+- 匯出 Excel：已安裝 `exceljs`（MIT）；產生後用 `download(buffer, '檔名.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')`。CSV 解析已安裝 `papaparse`；台灣銀行/物流 CSV 常是 Big5：`new TextDecoder('big5').decode(buf)`。前端 DataTables `excel` 按鈕（jszip）照原站即可，不需後端。
 - 上傳：圖片走 core 的 `/json/uploadImage/:dir`（Editor upload 欄位、CKEditor4/5 已自動導向）；程式內可用 `storeUpload(ctx, file)`（`lib/modules/core/upload-api.ts`）。檔案存 Supabase Storage bucket `groupbuy-uploads`，前端以 `/upload/images/<id>` 顯示。**Vercel 請求上限 4.5MB**：影片等大檔請用 Storage 簽名直傳（需要時向 core 提出）。
 
 ---
