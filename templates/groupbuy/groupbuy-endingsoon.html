@@ -379,6 +379,12 @@ $(document).ready(function() {
 		},
 	} );
 
+	// 放進 on*="…" 屬性的 JS 值：同伺服器端 jsattr helper（JSON 字面值再做 HTML escape），避免字串拼接造成注入
+	var jsattr = function (v) {
+		return JSON.stringify(v === undefined ? null : v)
+			.replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+			.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+	};
 	var format = function ( d ) {
 		var id = d.groupBuyId;
 		var homeTypeButtons = '';
@@ -407,8 +413,8 @@ $(document).ready(function() {
 			+ '<a target="_blank" class="btn btn-home" href="/backend/GroupBuyItemCrmTag/list.do?groupBuyId='+id+'">商品銷售標籤</a>'
 			+ '<a class="btn btn-home" href="javascript: void(0)" onclick="editActivitySettings('+id+')">彈出活動</a>'
 			//+ '<a target="_blank" class="btn btn-home" href="/backend/WebEditor/footer.do?groupBuyId='+id+'">Footer編輯器</a>'
-			+ '<a class="btn btn-warning" href="javascript: void(0)" onclick="GBAPI.refreshHome(\''+id+'\')">更新首頁暫存</a>'
-			+ '<a id="refreshFooterBtn" class="btn btn-warning" href="javascript: void(0)" onclick="refreshFooter(\''+id+'\')">更新Footer暫存</a>'
+			+ '<a class="btn btn-warning" href="javascript: void(0)" onclick="GBAPI.refreshHome('+jsattr(String(id))+')">更新首頁暫存</a>'
+			+ '<a id="refreshFooterBtn" class="btn btn-warning" href="javascript: void(0)" onclick="refreshFooter('+jsattr(String(id))+')">更新Footer暫存</a>'
 			+ '</div>'
 			
 		} else if (d.render == 'FB') {
@@ -426,10 +432,10 @@ $(document).ready(function() {
 		}
 		cardDetail += renderStatistics(d.groupBuyStatistics) + '</div>'
 		var publishButtons = ''
-			+ '<a class="btn btn-primary" href="javascript: void(0)" onclick="GBAPI.showShortUrl(\''+d.shortUrl+'\','+d.groupBuyId+',\''+d.publishUrl+'\')">賣場網址</a>'
-			+ '<a target="_blank" class="btn btn-default" href="/'+d.shortUrl+'?preview=true">預覽前台</a>'
+			+ '<a class="btn btn-primary" href="javascript: void(0)" onclick="GBAPI.showShortUrl('+jsattr(d.shortUrl)+','+jsattr(d.groupBuyId)+','+jsattr(d.publishUrl)+')">賣場網址</a>'
+			+ '<a target="_blank" class="btn btn-default" href="/'+encodeURIComponent(d.shortUrl)+'?preview=true">預覽前台</a>'
 
-			+ '<a class="btn btn-secondary" href="javascript: void(0)" onclick="GBAPI.showReportUrl(\''+d.uuid+'\',\''+d.password+'\')">業績報表</a>'
+			+ '<a class="btn btn-secondary" href="javascript: void(0)" onclick="GBAPI.showReportUrl('+jsattr(d.uuid)+','+jsattr(d.password)+')">業績報表</a>'
 
 			+ posTypeButtons
 
