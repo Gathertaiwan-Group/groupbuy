@@ -1,0 +1,69 @@
+// core 模組路由：登入/登出、後台首頁、頂列共用彈窗、服務條款、系統設定（無權限）、select2 共用查詢。
+import type { RouteDef } from "@/lib/core/http/types";
+import { any, fragment, get, page, post } from "@/lib/core/http/route-helpers";
+import { redirect } from "@/lib/core/http/responses";
+import * as authApi from "./auth-api";
+import * as system from "./system";
+import { lookupGroupBuy } from "./lookup";
+import { uploadedImage } from "./uploads";
+import { uploadImage } from "./upload-api";
+
+export const routes: RouteDef[] = [
+  // ── 入口 ────────────────────────────────────────────────
+  get("/", () => redirect("/backend/panel.do"), { auth: "public" }),
+  get("/backend", () => redirect("/backend/panel.do")),
+  page("/backend/panel", {
+    template: "core/panel.html",
+    title: "團購表單",
+    jsp: "/backend/Panel/panel.jsp",
+    sidebar: false,
+    groupBuy: "none",
+    data: (ctx) => ({ canSystemPreference: ctx.session.permissions?.systemPreference === true }),
+  }),
+
+  // ── 登入 / 登出 ───────────────────────────────────────────
+  get("/backend/AdminUser/login", authApi.loginPage, { auth: "public" }),
+  post("/ajax/AdminUser/login", authApi.login, { auth: "public" }),
+  get("/backend/AdminUser/logout", authApi.logout, { auth: "public" }),
+  post("/ajax/GoogleRecaptcha/verify", authApi.recaptchaVerify, { auth: "public" }),
+  post("/ajax/AdminUser/auth", authApi.authRemembered, { auth: "public" }),
+  post("/ajax/AdminUser/resendWtoken", authApi.resendWtoken, { auth: "public" }),
+  any("/ajax/AdminUser/keepalive", authApi.keepalive),
+  get("/ajax/AdminUser/info", system.adminInfo),
+  any("/ajax/AdminUser/switchAdmin", authApi.switchAdmin),
+
+  // ── 修改密碼（loadAjax 載入片段 → Editor.create()）─────────
+  fragment("/backend/AdminUser/changePassword", { template: "core/change-password.html", method: "GET" }),
+  post("/ajax/AdminUser/changePassword", authApi.changePassword),
+
+  // ── 系統通知（頂列鈴鐺 openForm）──────────────────────────
+  fragment("/backend/SystemNotification/list", { template: "core/system-notification-list.html", method: "GET" }),
+  post("/ajax/SystemNotification/list", system.notificationList),
+  post("/ajax/SystemNotification/markAsViewed", system.notificationMarkAsViewed),
+
+  // ── 編輯廠商資料（prepareCompanyEditor）──────────────────
+  get("/ajax/Billing/show", system.billingShow),
+  post("/ajax/Billing/updateOne", system.billingUpdate),
+
+  // ── 服務條款、系統設定（本帳號無權限）─────────────────────
+  page("/backend/GroupBuy/terms", { template: "core/terms.html", title: "服務條款", groupBuy: "none" }),
+  page("/backend/SystemPreference/panel", {
+    template: "core/system-preference-panel.html",
+    title: "系統設定",
+    permission: "systemPreference",
+    groupBuy: "none",
+  }),
+  page("/backend/SystemPreference/csvEditor", {
+    template: "core/system-preference-csveditor.html",
+    title: "csv 編輯器",
+    permission: "csvEditor",
+    groupBuy: "none",
+  }),
+
+  // ── 共用 select2 查詢 ─────────────────────────────────────
+  get("/ajax/Lookup/groupBuy", lookupGroupBuy),
+
+  // ── 上傳（原站外部主機 groupbuyforms.com/json/uploadImage/vcf → 本站）與圖片網址（cdn…/upload/images/*）──
+  post("/json/uploadImage/:dir", uploadImage, { auth: "admin" }),
+  get("/upload/images/*", uploadedImage, { auth: "public" }),
+];

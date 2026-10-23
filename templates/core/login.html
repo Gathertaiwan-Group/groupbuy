@@ -1,0 +1,242 @@
+<!--#head-->
+	<style>
+	#card-login{min-height:408px}
+	#card-body-auth{ display: flex;justify-content: center;align-items: center;}
+	/* FB 快速登入按鈕（未串接 Facebook SDK，以靜態樣式呈現原站按鈕位置） */
+	.fb-login-button.gb-fb-static{display:inline-block;background:#1877f2;color:#fff;border-radius:4px;padding:6px 10px;font-size:15px;font-weight:700;line-height:22px;cursor:pointer;white-space:nowrap}
+	.fb-login-button.gb-fb-static .fa-facebook{font-size:20px;vertical-align:-3px}
+	</style>
+<!--#body--><div class="container">
+	<div id="fb-root"></div>
+<div class="row mt-4">
+<div class="col-xl-5 col-lg-6 col-md-10 col-sm-12 mx-auto mt-5">
+<div class="card" id="card-login">
+<div class="card-header"><img style="height:32px" class="img-fluid" src="/upload/images/unsort/logo.png">{{#if en}}Login{{else}}登入{{/if}}</div>
+<div class="card-body text-center d-none" id="card-body-auth">
+<div class="modal-message"></div>
+<button class="btn btn-info" id="btn-auth">繼續登入為 <span id="auth-name"></span></button>
+<button class="btn btn-info" id="btn-switch">切換使用者</button>
+</div>
+<div class="card-body" id="card-body-login">
+<form name="AdminUserForm" method="post" action="/ajax/AdminUser/login.do" class="form-horizontal" id="AdminUserForm"><!-- <div class="modal-message"></div> -->
+<input type="hidden" name="g-recaptcha-response-v3">
+<div class="md-form">
+	<i class="fa-light fa-user prefix"></i>
+	<input type="text" name="username" maxlength="50" size="60" value="" type="text" id="username" class="form-control"><label for="username">帳號</label>
+</div>
+<div class="md-form">
+	<i class="fa-light fa-lock prefix"></i>
+	<input type="password" name="password" maxlength="20" size="60" value="" type="password" id="password" class="form-control"><label for="password">密碼</label>
+</div>
+<div class="md-form wtoken-group d-none">
+	<i class="fa-light fa-lock prefix"></i>
+	<input type="text" name="wtoken" maxlength="6" size="60" value="" type="text" id="wtoken" class="form-control required"><label for="wtoken">請輸入6碼驗證碼</label>
+</div>
+<div class="md-form">
+	<input type="checkbox" class="form-check-input" id="kmsi" name="kmsi" value="1">
+	<label for="kmsi">{{#if en}}keep me signed in (24 hours){{else}}讓我保持登入(24小時){{/if}}</label>
+</div>
+<div class="md-form">
+	<div id="login_recaptcha" class="text-center"></div>
+</div>
+<div class="text-center align-middle justify-content-center wtoken-group d-none">
+	<button type="button" class="btn btn-warning" id="btn-acquire"><span></span> 重送驗證碼</button>
+</div>
+
+<div class="text-center align-middle d-flex justify-content-center div-env-check">
+	<span>環境檢測中</span>
+</div>
+<div class="text-center align-middle d-none justify-content-center div-group-submit">
+	<button type="submit" class="btn btn-info btn-md" id="btn-submit">{{#if en}}Login{{else}}登入{{/if}}</button>
+	<div class="my-auto" style="width:149px">
+	<div class="fb-login-button gb-fb-static" data-max-rows="1" data-size="large"
+		data-button-type="login_with" data-show-faces="false"
+		data-auto-logout-link="false" data-use-continue-as="false" scope="email,public_profile,pages_show_list,pages_messaging" onclick="fbAdminLogin();">
+		<i class="fa-brands fa-facebook mr-1"></i>FB快速登入
+	</div></div>
+</div>
+</form></div>
+<!-- card-body -->
+</div>
+<!-- card -->
+</div>
+</div>
+
+<script>
+// 原站以 Google reCAPTCHA v3 做「環境檢測」；本系統未串接 Google reCAPTCHA，
+// 改由本站 /ajax/GoogleRecaptcha/verify 直接回應通過，流程與畫面相同。
+var login_recaptcha;
+var initReCaptchaV3 = function() {
+	verifyV3('not-integrated');
+}
+var verifyV3 = function(token) {
+	$('input[name=g-recaptcha-response-v3]').val('');
+	$.ajax({
+		type: 'POST',
+		url:  '/ajax/GoogleRecaptcha/verify',
+		data: {
+			'token':token
+		},
+		dataType: 'json',
+		success: function(data, textStatus, jqXHR) {
+			$('input[name=g-recaptcha-response-v3]').val(token);
+			$('#AdminUserForm button[type=submit]').show();
+		},
+		error: function(data, textStatus, jqXHR) {
+			initReCaptchaV2();
+			$('#AdminUserForm button[type=submit]').show();
+		},
+		complete:function(jqXHR,textStatus) {
+			$('.div-env-check').remove();
+			$('.div-group-submit').removeClass('d-none').addClass('d-flex');
+		}
+	});
+}
+
+var initReCaptchaV2 = function() {
+	// 未串接 Google reCAPTCHA v2
+	$('#AdminUserForm button[type=submit]').show();
+};
+
+var onloadCallback = function() {
+	initReCaptchaV3();
+}
+$('#AdminUserForm button[type=submit]').hide();
+</script>
+
+<script>
+var fbAdminLogin = function() {
+	// 未串接 Facebook 登入
+	modalShowDanger($('#card-login'), '【未串接】Facebook 快速登入：本系統未串接 Facebook，請使用帳號密碼登入。');
+}
+
+$(document).ready(function() {
+	btnStartLoading($('.div-env-check'));
+
+	initAjaxForm('AdminUserForm', json => {
+		if (json.redirectUrl != null) {
+			window.location.replace(json.redirectUrl);
+			return;
+		} else {
+			window.location.reload();
+		}
+	}, json => {
+		modalShowDanger($('#card-login'), json.error);
+		if (json.code == 485) {
+			$('.wtoken-group').removeClass('d-none');
+			countdownAcquire();
+		} else if (json.code == 429) {
+			countdownSubmit(json.data);
+		} else if (json.code == 400 && login_recaptcha == undefined) {
+			$('input[name=g-recaptcha-response-v3]').val('');
+			initReCaptchaV2();
+			return;
+		}
+	});
+
+	showLoignAuthOption();
+	$('input[name=password]').passwordEye();
+
+	$('#btn-acquire').on('click', function() {
+		acquireCode();
+	});
+
+	onloadCallback();
+});
+
+var showLoignAuthOption = function() {
+	var auatn = Cookies.get('_auatn');
+	var auacc = Cookies.get('_auacc');
+	if (auatn == undefined || auacc == undefined) {
+		$('#card-body-auth').addClass('d-none');
+		$('#card-body-login').show();
+		return;
+	} else {
+		$('#card-body-auth').removeClass('d-none');
+		$('#auth-name').text(auacc);
+		$('#card-body-login').hide();
+	}
+}
+
+$('#btn-switch').on('click', function() {
+	$('#card-body-auth').addClass('d-none');
+	$('#card-body-login').show();
+})
+
+$('#btn-auth').on('click', function() {
+	var $this = $(this);
+	btnStartLoading($this);
+	$.ajax({
+		type:'POST',
+		url:'/ajax/AdminUser/auth',
+		async:false,
+	})
+	.done(function(json) {
+			btnStopLoading($this);
+			if (window.location.href.indexOf('AdminUser/login') > 0) {
+				window.location = '/backend';
+			} else {
+				window.location.reload();
+			}
+		}
+	)
+	.fail(function(jqXHR, textStatus, errorThrown) {
+			var json = jqXHR.responseJSON;
+			btnStopLoading($this);
+			modalShowDanger($('#card-login'), json.error);
+			$('#card-body-auth').addClass('d-none');
+			$('#card-body-login').show();
+		}
+	);
+})
+
+var countdownSubmit = function(wait) {
+	$('#btn-submit').prop('disabled', false);
+	btnCountdown($('#btn-submit'),wait);
+}
+
+var countdownAcquire = function(wait) {
+	var s = 120;
+	if (wait != null) {
+		s = wait;
+	}
+	$('#btn-acquire').prop('disabled', true);
+	var refreshIntervalId = setInterval(function() {
+		if (wait != null) {
+			$('#btn-acquire').html('重新發送尚需' + s + '秒');
+		} else {
+			$('#btn-acquire').html('已發送。重新發送尚需' + s + '秒');
+		}
+		s--;
+		if (s == 0) {
+			clearInterval(refreshIntervalId);
+			$('#btn-acquire').html('重送驗證碼');
+			$('#btn-acquire').prop('disabled', false);
+		}
+	},
+	1000);
+}
+
+var acquireCode = function() {
+
+	btnStartLoading($('#btn-acquire'));
+	jQuery.post(
+			'/ajax/AdminUser/resendWtoken',
+			{
+				'username' : $('#username').val()
+			},
+			function(data) {
+			}
+			).fail(function(data) {
+				json = data.responseJSON;
+				btnStopLoading($('#btn-acquire'));
+				modalShowDanger($('#card-login'), json.error);
+				if (json.code == 485) {
+					$('.wtoken-group').removeClass('d-none');
+					$('#btn-acquire').prop('disabled', true);
+					countdownAcquire();
+				}
+			});
+}
+</script>
+</div>

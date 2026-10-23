@@ -1,0 +1,57 @@
+<style type="text/css" class="init">
+div.DTED_Lightbox_Wrapper {
+    left: 1em;
+    right: 1em;
+    margin-left: 0;
+    width: auto;
+    background-color: #0000ff;
+}
+ 
+label.DTE_Label {
+    width: 25%;
+}
+ 
+div.DTE_Field_Input {
+    width: 75%;
+}
+
+div.DTE_Field label{
+    text-align:left;
+}
+
+div.DTE_Field label.control-label{
+    text-align:left;
+}
+
+div.DTE_Field div{
+    width:100%;
+}
+.modal-dialog-quickMenu{height:100%;}
+.modal-dialog-quickMenu .modal-content {height:100%;}
+.modal-dialog-quickMenu .modal-body{position: absolute;top: 58px;bottom: 48px;overflow-y: auto;width:100%}
+.modal-dialog-quickMenu .modal-footer{position: absolute!important;width:100%;}
+
+@media (min-width: 576px) {
+	.modal .modal-fluid, .DTED .modal-dialog.modal-dialog-scrollable {width:90%;max-width:90%;}
+}
+@media (min-width: 992px) {
+	.modal-lg {max-width:calc(100vw - 100px);}
+}
+div.DTE_Bubble{
+position: fixed;
+left: -webkit-calc(50vw - 150px) !important;
+left: calc(50vw - 150px) !important;
+top: -webkit-calc(50vh - 200px) !important;
+top: calc(50vh - 200px) !important;
+z-index:1032;
+width:auto;
+height:auto;
+}
+div.DTE_Bubble div.DTE_Bubble_Liner{
+position: relative;
+margin:0px;
+left: 0px !important;
+}
+div.DTE_Bubble div.DTE_Bubble_Triangle{display:none;}
+div.DTE_Bubble_Background{z-index:1031;}
+</style>

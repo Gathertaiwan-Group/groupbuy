@@ -1,0 +1,225 @@
+/*!
+ * groupbuy Editor 相容 shim 樣式（自行撰寫，非 DataTables Editor 程式碼）
+ * 對應原站 Editor 1.9.2 + bootstrap4 的 DOM 結構與 class；外觀數值依原站實際畫面量測。
+ * 原站頁面另有覆寫（.modal-dialog-quickMenu、.DTED、div.DTE_Bubble…）與自家 style_be_v4 的 .DTE_* 規則。
+ */
+
+/* ── 主表單（bootstrap modal）────────────────────────────── */
+div.DTED .modal-dialog { position: relative; }
+div.DTE.modal-content { position: relative; }
+div.DTE div.DTE_Header { position: relative; }
+div.DTE div.DTE_Header .close { font-weight: 400; }
+div.DTE div.DTE_Header_Content { font-weight: 300; }
+div.DTE div.DTE_Body { position: relative; }
+div.DTE div.DTE_Body_Content { position: relative; }
+div.DTE.DTE_Action_Remove div.DTE_Body_Content > form { display: none; }
+
+/* quickMenu（原站 DataTableHelper.initEditorOnCallback 加的 class）時頁尾貼齊底部 */
+.modal-dialog-quickMenu div.DTE.modal-content > div.DTE_Footer { left: 0; right: 0; bottom: 0; }
+
+div.DTE div.DTE_Footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+div.DTE div.DTE_Footer_Content { display: none; }
+div.DTE div.DTE_Form_Error {
+  flex: 1 1 auto;
+  margin: 0 0.5rem;
+  padding: 0.25rem 0;
+  color: #dc3545;
+  text-align: left;
+}
+div.DTE div.DTE_Form_Buttons { flex: 0 0 auto; white-space: nowrap; }
+div.DTE div.DTE_Form_Buttons button { margin: 6px; }
+
+/* 處理中指示器 */
+div.DTE_Processing_Indicator {
+  position: absolute;
+  top: 18px;
+  right: 50px;
+  width: 16px;
+  height: 16px;
+  display: none;
+  z-index: 20;
+}
+div.DTE_Processing_Indicator span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  border-top-color: #4285f4;
+  border-radius: 50%;
+  animation: dte-spin 0.8s linear infinite;
+}
+div.DTE_Field div.DTE_Processing_Indicator { top: 10px; right: 20px; }
+@keyframes dte-spin { to { transform: rotate(360deg); } }
+
+/* 欄位 */
+div.DTE_Field { position: relative; }
+div.DTE_Field div.DTE_Field_InputControl { display: block; position: relative; }
+div.DTE_Field label div.DTE_Label_Info { font-size: 0.85em; margin-top: 0.25em; }
+div.DTE_Field label div.DTE_Label_Info:empty { margin-top: 0; }
+div.DTE_Field div[data-dte-e="msg-error"],
+div.DTE_Field div[data-dte-e="msg-message"],
+div.DTE_Field div[data-dte-e="msg-info"] { margin-top: 0.25rem; }
+div.DTE_Field.error.is-invalid .form-control { border-color: #dc3545; }
+
+/* 多列編輯：多個數值 */
+div.DTE_Field div.multi-value,
+div.DTE_Field div.multi-restore {
+  display: none;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+}
+div.DTE_Field div.multi-value span { display: block; color: #666; font-size: 0.85em; line-height: 1.25em; }
+div.DTE_Field div.multi-value:hover { background-color: #f1f1f1; }
+div.DTE_Field div.multi-restore { margin-top: 0.5em; font-size: 0.8em; line-height: 1.25em; }
+div.DTE_Field div.multi-restore:hover { background-color: #f1f1f1; }
+div.DTE_Field.disabled div.multi-value { cursor: default; opacity: 0.6; }
+
+/* checkbox / radio 選項 */
+div.DTE_Field_Type_checkbox div.DTE_Field_InputControl > div > div,
+div.DTE_Field_Type_radio div.DTE_Field_InputControl > div > div {
+  display: inline-block;
+  margin: 0.4em 1.25em 0.2em 0;
+}
+div.DTE_Field_Type_checkbox div.DTE_Field_InputControl > div > div label,
+div.DTE_Field_Type_radio div.DTE_Field_InputControl > div > div label { margin: 0 0 0 0.25em; vertical-align: middle; }
+
+/* datetime（flatpickr） */
+div.DTE_Field_Type_datetime input.flatpickr-input[readonly] { background-color: #fff; }
+
+/* select2 在 Editor 中 */
+div.DTE_Field_Type_select2 .select2-container { width: 100% !important; }
+
+/* ── 上傳欄位 ─────────────────────────────────────────── */
+div.editor_upload { padding-top: 4px; }
+div.editor_upload div.eu_table { display: table; width: 100%; }
+div.editor_upload div.row { display: table-row; margin: 0; }
+div.editor_upload div.cell {
+  display: table-cell;
+  position: relative;
+  width: 50%;
+  vertical-align: top;
+}
+div.editor_upload div.cell + div.cell { padding-left: 10px; }
+div.editor_upload div.row + div.row div.cell { padding-top: 10px; }
+div.editor_upload button.btn,
+div.editor_upload input[type=file] { width: 100%; height: 2.3em; font-size: 0.8em; text-align: center; line-height: normal; }
+div.editor_upload input[type=file] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+div.editor_upload div.drop {
+  position: relative;
+  top: 0;
+  right: 0;
+  left: 0;
+  bottom: 0;
+  border: 3px dashed #ccc;
+  border-radius: 6px;
+  min-height: 4em;
+  color: #999;
+  padding-top: 3px;
+  text-align: center;
+}
+div.editor_upload div.drop.over { border: 3px dashed #111; color: #222; }
+div.editor_upload div.drop span { max-width: 75%; font-size: 0.85em; line-height: 1em; }
+div.editor_upload div.rendered img { max-width: 8em; margin: 0 auto; }
+div.editor_upload.noDrop div.drop { display: none; }
+div.editor_upload.noDrop div.row.second { display: none; }
+div.editor_upload.noDrop div.rendered { margin-top: 10px; }
+div.editor_upload.noClear div.clearValue button { display: none; }
+div.editor_upload.multi div.cell { display: block; width: 100%; }
+div.editor_upload.multi div.cell div.drop { min-height: 0; padding-bottom: 5px; }
+div.editor_upload.multi div.clearValue { display: none; }
+div.editor_upload.multi ul { list-style-type: none; margin: 0; padding: 0; }
+div.editor_upload.multi ul li { position: relative; margin-top: 0.5em; }
+div.editor_upload.multi ul li:first-child { margin-top: 0; }
+div.editor_upload.multi ul li img { vertical-align: middle; }
+div.editor_upload.multi ul li button { position: absolute; width: 40px; right: 0; top: 50%; margin-top: -1.5em; }
+
+/* ── 行內編輯 ─────────────────────────────────────────── */
+div.DTE_Inline { position: relative; display: table; width: 100%; }
+div.DTE_Inline div.DTE_Inline_Field,
+div.DTE_Inline div.DTE_Inline_Buttons { display: table-cell; vertical-align: middle; }
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field,
+div.DTE_Inline div.DTE_Inline_Buttons div.DTE_Field { padding: 0; margin: 0; display: block; }
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field > label,
+div.DTE_Inline div.DTE_Inline_Buttons div.DTE_Field > label { display: none; }
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field > div,
+div.DTE_Inline div.DTE_Inline_Buttons div.DTE_Field > div { width: 100%; max-width: 100%; flex: 0 0 100%; padding: 0; }
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field input.form-control,
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field select.form-control { height: 30px; padding: 2px 6px; font-size: inherit; }
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field div[data-dte-e="msg-info"],
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field div[data-dte-e="msg-message"],
+div.DTE_Inline div.DTE_Inline_Field div.DTE_Field div[data-dte-e="msg-label"] { display: none !important; }
+div.DTE_Inline div.DTE_Inline_Buttons { padding-left: 0.5em; white-space: nowrap; }
+div.DTE_Inline div.DTE_Inline_Buttons div.DTE_Form_Buttons button { margin: -6px 0 -6px 4px; padding: 3px 8px; }
+div.DTE_Inline div.DTE_Form_Error { color: #dc3545; font-size: 0.85em; }
+div.DTE_Inline div.DTE_Form_Error:empty { display: none !important; }
+table.dataTable tbody tr td > div.DTE_Inline { margin: -6px 0; }
+
+/* ── bubble ────────────────────────────────────────────── */
+div.DTE_Bubble {
+  position: absolute;
+  z-index: 1032;
+  margin-top: -6px;
+  opacity: 0;
+}
+div.DTE_Bubble div.DTE_Bubble_Liner {
+  position: absolute;
+  bottom: 0;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  width: 300px;
+  margin-left: -150px;
+  background-color: #fff;
+  box-shadow: 0 5px 11px 0 rgba(0, 0, 0, 0.18), 0 4px 15px 0 rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  padding: 1em;
+  box-sizing: border-box;
+}
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table { width: 100%; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table > form div.DTE_Form_Content { padding: 0; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table > form div.DTE_Form_Content div.DTE_Field { position: relative; margin-bottom: 0.5em; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table > form div.DTE_Form_Content div.DTE_Field:last-child { margin-bottom: 0; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table > form div.DTE_Form_Content div.DTE_Field > label { padding-top: 0; margin-bottom: 0; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table > form div.DTE_Form_Content div.DTE_Field > div { padding: 0; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table div.DTE_Form_Buttons { text-align: right; margin-top: 1em; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Bubble_Table div.DTE_Form_Buttons button { margin-bottom: 0; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Header { border-top-left-radius: 5px; border-top-right-radius: 5px; padding: 0 0 0.75em; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.DTE_Form_Error { float: none; display: none; padding: 0; margin-bottom: 0.5em; color: #dc3545; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.close {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  cursor: pointer;
+  opacity: 0.5;
+}
+div.DTE_Bubble div.DTE_Bubble_Liner div.close:after { content: '\00D7'; font-size: 1.5rem; line-height: 1.5rem; }
+div.DTE_Bubble div.DTE_Bubble_Liner div.close:hover { opacity: 1; }
+div.DTE_Bubble div.DTE_Bubble_Triangle { display: none; }
+div.DTE_Bubble_Background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1031;
+  opacity: 0;
+}
+div.DTE_Bubble_Background > div { display: none; }
+
+/* 表格列更新後的醒目提示 */
+table.dataTable tbody tr.highlight,
+table.dataTable tbody tr.highlight td { background-color: #fff7d1 !important; transition: background-color 500ms linear; }
+table.dataTable tbody tr.noHighlight,
+table.dataTable tbody tr.noHighlight td { transition: background-color 500ms linear; }

@@ -1,0 +1,275 @@
+<style>
+.side-nav.wide {width:240px;}
+.side-nav.wide.slim {width: 60px !important;}
+.side-nav-on {padding-left:250px;}
+.side-nav-mini {padding-left:70px;}
+.side-nav .collapsible .fab,
+.side-nav .collapsible .far,
+.side-nav .collapsible .fas,
+.side-nav .collapsible .fa-light {font-size:1rem;}
+.side-nav .collapsible a{font-size:1rem;}
+.side-nav .collapsible>li a.collapsible-header {margin: 4px 0;}
+.side-nav.wide .logo-wrapper.sn-ad-avatar-wrapper {border-bottom:0 !important}
+.logo-wrapper img {max-width:160px !important;padding-left: 2px !important;}
+.side-nav.wide.slim .collapsible .sv-slim-icon{line-height:36px;}
+.side-nav .collapsible .fas{font-size:16px;}
+.side-nav .collapsible a {font-size:16px;}
+.button-collapse {position: fixed;left: 0px;top: calc(25vh);z-index: 10;width:32px;height:64px;margin:0px}
+.side-nav .btn-help {position:absolute;right:10px;top:0; z-index:2}
+.side-nav li {position:relative;}
+.side-nav a {overflow: hidden;}
+.rgba-side, .rgba-side:after {
+background-color: #212529ba;
+}
+
+.sn-bg-1 {
+background-attachment: fixed;
+background-image: url(/pups/img/Top1.jpg);
+}
+
+.gb-text {color:#f16a5f !important}
+.sub-text {color:#f7ed97 !important}
+.fa-clipboard-list:before{padding-left:0.2rem;}
+.sv-slim {margin-left:-8px !important}
+.sv-slim-3d {margin-left:-17px !important}
+</style>
+<!-- SideNav slide-out button -->
+<button style="display:none" type="button" id="side-button" data-activates="slide-out" class="btn btn-primary p-3 button-collapse">
+<i class="fa-regular fa-bars"></i></button>
+
+<!-- Sidebar navigation -->
+<div id="slide-out" class="side-nav fixed wide slim sn-bg-1">
+	<ul class="custom-scrollbar">
+		<!-- Logo -->
+		<li style="overflow:hidden;">
+			<div class="logo-wrapper sn-ad-avatar-wrapper">
+			<a href="/backend"><img src="/upload/images/unsort/369c7943e210419e921e8b4f8f091339.png"></a>
+			</div>
+		</li>
+		<!-- Side navigation links -->
+		<li>
+			<ul class="collapsible collapsible-accordion">
+			<li><a class="collapsible-header waves-effect arrow-r" data-name="groupBuyMenu">
+					<i class="sv-slim-icon fa-light fa-home"></i>所有團購<i class="fa-light fa-angle-down rotate-icon"></i>
+				</a>
+				<div class="collapsible-body">
+					<ul>
+					<li><a href="/backend/GroupBuy/list" >
+							<span class="sv-slim">團購</span>
+							<span class="sv-normal">所有團購</span></a>
+					</li>
+					<li><a href="/backend/GroupBuy/endingsoon?statusV2=ENDING_SOON" >
+							<span class="sv-slim">即結</span>
+							<span class="sv-normal">即將結團</span></a>
+					</li>
+					<li><a href="/backend/GroupBuy/endingsoon?statusV2=ACTIVE" >
+							<span class="sv-slim">開團</span>
+							<span class="sv-normal">正在開團</span></a>
+					</li>
+					<li><a href="/backend/GroupBuy/endingsoon?statusV2=NOT_STARTED" >
+							<span class="sv-slim">未開</span>
+							<span class="sv-normal">尚未開始</span></a>
+					</li>
+					<li><a href="/backend/GroupBuyTag/list" >
+							<span class="sv-slim">標籤</span>
+							<span class="sv-normal">團購標籤</span></a>
+					</li>
+					<li><a href="/backend/FacebookAuthGroupBuy/list" data-name="facebookAuthGroupBuy" >
+							<span class="sv-slim">授權</span>
+							<span class="sv-normal">報表授權</span></a>
+					</li>
+					</ul>
+				</div>
+			</li>
+
+<li><a class="collapsible-header waves-effect arrow-r" data-name="salesOrderMenu">
+					<i class="sv-slim-icon fa-light fa-shopping-cart"></i>所有訂單<i class="fa-light fa-angle-down rotate-icon"></i>
+				</a>
+				<div class="collapsible-body">
+					<ul>
+					<li><a href="/backend/SalesOrder/list" >
+							<span class="sv-slim">訂單</span>
+							<span class="sv-normal">所有訂單</span></a>
+					</li>
+					<li><a href="/backend/SalesOrderReturn/list" >
+							<span class="sv-slim">退換</span>
+							<span class="sv-normal">退換貨訂單</span></a>
+					</li>
+					<li><a href="/backend/SalesOrderReservation/list" >
+							<span class="sv-slim">保留</span>
+							<span class="sv-normal">保留訂單</span></a>
+					</li>
+					<li><a href="/backend/SalesOrder/pickup" >
+							<span class="sv-slim">自取</span>
+							<span class="sv-normal">自取訂單</span></a>
+					</li>
+					<li><a href="/backend/helpdesk/Conversation/list" data-name="conversation" >
+							<span class="sv-slim">客服</span>
+							<span class="sv-normal">客服對話</span></a>
+					</li>
+					</ul>
+				</div>
+			</li>
+<li><a class="collapsible-header waves-effect arrow-r" data-name="logisticMenu">
+					<i class="sv-slim-icon fa-light fa-shipping-fast sub-text"></i>出貨紀錄<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/ShippingRecord/export" >
+								<span class="sv-slim">匯出</span>
+								<span class="sv-normal">匯出紀錄</span></a>
+							</li>
+							<li><a href="/backend/ShippingRecord/shipped" >
+								<span class="sv-slim">月份</span>
+								<span class="sv-normal">月份紀錄</span></a>
+							</li>
+							<li><a href="/backend/SalesOrderCVSTrace/list" data-name="cvsUnpicked" >
+								<span class="sv-slim">超取</span>
+								<span class="sv-normal">超商未取</span></a>
+							</li>
+							<li><a href="/backend/SalesOrderCVSTrace/listPickup" data-name="selfUnpicked" >
+								<span class="sv-slim">自取</span>
+								<span class="sv-normal">自取未取</span></a>
+							</li>
+							<li><a href="/backend/SalesOrderCVSTrace/listUnshipped" data-name="unshipped" >
+								<span class="sv-slim">未出</span>
+								<span class="sv-normal">超時出貨</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+</li>
+{{#if groupBuy}}{{> core/layout/sidebar-groupbuy.html}}{{/if}}
+<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-analytics sub-text"></i>銷售
+					<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/SalesAnalysis/panel" >
+									<span class="sv-slim">銷售</span>
+									<span class="sv-normal">銷售一覽</span></a>
+							</li>
+							<li><a href="/backend/GroupBuyErpMonthlyStatistics/list" >
+									<span class="sv-slim">團銷</span>
+									<span class="sv-normal">團購銷售</span></a>
+							</li>
+							<li><a href="/backend/SalesAnalysis/show" >
+									<span class="sv-slim">商銷</span>
+									<span class="sv-normal">商品銷售</span></a>
+							</li>
+							<li><a href="/backend/SalesOrderMonthlyStatistics/list" >
+									<span class="sv-slim">訂單</span>
+									<span class="sv-normal">訂單統計</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-warehouse sub-text"></i>倉儲
+					<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/Warehouse/list" >
+									<span class="sv-slim">倉管</span>
+									<span class="sv-normal">倉儲管理</span></a>
+							</li>
+							<li><a href="/backend/WarehouseRequisition/list" >
+									<span class="sv-slim">調撥</span>
+									<span class="sv-normal">調撥單據</span></a>
+							</li>
+							<li><a href="/backend/Inbound/list">
+									<span class="sv-slim">入庫</span>
+									<span class="sv-normal">入庫單據</span></a>
+							</li>
+							<li><a href="/backend/InboundRecord/list">
+									<span class="sv-slim">庫紀</span>
+									<span class="sv-normal">入庫紀錄</span></a>
+							</li>
+							<li><a href="/backend/Warehouse/inventory" >
+									<span class="sv-slim">盤點</span>
+									<span class="sv-normal">庫存盤點</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r"><i
+							class="sv-slim-icon fa-light fa-cog sub-text"></i>設定<i class="fa-light fa-angle-down rotate-icon"></i></a>
+					<div class="collapsible-body">
+						<ul>
+<li><a href="/backend/FlatRateShipping/list" >
+									<span class="sv-slim">運費</span>
+									<span class="sv-normal">運費規則</span></a>
+							</li>
+<li><a href="/backend/CouponTemplate/list" >
+									<span class="sv-slim sv-slim-3d">卷樣板</span>
+									<span class="sv-normal">優惠卷樣板</span></a>
+							</li>
+<li><a href="/backend/ShippingTag/list" >
+									<span class="sv-slim">貨標</span>
+									<span class="sv-normal">貨運標籤</span></a>
+							</li>
+							<li><a href="/backend/PickupStore/list" >
+									<span class="sv-slim">門市</span>
+									<span class="sv-normal">自取門市</span></a>
+							</li>
+<li><a href="/backend/Blacklist/list" >
+									<span class="sv-slim sv-slim-3d">黑名單</span>
+									<span class="sv-normal">黑名單</span></a>
+							</li>
+							<li><a href="/backend/ShortUrl/list" >
+									<span class="sv-slim">短址</span>
+									<span class="sv-normal">短網址</span></a>
+							</li>
+							<li><a href="/backend/Upload/uploadVideo" >
+									<span class="sv-slim">上傳</span>
+									<span class="sv-normal">上傳影片</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r" data-name="accountantMenu"><i
+							class="sv-slim-icon fa-light fa-hand-holding-usd sub-text"></i>會計<i class="fa-light fa-angle-down rotate-icon"></i></a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/RefundRequisition/list" >
+									<span class="sv-slim">退款</span>
+									<span class="sv-normal">退款單據</span></a>
+							</li>
+							<li><a href="/backend/Invoice/list" data-name="invoice">
+								<span class="sv-slim">發票</span>
+								<span class="sv-normal">電子發票</span></a>
+							</li>
+							<li><a href="/backend/erp/DistributionChannel/panel" >
+									<span class="sv-slim">通路</span>
+									<span class="sv-normal">銷售通路</span></a>
+							</li>
+<li><a href="/backend/BillingTransaction/list" >
+									<span class="sv-slim">月結</span>
+									<span class="sv-normal">月結帳單</span></a>
+							</li>
+</ul>
+					</div>
+				</li>
+<li><a href="/jranv/menu/4411/%E6%89%80%E6%9C%89%E6%95%99%E5%AD%B8" >
+				<i class="sv-slim-icon fa-light fa-question-circle"></i>幫助</a>
+				</li>
+<li><a id="toggle" >
+				<i class="sv-slim-icon fa-light fa-angle-double-right"></i>收合選單</a>
+				</li>
+			</ul>
+		</li>
+		<!--/. Side navigation links -->
+	</ul>
+	<div class="sidenav-bg rgba-side"></div>
+</div>
+<!--/. Sidebar navigation -->
+<script>
+	// 側欄初始化（原站 inline script 因擷取過濾不可得；以下依原站實際行為重寫：
+	// cookie _side_nav_slim=slim 記憶收合狀態；寬螢幕固定側欄、窄螢幕改為左側按鈕滑出；
+	// nav/main/footer 加 side-fixed＋side-nav-on(250px)/side-nav-mini(70px) 內距）
+	$(document).ready(function() {
+		GBSideNav.init({{json activeHref}});
+	});
+</script>

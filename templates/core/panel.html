@@ -1,0 +1,200 @@
+<!--#head-->
+<style>
+.container-card-grid {
+    min-height: calc(100vh - 188px); 
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+ }
+.card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 8px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border: none;
+            text-decoration: none;
+            color: inherit;
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            text-decoration: none;
+            color: inherit;
+        }
+        
+        .feature-card .icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+            transition: transform 0.3s ease;
+        }
+        
+        .feature-card:hover .icon {
+            transform: scale(1.1);
+        }
+        
+        .feature-card .title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+        
+        .feature-card.disabled {
+           opacity: 0.6;
+           cursor: not-allowed;
+           position: relative;
+           overflow: hidden;
+       }
+       
+       .feature-card.disabled::before {
+           content: '';
+           position: absolute;
+           top: 0;
+           left: 0;
+           right: 0;
+           bottom: 0;
+           background: repeating-linear-gradient(
+               45deg,
+               transparent,
+               transparent 10px,
+               rgba(255,255,255,0.1) 10px,
+               rgba(255,255,255,0.1) 20px
+           );
+           pointer-events: none;
+       }
+       
+       .feature-card.disabled:hover {
+           transform: none;
+           opacity: 0.6;
+       }
+       
+       .feature-card.disabled .icon {
+           opacity: 0.7;
+       }
+       
+       .feature-card.disabled .title {
+           opacity: 0.8;
+       }
+       
+       .feature-card.disabled .lock-icon {
+           position: absolute;
+           top: 10px;
+           right: 10px;
+           font-size: 14px;
+           opacity: 0.8;
+       }
+        
+        .breadcrumb {
+            background: transparent;
+            padding: 0;
+            margin-bottom: 20px;
+        }
+        
+        .breadcrumb-item + .breadcrumb-item::before {
+            content: "/";
+            color: #6c757d;
+        }
+        
+        .breadcrumb-item a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        
+        .breadcrumb-item.active {
+            color: #6c757d;
+        }
+        
+        @media (max-width: 768px) {
+            .card-grid {
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+            }
+            
+            .feature-card {
+                padding: 20px 15px;
+                min-height: 120px;
+            }
+            
+            .feature-card .icon {
+                font-size: 28px;
+                margin-bottom: 10px;
+            }
+        }
+</style>
+<!--#body--><div class="container-fluid ">
+	<div class="container-card-grid">
+<div class="card-grid" id="card-grid"></div>
+</div>
+</div>
+<!--#foot-->
+<script>
+$(document).ready(function() {
+    // 初始化卡片管理器
+    const cardManager = new PanelCardManager('card-grid');
+    
+    // 預設卡片資料
+    const defaultCards = [
+        {
+            title: '管理團購',
+            icon: 'fas fa-plus-circle',
+            color: '#28a745',
+            url: '/backend/GroupBuy/list'
+        },
+        {
+            title: '訂單管理',
+            icon: 'fas fa-shopping-cart',
+            color: '#007bff',
+
+            url: '/backend/SalesOrder/list'
+        },
+        {
+            title: '出貨管理',
+            icon: 'fas fa-truck',
+            color: '#fd7e14',
+
+        	url: '/backend/ShippingRecord/export'
+        },
+        {
+            title: '系統設定',
+            icon: 'fas fa-cog',
+            color: '#6c757d',
+{{#unless canSystemPreference}}
+			disabled: true,
+{{/unless}}
+       		url: '/backend/SystemPreference/panel'
+        },
+        {
+            title: '銷售分析',
+            icon: 'fas fa-chart-line',
+            color: '#e83e8c',
+
+            url: '/backend/SalesAnalysis/panel'
+        },
+        {
+            title: '幫助',
+            icon: 'fas fa-question-circle',
+            color: '#17a2b8',
+            url: '/jranv/menu/4411/所有教學'
+        }
+    ];
+    
+    // 載入預設卡片
+    cardManager.addCards(defaultCards);
+});
+</script>

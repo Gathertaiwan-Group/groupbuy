@@ -1,0 +1,102 @@
+<style>
+#systemNotificationTable_wrapper .dataTables_scrollBody {height: calc(66vh);}
+#systemNotificationTable_wrapper span.title {
+    font-size: .8rem;
+}
+#systemNotificationTable_wrapper span.small {
+    font-size: .7rem;
+}
+#systemNotificationTable_wrapper .viewed span.title {
+    color: #6c757d;
+}
+</style>
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var tableName = '#systemNotificationTable';
+		var systemNotificationTable = $(tableName).DataTable( {
+			dom: 'rtip',
+			serverSide: true,
+			processing:true,
+			scrollX:true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			pageLength: 10,
+			ajax: {
+				url:'{{baseUrl}}/ajax/SystemNotification/list.do',
+				type: "POST",
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				{data: '',
+					render: function ( data, type, row ) {
+						var clazz = row.viewed ? 'viewed' : 'font-weight-bold';
+						var html = '<div class="'+clazz+'"><span class="title">' + row.message + '</span><br><span class="small">' + row.dateCreatedString + "</span></div>";
+						return html;
+					}
+				},
+				{data: '',
+					render: function ( data, type, row ) {
+						var html = '';
+						if (!row.viewed) {
+							html = '<button class="btn btn-sm btn-default text-nowrap" data-action="markAsViewed">已讀</button>';
+						}
+						return html;
+					}
+				}
+			],
+			select: false,
+			ordering:false,
+			buttons:[],
+			initComplete: function (settings, json) {
+				console.log('initComplete')
+				setTimeout(function(){
+					systemNotificationTable.columns.adjust().draw(false);
+				},100);
+			},
+			"drawCallback": function( settings ) {
+				$('#systemNotificationTable_wrapper thead').remove()
+			} 
+		} );
+		
+		$(tableName +' tbody').on('click', 'button', function () {
+			var tr = $(this).closest('tr');
+			var row = systemNotificationTable.row( tr );
+			var id = row.data().systemNotificationId;
+			var action = $(this).attr('data-action');
+			if (action == null) return;
+			
+			switch (action) {
+				case 'markAsViewed':{
+					var ajaxurl = GBF.baseUrl+'/ajax/SystemNotification/' + action;
+					jQuery.post( 
+						ajaxurl, 
+						{
+							'systemNotificationId':id,
+						},
+						function( json ) {
+							systemNotificationTable.ajax.reload( null, false );
+							if (typeof table != 'undefined' && table && table.ajax) table.ajax.reload();
+							GBFAPI.adminInfo(true);
+						}
+					).fail(function(jqXHR) {
+						var json = jqXHR.responseJSON || {};
+						displayAlertWarning(json.error);
+					})
+				}
+			};
+			
+		} );
+	} ); // end ready
+</script><div class="card mt-4">
+<div class="card-header">系統通知</div>
+<div class="card-body">
+	<table id="systemNotificationTable" class="table display" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th></th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>

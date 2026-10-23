@@ -1,0 +1,5 @@
+/*!
+ * groupbuy compat：後台（dashboard）頁面專用補丁（自行撰寫）。
+ * 原站後台載入 MDB PRO 的 dashboard 版 CSS，其中與 MDB Free 不同、且影響整體外觀的規則在此補上。
+ */
+body { background-color: #eee; }

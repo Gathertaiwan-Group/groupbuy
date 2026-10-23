@@ -1,0 +1,26 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+
+<head>
+{{> core/layout/head.html}}<base href="{{jsp}}"><title>{{title}}</title>
+{{{pageHead}}}
+</head>
+<body>
+{{#if loggedIn}}{{> core/layout/navbar.html}}{{/if}}
+	<!-- main -->
+	<main> 
+{{> core/layout/messagebox.html}}{{#if sidebar}}{{> core/layout/sidebar.html}}{{/if}}{{{pageBody}}}
+	</main>
+	<!-- main -->
+{{> core/layout/footer.html}}
+{{> core/layout/foot-scripts.html}}
+{{{pageFoot}}}
+<!-- Modal -->
+	<div id="myModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content" id="myModalContent"></div>
+		</div>
+	</div>
+	<!-- Modal -->
+</body>
+</html>

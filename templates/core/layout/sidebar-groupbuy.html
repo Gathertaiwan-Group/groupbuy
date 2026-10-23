@@ -1,0 +1,133 @@
+<li role="separator" class="divider dropdown-divider my-0"></li>
+				<li style="background-color:#30515e9c;"><a class="collapsible-header waves-effect arrow-r gb-text">
+					<i class="sv-slim-icon fa-light fa-star"></i>{{groupBuy.title}}</a>
+				</li>
+<li><a target="_blank" href="/backend/SalesOrder/list?groupBuyId={{groupBuy.groupBuyId}}" >
+				<i class="sv-slim-icon fa-light fa-clipboard-list"></i>訂單管理</a>
+				</li>
+<li><a target="_blank" href="/backend/GroupBuy/show?groupBuyId={{groupBuy.groupBuyId}}" >
+				<i class="sv-slim-icon fa-light fa-box-open"></i>品項管理</a>
+				</li>
+				<li><a target="_blank" href="/backend/GroupBuyItemSet/show?groupBuyId={{groupBuy.groupBuyId}}" >
+				<i class="sv-slim-icon fa-light fa-box"></i>所有商品</a>
+				</li>
+<li><a target="_blank" href="/{{groupBuy.shortUrl}}?preview=true" >
+				<i class="sv-slim-icon fa-light fa-eye"></i>預覽</a>
+				</li>
+				<li><a href="javascript: void(0)" onclick="GBAPI.showShortUrl('{{groupBuy.shortUrl}}',{{groupBuy.groupBuyId}},'https://groupbuyforms.tw')" >
+				<i class="sv-slim-icon fa-light fa-share-alt"></i>賣場網址</a>
+				</li>
+<li><a href="javascript: void(0)" onclick="openFormF('/backend/GroupBuy/clone', 'groupBuyId={{groupBuy.groupBuyId}}')" >
+				<i class="sv-slim-icon fa-light fa-copy"></i>複製團購</a>
+				</li>
+				<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-cog sub-text"></i>進階設定<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/GroupBuy/shipping?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">運費</span>
+								<span class="sv-normal">運費設定</span></a>
+							</li>
+							<li><a href="/backend/GroupBuyPreference/list?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">設定</span>
+								<span class="sv-normal">進階設定</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-tag sub-text"></i>行銷管理<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/GroupBuy/salesRule?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">優惠</span>
+								<span class="sv-normal">優惠條件</span></a>
+							</li>
+							<li><a href="/backend/GroupBuy/coupon?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim sv-slim-3d">優惠卷</span>
+								<span class="sv-normal">優惠卷</span></a>
+							</li>
+<li><a href="javascript: void(0)" onclick="openForm('{{baseUrl}}/ajax/GroupBuy/displaySMS.do', 'groupBuyId={{groupBuy.groupBuyId}}')" >
+								<span class="sv-slim">簡訊</span>
+								<span class="sv-normal">發送簡訊</span></a>
+							</li>
+							<li><a href="/backend/Lottery/lottery?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">抽獎</span>
+								<span class="sv-normal">抽獎活動</span></a>
+							</li>
+<li><a href="/backend/GroupBuyItemCrmTag/list?&groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">銷標</span>
+								<span class="sv-normal">商品銷售標籤</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-shipping-fast sub-text"></i>訂單出貨<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="javascript: void(0)" onclick="openFormF('/backend/SplitSalesOrder/split', 'groupBuyId={{groupBuy.groupBuyId}}')" >
+								<span class="sv-slim">分割</span>
+								<span class="sv-normal">分割訂單</span></a>
+							</li>
+							<li><a href="/backend/PreorderToStock/list?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">轉換</span>
+								<span class="sv-normal">預購轉現貨</span></a>
+							</li>
+							<!-- <li><a href="javascript: void(0)" onclick="openFormF('/backend/ShippingCSV/exportShippingCSV', 'groupBuyId={{groupBuy.groupBuyId}}')" > -->
+							<li><a href="/backend/ShippingRecord/export?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">匯出</span>
+								<span class="sv-normal">匯出貨運單</span></a>
+							</li>
+							<li><a href="javascript: void(0)" onclick="openFormL('/backend/ShippingCSV/importShippingCSV', 'groupBuyId={{groupBuy.groupBuyId}}')" >
+								<span class="sv-slim">匯入</span>
+								<span class="sv-normal">匯入貨運單</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-chart-line sub-text"></i>分析報表<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/rp/{{groupBuy.reportToken}}" target="_blank" class="waves-effect gb-text">
+								<span class="sv-slim">報表</span>
+								<span class="sv-normal">銷售報表</span></a>
+								<button class="btn btn-help" data-toggle="tooltip" data-placement="top" title="任何擁有此網址者均能瀏覽報表內容。更換報表密碼後，原先網址將會失效" data-original-title=""><i class="far fa-question-circle"></i></button>
+							</li>
+							<li><a href="/backend/GroupBuyDailyStatistics/list?groupBuyId={{groupBuy.groupBuyId}}" >
+									<span class="sv-slim">每日</span>
+									<span class="sv-normal">每日銷售</span></a>
+							</li>
+							<li><a href="/backend/GroupBuy/analytics?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">分析</span>
+								<span class="sv-normal">銷售分析</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li><a class="collapsible-header waves-effect arrow-r">
+					<i class="sv-slim-icon fa-light fa-hand-holding-usd sub-text"></i>財務相關<i class="fa-light fa-angle-down rotate-icon"></i>
+					</a>
+					<div class="collapsible-body">
+						<ul>
+							<li><a href="/backend/GroupBuy/importBankTransactionCSV?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">對賬</span>
+								<span class="sv-normal">匯款對帳</span></a>
+							</li>
+							<li><a href="/backend/SalesOrderTransaction/list?groupBuyId={{groupBuy.groupBuyId}}" >
+								<span class="sv-slim">金流</span>
+								<span class="sv-normal">金流對帳</span></a>
+							</li>
+							<li><a href="/backend/Invoice/list?groupBuyId={{groupBuy.groupBuyId}}">
+								<span class="sv-slim">發票</span>
+								<span class="sv-normal">電子發票</span></a>
+							</li>
+						</ul>
+					</div>
+				</li>
+<li role="separator" class="divider dropdown-divider my-0"></li>
