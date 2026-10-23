@@ -78,7 +78,9 @@
   font-weight: 300;
   color: #fff;
   cursor: pointer;
-  white-space: nowrap;
+  /* 原站：slim 時群組名稱換行到第二行並被 overflow:hidden 截掉，只剩圖示 */
+  white-space: normal;
+  overflow: hidden;
 }
 .side-nav .collapsible li a:hover { background-color: rgba(0, 0, 0, 0.15); }
 .side-nav .collapsible > li a.collapsible-header.active,
@@ -119,9 +121,8 @@
 .side-nav.wide.slim .fa-angle-down.rotate-icon { display: none; opacity: 0; }
 .side-nav.wide.slim .logo-wrapper img { max-width: 160px; }
 
-/* 背景圖遮罩 */
+/* 背景圖遮罩：.sidenav-bg 本身不定位（高度 0），只靠 :after 以 #slide-out 為容器蓋上一層半透明（同原站，避免雙層變太暗） */
 .side-nav .sidenav-bg {
-  position: absolute;
   top: 0;
   bottom: 0;
   left: 0;

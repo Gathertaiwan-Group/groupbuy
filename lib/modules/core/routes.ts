@@ -65,7 +65,7 @@ export const routes: RouteDef[] = [
   page("/backend/dev/editorShimTest", {
     template: "core/dev/editor-shim-test.html",
     title: "Editor 相容 shim 自我測試",
-    groupBuy: "none",
+    groupBuy: "auto", // 網址帶 ?groupBuyId= 時可順便檢查單一團購側欄選單
     async data(ctx) {
       const { data } = await getServiceClient()
         .from("group_buys")
