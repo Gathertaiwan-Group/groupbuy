@@ -1,6 +1,6 @@
 # accounting 模組（會計／對帳）
 
-擁有者：accounting agent。程式：`lib/modules/accounting/**`、模板：`templates/accounting/**`、migration：`supabase/migrations/3500_accounting_bank_reconcile.sql`。
+擁有者：accounting agent。程式：`lib/modules/accounting/**`、模板：`templates/accounting/**`、migration：`supabase/migrations/3500_accounting_bank_reconcile.sql`、`3501_accounting_reconcile_guards.sql`、`3502_accounting_same_payment_guard.sql`。
 對外服務（金流後台、電子發票平台、Email、信用卡退刷）**一律未串接**：介面照原站，動作只寫 DB 紀錄，回應帶【未串接】。
 
 ## 頁面與狀態
@@ -48,12 +48,15 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 
 執行測試：`node --test 'lib/modules/accounting/tests/*.test.mjs'`（Node ≥ 23.6；Node 22 加 `--experimental-strip-types`）。
 
-1. **重複匯入**：同「付款日期＋時間（有時間才比）＋金額（以分比較）＋帳號數字」已存在 → `重複匯入（與…相同），略過`，不對應訂單。比對對象：同團購的既有明細（全部）、**同租戶其他團購已對應／已入帳的明細**（同一份對帳單匯入兩個團購時擋下）、同批前面的行。帶「指定訂單編號」的行不會被同團購「尚未對應、未入帳」的舊明細擋下（用於更正多筆候選／未對到）。
+1. **重複防呆**（兩層，都會 `DUPLICATE`、不對應訂單）：
+   - **重複匯入**：與同團購既有明細或同批前面的行「原始內容相同」（空白正規化後；同一份對帳單再匯一次）→ `重複匯入（與… 相同），略過`。帶「指定訂單編號」的行不會被同團購「尚未對應、未入帳」的舊明細擋下（用於更正多筆候選／未對到）。
+   - **可能為同一筆匯款**（容錯、寧可擋下）：與同租戶任何「已對應訂單／已入帳」的明細（含其他團購、含同批前面已符合的行）**付款日相同＋金額相同＋時間相容**（任一方沒有時間，或兩方時間相同）**＋帳號相容**（數字相同，或兩方都 ≥4 碼且末 N 碼相同，N=min(5, 兩方長度)）→ `可能與… 為同一筆匯款…，略過；若確定是另一筆匯款，請至訂單管理手動設為已付款`。
+   - 既有明細的讀取範圍：同租戶、付款日落在本次匯入日期前後 1 天內的全部明細＋本團購已對應訂單的明細（不限日期），不受明細總量影響。
 2. **候選訂單**：同租戶、同團購；階段 `NEW`/`PROCESSING`；付款方式 銀行轉帳(1)／虛擬帳戶(2)（卡號格式 `CATHAYECC`/`CTBCCC`：信用卡 4/128/16384）；**訂單成立日 ≤ 付款日**。
 3. **帳號（必要）**：虛擬帳號（≥10 碼）完全相符＝強符合；否則明細帳號末 N 碼＝訂單「匯款帳號後五碼」末 N 碼（N=min(5, 兩者長度)，N≥4）；卡號模式比末 4 碼。只有金額相同、沒有帳號依據時**不自動對應**。帳號只存數字／`*`／`-`（其他字元在解析時去除）。
 4. **金額（必要）**：匯款金額＝訂單應付（grand_total − total_paid）。
 5. **結果**：恰 1 筆 → `符合，待確認入帳`（帶訂單）；多筆 → 有唯一虛擬帳號強符合取它，否則 `多筆候選訂單：…（請於對帳紀錄第 4 欄指定訂單編號後重新匯入）`；0 筆 → `金額不符：訂單 X 應付 N`／`訂單 X 已付款`／`未對到訂單`。
-6. **重複入帳防呆**：訂單已被既有明細（含已入帳）或同批前一行對應 → `訂單 X 已有…，請確認是否重複付款`；確認入帳時 DB 函式再檢查一次：同一訂單已有有效入帳（另有唯一索引）、**同租戶同一筆匯款（付款時間＋金額＋帳號數字完全相同）已由其他明細入帳**（`DUPLICATE_PAYMENT`）。
+6. **重複入帳防呆**：訂單已被既有明細（含已入帳）或同批前一行對應 → `訂單 X 已有…，請確認是否重複付款`；確認入帳時 DB 函式再檢查一次：同一訂單已有有效入帳（另有唯一索引）、**同租戶「可能為同一筆匯款」的明細已入帳**（與上面第 1 點相同的容錯規則，migration 3502 的 `DUPLICATE_PAYMENT`），並以 `pg_advisory_xact_lock(租戶, 金額, 付款日)` 讓同時確認的請求依序執行。
 7. **指定訂單**：文字框第 4 欄（或檔案備註中的 12 碼訂單編號）＝只比該訂單（仍檢查階段、應付金額）。
 
 **確認入帳**（DB 函式，同一交易）：`set_config('groupbuy.actor','ADMIN')`＋`admin_user_id` → 只更新訂單 `status='PAID_EMAIL_SENT'`、`total_paid += 金額`、`date_paid=付款日` → `log_sales_order_history()` 觸發器寫歷程；同時寫 `bank_transaction_confirmations`（入帳前快照）與付款成功通知信紀錄（`email_messages`，NOT_SENT_UNINTEGRATED）。
@@ -70,7 +73,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 
 ## 已知缺口
 
-- 同一份對帳單「沒有時間欄」且同帳號同日同額出現兩行時，第二行視為重複（無法和重複匯入區分）；有時間或餘額欄的銀行檔不受影響，必要時以指定訂單編號匯入。
+- 同帳號、同一天、同金額的多筆匯款，若無法以時間區分（任一方沒有時間欄，例如原站文字框格式），第二筆起一律視為「可能為同一筆匯款」而略過（指定訂單編號也不例外）——這是刻意的寧可擋下；這類款項請至訂單管理手動設為已付款。兩筆都有不同的時間時（含在文字框第 2 欄手動填入時間）可各自對應。
 - 單元測試不在 CI 內（CI 由 core 管理，Node 22 需 `--experimental-strip-types`）；本機 `node --test 'lib/modules/accounting/tests/*.test.mjs'`。
 
 - 金流對帳列表依賴 orders 模組的 `/ajax/SalesOrder/list`（需支援 `groupBuyId`、`month`、`rowId=salesOrderId` 用的 `salesOrderId` 鍵）；orders 未上線前列表為空／錯誤。

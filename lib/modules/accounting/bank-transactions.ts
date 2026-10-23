@@ -112,25 +112,41 @@ async function loadOrders(tenantId: number, groupBuyId: number): Promise<MatchOr
   }));
 }
 
-/** 同租戶既有明細（重複匯入／跨團購重複入帳防呆用）；其他團購的明細只有已對應或已入帳才會被 bank-match 視為重複 */
-async function loadExisting(tenantId: number, groupBuyId: number): Promise<ExistingBankTx[]> {
+type ExistingRow = { id: number; group_buy_id: number | null; date_paid: string | null; amount: string | number; account: string | null; sales_order_id: number | null; checked: boolean; raw_line: string | null };
+
+/**
+ * 既有明細（重複匯入／同一筆匯款／訂單已有匯款 防呆用）：
+ *   1. 同租戶、付款日落在本次匯入日期範圍前後 1 天內的所有明細（含其他團購）
+ *   2. 本團購已對應訂單的明細（不限日期；「訂單已有匯款」用）
+ * 依日期範圍查詢，明細再多也不會漏讀最新的資料。
+ */
+async function loadExisting(tenantId: number, groupBuyId: number, lines: BankLine[]): Promise<ExistingBankTx[]> {
   const db = getServiceClient();
-  const rows = await fetchAll<{ id: number; group_buy_id: number | null; date_paid: string | null; amount: string | number; account: string | null; sales_order_id: number | null; checked: boolean }>(
-    (from, to) =>
-      db
-        .from("bank_transactions")
-        .select("id, group_buy_id, date_paid, amount, account, sales_order_id, checked")
-        .eq("tenant_id", tenantId)
-        .order("id")
-        .range(from, to),
+  const cols = "id, group_buy_id, date_paid, amount, account, sales_order_id, checked, raw_line";
+  const days = lines.map((l) => l.date).filter(Boolean).sort();
+  const byId = new Map<number, ExistingRow>();
+  if (days.length) {
+    const from = new Date(new Date(`${days[0]}T00:00:00+08:00`).getTime() - 24 * 3600 * 1000).toISOString();
+    const to = new Date(new Date(`${days[days.length - 1]}T00:00:00+08:00`).getTime() + 2 * 24 * 3600 * 1000).toISOString();
+    const inRange = await fetchAll<ExistingRow>(
+      (f, t) => db.from("bank_transactions").select(cols).eq("tenant_id", tenantId).gte("date_paid", from).lt("date_paid", to).order("id").range(f, t),
+      200000,
+    );
+    for (const r of inRange) byId.set(r.id, r);
+  }
+  const linkedHere = await fetchAll<ExistingRow>(
+    (f, t) => db.from("bank_transactions").select(cols).eq("tenant_id", tenantId).eq("group_buy_id", groupBuyId).not("sales_order_id", "is", null).order("id").range(f, t),
+    200000,
   );
-  return rows.map((r) => {
+  for (const r of linkedHere) byId.set(r.id, r);
+  return [...byId.values()].map((r) => {
     const t = r.date_paid ? taipeiTime(r.date_paid) : null;
     return {
       bankTransactionId: r.id,
       date: taipeiDay(r.date_paid),
       time: t && t !== "00:00:00" ? t : null,
       sameGroupBuy: r.group_buy_id === groupBuyId,
+      raw: r.raw_line,
       amount: Number(r.amount),
       account: digitsOf(r.account),
       salesOrderId: r.sales_order_id,
@@ -205,7 +221,7 @@ async function importBankTransaction(ctx: RequestContext): Promise<Response> {
   }
   if (lines.length > MAX_LINES) throw new FieldErrors([{ name: "status", status: `一次最多匯入 ${MAX_LINES} 筆` }]);
 
-  const [orders, existing] = await Promise.all([loadOrders(session.tenantId, groupBuyId), loadExisting(session.tenantId, groupBuyId)]);
+  const [orders, existing] = await Promise.all([loadOrders(session.tenantId, groupBuyId), loadExisting(session.tenantId, groupBuyId, lines)]);
   const mode = accountModeOf(bankProvider);
   const results = matchBankLines(lines, orders, existing, mode);
 
