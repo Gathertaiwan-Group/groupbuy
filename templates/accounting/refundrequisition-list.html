@@ -1,0 +1,181 @@
+{{!-- 推導：原站「退款單據」（/backend/RefundRequisition/list）本帳號無權限、內容未擷取；
+     依相鄰頁（電子發票 invoice-list：狀態 radio 篩選＋serverSide 表格＋Editor＋actionButton）的結構與 class 補完 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var refundTable;
+$(document).ready(function() {
+	var tableName = '#refundRequisitionTable';
+	var editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/RefundRequisition/save.do'
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/RefundRequisition/update.do?refundRequisitionId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/RefundRequisition/delete.do?refundRequisitionId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'refundRequisitionId',
+		fields: [
+			DataTableConfig.field_input_f('訂單編號','salesOrderUUID'),
+			DataTableConfig.field_input_f('退款金額','amount'),
+			DataTableConfig.field_select('退款方式','refundMethod'),
+			DataTableConfig.field_textarea('退款原因','reason'),
+			DataTableConfig.field_input_f('銀行代碼','bankCode'),
+			DataTableConfig.field_input_f('銀行名稱','bankName'),
+			DataTableConfig.field_input_f('銀行帳號','bankAccount'),
+			DataTableConfig.field_input_f('戶名','accountName'),
+			DataTableConfig.field_textarea('備註','note'),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+	editor.dependent('refundMethod', function ( val ) {
+		return val == 'BANK_TRANSFER' ?
+			{ show: ['bankCode', 'bankName', 'bankAccount', 'accountName'] } :
+			{ hide: ['bankCode', 'bankName', 'bankAccount', 'accountName'] };
+	} );
+	editor.on('initEdit', function () {
+		editor.field('salesOrderUUID').disable();
+	} ).on('initCreate', function () {
+		editor.field('salesOrderUUID').enable();
+	} );
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		"lengthMenu": [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/RefundRequisition/list.do',
+			type: "POST",
+			data: function ( d ) {
+				d.status = $('input[name=status]:checked').val();
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('dateCreatedString'),
+			DataTableConfig.data_input('salesOrderUUID'),
+			DataTableConfig.data_input('groupBuyTitle'),
+			DataTableConfig.data_input('amount'),
+			DataTableConfig.data_select('refundMethod'),
+			DataTableConfig.data_select('status'),
+			DataTableConfig.data_input('reason'),
+			DataTableConfig.data_input('requester'),
+			DataTableConfig.data_input('approver'),
+			DataTableConfig.data_input('dateRefundedString'),
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 1, "desc" ]],
+		columnDefs: [ { orderable: false, targets: [2,3,7,8,9] } ],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+			DataTableConfig.actionButton({
+				className:'',
+				text:'核准',
+				confirm:'確定要核准選取的 {0} 筆退款單嗎?',
+				url:'{{baseUrl}}/ajax/RefundRequisition/approve',
+			}),
+			DataTableConfig.actionButton({
+				className:'',
+				text:'駁回',
+				confirm:'確定要駁回選取的 {0} 筆退款單嗎?',
+				url:'{{baseUrl}}/ajax/RefundRequisition/reject',
+			}),
+			DataTableConfig.actionButton({
+				className:'',
+				text:'已退款',
+				confirm:'確定已完成退款，並將選取的 {0} 筆退款單標示為已退款嗎?（金流退刷未串接，請先至金流後台或網銀完成退款）',
+				url:'{{baseUrl}}/ajax/RefundRequisition/refund',
+				success:function(json) { displayAlertSuccess(json.error); }
+			}),
+			DataTableConfig.actionButton({
+				className:'',
+				text:'取消',
+				confirm:'確定要取消選取的 {0} 筆退款單嗎?',
+				url:'{{baseUrl}}/ajax/RefundRequisition/cancel',
+			}),
+			{
+				extend: 'excel',
+				text: '匯出 Excel',
+				exportOptions: {
+					columns: ':not(.noExport)'
+				}
+			},
+		],
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [2],[16]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	DataTableHelper.initEditorOnCallback(table,editor);
+	refundTable = table;
+	$('.card').on('change', '.filters', function() {
+		table.clear().ajax.reload();
+	});
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4">
+<div class="card-header">退款單據</div>
+<div class='card-footer pb-0'>
+		<input type="radio" name="status" id="status_ALL" class="filters form-check-input" value="" ><label for="status_ALL" class="form-check-label pl-4 mr-2">全部</label>
+<input type="radio" name="status" id="status_PENDING" class="filters form-check-input" value="PENDING"  checked ><label for="status_PENDING" class="form-check-label pl-4 mr-2">待審核</label>
+<input type="radio" name="status" id="status_APPROVED" class="filters form-check-input" value="APPROVED" ><label for="status_APPROVED" class="form-check-label pl-4 mr-2">已核准</label>
+<input type="radio" name="status" id="status_REJECTED" class="filters form-check-input" value="REJECTED" ><label for="status_REJECTED" class="form-check-label pl-4 mr-2">已駁回</label>
+<input type="radio" name="status" id="status_REFUNDED" class="filters form-check-input" value="REFUNDED" ><label for="status_REFUNDED" class="form-check-label pl-4 mr-2">已退款</label>
+<input type="radio" name="status" id="status_CANCELED" class="filters form-check-input" value="CANCELED" ><label for="status_CANCELED" class="form-check-label pl-4 mr-2">已取消</label>
+</div>
+<div class="card-body">
+	<table id="refundRequisitionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th class="noExport"></th>
+				<th>申請日期</th>
+				<th>訂單編號</th>
+				<th>團購</th>
+				<th>退款金額</th>
+				<th>退款方式</th>
+				<th>狀態</th>
+				<th>退款原因</th>
+				<th>申請人</th>
+				<th>審核人</th>
+				<th>退款日期</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>申請日期</th>
+				<th>訂單編號</th>
+				<th>團購</th>
+				<th>退款金額</th>
+				<th>退款方式</th>
+				<th>狀態</th>
+				<th>退款原因</th>
+				<th>申請人</th>
+				<th>審核人</th>
+				<th>退款日期</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

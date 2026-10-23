@@ -4,5 +4,14 @@
 import type { RouteDef } from "@/lib/core/http/types";
 import { bankTransactionRoutes } from "./bank-transactions";
 import { invoiceRoutes } from "./invoices";
+import { salesOrderTransactionRoutes } from "./sales-order-transactions";
+import { billingTransactionRoutes } from "./billing-transactions";
+import { refundRequisitionRoutes } from "./refund-requisitions";
 
-export const routes: RouteDef[] = [...bankTransactionRoutes, ...invoiceRoutes];
+export const routes: RouteDef[] = [
+  ...bankTransactionRoutes,
+  ...salesOrderTransactionRoutes,
+  ...refundRequisitionRoutes,
+  ...invoiceRoutes,
+  ...billingTransactionRoutes,
+];

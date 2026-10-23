@@ -1,0 +1,144 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var editor; // use a global for the submit and return data rendering in the examples
+	$.extend( true, $.fn.dataTable.defaults, {
+		"searching": true,
+		"pageLength":40,
+	} );
+	var appendExtra = function (d) {
+		d.payable = ($('input[name=payable]:checked').length > 0);
+		d.newBt = ($('input[name=newBt]:checked').length > 0);
+	}
+	$(document).ready(function() {
+		var tableName = '#example';
+		var table = $(tableName).DataTable( {
+			dom: 'lBfrtip',
+			scrollX:true,
+			serverSide: true,
+			processing:true,
+			lengthMenu: [20],
+			ajax: {
+				url:'/ajax/BillingTransaction/list.do',
+				type: "POST",
+				data: function ( d ) {
+					appendExtra(d);
+					return d;
+				}
+			},
+			language:DataTableConfig.i18n,
+			columns:[
+				{ data: 'dateTransactionString' },
+				{ data: 'summary.groupBuyRevenue' },
+				{ data: 'grandTotal' },
+				{
+					"className":	'details-control',
+					"orderable":	false,
+					"data":null,
+					"defaultContent": '<a class="btn btn-default btn-sm btn_more">明細</a>'
+				},
+			],
+			keys: DataTableConfig.keysInlineTab,
+			"order": [[ 0, "desc" ]],
+			columnDefs: [
+				{ orderable: false, targets: [1,2,3] }
+			],
+			select: {
+				style: 'os'
+			},
+			buttons:[],
+			drawCallback: function (settings) {
+				$(".dataTables_scrollBody").floatingScroll();
+			}
+		} );
+
+		var renderBillingBlanArea = function(billingPlans) {
+			billingPlans = billingPlans.filter(b => b.monthlyFee || b.billingPlanSettings.credit || b.billingPlanSettings.creditRegularlyLimit);
+			if (!billingPlans.length) return;
+			var html = '<div class="card mt-4"><div class="card-header">方案</div></div><div class="card-body"><div class="container">';
+			billingPlans.forEach(b => {
+				var monthlyFee = b.monthlyFee;
+				var credit = b.billingPlanSettings.credit;
+				var creditUsed = b.billingPlanSettings.creditUsed;
+				var creditRegularlyLimit = b.billingPlanSettings.creditRegularlyLimit;
+				html += '<div class="row my-1"><div class="col-12">' + b.title + '</div>';
+				html += '<div class="col-12 small">方案期限:' + b.dateStartString + '~' + b.dateEndString + '</div>';
+				if (monthlyFee)
+					html += '<div class="col-12 small">月費:' + monthlyFee + '</div>';
+				if (creditRegularlyLimit)
+					html += '<div class="col-12 small">每月折抵額度儲值金額:'+creditRegularlyLimit + '</div>'
+				if (credit)
+					html += '<div class="col-12 small">儲值金額:'+credit + " 已使用金額:"+creditUsed+ '剩餘金額:'+ (credit-creditUsed)+ '</div>'
+				html += '</div>'
+			});
+			html += "</div></div></div>"
+			$('#billingPlanArea').html(html);
+		}
+
+		table.on('xhr.dt', function ( e, settings, json, xhr ) {
+			if (json != null && json.billingPlans != null) {
+				renderBillingBlanArea(json.billingPlans);
+			}
+		});
+
+		function format ( d ) {
+			// `d` is the original data object for the row
+			var id = d.billingTransactionId;
+			return ''
+			+ '<div class="row">'
+			+ '<div class="col-sm-10">'
+			+ '<div class="panel panel-primary">'
+			+ '<div class="panel-heading"></div>'
+			+ '<div class="panel-body"></div>'
+			+ '<table class="table table-striped">'
+			+ '<tr class="warning">'
+			+ '<td><textarea class="form-control" style="width:100%" rows=8>'+d.descr+'</textarea></td>'
+			+ '</tr>'
+			+ '</table>'
+			+ '</div>'
+			+ '</div>'
+			+ '</div>'
+			;
+		}
+
+		$('#example tbody').on('click', 'a.btn_more', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var url = '/backend/BillingTransactionRecord/list.do?billingTransactionId=' + row.data().billingTransactionId;
+			window.open(url);
+			//location.href = '/backend/ItemSet/show.do?itemSetId=' + row.data().itemSetId;
+		} );
+
+		$('#example').on('click', 'a.editor_edit', function (e) {
+			e.preventDefault();
+			editor.edit( $(this).closest('tr'), {
+				title: '編輯',
+				buttons: '更新'
+			} );
+		} );
+
+		$('.filters').on('change', function() {
+			table.clear().ajax.reload();
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<div id="billingPlanArea"></div>
+	<div class="card mt-4">
+<div class="card-header">月結單</div>
+<div class="card-body">
+</div>
+<div class="card-body">
+	<table id="example" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>核發日期</th>
+				<th>總營收</th>
+				<th>帳單金額</th>
+				<th width=20px></th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

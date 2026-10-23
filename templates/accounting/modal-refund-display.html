@@ -1,0 +1,66 @@
+{{!-- 推導：原站訂單「退款」彈窗（/ajax/Refund/displayRefund?salesOrderId=，信用卡／LINE Pay／悠遊付／台灣Pay 訂單顯示）未擷取；
+     本系統改為建立「退款單據」（待審核），金流退刷未串接 --}}
+<form name="RefundForm" method="post" action="{{baseUrl}}/ajax/RefundRequisition/save.do" class="form-horizontal" id="RefundForm"><input type="hidden" name="action" value="create"><input type="hidden" name="data[0][salesOrderUUID]" value="{{uuid}}"><div class="modal-header">
+    <h5 class="modal-title">退款 {{uuid}}</h5>
+    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="modal-body">
+    <div class="modal-message"></div>
+    <p class="small">已付金額：{{totalPaid}}　可退金額：{{refundable}}</p>
+    <div class="form-group row">
+        <label class="col-4" for="refundAmount">退款金額:</label>
+        <div class="col-8"><input type="text" name="data[0][amount]" id="refundAmount" class="form-control" value="{{refundable}}" required/></div>
+    </div>
+    <div class="form-group row">
+        <label class="col-4" for="refundMethod">退款方式:</label>
+        <div class="col-8"><select name="data[0][refundMethod]" id="refundMethod" class="form-control">{{#each methods}}<option value="{{value}}"{{#if (eq value ../defaultMethod)}} selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+    </div>
+    <div class="refund-bank">
+    <div class="form-group row">
+        <label class="col-4" for="refundBankCode">銀行代碼:</label>
+        <div class="col-8"><input type="text" name="data[0][bankCode]" id="refundBankCode" class="form-control" maxlength="3"/></div>
+    </div>
+    <div class="form-group row">
+        <label class="col-4" for="refundBankName">銀行名稱:</label>
+        <div class="col-8"><input type="text" name="data[0][bankName]" id="refundBankName" class="form-control"/></div>
+    </div>
+    <div class="form-group row">
+        <label class="col-4" for="refundBankAccount">銀行帳號:</label>
+        <div class="col-8"><input type="text" name="data[0][bankAccount]" id="refundBankAccount" class="form-control"/></div>
+    </div>
+    <div class="form-group row">
+        <label class="col-4" for="refundAccountName">戶名:</label>
+        <div class="col-8"><input type="text" name="data[0][accountName]" id="refundAccountName" class="form-control"/></div>
+    </div>
+    </div>
+    <div class="form-group row">
+        <label class="col-4" for="refundReason">退款原因:</label>
+        <div class="col-8"><textarea name="data[0][reason]" id="refundReason" class="form-control" rows="3" required></textarea></div>
+    </div>
+    <p class="small text-danger">【未串接】金流退刷未串接：送出後建立「待審核」退款單據，核准並完成退款後請於「會計 &gt; 退款單據」標示已退款。</p>
+    </div> <!-- modal-body -->
+    <div class="progress">
+        <div class="progress-bar" role="progressbar"></div>
+    </div>
+    <div class="modal-footer">
+        <button class="btn btn-default" data-dismiss="modal">關閉</button>
+        <input id="submitButton" name="submitButton" type="submit" class="btn btn-warning" value="送出" />
+    </div>
+</form><script>
+(function() {
+	var toggle = function() { $('#RefundForm .refund-bank').toggle($('#refundMethod').val() == 'BANK_TRANSFER'); };
+	$('#refundMethod').on('change', toggle);
+	toggle();
+})();
+function refundSuccess(json) {
+	if (json.fieldErrors && json.fieldErrors.length) {
+		modalShowDanger($('#RefundForm'), json.fieldErrors.map(function(f) { return f.status; }).join('<br>'));
+		return;
+	}
+	modalShowSuccess($('#RefundForm'), '已建立退款單據（待審核）');
+	$('#RefundForm #submitButton').attr('disabled', true);
+}
+initAjaxForm('RefundForm', refundSuccess, function(json) {
+	modalShowDanger($('#RefundForm'), json && (json.error || (json.fieldErrors || []).map(function(f) { return f.status; }).join('<br>')));
+});
+</script>
