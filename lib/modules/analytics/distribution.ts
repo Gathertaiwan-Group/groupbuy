@@ -286,6 +286,8 @@ async function saveDcgb(ctx: RequestContext): Promise<Response> {
     if (error) throw new Error(`[analytics] 新增通路商團購失敗：${error.message}`);
     created.push(...((data ?? []) as AnyRow[]));
   }
+  // 回傳順序固定為建立順序（＝選取順序；一次 insert 的 id 依序遞增）
+  created.sort((a, b) => int(a.id) - int(b.id));
   return editorResponse(created.map((r) => dcgbToApi(r, false)));
 }
 
