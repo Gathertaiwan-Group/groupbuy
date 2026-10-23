@@ -20,7 +20,6 @@ import {
   dateTime,
   db,
   formJson,
-  loadItem,
   loadWarehouse,
   parseTaipei,
   requesterOptions,
@@ -115,6 +114,7 @@ function reqJson(r: ReqRow, whs: Map<number, WarehouseRow>): AnyRow {
     warehouseRequisitionItems: items,
     transferable: (st === "APPROVED" || st === "TRANSFERRING") && ts !== "COMPLETED",
     receivable: st === "TRANSFERRING" && ts === "COMPLETED",
+    sourceRequisitionId: r.source_requisition_id == null ? null : Number(r.source_requisition_id),
     dateCreated: new Date(String(r.created_at)).getTime(),
     dateModified: new Date(String(r.updated_at)).getTime(),
     dateModifiedString: dateTime(r.updated_at),
@@ -131,18 +131,6 @@ async function listOptions(session: AdminSession) {
     ...(await enumOptionsFor({ requisitionStatus: ST, transferStatus: TS, type: TYPE, logisticType: LOGI })),
     requester: await requesterOptions(session),
   };
-}
-
-async function recomputeTotals(session: AdminSession, reqId: number) {
-  const { data } = await db()
-    .from("warehouse_requisition_items")
-    .select("quantity, cost")
-    .eq("tenant_id", session.tenantId)
-    .eq("warehouse_requisition_id", reqId);
-  const rows = (data ?? []) as { quantity: number; cost: number | string }[];
-  const totalAmount = rows.reduce((s, r) => s + Number(r.quantity ?? 0), 0);
-  const totalCost = Math.round(rows.reduce((s, r) => s + Number(r.cost ?? 0), 0) * 100) / 100;
-  await db().from("warehouse_requisitions").update({ total_amount: totalAmount, total_cost: totalCost }).eq("tenant_id", session.tenantId).eq("id", reqId);
 }
 
 /* ───────────────────────── 列表 ───────────────────────── */
@@ -314,8 +302,16 @@ async function removeReq(ctx: RequestContext): Promise<Response> {
       throw badRequest(`調撥單 ${id} 已轉移庫存，不可刪除`);
     }
   }
-  const { error } = await db().from("warehouse_requisitions").delete().eq("tenant_id", session.tenantId).in("id", ids);
+  // 條件式刪除：檢查後到刪除前若有人完成轉移（狀態已變調撥中/已收到），該筆不會被刪
+  const { data: deleted, error } = await db()
+    .from("warehouse_requisitions")
+    .delete()
+    .eq("tenant_id", session.tenantId)
+    .in("id", ids)
+    .not("requisition_status", "in", "(TRANSFERRING,RECEIVED)")
+    .select("id");
   if (error) throw new Error(`[wms req delete] ${error.message}`);
+  if ((deleted ?? []).length !== ids.length) throw badRequest("部分調撥單已轉移庫存，未刪除");
   return editorResponse([]);
 }
 
@@ -369,20 +365,24 @@ function actionHandler(action: string) {
       }
       case "transfer": {
         const body = await ctx.body();
-        let quantities: Record<string, number> | null = null;
-        const q = body.nested.quantities;
-        if (q && typeof q === "object" && !Array.isArray(q)) {
-          quantities = {};
-          for (const [k, v] of Object.entries(q)) {
-            const n = toInt(v);
-            if (n === null || n < 0) throw badRequest("轉移數量需為 0 以上的整數");
-            quantities[k] = n;
+        // quantities[<明細id>]＝本次轉移數量；expected[<明細id>]＝畫面上的已調撥數量（DB 比對，重送/他人已轉移 → 拒絕）
+        const intMap = (v: unknown, label: string): Record<string, number> | null => {
+          if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+          const out: Record<string, number> = {};
+          for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+            const n = toInt(x);
+            if (n === null || n < 0) throw badRequest(`${label}需為 0 以上的整數`);
+            out[k] = n;
           }
-        }
+          return out;
+        };
+        const quantities = intMap(body.nested.quantities, "轉移數量");
+        const expected = intMap(body.nested.expected, "已調撥數量");
         const res = await rpc<AnyRow>("wms_transfer_requisition", {
           p_tenant_id: session.tenantId,
           p_requisition_id: reqId,
           p_quantities: quantities,
+          p_expected: expected ?? (quantities ? null : Object.fromEntries(items.map((i) => [String(i.id), Number(i.transferred_quantity)]))),
           p_admin_user_id: session.adminUserId,
           p_actor: session.account,
         });
@@ -472,14 +472,9 @@ async function writeItems(ctx: RequestContext): Promise<Response> {
   const client = db();
   const reqId = toInt(req.extra.warehouseRequisitionId ?? (await ctx.param("warehouseRequisitionId")));
 
-  const assertOpen = async (id: number | null): Promise<ReqRow> => {
-    const r = await loadReq(session, id);
-    if (r.requisition_status !== "OPEN" && r.requisition_status !== "REJECTED") throw badRequest("只有新申請（或駁回）的調撥單可以調整商品");
-    return r;
-  };
-
+  // 寫入一律走 DB 函式（鎖定調撥單、限新申請/駁回、重算總數量與成本），不會寫進已送審/已轉移的單
   if (req.action === "create") {
-    const r = await assertOpen(reqId);
+    const r = await loadReq(session, reqId);
     for (const row of req.rows) {
       const v = row.values;
       const errors: { name: string; status: string }[] = [];
@@ -490,68 +485,41 @@ async function writeItems(ctx: RequestContext): Promise<Response> {
       const costIn = v.cost === undefined || v.cost === "" ? null : toNum(v.cost);
       if (v.cost !== undefined && v.cost !== "" && (costIn === null || costIn < 0)) errors.push({ name: "cost", status: "請輸入 0 以上的數字" });
       if (errors.length) throw new FieldErrors(errors);
-      const item = await loadItem(session, itemId as number);
-      const existing = ((r.warehouse_requisition_items ?? []) as AnyRow[]).find((i) => Number(i.item_id) === Number(item.id));
-      const unitCost = Number(item.cprice ?? 0);
-      if (existing) {
-        const newQty = Number(existing.quantity) + (qty as number);
-        const newCost = costIn !== null ? Number(existing.cost) + costIn : Math.round(unitCost * newQty * 100) / 100;
-        const { error } = await client.from("warehouse_requisition_items").update({ quantity: newQty, cost: newCost }).eq("tenant_id", session.tenantId).eq("id", existing.id);
-        if (error) throw new Error(`[wms req item] ${error.message}`);
-      } else {
-        const { error } = await client.from("warehouse_requisition_items").insert({
-          tenant_id: session.tenantId,
-          warehouse_requisition_id: r.id,
-          item_id: item.id,
-          uid: item.uid,
-          title: item.title,
-          quantity: qty,
-          transferred_quantity: 0,
-          cost: costIn !== null ? costIn : Math.round(unitCost * (qty as number) * 100) / 100,
-        });
-        if (error) throw new Error(`[wms req item] ${error.message}`);
-      }
+      await rpc("wms_req_item_add", { p_tenant_id: session.tenantId, p_requisition_id: Number(r.id), p_item_id: itemId, p_quantity: qty, p_cost: costIn });
     }
-    await recomputeTotals(session, Number(r.id));
     return editorResponse(await itemRows(session, await loadReq(session, Number(r.id))));
   }
 
   const ids = editorIds(req, "warehouseRequisitionItemId");
-  const { data: rows } = await client.from("warehouse_requisition_items").select("*").eq("tenant_id", session.tenantId).in("id", ids);
+  const { data: rows } = await client.from("warehouse_requisition_items").select("id, warehouse_requisition_id").eq("tenant_id", session.tenantId).in("id", ids);
   const found = (rows ?? []) as AnyRow[];
   if (found.length !== ids.length) throw notFound("找不到調撥商品");
   const parentIds = [...new Set(found.map((x) => Number(x.warehouse_requisition_id)))];
-  for (const pid of parentIds) await assertOpen(pid);
 
   if (req.action === "remove") {
-    const { error } = await client.from("warehouse_requisition_items").delete().eq("tenant_id", session.tenantId).in("id", ids);
-    if (error) throw new Error(`[wms req item delete] ${error.message}`);
-    for (const pid of parentIds) await recomputeTotals(session, pid);
+    await rpc("wms_req_item_delete", { p_tenant_id: session.tenantId, p_ids: ids });
     return editorResponse([]);
   }
 
   for (const row of req.rows) {
     const id = Number(row.id);
     const v = row.values;
-    const patch: AnyRow = {};
     const errors: { name: string; status: string }[] = [];
+    let quantity: number | null = null;
+    let cost: number | null = null;
     if (v.quantity !== undefined) {
-      const q = toInt(v.quantity);
-      if (q === null || q <= 0) errors.push({ name: "quantity", status: "數量需大於 0" });
-      else patch.quantity = q;
+      quantity = toInt(v.quantity);
+      if (quantity === null || quantity <= 0) errors.push({ name: "quantity", status: "數量需大於 0" });
     }
     if (v.cost !== undefined) {
-      const c = toNum(v.cost);
-      if (c === null || c < 0) errors.push({ name: "cost", status: "請輸入 0 以上的數字" });
-      else patch.cost = c;
+      cost = toNum(v.cost);
+      if (cost === null || cost < 0) errors.push({ name: "cost", status: "請輸入 0 以上的數字" });
     }
     if (errors.length) throw new FieldErrors(errors);
-    if (Object.keys(patch).length) {
-      const { error } = await client.from("warehouse_requisition_items").update(patch).eq("tenant_id", session.tenantId).eq("id", id);
-      if (error) throw new Error(`[wms req item update] ${error.message}`);
+    if (quantity !== null || cost !== null) {
+      await rpc("wms_req_item_set", { p_tenant_id: session.tenantId, p_row_id: id, p_quantity: quantity, p_cost: cost });
     }
   }
-  for (const pid of parentIds) await recomputeTotals(session, pid);
   const out: AnyRow[] = [];
   for (const pid of parentIds) {
     const all = await itemRows(session, await loadReq(session, pid));
@@ -572,25 +540,23 @@ async function lookupStock(ctx: RequestContext): Promise<Response> {
     return json(rows.length === 1 ? rows[0] : rows);
   }
   if (!warehouseId) return json(select2Json([]));
-  const { data: stocks } = await client
-    .from("warehouse_stocks")
-    .select("item_id, quantity")
+  // 倉庫內有庫存的商品：items × warehouse_stocks（inner join），依頁分頁，不受單次 1000 筆限制
+  let q = client
+    .from("items")
+    .select("id, uid, title, warehouse_stocks!inner(quantity, warehouse_id)")
     .eq("tenant_id", session.tenantId)
-    .eq("warehouse_id", warehouseId)
-    .gt("quantity", 0)
-    .limit(2000);
-  const qty = new Map(((stocks ?? []) as AnyRow[]).map((s) => [Number(s.item_id), Number(s.quantity)]));
-  if (!qty.size) return json(select2Json([]));
-  let q = client.from("items").select("id, uid, title").eq("tenant_id", session.tenantId).in("id", [...qty.keys()]);
+    .eq("warehouse_stocks.warehouse_id", warehouseId)
+    .gt("warehouse_stocks.quantity", 0);
   const term = sanitizeLike(p.term);
   if (term) q = q.or(`uid.ilike.*${term}*,title.ilike.*${term}*`);
   const from = (p.page - 1) * 30;
-  const { data, error } = await q.order("uid").range(from, from + 30);
+  const { data, error } = await q.order("uid").order("id").range(from, from + 30);
   if (error) throw new Error(`[wms stock lookup] ${error.message}`);
   const rows = (data ?? []) as AnyRow[];
+  const qtyOf = (r: AnyRow) => Number(((r.warehouse_stocks ?? []) as AnyRow[])[0]?.quantity ?? 0);
   return json(
     select2Json(
-      rows.slice(0, 30).map((r) => ({ id: r.id, text: `${r.uid ?? ""} ${r.title ?? ""}（庫存 ${qty.get(Number(r.id)) ?? 0}）`.trim() })),
+      rows.slice(0, 30).map((r) => ({ id: r.id, text: `${r.uid ?? ""} ${r.title ?? ""}（庫存 ${qtyOf(r)}）`.trim() })),
       rows.length > 30,
     ),
   );

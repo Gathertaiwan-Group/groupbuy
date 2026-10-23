@@ -21,7 +21,6 @@ import {
   dateTime,
   db,
   formJson,
-  loadItem,
   loadWarehouse,
   parseTaipei,
   requesterOptions,
@@ -251,36 +250,16 @@ async function assertOpen(session: AdminSession, id: number | null): Promise<Inb
   return r;
 }
 
+/** 加入入庫商品（DB 函式：鎖定入庫單、限新申請、同商品＋同訂單合併數量、共用庫存子商品歸屬主商品） */
 async function addItem(session: AdminSession, r: InboundRow, itemId: number, qty: number, unitPrice: number | null, salesOrderId: number | null) {
-  const item = await loadItem(session, itemId);
-  const existing = ((r.inbound_items ?? []) as AnyRow[]).find(
-    (i) => Number(i.item_id) === Number(item.id) && (i.sales_order_id ?? null) === (salesOrderId ?? null),
-  );
-  const client = db();
-  if (existing) {
-    const patch: AnyRow = { quantity: Number(existing.quantity) + qty };
-    if (unitPrice !== null) patch.unit_price = unitPrice;
-    const { error } = await client.from("inbound_items").update(patch).eq("tenant_id", session.tenantId).eq("id", existing.id);
-    if (error) throw new Error(`[wms inbound item] ${error.message}`);
-    existing.quantity = patch.quantity;
-  } else {
-    const { data, error } = await client
-      .from("inbound_items")
-      .insert({
-        tenant_id: session.tenantId,
-        inbound_id: r.id,
-        item_id: item.id,
-        sales_order_id: salesOrderId,
-        uid: item.uid,
-        title: item.title,
-        quantity: qty,
-        unit_price: unitPrice ?? Number(item.cprice ?? 0),
-      })
-      .select("*")
-      .single();
-    if (error) throw new Error(`[wms inbound item] ${error.message}`);
-    (r.inbound_items as AnyRow[] | undefined)?.push(data as AnyRow);
-  }
+  await rpc("wms_inbound_item_add", {
+    p_tenant_id: session.tenantId,
+    p_inbound_id: Number(r.id),
+    p_item_id: itemId,
+    p_quantity: qty,
+    p_unit_price: unitPrice,
+    p_sales_order_id: salesOrderId,
+  });
 }
 
 function writeItemsFor(expected: "create" | "edit" | "remove") {
@@ -297,7 +276,6 @@ async function writeItems(ctx: RequestContext): Promise<Response> {
   const client = db();
   if (req.action === "create") {
     const r = await assertOpen(session, toInt(req.extra.inboundId ?? (await ctx.param("inboundId"))));
-    r.inbound_items = r.inbound_items ?? [];
     for (const row of req.rows) {
       const v = row.values;
       const errors: { name: string; status: string }[] = [];
@@ -313,34 +291,30 @@ async function writeItems(ctx: RequestContext): Promise<Response> {
     return editorResponse(await itemRows(session, Number(r.id)));
   }
   const ids = editorIds(req, "inboundItemId");
-  const { data: found } = await client.from("inbound_items").select("*").eq("tenant_id", session.tenantId).in("id", ids);
+  const { data: found } = await client.from("inbound_items").select("id, inbound_id").eq("tenant_id", session.tenantId).in("id", ids);
   const rows = (found ?? []) as AnyRow[];
   if (rows.length !== ids.length) throw notFound("找不到入庫商品");
   const parents = [...new Set(rows.map((x) => Number(x.inbound_id)))];
-  for (const p of parents) await assertOpen(session, p);
   if (req.action === "remove") {
-    const { error } = await client.from("inbound_items").delete().eq("tenant_id", session.tenantId).in("id", ids);
-    if (error) throw new Error(`[wms inbound item delete] ${error.message}`);
+    await rpc("wms_inbound_item_delete", { p_tenant_id: session.tenantId, p_ids: ids });
     return editorResponse([]);
   }
   for (const row of req.rows) {
     const v = row.values;
-    const patch: AnyRow = {};
     const errors: { name: string; status: string }[] = [];
+    let quantity: number | null = null;
+    let unitPrice: number | null = null;
     if (v.quantity !== undefined) {
-      const q = toInt(v.quantity);
-      if (q === null || q <= 0) errors.push({ name: "quantity", status: "數量需大於 0" });
-      else patch.quantity = q;
+      quantity = toInt(v.quantity);
+      if (quantity === null || quantity <= 0) errors.push({ name: "quantity", status: "數量需大於 0" });
     }
     if (v.unitPrice !== undefined) {
-      const p = toNum(v.unitPrice);
-      if (p === null || p < 0) errors.push({ name: "unitPrice", status: "請輸入 0 以上的數字" });
-      else patch.unit_price = p;
+      unitPrice = toNum(v.unitPrice);
+      if (unitPrice === null || unitPrice < 0) errors.push({ name: "unitPrice", status: "請輸入 0 以上的數字" });
     }
     if (errors.length) throw new FieldErrors(errors);
-    if (Object.keys(patch).length) {
-      const { error } = await client.from("inbound_items").update(patch).eq("tenant_id", session.tenantId).eq("id", Number(row.id));
-      if (error) throw new Error(`[wms inbound item update] ${error.message}`);
+    if (quantity !== null || unitPrice !== null) {
+      await rpc("wms_inbound_item_set", { p_tenant_id: session.tenantId, p_inbound_item_id: Number(row.id), p_quantity: quantity, p_unit_price: unitPrice });
     }
   }
   const out: AnyRow[] = [];
@@ -355,7 +329,6 @@ async function importFromSalesOrder(ctx: RequestContext): Promise<Response> {
   expectAction(req.action, "create");
   const inboundId = toInt(req.extra.inboundId ?? (await ctx.param("inboundId")));
   const r = await assertOpen(session, inboundId);
-  r.inbound_items = r.inbound_items ?? [];
   const uuid = String(req.rows[0]?.values.salesOrderUUID ?? "").trim();
   if (!uuid) throw new FieldErrors([{ name: "salesOrderUUID", status: "需要填寫內容" }]);
   const client = db();

@@ -138,7 +138,7 @@
 				if (editable) return '<button type="button" class="btn btn-danger btn-sm px-2" data-action="remove">刪除</button>';
 				if (transfer) {
 					return '<div class="input-group input-group-sm" style="min-width:160px"><div class="input-group-prepend"><span class="input-group-text">本次轉移</span></div>'
-						+ '<input type="text" class="form-control wr-transfer-qty" data-id="' + row.warehouseRequisitionItemId + '" value="' + row.remainingQuantity + '" autocomplete="off"></div>';
+						+ '<input type="text" class="form-control wr-transfer-qty" data-id="' + row.warehouseRequisitionItemId + '" data-transferred="' + row.transferredQuantity + '" value="' + row.remainingQuantity + '" autocomplete="off"></div>';
 				}
 				return '';
 			}
@@ -233,6 +233,8 @@
 				var v = $(this).val();
 				if (!/^\d+$/.test(v)) ok = false;
 				data['quantities[' + $(this).attr('data-id') + ']'] = v;
+				// 畫面上的已調撥數量：DB 比對，重送或他人已轉移 → 拒絕（不會重複轉移）
+				data['expected[' + $(this).attr('data-id') + ']'] = $(this).attr('data-transferred');
 			});
 			if (!ok) { modalShowDanger($modal, '轉移數量需為 0 以上的整數'); return; }
 		}

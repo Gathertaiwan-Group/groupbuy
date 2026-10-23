@@ -25,6 +25,8 @@ import { parseEditorRequest } from "@/lib/core/editor/protocol";
 import {
   type AnyRow,
   db,
+  escapeHtml,
+  fetchAll,
   idList,
   rpc,
   select2Json,
@@ -65,35 +67,25 @@ async function activeWarehouses(session: AdminSession): Promise<WarehouseRow[]> 
   return (data ?? []) as WarehouseRow[];
 }
 
-/** 商品的「主倉」：綁定該商品所屬倉儲型團購的倉庫 → 庫存最多的倉庫 → 第一個啟用中的倉庫 */
-async function homeWarehouseId(session: AdminSession, item: ItemRow, whs: WarehouseRow[], stocks: StockRow[]): Promise<number | null> {
-  const bound = whs.filter((w) => w.group_buy_id);
-  if (bound.length) {
-    const { data } = await db()
-      .from("group_buy_item_sets")
-      .select("group_buy_id")
-      .eq("tenant_id", session.tenantId)
-      .eq("item_set_id", item.item_set_id);
-    const gbIds = new Set(((data ?? []) as AnyRow[]).map((r) => Number(r.group_buy_id)));
-    const hit = bound.find((w) => gbIds.has(Number(w.group_buy_id)));
-    if (hit) return Number(hit.id);
-  }
-  const withStock = [...stocks].sort((a, b) => Number(b.quantity) - Number(a.quantity) || Number(a.id) - Number(b.id))[0];
-  if (withStock) return Number(withStock.warehouse_id);
-  const first = whs.find((w) => w.is_active);
-  return first ? Number(first.id) : null;
+function chunk<T>(arr: T[], n: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
 }
 
 async function loadItemsById(session: AdminSession, ids: number[]): Promise<Map<number, ItemRow>> {
   const out = new Map<number, ItemRow>();
-  if (!ids.length) return out;
-  const { data, error } = await db()
-    .from("items")
-    .select("id, uid, title, item_set_id, stock, stock_available, stock_back_order, stock_back_order_available")
-    .eq("tenant_id", session.tenantId)
-    .in("id", ids);
-  if (error) throw new Error(`[wms inv] ${error.message}`);
-  for (const r of (data ?? []) as ItemRow[]) out.set(Number(r.id), r);
+  for (const c of chunk([...new Set(ids)], 200)) {
+    const rows = await fetchAll<ItemRow>(() =>
+      db()
+        .from("items")
+        .select("id, uid, title, item_set_id, stock, stock_available, stock_back_order, stock_back_order_available")
+        .eq("tenant_id", session.tenantId)
+        .in("id", c)
+        .order("id"),
+    );
+    for (const r of rows) out.set(Number(r.id), r);
+  }
   return out;
 }
 
@@ -104,43 +96,17 @@ interface Detail {
   sums: { stock: number; stockAvailable: number; stockBackOrder: number; stockBackOrderAvailable: number };
 }
 
-/**
- * 商品在各倉庫的明細（inventory.js 的 json 列）。ensure=true 時為所有啟用中倉庫補建 0 數量的庫存列（取得列 id）。
- * 可售數量分配：商品未出貨保留量（stock − stock_available）先由主倉、再由庫存多的倉庫承擔；預購數量只放在主倉列。
- */
-async function productDetail(session: AdminSession, item: ItemRow, ensure: boolean): Promise<Detail> {
-  const client = db();
-  const whs = await activeWarehouses(session);
-  const whById = new Map(whs.map((w) => [Number(w.id), w]));
-  const fetchStocks = async () => {
-    const { data, error } = await client.from("warehouse_stocks").select("id, warehouse_id, item_id, quantity, rack_bin").eq("tenant_id", session.tenantId).eq("item_id", item.id);
-    if (error) throw new Error(`[wms inv] ${error.message}`);
-    return (data ?? []) as StockRow[];
-  };
-  let stocks = await fetchStocks();
-  const homeWh = await homeWarehouseId(session, item, whs, stocks);
-  if (ensure) {
-    const have = new Set(stocks.map((s) => Number(s.warehouse_id)));
-    const missing = whs.filter((w) => (w.is_active || Number(w.id) === homeWh) && !have.has(Number(w.id)));
-    if (missing.length) {
-      await client
-        .from("warehouse_stocks")
-        .upsert(missing.map((w) => ({ tenant_id: session.tenantId, warehouse_id: w.id, item_id: item.id, quantity: 0 })), {
-          onConflict: "warehouse_id,item_id",
-          ignoreDuplicates: true,
-        });
-      stocks = await fetchStocks();
-    }
-  }
-  stocks = stocks.filter((s) => whById.has(Number(s.warehouse_id)) && (whById.get(Number(s.warehouse_id))!.is_active || Number(s.quantity) !== 0 || Number(s.warehouse_id) === homeWh));
+/** 單一商品明細（由已載入的倉庫/庫存列計算，不查 DB） */
+function buildDetail(item: ItemRow, stocksIn: StockRow[], whById: Map<number, WarehouseRow>, homeWh: number | null): Detail {
+  let stocks = stocksIn.filter(
+    (s) => whById.has(Number(s.warehouse_id)) && (whById.get(Number(s.warehouse_id))!.is_active || Number(s.quantity) !== 0 || Number(s.warehouse_id) === homeWh),
+  );
   const order = (s: StockRow) => (Number(s.warehouse_id) === homeWh ? 0 : 1);
-  stocks.sort((a, b) => order(a) - order(b) || Number(a.warehouse_id) - Number(b.warehouse_id));
-
-  // 可售分配
+  stocks = [...stocks].sort((a, b) => order(a) - order(b) || Number(a.warehouse_id) - Number(b.warehouse_id));
+  // 可售分配：商品未出貨保留量（stock − stock_available）先由主倉、再由庫存多的倉庫承擔
   let reserved = Math.max(0, Number(item.stock) - Number(item.stock_available));
   const alloc = new Map<number, number>();
-  const byNeed = [...stocks].sort((a, b) => order(a) - order(b) || Number(b.quantity) - Number(a.quantity));
-  for (const s of byNeed) {
+  for (const s of [...stocks].sort((a, b) => order(a) - order(b) || Number(b.quantity) - Number(a.quantity))) {
     const take = Math.min(Math.max(Number(s.quantity), 0), reserved);
     alloc.set(Number(s.id), take);
     reserved -= take;
@@ -148,7 +114,7 @@ async function productDetail(session: AdminSession, item: ItemRow, ensure: boole
   const homeWs = stocks.find((s) => Number(s.warehouse_id) === homeWh) ?? stocks[0];
   const rows = stocks.map((s) => {
     const w = whById.get(Number(s.warehouse_id));
-    const isHome = homeWs && Number(s.id) === Number(homeWs.id);
+    const isHome = !!homeWs && Number(s.id) === Number(homeWs.id);
     const quantity = Number(s.quantity);
     return {
       itemId: Number(s.id),
@@ -161,9 +127,10 @@ async function productDetail(session: AdminSession, item: ItemRow, ensure: boole
       rackBin: s.rack_bin ?? "",
       stock: quantity,
       stockAvailable: Math.max(quantity - (alloc.get(Number(s.id)) ?? 0), 0),
+      // 預購數量為商品層級（非實體庫存），只放在主倉列
       stockBackOrder: isHome ? Number(item.stock_back_order) : 0,
       stockBackOrderAvailable: isHome ? Number(item.stock_back_order_available) : 0,
-      home: !!isHome,
+      home: isHome,
     };
   });
   const sums = rows.reduce(
@@ -176,6 +143,93 @@ async function productDetail(session: AdminSession, item: ItemRow, ensure: boole
     { stock: 0, stockAvailable: 0, stockBackOrder: 0, stockBackOrderAvailable: 0 },
   );
   return { item, homeWsId: homeWs ? Number(homeWs.id) : null, rows, sums };
+}
+
+/**
+ * 多個商品在各倉庫的明細（inventory.js 的 json 列；批次查詢，查詢數與商品數無關）。
+ * ensure=true 時為所有啟用中倉庫補建 0 數量的庫存列（才有列 id 可把盤點差異入到尚無此商品的倉庫）。
+ * 主倉＝綁定該商品所屬倉儲型團購的倉庫 → 庫存最多的倉庫 → 第一個啟用中的倉庫。
+ */
+async function productDetails(session: AdminSession, items: ItemRow[], ensure: boolean): Promise<Map<number, Detail>> {
+  const out = new Map<number, Detail>();
+  if (!items.length) return out;
+  const client = db();
+  const tid = session.tenantId;
+  const whs = await activeWarehouses(session);
+  const whById = new Map(whs.map((w) => [Number(w.id), w]));
+  const ids = [...new Set(items.map((i) => Number(i.id)))];
+  const fetchStocks = async (): Promise<Map<number, StockRow[]>> => {
+    const by = new Map<number, StockRow[]>();
+    for (const c of chunk(ids, 200)) {
+      const rows = await fetchAll<StockRow>(() =>
+        client.from("warehouse_stocks").select("id, warehouse_id, item_id, quantity, rack_bin").eq("tenant_id", tid).in("item_id", c).order("id"),
+      );
+      for (const r of rows) {
+        const k = Number(r.item_id);
+        const arr = by.get(k);
+        if (arr) arr.push(r);
+        else by.set(k, [r]);
+      }
+    }
+    return by;
+  };
+  let stocksByItem = await fetchStocks();
+
+  const bound = whs.filter((w) => w.group_buy_id);
+  const gbBySet = new Map<number, Set<number>>();
+  if (bound.length) {
+    const setIds = [...new Set(items.map((i) => Number(i.item_set_id)))];
+    for (const c of chunk(setIds, 200)) {
+      const rows = await fetchAll<AnyRow>(() =>
+        client.from("group_buy_item_sets").select("id, item_set_id, group_buy_id").eq("tenant_id", tid).in("item_set_id", c).order("id"),
+      );
+      for (const r of rows) {
+        const k = Number(r.item_set_id);
+        const set = gbBySet.get(k) ?? new Set<number>();
+        set.add(Number(r.group_buy_id));
+        gbBySet.set(k, set);
+      }
+    }
+  }
+  const firstActive = whs.find((w) => w.is_active);
+  const homeOf = new Map<number, number | null>();
+  for (const item of items) {
+    const gbs = gbBySet.get(Number(item.item_set_id));
+    const hit = gbs ? bound.find((w) => gbs.has(Number(w.group_buy_id))) : undefined;
+    if (hit) {
+      homeOf.set(Number(item.id), Number(hit.id));
+      continue;
+    }
+    const top = [...(stocksByItem.get(Number(item.id)) ?? [])].sort((a, b) => Number(b.quantity) - Number(a.quantity) || Number(a.id) - Number(b.id))[0];
+    homeOf.set(Number(item.id), top ? Number(top.warehouse_id) : firstActive ? Number(firstActive.id) : null);
+  }
+
+  if (ensure) {
+    const missing: AnyRow[] = [];
+    for (const item of items) {
+      const have = new Set((stocksByItem.get(Number(item.id)) ?? []).map((s) => Number(s.warehouse_id)));
+      const home = homeOf.get(Number(item.id));
+      for (const w of whs) {
+        if ((w.is_active || Number(w.id) === home) && !have.has(Number(w.id))) {
+          missing.push({ tenant_id: tid, warehouse_id: w.id, item_id: item.id, quantity: 0 });
+          have.add(Number(w.id));
+        }
+      }
+    }
+    for (const c of chunk(missing, 500)) {
+      const { error } = await client.from("warehouse_stocks").upsert(c, { onConflict: "warehouse_id,item_id", ignoreDuplicates: true });
+      if (error) throw new Error(`[wms inv ensure] ${error.message}`);
+    }
+    if (missing.length) stocksByItem = await fetchStocks();
+  }
+  for (const item of items) {
+    out.set(Number(item.id), buildDetail(item, stocksByItem.get(Number(item.id)) ?? [], whById, homeOf.get(Number(item.id)) ?? null));
+  }
+  return out;
+}
+
+async function productDetail(session: AdminSession, item: ItemRow, ensure: boolean): Promise<Detail> {
+  return (await productDetails(session, [item], ensure)).get(Number(item.id))!;
 }
 
 async function stockRowById(session: AdminSession, id: number | null): Promise<StockRow> {
@@ -200,12 +254,13 @@ async function uploadRows(
 ): Promise<AnyRow[]> {
   const byUid = await warehouseItemsByUid(session, entries.map((e) => e.uid));
   const items = await loadItemsById(session, [...byUid.values()].map((w: WarehouseItemRow) => Number(w.item_id)));
-  const cache = new Map<number, Detail>();
+  const details = await productDetails(session, [...items.values()], true);
   const out: AnyRow[] = [];
   for (const e of entries) {
     const w = byUid.get(e.uid);
     const item = w ? items.get(Number(w.item_id)) : undefined;
-    if (!item) {
+    const d = item ? details.get(Number(item.id)) : undefined;
+    if (!item || !d) {
       out.push({
         itemId: null,
         productItemId: null,
@@ -219,11 +274,6 @@ async function uploadRows(
         stockBackOrderCounting: e.stockBackOrderCounting ?? 0,
       });
       continue;
-    }
-    let d = cache.get(Number(item.id));
-    if (!d) {
-      d = await productDetail(session, item, true);
-      cache.set(Number(item.id), d);
     }
     out.push({
       itemId: d.homeWsId,
@@ -394,13 +444,24 @@ async function addStock(ctx: RequestContext): Promise<Response> {
   const wsId = toInt(await ctx.param("itemId"));
   const inc = toInt(await ctx.param("stock"));
   const name = (await ctx.param("name")) === "stockBackOrder" ? "stockBackOrder" : "stock";
+  // expected＝畫面上入庫倉的原數量（inventory.js 修補後送出）；DB 鎖定後比對，重送或期間有人異動 → 拒絕
+  const expected = toInt(await ctx.param("expected"));
   if (inc === null) throw badRequest("請輸入盤點數量");
+  if (expected === null) throw badRequest("缺少盤點前數量，請重新整理頁面後再盤點");
   const ws = await stockRowById(session, wsId);
+  if (name === "stockBackOrder") {
+    const d = await productDetail(session, await itemOf(session, Number(ws.item_id)), false);
+    if (d.homeWsId !== Number(ws.id)) {
+      const home = d.rows.find((r) => r.home);
+      throw badRequest(`預購數量為商品層級，請在主倉（${escapeHtml(home?.warehouseName ?? "")}）調整`);
+    }
+  }
   await rpc("wms_adjust_stock", {
     p_tenant_id: session.tenantId,
     p_warehouse_stock_id: Number(ws.id),
     p_change: inc,
     p_name: name,
+    p_expected: expected,
     p_admin_user_id: session.adminUserId,
     p_actor: session.account,
   });
@@ -421,16 +482,19 @@ async function archiveAndSync(ctx: RequestContext): Promise<Response> {
   const { data } = await db().from("warehouse_stocks").select("item_id").eq("tenant_id", session.tenantId).in("id", ids);
   const itemIds = [...new Set(((data ?? []) as AnyRow[]).map((r) => Number(r.item_id)))];
   const items = await loadItemsById(session, itemIds);
+  const details = await productDetails(session, [...items.values()], false);
   const out: AnyRow[] = [];
-  for (const it of items.values()) {
-    const d = await productDetail(session, it, false);
-    out.push(...d.rows.filter((r) => ids.includes(Number(r.itemId))));
-  }
+  for (const d of details.values()) out.push(...d.rows.filter((r) => ids.includes(Number(r.itemId))));
   return json({ data: out });
 }
 
+/** 主商品＋共用庫存（share_stock）的子商品（不共用庫存的子商品用自己的庫存，不算） */
 async function familyIds(session: AdminSession, itemId: number): Promise<number[]> {
-  const { data } = await db().from("items").select("id").eq("tenant_id", session.tenantId).or(`id.eq.${itemId},parent_item_id.eq.${itemId}`);
+  const { data } = await db()
+    .from("items")
+    .select("id")
+    .eq("tenant_id", session.tenantId)
+    .or(`id.eq.${itemId},and(parent_item_id.eq.${itemId},share_stock.eq.true)`);
   return ((data ?? []) as AnyRow[]).map((r) => Number(r.id));
 }
 
@@ -481,17 +545,20 @@ async function markArchived(ctx: RequestContext): Promise<Response> {
   // 只標註倉儲商品（含共用庫存的子商品）
   const { data: ois } = await client
     .from("order_items")
-    .select("id, item_id, items!inner(id, parent_item_id)")
+    .select("id, item_id, items!inner(id, parent_item_id, share_stock)")
     .eq("tenant_id", session.tenantId)
     .eq("sales_order_id", (so as AnyRow).id)
     .in("state", ["UNSHIPPING", "SHIPPING", "SHIPPED"]);
   const rows = (ois ?? []) as AnyRow[];
-  const candidate = [...new Set(rows.flatMap((r) => [Number(r.item_id), Number((r.items as AnyRow)?.parent_item_id ?? 0)]).filter(Boolean))];
+  // 庫存歸屬商品：共用庫存的子商品 → 主商品
+  const ownerOf = (r: AnyRow): number => {
+    const it = (r.items ?? {}) as AnyRow;
+    return it.share_stock && it.parent_item_id ? Number(it.parent_item_id) : Number(r.item_id);
+  };
+  const candidate = [...new Set(rows.map(ownerOf).filter(Boolean))];
   const { data: wi } = await client.from("wms_warehouse_items_v").select("item_id").eq("tenant_id", session.tenantId).in("item_id", candidate.length ? candidate : [0]);
   const whItems = new Set(((wi ?? []) as AnyRow[]).map((r) => Number(r.item_id)));
-  const ids = rows
-    .filter((r) => whItems.has(Number(r.item_id)) || whItems.has(Number((r.items as AnyRow)?.parent_item_id ?? 0)))
-    .map((r) => Number(r.id));
+  const ids = rows.filter((r) => whItems.has(ownerOf(r))).map((r) => Number(r.id));
   if (!ids.length) throw badRequest("此訂單沒有可標註的倉儲商品");
   const { error } = await client.from("order_items").update({ state: "ARCHIVED" }).eq("tenant_id", session.tenantId).in("id", ids);
   if (error) throw new Error(`[wms inv archive] ${error.message}`);
@@ -527,18 +594,19 @@ async function downloadInventory(ctx: RequestContext): Promise<Response> {
     .map((s) => s.trim())
     .filter(Boolean);
   if (!uids.length) throw badRequest("沒有可匯出的商品");
+  if (uids.length > MAX_ITEMS) throw badRequest(`上限${MAX_ITEMS}個商品`);
   const rows = await uploadRows(session, uids.map((uid) => ({ uid })));
   const whs = await activeWarehouses(session);
+  const prodItems = await loadItemsById(session, rows.filter((r) => r.productItemId).map((r) => Number(r.productItemId)));
+  const details = await productDetails(session, [...prodItems.values()], false);
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("盤點");
   const headers = ["商品代碼", "名稱", "庫存數量", "預購庫存數量", "可售現貨", "可售預購", ...whs.map((w) => `倉庫:${w.short_name || w.name}`)];
   ws.addRow(headers);
   for (const r of rows) {
     const per = new Map<number, number>();
-    if (r.productItemId) {
-      const d = await productDetail(session, await itemOf(session, Number(r.productItemId)), false);
-      for (const x of d.rows) per.set(Number(x.warehouseId), Number(x.stock));
-    }
+    const d = r.productItemId ? details.get(Number(r.productItemId)) : undefined;
+    if (d) for (const x of d.rows) per.set(Number(x.warehouseId), Number(x.stock));
     ws.addRow([r.uid, r.title ?? "商品不存在", r.stock, r.stockBackOrder, r.stockAvailable, r.stockBackOrderAvailable, ...whs.map((w) => per.get(Number(w.id)) ?? 0)]);
   }
   ws.getRow(1).font = { bold: true };

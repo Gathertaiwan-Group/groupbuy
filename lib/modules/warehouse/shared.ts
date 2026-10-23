@@ -23,10 +23,34 @@ export async function rpc<T = unknown>(fn: string, args: Record<string, unknown>
   if (error) {
     const msg = String(error.message ?? "");
     const i = msg.indexOf("WMS:");
-    if (i >= 0) throw badRequest(msg.slice(i + 4).trim());
+    // 訊息可能含倉庫/商品名稱（使用者可編輯），前端多以 .html() 顯示 → 一律跳脫
+    if (i >= 0) throw badRequest(escapeHtml(msg.slice(i + 4).trim()));
     throw new Error(`[wms rpc ${fn}] ${msg}`);
   }
   return data as T;
+}
+
+/** HTML 跳脫（回應訊息、會被前端以 HTML 插入的文字） */
+export function escapeHtml(v: unknown): string {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** PostgREST 單次最多 1000 筆：依 range 分頁取完（make 每次回傳新的查詢物件） */
+export async function fetchAll<T = AnyRow>(make: () => AnyRow, max = 50000): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; from < max; from += 1000) {
+    const { data, error } = await make().range(from, from + 999);
+    if (error) throw new Error(`[wms fetchAll] ${error.message}`);
+    const rows = (data ?? []) as T[];
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
 }
 
 /* ─────────────── 小工具 ─────────────── */
@@ -164,8 +188,9 @@ export async function requesterOptions(session: AdminSession): Promise<{ label: 
     .select("account, display_name")
     .eq("tenant_id", session.tenantId)
     .order("account");
+  // label 會被 DataTables renderOption／表尾下拉以 HTML 輸出 → 跳脫
   return ((data ?? []) as { account: string; display_name: string | null }[]).map((u) => ({
-    label: u.display_name && u.display_name !== u.account ? `${u.display_name}(${u.account})` : u.account,
+    label: escapeHtml(u.display_name && u.display_name !== u.account ? `${u.display_name}(${u.account})` : u.account),
     value: u.account,
   }));
 }
@@ -313,22 +338,22 @@ export async function warehouseItemsByUid(session: AdminSession, uids: string[])
   const client = db();
   const rows: WarehouseItemRow[] = [];
   for (let i = 0; i < clean.length; i += 200) {
-    const { data, error } = await client
-      .from("wms_warehouse_items_v")
-      .select("*")
-      .eq("tenant_id", session.tenantId)
-      .in("uid", clean.slice(i, i + 200));
-    if (error) throw new Error(`[wms] 讀取倉儲商品失敗：${error.message}`);
-    rows.push(...((data ?? []) as WarehouseItemRow[]));
+    const part = clean.slice(i, i + 200);
+    rows.push(
+      ...(await fetchAll<WarehouseItemRow>(() =>
+        client.from("wms_warehouse_items_v").select("*").eq("tenant_id", session.tenantId).in("uid", part).order("item_id"),
+      )),
+    );
   }
   const ids = rows.map((r) => Number(r.item_id));
   // 每個商品的倉庫庫存合計；沒有任何倉庫庫存列者記為 -1（排在有庫存列者之後）
   const stockSum = new Map<number, number>();
-  if (ids.length) {
-    const { data } = await client.from("warehouse_stocks").select("item_id, quantity").eq("tenant_id", session.tenantId).in("item_id", ids);
-    for (const s of (data ?? []) as { item_id: number; quantity: number }[]) {
-      stockSum.set(Number(s.item_id), (stockSum.get(Number(s.item_id)) ?? 0) + Number(s.quantity));
-    }
+  for (let i = 0; i < ids.length; i += 200) {
+    const part = ids.slice(i, i + 200);
+    const stocks = await fetchAll<{ item_id: number; quantity: number }>(() =>
+      client.from("warehouse_stocks").select("id, item_id, quantity").eq("tenant_id", session.tenantId).in("item_id", part).order("id"),
+    );
+    for (const s of stocks) stockSum.set(Number(s.item_id), (stockSum.get(Number(s.item_id)) ?? 0) + Number(s.quantity));
   }
   for (const r of rows.sort((a, b) => Number(a.item_id) - Number(b.item_id))) {
     const key = String(r.uid ?? "");

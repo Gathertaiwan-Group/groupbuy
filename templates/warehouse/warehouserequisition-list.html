@@ -97,14 +97,14 @@ var reverseEditor;
 				{
 					data:'fromWarehouseId',
 					render: function ( data, type, row ) {
-						return row.fromWarehouse.name;
+						return $.fn.dataTable.render.text().display(row.fromWarehouse.name);
 					}
 				},
 				{
 					data:'toWarehouseId',
 					visible:false,
 					render: function ( data, type, row ) {
-						return row.toWarehouse.name;
+						return $.fn.dataTable.render.text().display(row.toWarehouse.name);
 					}
 				},
 				{

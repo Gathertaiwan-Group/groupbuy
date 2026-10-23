@@ -14,7 +14,7 @@ import { crudRoutes, type ListSpec, type WriteSpec } from "@/lib/core/entity/cru
 import { enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { sanitizeLike } from "@/lib/core/datatables/query";
 import { select2Params } from "@/lib/core/select2";
-import { type AnyRow, db, loadWarehouse, select2Json, toInt, warehouseAddress, warehouseJson, type WarehouseRow } from "./shared";
+import { type AnyRow, db, loadWarehouse, rpc, select2Json, toInt, warehouseAddress, warehouseJson, type WarehouseRow } from "./shared";
 
 const TYPE_ENUM = "Warehouse.type";
 
@@ -119,55 +119,24 @@ async function newShortUrl(): Promise<string> {
   throw new Error("[wms] 無法產生短網址");
 }
 
-/** POST /ajax/wms/Warehouse/bind：warehouseId、mode=existing|new、groupBuyId */
+/** POST /ajax/wms/Warehouse/bind：warehouseId、mode=existing|new、groupBuyId（DB 函式 wms_bind_group_buy 原子完成） */
 async function bindGroupBuy(ctx: Parameters<RouteDef["handler"]>[0]): Promise<Response> {
   const session = requireSession(ctx);
   const warehouseId = toInt(await ctx.param("warehouseId"));
   const mode = (await ctx.param("mode")) ?? "";
   const wh = await loadWarehouse(session, warehouseId);
   if (wh.group_buy_id) throw badRequest("此倉儲已綁定表單");
-  const client = db();
-  let groupBuyId: number;
-  if (mode === "existing") {
-    const gid = toInt(await ctx.param("groupBuyId"));
-    if (!gid) throw badRequest("請選擇團購");
-    const { data: gb } = await client
-      .from("group_buys")
-      .select("id, title, render, feature_tags")
-      .eq("tenant_id", session.tenantId)
-      .eq("id", gid)
-      .maybeSingle();
-    if (!gb) throw badRequest("找不到團購");
-    const tags = ((gb as AnyRow).feature_tags ?? []) as string[];
-    if (!tags.includes("MAIN")) throw badRequest("僅能選擇[主表單]團購");
-    if ((gb as AnyRow).render === "ALIAS") throw badRequest("替身表單不可改作倉儲");
-    const { data: used } = await client.from("warehouses").select("id, name").eq("tenant_id", session.tenantId).eq("group_buy_id", gid).maybeSingle();
-    if (used) throw badRequest(`此團購已綁定倉儲「${(used as AnyRow).name}」`);
-    const { error } = await client.from("group_buys").update({ render: "WH" }).eq("tenant_id", session.tenantId).eq("id", gid);
-    if (error) throw new Error(`[wms bind] ${error.message}`);
-    groupBuyId = gid;
-  } else if (mode === "new") {
-    const { data: created, error } = await client
-      .from("group_buys")
-      .insert({ tenant_id: session.tenantId, title: wh.name, render: "WH", feature_tags: ["MAIN"], short_url: await newShortUrl() })
-      .select("id")
-      .single();
-    if (error || !created) throw new Error(`[wms bind] 建立表單失敗：${error?.message}`);
-    groupBuyId = Number((created as AnyRow).id);
-  } else {
-    throw badRequest("請選擇啟用方式");
-  }
-  // 條件式更新：只在仍未綁定時寫入（避免重複啟用）
-  const { data: upd, error: e2 } = await client
-    .from("warehouses")
-    .update({ group_buy_id: groupBuyId })
-    .eq("tenant_id", session.tenantId)
-    .eq("id", wh.id)
-    .is("group_buy_id", null)
-    .select("id");
-  if (e2) throw new Error(`[wms bind] ${e2.message}`);
-  if (!upd || upd.length === 0) throw badRequest("此倉儲已綁定表單");
-  return actionOk("倉儲已啟用", { data: { warehouseId: Number(wh.id), groupBuyId } });
+  if (mode !== "existing" && mode !== "new") throw badRequest("請選擇啟用方式");
+  const groupBuyId = mode === "existing" ? toInt(await ctx.param("groupBuyId")) : null;
+  if (mode === "existing" && !groupBuyId) throw badRequest("請選擇團購");
+  const gid = await rpc<number>("wms_bind_group_buy", {
+    p_tenant_id: session.tenantId,
+    p_warehouse_id: wh.id,
+    p_mode: mode,
+    p_group_buy_id: groupBuyId,
+    p_short_url: mode === "new" ? await newShortUrl() : null,
+  });
+  return actionOk("倉儲已啟用", { data: { warehouseId: Number(wh.id), groupBuyId: Number(gid) } });
 }
 
 /** GET /ajax/wms/Warehouse/lookup（select2） */

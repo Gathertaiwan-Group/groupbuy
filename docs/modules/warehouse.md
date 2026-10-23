@@ -1,6 +1,8 @@
 # warehouse 模組（倉儲 WMS）
 
-擁有者：warehouse agent。程式：`lib/modules/warehouse/**`、模板：`templates/warehouse/**`、原站自家檔：`public/scripts/inventory.js`、migration：`supabase/migrations/4500_wms_stock_core.sql`、`4501_wms_warehouse_items_view.sql`。
+擁有者：warehouse agent。程式：`lib/modules/warehouse/**`、模板：`templates/warehouse/**`、原站自家檔：`public/scripts/inventory.js`、migration：`supabase/migrations/4500_wms_stock_core.sql`、`4501_wms_warehouse_items_view.sql`、`4502_wms_hardening.sql`、`4503_wms_drop_legacy_signatures.sql`。
+
+**新增欄位**：`warehouse_requisitions.source_requisition_id`（4502，逆向調撥來源單；只能建立一次）。未改 items 等其他模組的表結構。
 
 ## 頁面與狀態
 
@@ -30,6 +32,9 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 | 盤點所選倉庫 | `wms_archive_and_sync` | 歸檔造成的原始庫存減少量依所選倉庫順序扣除 | 原始庫存＝可售＋未出貨數量 | 已出貨訂單商品 `order_items.state` SHIPPED→ARCHIVED（「已盤點」） |
 | 出貨（orders 設 SHIPPED） | 觸發器 `wms_consume_inbound_records` | — | — | 入庫紀錄 FIFO 扣剩餘數量、更新最後銷售日期（只寫 inbound_records；錯誤只記 warning 不影響訂單） |
 
+- **防重送／併發**（4502）：盤點「確認」送畫面上的原數量 `expected`、部分轉移送 `expected[<明細id>]`（已調撥數量），DB 鎖定後比對，不符（重送、他人已異動）→ 400「已變動，請重新檢視」；入庫商品／調撥商品的新增修改刪除都由 DB 函式鎖定單據後執行（`wms_inbound_item_*`、`wms_req_item_*`），不會寫進已入庫／已送審的單；調撥單刪除為條件式（已轉移者不刪）；逆向調撥只能建立一次；倉儲「啟用」由 `wms_bind_group_buy` 原子完成。
+- **共用庫存**：`share_stock=true` 的子商品，庫存一律歸屬主商品（`wms_stock_owner`；入庫、調撥、盤點、FIFO 都用主商品），倉儲商品檢視不列這類子商品；歸檔／未出貨只算主商品＋共用庫存子商品。
+- **盤點所選倉庫**：原始庫存＝可售＋未出貨＋暫存庫存（stock_cache）；所選倉庫不足以扣除已出貨數量 → 拒絕（請一併勾選其他倉庫），維持「各倉合計＝原始庫存」。
 - 倉儲商品範圍（原站「***僅供倉儲商品使用」）：檢視 `wms_warehouse_items_v`＝已有倉庫庫存列、或屬於 render=WH 團購品項的商品。
 - 盤點頁 inventory.js 的「倉儲商品列」（`.row-warehouseItem`，data-id＝JSON `itemId`）在本系統對應一筆 `warehouse_stocks`，`itemId` 放 `warehouse_stocks.id`；盤點商品列（`#invTableUpload`）的 `itemId` 放主倉那一筆的 id（主倉＝綁定該商品倉儲團購的倉庫 → 庫存最多 → 第一個倉庫），所以「檢視庫存」會預選主倉為入庫倉（同原站預選商品本身）。檢視庫存時會為所有啟用中倉庫補建 0 數量的庫存列（才能把盤點差異入到尚無此商品的倉庫）。
 - 各倉「可售」顯示：商品未出貨保留量（stock − stock_available）先由主倉、再由庫存多的倉庫承擔；預購數量只顯示在主倉列。
@@ -68,10 +73,13 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 來源：`https://p4.groupbuyforms.tw/scripts/inventory.js`（原站自家檔，公開靜態檔）。修補（最小、皆為安全/相容性）：
 1. 會改資料的 `jQuery.get(...)` 改 `jQuery.post(...)`：queryInv、addStock、archiveAndSync、loadItems、cancelOrder、markArchived（MODULE_GUIDE：會改資料的端點一律 POST；SameSite=Lax 擋不住跨站頂層 GET）。
 2. 取消訂單／設為已盤點送 `salesOrderId`（原站送 `uuid`）：對齊 orders 模組的 `POST /ajax/SalesOrder/cancelOrder`（參數 salesOrderId）；`queryUnarchivedOrders` 的 `value` 因此回訂單 id。
+3. 盤點確認送出時多帶 `expected`（畫面上入庫倉的原數量），伺服器比對防重送。
+4. 插入 HTML 前跳脫（`_invEsc`）：倉庫名稱、商品名稱／代碼、未盤點訂單清單（含顧客姓名）。
+5. 頁面 `#ItemForm` 補上隱藏的 `.modal-message`（原站無此節點，inventory.js 的錯誤訊息原本不會顯示）。
 
 ## 推導（原站未擷取／擷取工具過濾的部分）
 
-- 倉儲管理：列按鈕動作（已綁定=顯示綁定表單、品項 `/backend/GroupBuy/show`、全部商品 `/backend/GroupBuyItemSet/show`、訂單 `/backend/SalesOrder/list`，皆帶 groupBuyId）；啟用精靈「將既有團購改作倉儲」的選團購步驟（原站 DOM 無 step-2__choose-1，改為動態插入 select2 團購選單）；確定操作後端 `bind`。名稱欄 render（名稱＋`表單ID:` 徽章）、「調撥單」→`/backend/WarehouseRequisition/list`、`initFooterSearch(this,[1,2],[16,0])`、`injectImageChange` 由原站實測取得。
+- 倉儲管理：「全新倉儲」建立的同名表單設為 render=WH、功能標籤[主表單]（MAIN）、自動配發 5 碼短網址；列按鈕動作（已綁定=顯示綁定表單、品項 `/backend/GroupBuy/show`、全部商品 `/backend/GroupBuyItemSet/show`、訂單 `/backend/SalesOrder/list`，皆帶 groupBuyId）；啟用精靈「將既有團購改作倉儲」的選團購步驟（原站 DOM 無 step-2__choose-1，改為動態插入 select2 團購選單）；確定操作後端 `bind`。名稱欄 render（名稱＋`表單ID:` 徽章）、「調撥單」→`/backend/WarehouseRequisition/list`、`initFooterSearch(this,[1,2],[16,0])`、`injectImageChange` 由原站實測取得。
 - 調撥單：`/backend/WarehouseRequisition/update` 片段整頁（原站 0 筆調撥單無法開啟）；審核（批准/駁回）、轉移（可部分）、收貨的介面與 `submit/approve/reject/cancel` 端點名稱；建立表單送出與聯絡資訊帶入的 JS（可見片段補完）。列按鈕文字與狀態判斷、`reqReverse` 訊息由原站實測取得。
 - 入庫單：`/backend/Inbound/update` 片段整頁（加入商品、行內修改數量/單價、刪除、由訂單匯入、確認入庫）；`received` 端點名稱；建立表單送出 JS。
 - 入庫紀錄：「最後銷售日期」欄顯示日期（原站該欄 render 被過濾，可見片段 `return data`）、「上次銷售至今天數」從未銷售顯示 NA；篩選以 preXhr 附加；匯出內容欄位。
@@ -82,6 +90,8 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 - 調撥的「調撥中」是在轉移庫存時同時完成出庫與入庫（沒有在途庫存）；收貨只改狀態。
 - 盤點「盤點所選倉庫」只歸檔非預購（`back_order=false`）的已出貨商品；預購訂單商品不在歸檔範圍（預購數量以「盤點預購數量」直接調整）。
 - 倉庫刪除有庫存時拒絕（原站行為未知）。
+- 預購數量（商品層級）只能在主倉列調整。
+- 盤點頁「檢視庫存」會為所有啟用中倉庫補建 0 數量的庫存列（才能把差異入到尚無此商品的倉庫）。
 - 「取消訂單」由 orders 模組處理（含回補庫存），本模組不重做。
 
 ## 給 core 的問題
@@ -91,5 +101,5 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 
 ## 測試工具
 
-- `node lib/modules/warehouse/tools/e2e-stock-flow.mjs <BASE>`：入庫 → 調撥 → 盤點調整完整流程（每步列出庫存前後數字、驗證異動帳與不變式），加上列表篩選、匯出、權限/方法/租戶檢查；測完刪除全部 `[測試-warehouse]` 資料並確認種子庫存未變。需 `GB_ACC/GB_PW`（`scripts/dev/creds.sh`）與 `SUPABASE_ACCESS_TOKEN/SUPABASE_PROJECT_REF`。
+- `node lib/modules/warehouse/tools/e2e-stock-flow.mjs <BASE>`：入庫 → 調撥 → 盤點調整完整流程（每步列出庫存前後數字、驗證異動帳與不變式），加上列表篩選、匯出、權限/方法/租戶檢查、盤點/部分轉移重送被拒、逆向/啟用只能一次、盤點所選倉庫（不足拒絕＋同步＋已盤點）、未盤點訂單、HTML 跳脫；測完刪除全部 `[測試-warehouse]` 資料並確認種子庫存未變。需 `GB_ACC/GB_PW`（`scripts/dev/creds.sh`）與 `SUPABASE_ACCESS_TOKEN/SUPABASE_PROJECT_REF`。
 - `node lib/modules/warehouse/tools/dom-compare.mjs <spec html> <本系統 html>`：主內容區 DOM 骨架相似度。

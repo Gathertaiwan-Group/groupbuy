@@ -11,7 +11,7 @@ import { badRequest } from "@/lib/core/http/errors";
 import { download } from "@/lib/core/http/responses";
 import { editorEntity, type WriteSpec } from "@/lib/core/entity/crud";
 import type { DtRequest } from "@/lib/core/datatables/request";
-import { type AnyRow, dateTime, db, toInt, warehouseMap, wmsList } from "./shared";
+import { type AnyRow, dateTime, db, expectAction, fetchAll, toInt, warehouseMap, wmsList } from "./shared";
 
 const DAY = 86400000;
 
@@ -102,6 +102,14 @@ const writeSpec: WriteSpec = {
   mapRow: (api, row) => recordJson(row, ""),
 };
 
+function recordWrite(expected: "create" | "edit" | "remove") {
+  return async (ctx: RequestContext): Promise<Response> => {
+    const body = await ctx.body();
+    expectAction(body.flat.get("action")?.[0] ?? "", expected);
+    return editorEntity(ctx, inboundRecordEntity, writeSpec);
+  };
+}
+
 /** POST /backend/InboundRecord/download：依目前篩選匯出 Excel */
 async function downloadRecords(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
@@ -110,11 +118,12 @@ async function downloadRecords(ctx: RequestContext): Promise<Response> {
     const v = await ctx.param(k);
     if (v) extra[k] = v;
   }
-  let q: AnyRow = db().from("inbound_records").select("*").eq("tenant_id", session.tenantId);
-  q = applyFilters(q, extra);
-  const { data, error } = await q.order("date_inbound", { ascending: true }).order("id").limit(20000);
-  if (error) throw new Error(`[wms inbound record download] ${error.message}`);
-  const rows = (data ?? []) as AnyRow[];
+  // 分頁取完（PostgREST 單次上限 1000 筆）
+  const rows = await fetchAll<AnyRow>(() =>
+    applyFilters(db().from("inbound_records").select("*").eq("tenant_id", session.tenantId), extra)
+      .order("date_inbound", { ascending: true })
+      .order("id"),
+  );
   const whs = await warehouseMap(session, rows.map((r) => r.warehouse_id));
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("入庫紀錄");
@@ -147,9 +156,9 @@ export const inboundRecordRoutes: RouteDef[] = [
     groupBuy: "none",
   }),
   any("/ajax/InboundRecord/list", listRecords),
-  post("/ajax/InboundRecord/save", (ctx) => editorEntity(ctx, inboundRecordEntity, writeSpec)),
-  post("/ajax/InboundRecord/update", (ctx) => editorEntity(ctx, inboundRecordEntity, writeSpec)),
-  post("/ajax/InboundRecord/delete", (ctx) => editorEntity(ctx, inboundRecordEntity, writeSpec)),
+  post("/ajax/InboundRecord/save", recordWrite("create")),
+  post("/ajax/InboundRecord/update", recordWrite("edit")),
+  post("/ajax/InboundRecord/delete", recordWrite("remove")),
   post("/backend/InboundRecord/download", downloadRecords),
 ];
 

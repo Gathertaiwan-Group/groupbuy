@@ -28,7 +28,7 @@ span.stockDiff{display: block;font-size: 0.8rem;}
 //.btn-group {float: right;}
 .btn-cancelOrder {padding: 4px 8px;}
 </style>
-<script src="/scripts/inventory.js?v=1"></script>
+<script src="/scripts/inventory.js?v=2"></script>
 <!--#body--><div class="container-fluid ">
 <div class="card mt-4">
 <div class="card-header">加入盤點商品</div>
@@ -58,6 +58,8 @@ span.stockDiff{display: block;font-size: 0.8rem;}
 </div>
 <div class="card mt-4" id="ItemForm">
 <div class="card-header">盤點</div>
+{{!-- 推導：inventory.js 錯誤顯示在 #ItemForm .modal-message（原站頁面無此節點，錯誤不會顯示）；補上隱藏的訊息區 --}}
+<div class="modal-message px-3 pt-3" style="display:none"><div class="alert alert-warning mb-0 modal-message-alert-text"></div></div>
 <div class="card-body">
 	<div class="blue-grey lighten-5 small p-2">
 	***僅供倉儲商品使用

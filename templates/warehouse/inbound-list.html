@@ -56,7 +56,7 @@ var inboundEditor;
 				{
 					data:'warehouseId',
 					render: function ( data, type, row ) {
-						return row.warehouse.name;
+						return $.fn.dataTable.render.text().display(row.warehouse.name);
 					}
 				},
 				{

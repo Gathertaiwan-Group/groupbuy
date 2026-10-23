@@ -1,4 +1,7 @@
 
+// 【本系統修補】HTML 跳脫：倉庫名稱、商品名稱/代碼、訂單清單等使用者可編輯的值插入 HTML 前先跳脫
+var _invEsc = function (s) { return $('<div>').text(s == null ? '' : String(s)).html(); };
+
 var inventoryManager = {
 	init:function(itemId) {
 		this.itemId = itemId || '';
@@ -336,7 +339,7 @@ var inventoryManager = {
 			<input class="form-check-input small" id="itemIdSelect_${o.itemId}" name="itemIdSelect" type="checkbox" value="${o.itemId}">
 			<label class="form-check-label red-text" for="itemIdSelect_${o.itemId}"> </label>
 			</div>
-			<div class="col-4"><span class="warehouse">${o.warehouseName} (${o.itemId})</span></div>
+			<div class="col-4"><span class="warehouse">${_invEsc(o.warehouseName)} (${o.itemId})</span></div>
 			<div class="col-1 col-stock">${o.stock}</div>
 			<div class="col-2 col-stockAvailable">${o.stockAvailable} ${showUnarchivedBtn}</div>
 			<div class="col-1 col-stockBackOrder">${o.stockBackOrder}</div>
@@ -454,7 +457,8 @@ var inventoryManager = {
 			{
 				'itemId':info.toWareHouseItemId,
 				'stock':info.incStock,
-				'name':name
+				'name':name,
+				'expected':info.oriStock
 			},
 			function(data) {
 				json = data.data;
@@ -690,9 +694,9 @@ var inventoryManager = {
 				{
 					data:'title',
 					render: function ( data, type, row, meta ) {
-						var title = !data ? '<span class="text-warning">商品不存在</span>' : data;
+						var title = !data ? '<span class="text-warning">商品不存在</span>' : _invEsc(data);
 						return `
-							<span class="col-title">${title}</span><span class="col-uid">${row.uid}</span>'
+							<span class="col-title">${title}</span><span class="col-uid">${_invEsc(row.uid)}</span>'
 							`
 					}
 				},
@@ -841,7 +845,7 @@ var inventoryManager = {
 				if (data && data.data) {
 					var html = data.data.map(function (obj) {
 						return `
-							<li class="list-group-item">${obj.label}
+							<li class="list-group-item">${_invEsc(obj.label)}
 							<div class="btn-group">
 							<button class="btn btn-warning btn-cancelOrder" data-uuid="${obj.value}">取消訂單</button>
 							<button class="btn btn-default btn-markArchived" data-uuid="${obj.value}">設為已盤點</button>
