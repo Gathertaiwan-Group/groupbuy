@@ -1,4 +1,10 @@
-{{!-- CLEANROOM:modal-export-monthlyreport#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-monthlyreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：原站表單開頭、標題列被擷取過濾 --}}
+<form name="GroupBuyForm" method="post" action="/backend/GroupBuy/exportMonthlyReport.do" class="form-horizontal" id="exportMonthlyReportForm"><div class="modal-header">
+	<h5 class="modal-title">匯出團購月報表</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+</div>
+<div class="modal-body">
+	<div class="form-group row">
 		<label class="col-sm-4 control-label" for="featureTag">包含標籤</label>
 		<div class="col-sm-8">
 <input type="checkbox" name="featureTag" id="emr_featureTag_UNCLOSED" class="filters form-check-input" value="16" ><label for="emr_featureTag_UNCLOSED" class="pl-4 mr-2">未結案</label>
@@ -70,7 +76,69 @@
 	<div class="modal-footer">
 		<div class="text-right help-block with-errors"></div>
 		<button class="btn btn-default" data-dismiss="modal">關閉</button>
-		{{!-- CLEANROOM:modal-export-monthlyreport#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-monthlyreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+	</div>
+</form>
+{{!-- 推導：原站此段 script 被擷取過濾；依 spec 已知的計數請求與本系統端點補完 --}}
+<script>
+$(function () {
+	var $form = $('#exportMonthlyReportForm');
+	$('#submitButton').hide();
+	$('.progress').hide();
+	$('.form-group-daysToShipped').hide();
+
+	$('input[name=purpose]').change(function() {
+		getCount();
+	});
+
+	$('input[name=featureTag][value=512]').change(function(v) {
+		if ($(this).is(':checked')) {
+			$('.form-group-daysToShipped').show();
+		} else {
+			$('#daysToShipped').val('');
+			$('.form-group-daysToShipped').hide();
+		}
+	});
+
+	$form.on('submit', function(e) {
+		e.preventDefault();
+		if ($('#closing').is(':checked') && !confirm('將匯出的表單標註為「結案中」？')) {
+			return false;
+		}
+		var $btn = $('#submitButton');
+		$btn.prop('disabled', true);
+		$('.progress').show();
+		$('.progress-bar').css('width', '100%');
+		$.fileDownload($form.attr('action'), { httpMethod: 'POST', data: $form.serialize() })
+			.done(function() {
+				$btn.prop('disabled', false);
+				$('.progress').hide();
+				$('#myModal').modal('hide');
+			})
+			.fail(function(responseHtml) {
+				$btn.prop('disabled', false);
+				$('.progress').hide();
+				messagebox('error', $('<div>').html(responseHtml || '').text() || '匯出失敗', 'OK');
+			});
+		return false;
+	});
+
+	var loading = false;
+	var ajaxurl = '{{baseUrl}}/ajax/GroupBuy/countMonthlyReport.do';
+	var getCount = function() {
+		if ($('#dateStartString').val() == '' || $('#dateEndString').val() == '' || !$('input[name=purpose]:checked').length) {
+			return;
+		}
+		if (loading) return;
+		loading = true;
+		var featureTag = $('input[name=featureTag]:checked')
+		.map(function(){return this.value;})
+		.get()
+		.reduce(function(p,c) {return p|c}, 0)
+		var excludedFeatureTag = $('input[name=excludedFeatureTag]:checked')
+		.map(function(){return this.value;})
+		.get()
+		.reduce(function(p,c) {return p|c}, 0)
 
 		jQuery.post( ajaxurl,
 					{
@@ -81,7 +149,38 @@
 					'dateEndString':$('input[name="dateEndString"]').val(),
 					'daysToShipped':$('input[name="daysToShipped"]').val(),
 				},
-				{{!-- CLEANROOM:modal-export-monthlyreport#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-monthlyreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				function(data) {
+					loading = false;
+					var cnt = data.data;
+					if (cnt > 0) {
+						$('#submitButton').show();
+					} else {
+						$('#submitButton').hide();
+					}
+					$('.help-block.with-errors').html('符合結果:' + cnt);
+				}
+		).fail(function() { loading = false; });
+	};
+
+	$form.find(':input').on('change', function() {
+		if (!$(this).hasClass('nocount')) {
+			getCount();
+		}
+	});
+
+	initDatetimePicker('#dateStartString', 'YYYY-MM-DD', 'months', function(date, obj) {
+		var cur = moment(date);
+		var maxDate = moment(date).add(1, 'years');
 		$('#dateEndString').data("DateTimePicker").minDate(date);
 		$('#dateEndString').data("DateTimePicker").maxDate(maxDate);
-		{{!-- CLEANROOM:modal-export-monthlyreport#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-monthlyreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		$('#dateEndString').data("DateTimePicker").defaultDate('');
+		getCount();
+	});
+	initDatetimePicker('#dateEndString', 'YYYY-MM-DD', 'months', function(date, obj) {
+		getCount();
+	});
+	$('#dateEndString').on("dp.hide", function () {
+		getCount();
+	});
+});
+</script>

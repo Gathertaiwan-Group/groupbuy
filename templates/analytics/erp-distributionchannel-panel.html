@@ -1,7 +1,19 @@
 <!--#head-->
 {{> core/partials/dte-style.html}}
 {{> analytics/partials/erp-dc-transaction-js.html}}
-{{!-- CLEANROOM:erp-distributionchannel-panel#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/erp-distributionchannel-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<script type="text/javascript" class="init">
+	{{!-- 推導：原站此段被擷取過濾；面板的待審查明細（結算紀錄）與待審查月結（結算單據）表格 --}}
+	$(document).ready(function() {
+		var dcgbtEditor = createDistributionChannelGroupBuyTransactionEditor(null, null, '#distributionChannelGroupBuyTransactionTable');
+		createDistributionChannelGroupBuyTransactionTable(null, null, '#distributionChannelGroupBuyTransactionTable', dcgbtEditor);
+		var dctEditor = createDistributionChannelTransactionEditor(null, '#distributionChannelTransactionTable');
+		createDistributionChannelTransactionTable(null, null, '#distributionChannelTransactionTable', dctEditor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
 		<li class="breadcrumb-item active" aria-current="page">銷售通路</li>
 	</ol>
 </nav>

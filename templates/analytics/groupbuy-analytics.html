@@ -1,9 +1,24 @@
 <!--#head-->
 <style>
-{{!-- CLEANROOM:groupbuy-analytics#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：圖例樣式後段被擷取過濾 --}}
+.chart-legends {
+margin-top: 30px;
+}
+.chart-legends ul {
+	list-style: none;
+	font-size:10px;
+}
+
+.chart-legends ul li span {
+	width: 20px;
+	height: 10px;
+	display: inline-block;
+	margin-right: 10px;
+	border-radius: 2px;
+}
 </style>
 <!--#body--><div class="container-fluid ">
-	{{!-- CLEANROOM:groupbuy-analytics#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<h5 class="mt-5">{{groupBuyTitle}}</h5>
 <div class="row">
 <div class="col-12">
 <div class="card">
@@ -50,9 +65,52 @@
 <!-- col begin -->
 <div class="col-md-6">
 <span class="badge badge-default">每日訂單數</span>
-{{!-- CLEANROOM:groupbuy-analytics#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：圖表區被擷取過濾；6 張圖的容器與標題依 spec 後文 createChart 呼叫補完 --}}
+<div class="chart-container" style="position: relative; height:320px;">
+	<canvas id="dailyChart"></canvas>
 </div>
-{{!-- CLEANROOM:groupbuy-analytics#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">訂單金額分級</span>
+<div class="chart-container" style="position: relative; height:320px;">
+	<canvas id="distributionChart"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">分類銷售金額</span>
+<div class="chart-container" style="position: relative; height:320px;">
+	<canvas id="cateTagPortionChart"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">商品銷售金額</span>
+<div class="chart-container" style="position: relative; height:320px;">
+	<canvas id="itemSetPortionChart"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">地區訂單數</span>
+<div class="chart-container" style="position: relative; height:320px;">
+	<canvas id="areaSalesOrderCountPortionChart"></canvas>
+</div>
+</div>
+<!-- col end -->
+<!-- col begin -->
+<div class="col-md-6">
+<span class="badge badge-default">地區訂單金額</span>
+<div class="chart-container" style="position: relative; height:320px;">
+	<canvas id="areaSalesOrderAmountPortionChart"></canvas>
+</div>
+</div>
+<!-- col end -->
 </div>
 
 <script>
@@ -79,9 +137,16 @@ var borderColors = [
 	'rgba(153, 102, 255, 1)',
 	'rgba(255, 159, 64, 1)',
 	'rgba(205, 99, 132, 1)',
-	{{!-- CLEANROOM:groupbuy-analytics#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	'rgba(54, 162, 185, 1)',
+	'rgba(255, 156, 86, 1)',
+	'rgba(75, 142, 192, 1)',
+	'rgba(153, 102, 205, 1)',
+	'rgba(205, 159, 64, 1)',
+	];
+
+{{!-- 推導：原站此段被擷取過濾；資料轉換、載入與近期摘要依 spec 已知的 createChart 呼叫與本系統端點補完 --}}
+var _charts = {};
 var _createChart = function(chartId, type, data, showLegend) {
-	{{!-- CLEANROOM:groupbuy-analytics#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	var myChart = new Chart(
 			$(chartId),
 			{
@@ -98,11 +163,60 @@ var _createChart = function(chartId, type, data, showLegend) {
 					},
 				}
 			});
-	{{!-- CLEANROOM:groupbuy-analytics#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 	window.addEventListener('resize', function () {
-		myChart.resize()
+		myChart.resize() 
 	})
-	{{!-- CLEANROOM:groupbuy-analytics#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	_charts[chartId] = myChart;
+	return myChart;
+}
+
+var createChart = function(chartId, type, label, items, unit, colorIndex, showLegend) {
+	items = items || [];
+	if (_charts[chartId]) {
+		_charts[chartId].destroy();
+		delete _charts[chartId];
+	}
+	var labels = items.map(function(item) { return item.label; });
+	var values = items.map(function(item) { return Number(item.data) || 0; });
+	var dataset = { label: label + (unit ? ' (' + unit + ')' : ''), data: values };
+	if (colorIndex < 0) {
+		dataset.backgroundColor = items.map(function(item, i) { return backgroundColors[i % backgroundColors.length]; });
+		dataset.borderColor = items.map(function(item, i) { return borderColors[i % borderColors.length]; });
+	} else {
+		dataset.backgroundColor = backgroundColors[colorIndex % backgroundColors.length];
+		dataset.borderColor = borderColors[colorIndex % borderColors.length];
+	}
+	dataset.borderWidth = 1;
+	return _createChart(chartId, type, { labels: labels, datasets: [dataset] }, showLegend);
+}
+
+var loadDailyReport = function(query) {
+	$.ajax({
+		url: '{{baseUrl}}/ajax/GroupBuy/getDailyReport.do',
+		dataType: 'json',
+		data: query
+	})
+	.done(function (json) {
+		var $tbody = $('#dailyReport tbody').empty();
+		$.each(json.data || {}, function(date, r) {
+			$tbody.append('<tr><td><div class="row">'
+				+ '<div class="col-3">' + r.date + '</div>'
+				+ '<div class="col-3">' + r.count + '</div>'
+				+ '<div class="col-3">' + r.grandTotal + '</div>'
+				+ '<div class="col-3">' + r.totalPaid + '</div>'
+				+ '</div></td></tr>');
+		});
+	});
+}
+
+var load = function() {
+	var query = {
+		groupBuyId: {{json groupBuyId}},
+		dateCreatedBegin: $('#dateCreatedBegin').val(),
+		dateCreatedEnd: $('#dateCreatedEnd').val(),
+	};
+	$.ajax({
+				url: '{{baseUrl}}/ajax/GroupBuy/analytics.do?all=1',
 				dataType: 'json',
 				data:query
 			})
@@ -111,7 +225,18 @@ var _createChart = function(chartId, type, data, showLegend) {
 				createChart('#distributionChart', 'bar', "訂單數", json.data.distributions, '元', 4, true);
 				createChart('#cateTagPortionChart', 'doughnut', "金額", json.data.cateTagPortions, '', -1, false);
 				createChart('#itemSetPortionChart', 'doughnut', "金額", json.data.itemSetPortions, '', -1, false);
-				{{!-- CLEANROOM:groupbuy-analytics#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				createChart('#areaSalesOrderCountPortionChart', 'bar', "訂單數", json.data.areaSalesOrderCountPortions, '', 5, true);
+				createChart('#areaSalesOrderAmountPortionChart', 'bar', "金額", json.data.areaSalesOrderAmountPortions, '', 1, true);
+			});
+	loadDailyReport(query);
+}
+
+$(document).ready(function() {
+	var end = moment().format('YYYY-MM-DD');
+	var begin = moment().subtract(7, 'days').format('YYYY-MM-DD');
+	initDatetimePicker('#dateCreatedBegin', 'YYYY-MM-DD', 'days', function(date) {
+		var maxDate = moment(date).add(1, 'years');
+		$('#dateCreatedEnd').data("DateTimePicker").minDate(date);
 		$('#dateCreatedEnd').data("DateTimePicker").maxDate(maxDate);
 		//$('#dateCreatedEnd').data("DateTimePicker").defaultDate(begin);
 		//$('#dateCreatedEnd').show();
@@ -119,8 +244,14 @@ var _createChart = function(chartId, type, data, showLegend) {
 	initDatetimePicker('#dateCreatedEnd', 'YYYY-MM-DD', 'days');
 	$('#dateCreatedBegin').data("DateTimePicker").defaultDate(begin);
 	$('#dateCreatedEnd').data("DateTimePicker").defaultDate(end);
-	{{!-- CLEANROOM:groupbuy-analytics#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	
+	$('#btn-search').click(function() {
+		load();
+	});
+	load();
+});
+</script>
 
 </div>
 <!--#foot-->
-{{!-- CLEANROOM:groupbuy-analytics#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-analytics.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.7.2/Chart.min.js"></script>

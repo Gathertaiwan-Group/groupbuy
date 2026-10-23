@@ -1,10 +1,29 @@
-{{!-- CLEANROOM:modal-export-itemsalesreport#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：原站表單開頭、標題列被擷取過濾 --}}
+<form name="ItemForm" method="post" action="/backend/Item/exportItemSalesReport.do" class="form-horizontal" id="ItemSalesReportForm"><div class="modal-header">
+	<h5 class="modal-title">匯出銷售商品總表</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+</div>
+<div class="modal-body">
+	<div class="form-group row">
 		<label class="col-sm-4 control-label" for="dateStart">開始時間</label>
 		<div class="col-sm-8">
-			{{!-- CLEANROOM:modal-export-itemsalesreport#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			<input type="text" id="dateStart" name="dateStart" class="required  form-control" required>
+			<script type="text/javascript">
+				$(function () { initDatetimePicker('#dateStart', 'YYYY-MM-DD', 'days'); });
+			</script>
+		</div>
+	</div>
+	<div class="form-group row">
+		<label class="col-sm-4 control-label" for="dateEnd">結束時間</label>
 		<div class="col-sm-8">
 			<input type="text" id="dateEnd" name="dateEnd" class="required  form-control" required>
-			{{!-- CLEANROOM:modal-export-itemsalesreport#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			<script type="text/javascript">
+				$(function () { initDatetimePicker('#dateEnd', 'YYYY-MM-DD', 'days'); });
+			</script>
+		</div>
+	</div>
+	<div class="form-group row" id="row-groupBuyId">
+		<label class="col-sm-4 control-label" for="state">選擇表單</label>
 		<div class="col-sm-8">
 		<select id="groupBuyId" class="form-control" name="groupBuyId"></select>
 		</div>
@@ -58,4 +77,37 @@
 </div>
 <div class="modal-footer">
 	<button class="btn btn-default" data-dismiss="modal">關閉</button>
-	{{!-- CLEANROOM:modal-export-itemsalesreport#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/modal-export-itemsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	<input id="submitButton" name="submitButton" type="submit" class="btn btn-primary" value="送出" />
+</div>
+</form>
+{{!-- 推導：原站此段 script 被擷取過濾；團購多選、送出下載依本系統端點補完（最多跨兩個月由伺服器檢查） --}}
+<script>
+$(function () {
+	var $form = $('#ItemSalesReportForm');
+	$('.progress').hide();
+	$('#groupBuyId').select2ForGroupBuy({ multiple: true, width: '100%' });
+	$form.on('submit', function(e) {
+		e.preventDefault();
+		if (!$('#dateStart').val() || !$('#dateEnd').val()) {
+			messagebox('error', '請選擇開始與結束時間', 'OK');
+			return false;
+		}
+		var $btn = $('#submitButton');
+		$btn.prop('disabled', true);
+		$('.progress').show();
+		$('.progress-bar').css('width', '100%');
+		$.fileDownload($form.attr('action'), { httpMethod: 'POST', data: $form.serialize() })
+			.done(function() {
+				$btn.prop('disabled', false);
+				$('.progress').hide();
+				$('#myModal').modal('hide');
+			})
+			.fail(function(responseHtml) {
+				$btn.prop('disabled', false);
+				$('.progress').hide();
+				messagebox('error', $('<div>').html(responseHtml || '').text() || '匯出失敗', 'OK');
+			});
+		return false;
+	});
+});
+</script>

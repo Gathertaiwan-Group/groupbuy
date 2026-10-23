@@ -45,7 +45,7 @@ const GBEMS_COLUMNS: Record<string, string> = {
   countAdvance: "count_advance",
 };
 
-/** 統計列 → 原站 JSON（鍵與順序同原站 /ajax/GroupBuyErpMonthlyStatistics/list；日期為 YYYYMM） */
+/** 統計列 → JSON（鍵依合法資產 gbes.min.js、sa.js 的使用；日期為 YYYYMM） */
 export function gbemsToApi(r: AnyRow): AnyRow {
   const ym = yyyymm(String(r.date_statistics ?? ""));
   return {
@@ -134,7 +134,6 @@ async function groupBuyMonthlyByMonth(ctx: RequestContext): Promise<Response> {
       countSales: int(r.count_sales),
       countAdvance: int(r.count_advance),
       datePaidString: ym,
-      dateStatisticsString: ym,
     };
   });
   return json({ data: rows, recordsTotal: rows.length, recordsFiltered: rows.length, dateModified: refreshed.getTime(), executionTime: Date.now() - started, options: {} });
@@ -163,15 +162,11 @@ export async function paymentMonthly(tenantId: number, month01: string): Promise
     if (!r) {
       const pm = paymentMethodOf(bit);
       r = {
-        paymentMethod: pm.code,
         paymentMethodName: pm.label,
         datePaidString: ym,
-        dateShippedString: ym,
-        dateStatisticsString: ym,
         amountTotal: 0,
         amountSales: 0,
         amountAdvance: 0,
-        amountShipping: 0,
         countTotal: 0,
         countSales: 0,
         countAdvance: 0,
@@ -181,7 +176,6 @@ export async function paymentMonthly(tenantId: number, month01: string): Promise
     const amt = num(o.grand_total);
     r.amountTotal += amt;
     r.countTotal += 1;
-    r.amountShipping += num(o.shipping_amount);
     if (o.is_shipped) {
       r.amountSales += amt;
       r.countSales += 1;
@@ -191,7 +185,7 @@ export async function paymentMonthly(tenantId: number, month01: string): Promise
     }
   }
   return [...by.values()]
-    .map((r) => ({ ...r, amountTotal: num(r.amountTotal), amountSales: num(r.amountSales), amountAdvance: num(r.amountAdvance), amountShipping: num(r.amountShipping) }))
+    .map((r) => ({ ...r, amountTotal: num(r.amountTotal), amountSales: num(r.amountSales), amountAdvance: num(r.amountAdvance) }))
     .sort((a, b) => b.amountTotal - a.amountTotal);
 }
 
@@ -219,15 +213,12 @@ const SOMS_COLUMNS: Record<string, string> = {
 function somsToApi(r: AnyRow): AnyRow {
   return {
     salesOrderMonthlyStatisticsId: int(r.id),
-    customerId: r.customer_id === null || r.customer_id === undefined ? null : int(r.customer_id),
     name: r.name ?? "",
     email: r.email ?? "",
     telephone: r.telephone ?? "",
     amountTotal: num(r.amount_total),
     amountMax: num(r.amount_max),
     countOrderValid: int(r.count_order_valid),
-    month: yyyymm(String(r.month ?? "")),
-    dateCreatedString: tpeDateTimeSec(r.created_at),
   };
 }
 
@@ -260,6 +251,11 @@ async function listSalesOrderMonthly(ctx: RequestContext): Promise<Response> {
     if (g("countOrderValidLess") !== null) q = q.lt("count_order_valid", g("countOrderValidLess"));
     const term = sanitizeLike(dt.search);
     if (term) q = q.or(`name.ilike.*${term}*,email.ilike.*${term}*,telephone.ilike.*${term}*`);
+    // 表尾搜尋（姓名／電子信箱／電話）
+    for (const c of dt.columns) {
+      const v = sanitizeLike(c.search ?? "");
+      if (v && (c.data === "name" || c.data === "email" || c.data === "telephone")) q = q.ilike(c.data, `%${v}%`);
+    }
     return q;
   };
   let q = filters(db.from("sales_order_monthly_statistics").select("*", { count: "exact" }), true);

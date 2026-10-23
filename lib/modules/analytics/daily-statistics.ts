@@ -136,7 +136,7 @@ async function listGroupBuyDaily(ctx: RequestContext): Promise<Response> {
   let to = parseDate(dt.extra.today);
   const day = parseDate(dt.extra.day);
   if (!from && !to && day) from = to = day;
-  // 原站：未給日期區間時不回資料
+  // 未給日期區間時不回資料（推導）
   if (!from || !to) return emptyList(dt, started);
   if (from > to) [from, to] = [to, from];
   const gbRaw = Number(dt.extra.groupBuyId);
@@ -233,18 +233,12 @@ async function realtimeStatistics(ctx: RequestContext): Promise<Response> {
       const rd = roas.get(r.groupBuyId);
       if (rd) {
         const converted = num(rd.converted_cost);
+        // 鍵依合法資產 gbes.min.js 的使用（roasDataItem.convertedCost / roas / result）
         out.roasDataItem = {
-          roasDataItemId: int(rd.id),
-          groupBuyId: int(rd.group_buy_id),
-          shortUrl: rd.short_url ?? "",
-          cost: num(rd.cost),
-          exchangeRate: Number(rd.exchange_rate ?? 1),
           convertedCost: converted,
           // ROAS＝本區間銷售總金額 ÷ 廣告金額（台幣）
           roas: converted > 0 ? Math.round((num(r.amountSales) / converted) * 100) / 100 : null,
           result: rd.result ?? "",
-          dateStatisticsString: tpeDate(rd.date_statistics),
-          dateCreatedString: tpeDateTimeSec(rd.created_at),
         };
       }
       return out;
@@ -307,14 +301,10 @@ async function uploadRoasData(ctx: RequestContext): Promise<Response> {
   const { data, error } = await db.from("roas_data_items").insert(inserts).select("*");
   if (error) throw new Error(`[analytics] ROAS 上傳失敗：${error.message}`);
   const saved = ((data ?? []) as AnyRow[]).map((r) => ({
-    roasDataItemId: int(r.id),
     groupBuyId: int(r.group_buy_id),
     shortUrl: r.short_url ?? "",
-    cost: num(r.cost),
-    exchangeRate: Number(r.exchange_rate),
     convertedCost: num(r.converted_cost),
     result: r.result ?? "",
-    dateStatisticsString: tpeDate(r.date_statistics),
   }));
   const message = skipped.length ? `上傳成功 ${saved.length} 筆；略過 ${skipped.length} 筆（第 ${skipped.slice(0, 20).join("、")} 列）` : `上傳成功 ${saved.length} 筆`;
   return json({ code: 200, success: true, error: message, message, data: saved });

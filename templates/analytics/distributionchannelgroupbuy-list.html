@@ -1,5 +1,6 @@
 <!--#head-->
 {{> core/partials/dte-style.html}}
+{{> analytics/partials/erp-dc-transaction-js.html}}
 <script>
 var createDistributionChannelGroupBuyEditor = function(distributionChannelId, tableName) {
 	var conf = {
@@ -21,26 +22,65 @@ var createDistributionChannelGroupBuyEditor = function(distributionChannelId, ta
 		fields: [
 				DataTableConfig.field_select('階段','state'),
 				//DataTableConfig.field_input('狀態','status'),
-				{{!-- CLEANROOM:distributionchannelgroupbuy-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				DataTableConfig.field_select2('團購','groupBuyId','','選擇團購', GBF.baseUrl + '/ajax/Lookup/groupBuy?rc=true', true),
+				DataTableConfig.field_textarea('備註', 'note','', 5),
 		],
-		{{!-- CLEANROOM:distributionchannelgroupbuy-list#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
 	}
 
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	if (tableName) {
+		conf.table = tableName;
 	}
 
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	var editor = new $.fn.dataTable.Editor(conf);
+	editor.on('open', function(e, mode, action) {
+		if (action === 'create') {
+			editor.show('groupBuyId');
+			editor.hide('state', false);
 		} else {
 			editor.hide('groupBuyId', false);
 			editor.show('state');
 		}
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	});
+	return editor;
 }
-{{!-- CLEANROOM:distributionchannelgroupbuy-list#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：原站此段被擷取過濾；階段按鈕、表格、篩選與更新階段依 spec 已知部分與本系統端點補完 --}}
+var distributionChannelGroupBuyTable;
+var stateButton = function(action, state, className, text) {
 	return '<button class="pull-right btn '
 	+className+' text-nowrap my-0" data-action="'+action
 	+'" data-state="'+state
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	+'">'+text+'</button>';
+}
+
+var createDistributionChannelGroupBuyTable = function(distributionChannelId, tableName, editor) {
+	var buttonUpdateStateAuto = {
+		text: '自動更新階段',
+		action: function(e, dt, node) {
+			var $btn = $(node);
+			btnStartLoading($btn);
+			$.ajax({
+				url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateStateAuto',
+				type: 'POST',
+				data: { distributionChannelId: distributionChannelId || '' },
+				dataType: 'json',
+				success: function(json) {
+					btnStopLoading($btn);
+					messagebox('', json.message || json.error || '已更新', GBFi18n.act_close);
+					dt.ajax.reload( null, false );
+				},
+				error: function (xhr) {
+					btnStopLoading($btn);
+					messagebox('', xhr.responseJSON ? xhr.responseJSON.error : xhr.status, GBFi18n.act_close);
+				}
+			});
+		}
+	};
+	var buttonUpdateState = {
+		extend: 'collection',
+		text: '更新階段',
+		buttons: [
 			DataTableConfig.actionButton({
 				text:'未結案',
 				confirm:'會將該通路商團購設為「可結案」',
@@ -64,17 +104,42 @@ var createDistributionChannelGroupBuyEditor = function(distributionChannelId, ta
 		]
 	}
 
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	var buttons;
+	if (!distributionChannelId) {
+		buttons = [
+			{ extend: 'refresh'},
+			buttonUpdateStateAuto,
+			buttonUpdateState,
+		];
 	} else {
 		buttons = [
 			{ extend: 'create', editor: editor },
 			{ extend: 'remove', editor: editor, className:'btn-danger' },
 			{ extend: 'refresh'},
 			buttonUpdateStateAuto,
-			{{!-- CLEANROOM:distributionchannelgroupbuy-list#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			buttonUpdateState,
+		];
 	}
 
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		"lengthMenu": [10, 25, 50, 100, 250],
+		ajax: {
+			url:GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/list.do',
+			type: "POST",
+			data: function(d) {
+				d.distributionChannelId = distributionChannelId || '';
+				$('input[name=state].filters').each(function() {
+					d[this.id] = $(this).is(':checked') ? 1 : 0;
+				});
+				d.statistics = $('#statistics').is(':checked') ? 1 : 0;
+				d.statusEnded = $('#statusEnded').is(':checked') ? 1 : 0;
+			},
+		},
+		language:DataTableConfig.i18n,
 		columns:[
 			DataTableConfig.data_details,
 			//DataTableConfig.data_details_control,
@@ -84,7 +149,8 @@ var createDistributionChannelGroupBuyEditor = function(distributionChannelId, ta
 				render: function ( data, type, row, meta ) {
 					var date = '<span class="badge badge-default mr-1">'
 					+ moment(new Date(row.groupBuy.dateEnd)).format('YYMMDD')
-					{{!-- CLEANROOM:distributionchannelgroupbuy-list#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+					+ '</span>';
+					var html = date + $('<span>').text(data || '').html();
 					if (row.groupBuyStatistics) {
 						html += '<br>'
 							+ '<span class="badge badge-default mt-1">訂單 '+row.groupBuyStatistics.orders+'</span>'
@@ -93,7 +159,23 @@ var createDistributionChannelGroupBuyEditor = function(distributionChannelId, ta
 							+ '<span class="badge badge-default ml-1">預購未出貨 '+row.groupBuyStatistics.unshippedBackOrders+'</span>'
 							+ '<br>'
 							+ '<span class="badge badge-default mt-1">已收金額 '+row.groupBuyStatistics.paidTotal+'</span>'
-							{{!-- CLEANROOM:distributionchannelgroupbuy-list#12 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+							+ '<span class="badge badge-default ml-1">已收金額(不含運) '+row.groupBuyStatistics.paidTotalWithoutShipping+'</span>';
+					}
+					return html;
+				}
+			},
+			{ data: 'state',
+				render: function ( data, type, row, meta ) {
+					var html = renderOption(meta, data, 'state');
+					if (type === 'display' && row.groupBuyStatistics) {
+						html += stateButton('updateState', 'CLOSED', 'btn-sm btn-outline-success', '完整結案')
+							+ stateButton('updateState', 'CLOSING', 'btn-sm btn-outline-info', '部分結案')
+							+ stateButton('updateState', 'CLOSABLE', 'btn-sm btn-outline-primary', '可結案');
+						if (!row.groupBuyStatistics.orders) {
+							html += stateButton('updateState', 'CLOSED_NO_SALES', 'btn-sm btn-outline-secondary', '完整結案(未銷售)');
+						}
+					}
+					return html;
 				}
 			},
 		],
@@ -102,11 +184,48 @@ var createDistributionChannelGroupBuyEditor = function(distributionChannelId, ta
 		select: DataTableConfig.selectOptionsOS,
 		buttons: buttons,
 		initComplete: function () {
-			{{!-- CLEANROOM:distributionchannelgroupbuy-list#13 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			DataTableConfig.initFooterSearch(this, [2,3],[12,16]);
+		},
+		drawCallback: function (settings) {
+			if ($.fn.floatingScroll)
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+	distributionChannelGroupBuyTable = table;
+
+	// 展開列：此通路商團購的結算紀錄
+	$(tableName + ' tbody').on('click', 'td.details-control', function () {
+		var tr = $(this).closest('tr');
+		var row = table.row(tr);
+		if (row.child.isShown()) {
+			row.child.hide();
+			tr.removeClass('shown');
+			return;
+		}
+		var d = row.data();
+		var childId = 'dcgbt_' + d.distributionChannelGroupBuyId;
+		row.child('<table id="' + childId + '" class="table table-striped display nowrap" width="100%"><thead><tr>'
+			+ '<th></th><th>結算日期</th><th>團購</th><th>狀態</th><th>營業額</th><th>訂單數量</th><th>結算金額</th>'
+			+ '</tr></thead></table>').show();
+		tr.addClass('shown');
+		var childEditor = createDistributionChannelGroupBuyTransactionEditor(d.distributionChannelGroupBuyId, d.distributionChannelId, '#' + childId);
+		createDistributionChannelGroupBuyTransactionTable(d.distributionChannelGroupBuyId, null, '#' + childId, childEditor);
+	});
 	injectOpenEditor(tableName, editor, false);
 	DataTableHelper.injectButtonEnableOnSelected(table);
 	$('.filters').on('change', function() {
-		{{!-- CLEANROOM:distributionchannelgroupbuy-list#14 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		table.ajax.reload();
+	});
+	$(tableName + ' tbody').on('click', 'button[data-action=updateState]', function(e) {
+		e.stopPropagation();
+		var $btn = $(this);
+		var id = table.row($btn.closest('tr')).data().distributionChannelGroupBuyId;
+		var state = $btn.data('state');
+		btnStartLoading($btn);
+		$.ajax({
+			url: GBF.baseUrl + '/ajax/erp/DistributionChannelGroupBuy/updateState',
+			type: 'POST',
+			data: {
 				'distributionChannelGroupBuyId':id,
 				'state':state
 			},
@@ -119,18 +238,32 @@ var createDistributionChannelGroupBuyEditor = function(distributionChannelId, ta
 				if (xhr.responseJSON) {
 					messagebox('',xhr.responseJSON.error, GBFi18n.act_close)
 				} else {
-					{{!-- CLEANROOM:distributionchannelgroupbuy-list#15 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+					alert(xhr.status + " "+ thrownError);
 				}
-				{{!-- CLEANROOM:distributionchannelgroupbuy-list#16 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				btnStopLoading($btn);
 			}
 		});
-	{{!-- CLEANROOM:distributionchannelgroupbuy-list#17 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	});
+	return table;
+}
+
+$(document).ready(function() {
+	var distributionChannelId = {{json distributionChannelId}};
+	var tableName = '#distributionChannelGroupBuyTable';
+	var editor = createDistributionChannelGroupBuyEditor(distributionChannelId, tableName);
+	createDistributionChannelGroupBuyTable(distributionChannelId, tableName, editor);
+}); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
 		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
 		<li class="breadcrumb-item"><a href="/backend/erp/DistributionChannel/list">銷售通路</a></li>
 		<li class="breadcrumb-item active" aria-current="page">通路商團購 - {{channelName}}</li>
 	</ol>
 </nav>
-{{!-- CLEANROOM:distributionchannelgroupbuy-list#18 此處原為 spec 缺段區內容，已移除；請依 spec/html/distributionchannelgroupbuy-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<div class="card mt-4">
+<div class="card-header">通路商團購 - {{channelName}}</div>
 <div class="card-footer">
 	<input type="checkbox" name="state" id="stateOPEN" class="filters form-check-input" value="1" checked><label for="stateOPEN" class="pl-4 mr-2">未結案</label>
 	<input type="checkbox" name="state" id="stateCLOSABLE" class="filters form-check-input" value="1" ><label for="stateCLOSABLE" class="pl-4 mr-2">可結案</label>

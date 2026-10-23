@@ -1,10 +1,28 @@
 <!--#head-->
-{{!-- CLEANROOM:groupbuydailystatistics-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	{{!-- 推導：原站此段被擷取過濾；預設查詢區間（單一團購 7 天、全部團購 1 天）與表格設定依 spec 已知部分與本系統端點補完 --}}
+	function initDateInput(hasTarget) {
+		var f = hasTarget ? 7 : 1;
+		var today = moment().format('YYYY-MM-DD');
+		var fromday = moment().subtract(f, 'days').format('YYYY-MM-DD');
+		$("input[name=day]").val(today).attr('max', today);
+		$("input[name=fromday]").val(fromday).attr('max', today);
+		$("input[name=today]").val(today).attr('max', today);
 	}
 
-	{{!-- CLEANROOM:groupbuydailystatistics-list#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	var groupBuyDailyStatisticsTable;
+	$(document).ready(function() {
+		var groupBuyId = '{{#if groupBuyId}}{{groupBuyId}}{{/if}}';
+		var sortSetting = [[ 0, "desc" ]];
+		$('.input-group-day-period').removeClass('d-none');
+		initDateInput(groupBuyId.length > 0);
+		var tableName = '#groupBuyDailyStatisticsTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
 					type: 'POST',
-					{{!-- CLEANROOM:groupbuydailystatistics-list#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+					url:  '{{baseUrl}}/ajax/GroupBuyDailyStatistics/save.do?'
 				},
 				edit: {
 					type: 'POST',
@@ -24,13 +42,36 @@
 					DataTableConfig.field_input('???GroupBuyDailyStatistics.groupBuyAccountId???','groupBuyAccountId'),
 					DataTableConfig.field_input('???GroupBuyDailyStatistics.groupBuyId???','groupBuyId'),
 			],
-			{{!-- CLEANROOM:groupbuydailystatistics-list#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			//template: '#customForm'
+		} );
+
+		var table = $(tableName).DataTable( {
+			dom: 'Brtip',
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			pageLength: 100,
+			ajax: {
+				url: '{{baseUrl}}/ajax/GroupBuyDailyStatistics/list.do',
+				type: 'POST',
+				data: function(d) {
+					d.groupBuyId = groupBuyId;
+					d.fromday = $('input[name=fromday]').val();
+					d.today = $('input[name=today]').val();
+				}
+			},
+			language:DataTableConfig.i18n,
 			columns:[
 				DataTableConfig.data_input('dateStatisticsString'),
 				{
                     data:'title',
                     render: function ( data, type, row ) {
-                    	{{!-- CLEANROOM:groupbuydailystatistics-list#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+                    	if (type !== 'display' || groupBuyId.length) return data;
+                    	return '<i class="fa-light fa-calendar mr-1" style="cursor:pointer"></i>' + $('<span>').text(data || '').html();
+                    }
+				},
+				DataTableConfig.data_input('amountSales'),
+				DataTableConfig.data_input('countSales'),
 				DataTableConfig.data_input('amountSalesPaid'),
 				DataTableConfig.data_input('countSalesPaid'),
 				DataTableConfig.data_input('amountSalesUnpaid'),
@@ -63,24 +104,44 @@
 			initComplete: function () {
 				DataTableConfig.initFooterSearch(this, [],[]);
 			},
-			{{!-- CLEANROOM:groupbuydailystatistics-list#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			drawCallback: function () {
+				if ($.fn.floatingScroll)
 				$(".dataTables_scrollBody").floatingScroll();
-			{{!-- CLEANROOM:groupbuydailystatistics-list#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			},
+			footerCallback: function () {
+				var api = this.api();
+				var intVal = function (i) {
+					return typeof i === 'string' ? i.replace(/[\$,]/g, '') * 1 : typeof i === 'number' ? i : 0;
+				};
+				var amountColumn = 2, countColumn = 3;
+				var amountTotal = api.column(amountColumn, { page: 'current' }).data().reduce(function (a, b) { return intVal(a) + intVal(b); }, 0);
+				var countTotal = api.column(countColumn, { page: 'current' }).data().reduce(function (a, b) { return intVal(a) + intVal(b); }, 0);
+				api.column(amountColumn).footer().innerHTML = '總金額 ( ' + amountTotal + ' )';
+				api.column(countColumn).footer().innerHTML = '總單數 ( ' + countTotal + ' )';
 			}
 		} );
-
+		
 		//DataTableHelper.initEditorOnCallback(table,editor);
 		//DataTableHelper.inlineModePlugin(table);
 		//DataTableHelper.injectInline(table,editor);
-		{{!-- CLEANROOM:groupbuydailystatistics-list#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		groupBuyDailyStatisticsTable = table;
+		$("#btn-day-period").click(function() {
+			table.ajax.reload();
 		});
-		{{!-- CLEANROOM:groupbuydailystatistics-list#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		$(tableName + ' tbody').on('click', 'i.fa-calendar', function(e) {
+			e.stopPropagation();
+			var data = table.row($(this).closest('tr')).data();
+			window.open('/backend/GroupBuyDailyStatistics/list?groupBuyId=' + data.groupBuyId, '_blank');
 		});
-
-		{{!-- CLEANROOM:groupbuydailystatistics-list#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		if (!groupBuyId.length) {
+			table.column(0).visible(false);
 		}
-
-	{{!-- CLEANROOM:groupbuydailystatistics-list#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuydailystatistics-all.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4">
+<div class="card-header">每日銷售</div>
+<div class="card-body">
 	<div class="input-group py-2 input-group-day d-none">
 		<input type="date" class="form-control filter col-lg-3" name="day">
 	</div>

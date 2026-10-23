@@ -8,10 +8,13 @@ span.uid {color:grey;font-size:0.8rem;}
 .btn-sm.btn-floating {width: 24px;height: 24px;}
 .btn-sm.btn-floating i {line-height: 24px;}
 #card-emss td:first-child {width: 180px;}
-{{!-- CLEANROOM:salesanalysis-panel#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+td.subtitle {font-size: 0.8rem;color: gray;padding: 0px 16px !important;}
 </style>
 <!--#body--><div class="container-fluid ">
-	{{!-- CLEANROOM:salesanalysis-panel#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<section class="">
+	<div class="row">
+		<div class="col-xl-3 col-md-6 mb-0">
+			<div class="card" id="card-daily-amount">
 				<!-- Card Data -->
 				<div class="row mt-3">
 					<div class="col-md-5 col-5 text-left pl-4">
@@ -170,7 +173,7 @@ span.uid {color:grey;font-size:0.8rem;}
 					</div>
 				</div>
 			</div>
-		{{!-- CLEANROOM:salesanalysis-panel#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		</div>
 		<div class="col-md-12 col-lg-6 ">
 			<div class="card mb-4" id="card-itemY">
 				<div class="card-header white-text primary-color">昨日銷售</div>
@@ -197,7 +200,8 @@ span.uid {color:grey;font-size:0.8rem;}
 </section>
 </div>
 <!--#foot-->
-{{!-- CLEANROOM:salesanalysis-panel#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesanalysis-panel.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：原站此處 script 標籤被擷取過濾；ana.js 使用 Chart.js v3 以上 API（scales 以軸 id 為鍵、title 選項），採 cdnjs Chart.js 4.x 最新版 --}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 <script src="/scripts/ana.js?v=1"></script>
 <script src="/scripts/sa.js?v=1"></script>
 <script type="text/javascript" class="init">

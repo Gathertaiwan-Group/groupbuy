@@ -6,14 +6,14 @@
 
 | 代號 | 網址 | 狀態 | 說明 |
 |---|---|---|---|
-| salesanalysis-panel | `/backend/SalesAnalysis/panel` | 完成 | 今日/昨日銷售額與訂單數、近日訂單數圖（Chart.js 4.4.1＋原站 `/scripts/ana.js`）、月份摘要（展開：付款方式／團購）、今日/昨日團購與商品（原站 `/scripts/sa.js`） |
+| salesanalysis-panel | `/backend/SalesAnalysis/panel` | 完成 | 今日/昨日銷售額與訂單數、近日訂單數圖（Chart.js 4.5.1（推導）＋原站 `/scripts/ana.js`）、月份摘要（展開：付款方式／團購）、今日/昨日團購與商品（原站 `/scripts/sa.js`） |
 | groupbuyerpmonthlystatistics-list | `/backend/GroupBuyErpMonthlyStatistics/list` | 完成 | 實時／每日／完整銷售統計三分頁（原站 `gbes.min.js`）、團購關鍵字標籤篩選（TagManager）、ROAS 上傳（原站 `epcvsuploader.min.js`＋xlsx 0.18.5） |
 | salesanalysis-show | `/backend/SalesAnalysis/show` | 完成 | 依商品代碼（最多 300 個）查詢，結果分類：無／月份／團購／商品銷售狀態 |
 | salesordermonthlystatistics-list | `/backend/SalesOrderMonthlyStatistics/list` | 完成 | 每月消費統計（依顧客/月），金額/單數門檻與月份篩選 |
 | groupbuydailystatistics-all | `/backend/GroupBuyDailyStatistics/list` | 完成 | 全部團購：區間內依團購合併（日期欄隱藏） |
 | groupbuydailystatistics-list | `/backend/GroupBuyDailyStatistics/list?groupBuyId=` | 完成 | 單一團購：逐日列出（含團購選單） |
 | itemdailystatistics-list | `/backend/ItemDailyStatistics/list[?uid=]` | 完成 | 依商品代碼合併；表尾搜尋代碼或帶 uid 時可「分開顯示每日數據」 |
-| groupbuy-analytics | `/backend/GroupBuy/analytics?groupBuyId=` | 完成 | 6 張圖（Chart.js 2.7.2，顏色/圖例同原站）＋近期摘要 |
+| groupbuy-analytics | `/backend/GroupBuy/analytics?groupBuyId=` | 完成 | 6 張圖（Chart.js 2.7.2；配色取自 spec 已知的色票）＋近期摘要 |
 | groupbuy-erpsalesreport | `/backend/GroupBuy/erpSalesReport` | 完成 | 依付款方式／排除主表單；匯出 EXCEL（TableExport 5.2.0＋xlsx 0.15.4＋FileSaver 1.3.8，同原站 CDN） |
 | modal-export-monthlyreport | `/ajax/GroupBuy/exportMonthlyReport` | 完成 | 符合筆數即時計算；送出下載 xlsx（伺服器產生） |
 | modal-export-itemsalesreport | `/ajax/GroupBuy/exportItemSalesReport` | 完成 | 送出下載 xlsx（一般/ERP 格式） |
@@ -49,47 +49,54 @@
 
 **與其他模組的一致性**：`is_valid_order_state` 同時供 datamodel 的 `refresh_group_buy_statistics`（團購列表的 groupBuyStatistics）使用，5000 已重算所有團購統計，故團購列表營收＝每日銷售合計＝圖表合計。
 
-## 3. 端點與 JSON 鍵
+## 3. 端點與 JSON 鍵（每個鍵的來源）
 
-> CLEANROOM：本節鍵名需逐一以 SPEC（spec/html）、合法 JS 資產（public/ 下原站自家 JS）或合法觀測重新佐證；無法佐證者標「推導」或移除。
+來源代號：**S**＝spec/html 頁面腳本已知內容；**A**＝合法 JS 資產（public/ 下原站自家 JS：gbes.min.js、sa.js、ana.js）；**O**＝合規取得的原站實際回應（未經任何繞過）；**R**＝本系統重寫後頁面需要（推導）。無法佐證、前端也沒用到的鍵已移除。
 
-| 端點 | 回傳（data 列的鍵） |
+| 端點 | data 列的鍵（來源） |
 |---|---|
-| `POST /ajax/GroupBuyDailyStatistics/list` | groupBuyDailyStatisticsId, title, amountSales, amountSalesPaid, countSales, countSalesPaid, groupBuyId, shortUrl, amountSalesUnpaid, countSalesUnpaid, dateStatisticsString, dateCreatedString, dateModifiedString。參數 fromday/today 必填（原站無日期回 0 筆）；無 groupBuyId 時依團購合併、日期＝區間最早一天（同原站）；separateByDate 逐日；keywords/allMatch 關鍵字標籤 |
-| `GET /ajax/GroupBuyDailyStatistics/getRealtimeStatistics` | groupBuyId, shortUrl, title, amount*/count* 六欄, roasDataItem{convertedCost, roas, result…}；ROAS＝區間總金額÷廣告金額 |
-| `POST /ajax/GroupBuyDailyStatistics/uploadRoasData` | JSON {data:[{groupBuyId/shortUrl, result, cost}], exchangeRate} → {code:200, success:true, data:[…]} |
-| `POST /ajax/ItemDailyStatistics/list` | itemDailyStatisticsId, title, uid, amountSales, amountSalesPaid, countSales, countSalesPaid, dateStatisticsString, dateCreatedString, dateModifiedString, key |
-| `GET /ajax/GroupBuyErpMonthlyStatistics/list` | title, amountSales, amountAdvance, countSales, countAdvance, groupBuyId, shortUrl, countTotal, amountTotal, dateStatisticsString(YYYYMM), datePaidString(YYYYMM) |
-| `GET /ajax/GroupBuyErpMonthlyStatistics/statistics?month=YYYYMM` | groupBuyId, title, amount/count Total/Sales/Advance, datePaidString, dateStatisticsString |
-| `GET /ajax/ErpMonthlyPaymentStatistics/statistics?month=YYYYMM` | paymentMethod, paymentMethodName, datePaidString, dateShippedString, dateStatisticsString, amount Total/Sales/Advance/Shipping, count Total/Sales/Advance |
-| `GET /ajax/SalesAnalysis/statistics` | data:{amount, total, amountY, totalY, gbds[], gbdsY[], idss[], idssY[], emss[]} |
-| `GET /ajax/GroupBuy/analytics?all=1&groupBuyId=&dateCreatedBegin=&dateCreatedEnd=` | data:{dailyCounts[{label:'MMDD', data:'筆數', data2:'金額.00'}], distributions, cateTagPortions, itemSetPortions, areaSalesOrderCountPortions, areaSalesOrderAmountPortions} |
-| `GET /ajax/GroupBuy/getDailyReport` | data:{'YYYY-MM-DD':{date, count, grandTotal, totalPaid}}（空時 {}，同原站） |
-| `POST /ajax/SalesAnalysis/queryOrderItemAnalysis` | month, groupBuyTitle, groupBuyId, title, uid, state, total, price, amount, unitPrice, shippingAmountCount；options.state |
-| `POST /ajax/GroupBuy/getErpSalesReport?paymentMethod=…` | data:{dateShipped:'YYMM', salesMonths:[{datePaid, salesAmount, advanceAmount, salesTotal, advanceTotal, pmAmounts{名稱:{…}}, groupBuys{id:{title, …, details{…}}}}]} |
-| `POST /ajax/SalesOrderMonthlyStatistics/list` | salesOrderMonthlyStatisticsId, customerId, name, email, telephone, amountTotal, amountMax, countOrderValid, month |
-| `/ajax/erp/*` | 見 `lib/modules/analytics/distribution.ts` 檔頭；列表 options 同原站（state/status/contactType/channelType） |
+| `/ajax/GroupBuyDailyStatistics/list` | groupBuyDailyStatisticsId, title, amountSales, amountSalesPaid, countSales, countSalesPaid, groupBuyId, shortUrl, amountSalesUnpaid, countSalesUnpaid, dateStatisticsString, dateCreatedString, dateModifiedString（O；A gbes 使用其中 10 個）；參數 fromday/today/groupBuyId/separateByDate/keywords/allMatch（S、A、R） |
+| `/ajax/GroupBuyDailyStatistics/getRealtimeStatistics` | 同上統計鍵＋roasDataItem{convertedCost, roas, result}（A） |
+| `/ajax/GroupBuyDailyStatistics/uploadRoasData` | {code, success, message, error, data[{groupBuyId, shortUrl, convertedCost, result}]}（A epcvsuploader 使用 success/message/error；data 為 R） |
+| `/ajax/ItemDailyStatistics/list` | itemDailyStatisticsId, title, uid, amountSales, amountSalesPaid, countSales, countSalesPaid, dateStatisticsString, dateCreatedString, dateModifiedString, key（O） |
+| `/ajax/GroupBuyErpMonthlyStatistics/list` | title, amountSales, amountAdvance, countSales, countAdvance, groupBuyId, shortUrl, countTotal, amountTotal, dateStatisticsString, datePaidString（A gbes、sa.js） |
+| `/ajax/GroupBuyErpMonthlyStatistics/statistics?month=` | groupBuyId, title, amountTotal/Sales/Advance, countTotal/Sales/Advance, datePaidString（A sa.js） |
+| `/ajax/ErpMonthlyPaymentStatistics/statistics?month=` | paymentMethodName, datePaidString, amountTotal/Sales/Advance, countTotal/Sales/Advance（A sa.js） |
+| `/ajax/SalesAnalysis/statistics` | data:{amount, total, amountY, totalY, gbds[], gbdsY[], idss[], idssY[], emss[]}（A sa.js）；emss 列：amountTotal/Sales/Advance、countTotal/Sales/Advance、datePaidString、dateModifiedString（A） |
+| `/ajax/GroupBuy/analytics` | data:{dailyCounts[{label,data,data2}]}（A ana.js）、distributions, cateTagPortions, itemSetPortions, areaSalesOrderCountPortions, areaSalesOrderAmountPortions（S：頁面 createChart 呼叫）；參數 all/groupBuyId/dateCreatedBegin/dateCreatedEnd（A ana.js、S） |
+| `/ajax/GroupBuy/getDailyReport` | data:{'YYYY-MM-DD':{date, count, grandTotal, totalPaid}}（R） |
+| `/ajax/SalesAnalysis/queryOrderItemAnalysis` | month, groupBuyTitle, groupBuyId, title, uid, state, total, price, amount, unitPrice, shippingAmountCount（S 欄位設定）；參數 uids/dateBeginString/dateEndString/extraSort（S 表單欄位） |
+| `/ajax/GroupBuy/getErpSalesReport` | data:{dateShipped, salesMonths[{datePaid, pmAmounts{…}, salesAmount, advanceAmount, salesTotal, advanceTotal, groupBuys{title, …, details{title, datePaid, dateShipped, paymentMethod, shippingState, amount, orderTotal}}}]}（S 已知的列組裝用到 pmAmounts/sum/gb/detail 各鍵；其餘 R） |
+| `/ajax/SalesOrderMonthlyStatistics/list` | salesOrderMonthlyStatisticsId, name, email, telephone, amountTotal, amountMax, countOrderValid（S） |
+| `/ajax/erp/*` | 見 `lib/modules/analytics/distribution.ts`；欄位名依 spec 已知的 Editor／表格設定（S），其餘 R |
 
 ## 4. 匯出（伺服器端 xlsx，`lib/modules/analytics/xlsx.ts` 自寫 SpreadsheetML＋zip，無第三方套件）
 
-| 匯出 | 檔名 | 工作表 | 欄位（照原站實際下載的檔案） |
+| 匯出 | 檔名 | 工作表 | 欄位（照原站實際下載的檔案；工作表名稱與欄位標題為合規取得） |
 |---|---|---|---|
-| 團購月報表 | CLEANROOM 待推導 | `YYYY-MM月報表`（第一列團購的開始/結束月份） | 團購ID、團購名稱、開始時間、結束時間、標籤、訂單數量、未出貨數量、銷售金額、已收匯款金額、已收匯款金額(扣除運費)、分潤金額、分潤（％）；最後一列為 F/H/I/J 合計。無符合團購時回純文字「團購不存在」（同原站） |
-| 銷售商品總表 | CLEANROOM 待推導 | `ALL` | 商品名稱、商品編號、商品單價、已付款/未付款/加總 ×[現]/[預]/[現＋預]、原始/剩餘 現貨/預購庫存、共用主庫存 4 欄、國際條碼、商品原價 |
+| 團購月報表 | `團購月報表_{起}_{迄}.xlsx`（推導） | `YYYY-MM月報表`（第一列團購的開始/結束月份） | 團購ID、團購名稱、開始時間、結束時間、標籤、訂單數量、未出貨數量、銷售金額、已收匯款金額、已收匯款金額(扣除運費)、分潤金額、分潤（％）；最後一列為 F/H/I/J 合計。無符合團購時回純文字「團購不存在」（同原站） |
+| 銷售商品總表 | `銷售商品總表_{匯出依照}_{起}_{迄}.xlsx`（推導；匯出依照標籤取自 spec 彈窗選項） | `ALL` | 商品名稱、商品編號、商品單價、已付款/未付款/加總 ×[現]/[預]/[現＋預]、原始/剩餘 現貨/預購庫存、共用主庫存 4 欄、國際條碼、商品原價 |
 | 銷售商品總表（ERP 格式） | 同上 | `ERP` | 單據日期、品號、品名、數量、單價、金額、備註（推導）；數量／金額＝已付款 |
 
 `/backend/Item/exportItemSalesReport` 在原站是同一支端點，兩個入口：本模組的「匯出銷售商品總表」彈窗（dateStart/dateEnd/exportBy/backOrder/shipped/toErpFormat/多個 groupBuyId），以及團購列表「匯出商品報表 → 匯出上月出貨報表」（原站 `groupBuyExportModal.min.js` 只送 `groupBuyId, toErpFormat=true, shipped=true, exportBy=SHIPPED`，不帶日期）。本處理接受兩種參數：未帶日期且 `exportBy=SHIPPED` 時預設上個月（台灣時間）。groupbuy 模組也登錄了同路徑（其「上月出貨商品統計」推導格式），本模組以 `priority: 90`（GET/POST）先比對，兩個入口都由此處理。
 
-## 5. 推導項目（原站未擷取或資料不足以實測）
+## 5. 推導項目（原站未擷取、被擷取過濾，或無合規資料可佐證）
 
-- **通路聯絡資訊、通路商結算**兩頁：原站有連結但未擷取，依相鄰頁版型補完。
-- **近期月報表口徑**：原站實測回傳結構 `{dateShipped, salesMonths}`，但該帳號無出貨資料無法看到明細；口徑定為「報表月份出貨的已付款訂單（銷貨，依收款月分組）＋報表月份收款但月底前未出貨（預收）」；報表月份預設本月（原站頁面無月份選擇器）。
-- **單一團購分析圖表**：每日訂單數同原站（與每日銷售同一張統計表）；均價訂單數以 0/500/1000/1500/2000/3000/5000/10000+ 元分級；地區＝收件縣市（無則訂購人縣市/超商地址）；分類＝商品 cate_tag（無則品項 cate_tag，皆無為「未分類」）。原站樣本團無資料，分級與取前 12/20 名為推導。
-- **通路商團購**：「顯示銷售數據」後的階段按鈕（可結案/部分結案/完整結案/完整結案(未銷售)）與標題列多出的已收金額(不含運)/分潤徽章（原站該段被擷取過濾）；「自動更新階段」端點名 `updateStateAuto`（原站網址被過濾）。
-- **通路結算單據金額**：結算紀錄新增/修改/刪除後，單據金額＝所含各團結算金額加總、稅額＝各團稅額加總；面板「待審查」＝狀態不是「已查核」。
-- **ERP 格式欄位**、**標註結案中**（加 CLOSING、移除 UNCLOSED）。
-- 原站 `itemdailystatistics` 頁的列表網址寫死 `/x/ajax/…`（租戶前綴 x），本系統租戶前綴須等於登入租戶，改用 `{{baseUrl}}`。
-- 每日銷售頁 `initDateInput`：預設區間 單一團購 7 天、全部團購 1 天（原站 `hasTarget ? 7 : …` 後段被過濾）。
+**無塵室重寫（2026-10-23）**：spec 缺段區（擷取時被安全過濾擋下的內容）先前曾以不合規方式讀取原站補上；已全部移除，改依 spec 已知內容、本系統 runtime 與合法 JS 資產重寫。以下各項皆為推導：
+- 各頁 `<head>` 內被過濾的 script 段：DataTables／Editor 設定的開頭與結尾、ajax 參數組裝、事件處理（查詢、表尾搜尋、月份選擇器、展開列、階段按鈕）、footerCallback 合計。
+- 頁面 body 開頭被過濾的容器（card／card-header 標題）與麵包屑。
+- foot 的函式庫版本：銷售一覽 Chart.js 4.5.1（ana.js 使用 v3 以上 API）；銷售分析頁 Chart.js 2.7.2、ERP 報表 FileSaver 1.3.8／xlsx 0.15.4／TableExport 5.2.0、銷售數據頁 tagify 4.35.4 為 spec 已知；銷售數據頁 xlsx 0.18.5（epcvsuploader 用）為推導。
+- 兩個匯出彈窗的表單開頭、標題列、送出流程（jquery.fileDownload）。標題改為「匯出團購月報表」「匯出銷售商品總表」。
+- 匯出下載檔名（§4）。
+- 銷售分析頁 6 張圖的容器（高 320px）與標題、近期摘要列格式；ERP 報表的 parseErp 與「更新」流程（按鈕文字用 TableExport 預設）。
+- 銷售通路：結算紀錄／結算單據編輯器與表格（partials/erp-dc-transaction-js.html）、狀態按鈕（要求查核／駁回／核可）、通路商團購的階段按鈕與展開結算紀錄、聯絡資訊與通路商結算兩頁（原站未擷取）。
+- 每月消費統計：姓名／電子信箱／電話改用表尾搜尋（後端支援欄位搜尋）。
+
+其他推導（口徑類）：
+- **近期月報表口徑**：「報表月份出貨的已付款訂單（銷貨，依收款月分組）＋報表月份收款但月底前未出貨（預收）」；報表月份預設本月。
+- **單一團購分析圖表**：均價分級 0/500/1000/1500/2000/3000/5000/10000+ 元；地區＝收件縣市；分類＝商品 cate_tag。
+- **通路結算單據金額**＝所含各團結算金額加總；面板「待審查」＝狀態不是「已查核」。
+- **ERP 格式欄位**、**標註結案中**（加 CLOSING、移除 UNCLOSED）、**上月出貨報表**（未帶日期＋exportBy=SHIPPED → 上個月）。
 
 ## 6. 已知缺口
 
@@ -105,7 +112,8 @@
 
 ## 8. 驗證紀錄
 
-- DOM 骨架：`node lib/modules/analytics/tools/dom-compare.mjs --base http://localhost:3115 --jar <jar>`（對 spec，含缺段時另列 recall）。
+- 無塵室重寫後（本機 analytics2）：16 網址登入 200／未登入登入頁（彈窗 401 JSON）；headless 實測各頁動作無 JS 例外；銷售通路 CRUD 26/26；兩份匯出讀回（月報表 12 欄 6 團＋合計 53／61000／50300／48400＝SQL；銷售商品總表 22 欄 11 列＝SQL；ERP 7 欄 11 列）；DOM 骨架對 spec recall 98–100%。
+- DOM 骨架：`node lib/modules/analytics/tools/dom-compare.mjs --base <base> --jar <jar> --spec <spec/html>`（對 spec，含缺段時另列 recall）。
 - headless 實測（`scripts/dev/shot.mjs --steps`）：14 頁＋彈窗皆無 JS 例外。
 - 銷售通路 CRUD／動作 26 項（建立 `[測試-analytics]` 資料，測完刪除）；本機與正式站各跑一次。
 - 正式站（2026-10-23）：16 個網址登入後皆 200；未登入時頁面回登入頁（200），兩個彈窗片段（AJAX）回 401 JSON「系統偵測到已登出」。他租戶前綴 `/groupbuyforms/ajax/…` → 403；他租戶團購的分析頁 404「找不到團購」、每日資料 0 筆；不存在的通路 404。

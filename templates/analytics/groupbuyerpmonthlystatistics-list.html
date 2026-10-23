@@ -237,11 +237,13 @@
             
             .title-cell {
            
-                {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+                max-width: 120px;
             }
         }
     </style>
-    {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+    {{!-- 推導：原站此處（版面與頁面開頭）被擷取過濾 --}}
+<!--#body--><div class="gbem-page">
+    <!-- 頁面標題 -->
     <div class="page-header">
         <div class="container">
             <div class="row align-items-center">
@@ -370,7 +372,11 @@
                         </div>
 					    <!-- <div class="col-md-3">
 					        <label class="form-label">團購ID</label>
-					        {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+					        <input type="text" class="form-control" id="dailyGroupBuyId" name="groupBuyId" placeholder="輸入團購ID">
+					    </div> -->
+					    {{!-- 推導：原站此處被擷取過濾 --}}
+					    <div class="col-md-12 mt-2">
+						    <div class="form-check">
 				        <input class="form-check-input" type="checkbox" id="dailySeparateByDate" name="separateByDate">
 						        <label class="form-check-label" for="dailySeparateByDate">
 						            <i class="fas fa-calendar-day"></i> 依日期分開顯示相同團購
@@ -461,7 +467,19 @@
                             </tr>
                         </thead>
                         
-                        {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{!-- 推導：原站此段 script 被擷取過濾；標籤篩選（TagManager）、送出時帶 keywords/allMatch，依 spec 已知部分與合法資產 gbes.min.js、ep.widget.be.min.js 補完 --}}
+    <script type="text/javascript">
+            var groupBuyErpMonthlyStatisticsTable;
+            function refreshGroupBuyErpMonthlyStatisticsTable() {
+                if (groupBuyErpMonthlyStatisticsTable)
+                groupBuyErpMonthlyStatisticsTable.ajax.reload();
             }
 
             function initTagManager(id) {
@@ -484,14 +502,40 @@
                     },
                     onFilterTypeChanged: function() {
                         //refreshCurrentTabTable();
-                    {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+                    }
+                });
+            }
+
+            window.tagManagers = {};
+            $(function() {
+            var tmRealtime = initTagManager('#tagFilterContainer_realtime');
+            var tmDaily = initTagManager('#tagFilterContainer_daily');
+            var tmMonthly = initTagManager('#tagFilterContainer_monthly');
+            window.tagManagers = {
+                realtime: tmRealtime,
+                daily: tmDaily,
                 monthly: tmMonthly
             };
+            });
 
             // In case gbes.min.js initializes tables with these names, hook into them to send keywords
-            {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+            $(document).on('preXhr.dt', function(e, settings, data) {
+                var map = { realtimeTable: 'realtime', dailyTable: 'daily', monthlyTable: 'monthly' };
+                var key = map[settings.sTableId];
+                if (!key || !window.tagManagers[key]) return;
+                var tm = window.tagManagers[key];
+                data.keywords = tm.getFilteredTags();
+                data.allMatch = tm.getIsAllMatch() ? 1 : 0;
+            });
+
+            // filter forms to trigger reloads
             $('#realtimeFilterForm, #dailyFilterForm, #monthlyFilterForm').on('submit', function(e) {
                 e.preventDefault();
-                {{!-- CLEANROOM:groupbuyerpmonthlystatistics-list#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuyerpmonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+                //refreshCurrentTabTable();
+            });
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="/public/scripts/epcvsuploader.min.js?v=250808"></script>
+    <script src="/public/scripts/gbes.min.js?v=260901"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tagify/4.35.4/tagify.min.js"></script>
 </div>

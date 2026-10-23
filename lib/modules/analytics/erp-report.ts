@@ -59,7 +59,7 @@ export async function erpSalesReport(tenantId: number, month01: string, paymentB
     const pb = (m.pmAmounts[pm] ??= bucket());
     let gb = m.groupBuys[String(gbId)];
     if (!gb) {
-      gb = { groupBuyId: gbId, title: gbInfo.get(gbId)?.title ?? "", ...bucket(), details: {} as Record<string, AnyRow> };
+      gb = { title: gbInfo.get(gbId)?.title ?? "", ...bucket(), details: {} as Record<string, AnyRow> };
       m.groupBuys[String(gbId)] = gb;
     }
     const ds = isSales ? yymm(String(o.shipped_date ?? "")) : "";

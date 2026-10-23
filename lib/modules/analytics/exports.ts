@@ -1,10 +1,10 @@
 // 匯出團購月報表、匯出銷售商品總表（伺服器產生 .xlsx 下載；工作表名稱與欄位照原站實際下載的檔案）。
-// CLEANROOM: 下載檔名需依 SPEC／runtime 重新推導（原檔名資訊來源不合規，已移除）。
+// 下載檔名為推導格式（原站檔名未能以合規來源取得）。
 //   GET  /ajax/GroupBuy/exportMonthlyReport          彈窗（所有團購列表的「匯出團購月報表」）
 //   POST /ajax/GroupBuy/countMonthlyReport           彈窗內「符合結果:N」
-//   POST /backend/GroupBuy/exportMonthlyReport       下載 .xlsx（檔名：CLEANROOM 待推導），工作表「YYYY-MM月報表」
+//   POST /backend/GroupBuy/exportMonthlyReport       下載 團購月報表_{起}_{迄}.xlsx（推導），工作表「YYYY-MM月報表」
 //   GET  /ajax/GroupBuy/exportItemSalesReport        彈窗（匯出銷售商品總表）
-//   GET|POST /backend/Item/exportItemSalesReport     下載 .xlsx（檔名：CLEANROOM 待推導），工作表「ALL」（ERP 格式「ERP」）
+//   GET|POST /backend/Item/exportItemSalesReport     下載 銷售商品總表_{匯出依照}_{起}_{迄}.xlsx（推導），工作表「ALL」（ERP 格式「ERP」）
 //     原站同一端點也供團購列表「匯出商品報表 → 匯出上月出貨報表」（groupBuyExportModal：groupBuyId、toErpFormat、shipped、
 //     exportBy=SHIPPED，不帶日期）→ 未帶日期且依出貨日期時預設上個月（台灣時間）。groupbuy 模組也登錄了同路徑，
 //     此處以 priority 90 優先比對，兩種呼叫都由本處理（參數為其超集）。
@@ -183,8 +183,7 @@ export async function buildMonthlyReport(
   const sheet = `${taipeiDateTime(first).slice(0, 7)}月報表`;
   const buffer = buildXlsx([{ name: sheet, rows: [header, ...body], widths: [10, 40, 18, 18, 16, 10, 10, 12, 14, 20, 10, 10] }]);
   void tenantCode;
-  // CLEANROOM: 月報表下載檔名待依 SPEC／runtime 推導
-  const filename = "CLEANROOM_TODO.xlsx";
+  const filename = `團購月報表_${f.from}_${f.to}.xlsx`;
   return { filename, sheet, buffer, rows: gbs };
 }
 
@@ -287,8 +286,7 @@ export async function buildItemSalesReport(tenantId: number, p: ItemReportInput)
   const aggs = [...by.values()].sort((x, y) => x.uid.localeCompare(y.uid) || x.title.localeCompare(y.title, "zh-Hant"));
 
   const exportByLabel = EXPORT_BY[p.exportBy] ?? EXPORT_BY.UUID;
-  // CLEANROOM: 銷售商品總表下載檔名待依 SPEC／runtime 推導
-  const filename = "CLEANROOM_TODO.xlsx";
+  const filename = `銷售商品總表_${exportByLabel}_${p.from}_${p.to}.xlsx`;
 
   if (p.toErpFormat) {
     const rows: CellInput[][] = [ERP_HEADER.map((v) => ({ v, s: "header" as const }))];

@@ -1,10 +1,11 @@
 <!--#head-->
-{{!-- CLEANROOM:groupbuy-erpsalesreport#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
-}
-{{!-- CLEANROOM:groupbuy-erpsalesreport#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<style>
+{{!-- 推導：原站此頁樣式被擷取過濾 --}}
+#erpTable td, #erpTable th {font-size: 0.85rem;}
 </style>
 <!--#body--><div class="container-fluid ">
-	{{!-- CLEANROOM:groupbuy-erpsalesreport#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<div class="card mt-4">
+<div class="card-header">
 <h5>銷售分析<span id="erpDateShipped"></span></h5>
 </div>
 <div class="card-body">
@@ -68,7 +69,17 @@
 
 <script>
 
-{{!-- CLEANROOM:groupbuy-erpsalesreport#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+{{!-- 推導：原站 parseErp 開頭、各段結尾與載入流程被擷取過濾；依 spec 已知的列組裝與本系統 getErpSalesReport 回傳補完 --}}
+var parseErp = function(erp) {
+	var html = '';
+	erp = erp || {};
+	$('#erpDateShipped').text(erp.dateShipped ? ' ' + erp.dateShipped : '');
+	$.each(erp.salesMonths || [], function(i, sum) {
+		var datePaid = sum.datePaid;
+		var j, k;
+		
+		for (j in sum.pmAmounts) {
+			html += '<tr class="alert-info">'
 			html += '<tr class="alert-info">'
 				+ '<td class="tableexport-string">' + datePaid + '</td>'
 				+ '<td>' + datePaid +' 月各付款方式總營收' + '</td>'
@@ -79,7 +90,13 @@
 				+ '<td>' + sum.pmAmounts[j].salesAmount + '</td>'
 				+ '<td>' + sum.pmAmounts[j].advanceAmount + '</td>'
 				+ '<td>' + (sum.pmAmounts[j].salesTotal + sum.pmAmounts[j].advanceTotal) + '</td>'
-				{{!-- CLEANROOM:groupbuy-erpsalesreport#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				+ '<td>' + sum.pmAmounts[j].salesTotal + '</td>'
+				+ '<td>' + sum.pmAmounts[j].advanceTotal + '</td>'
+				+ '</tr>';
+		}
+		html += '<tr class="alert-warning">'
+		+ '<td class="tableexport-string">' + datePaid + '</td>'
+		+ '<td>' + datePaid + ' 月總營收' + '</td>'
 		+ '<td>' + '' + '</td>'
 		+ '<td>' + '' + '</td>'
 		+ '<td>' + '' + '</td>'
@@ -91,12 +108,26 @@
 		+ '<td>' + sum.advanceTotal + '</td>'
 		+ '</tr>';
 
-		{{!-- CLEANROOM:groupbuy-erpsalesreport#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		for (j in sum.groupBuys) {
+			var gb = sum.groupBuys[j];
+			for (k in gb.details) {
+				var detail = gb.details[k];
+				var ds = detail.dateShipped || '';
+				html += '<tr>'
+					+ '<td class="tableexport-string">' + detail.datePaid + '</td>'
+					+ '<td class="tableexport-string">' + detail.title + '</td>'
 					+ '<td class="tableexport-string">' + ds + '</td>'
 					+ '<td>' + detail.paymentMethod + '</td>'
 					+ '<td>' + detail.shippingState + '</td>'
 					+ '<td>' + detail.amount + '</td>'
-					{{!-- CLEANROOM:groupbuy-erpsalesreport#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+					+ '<td>' + (ds ? detail.amount : '') + '</td>'
+					+ '<td>' + (ds ? '' : detail.amount) + '</td>'
+					+ '<td>' + detail.orderTotal + '</td>'
+					+ '<td>' + (ds ? detail.orderTotal : '') + '</td>'
+					+ '<td>' + (ds ? '' : detail.orderTotal) + '</td>'
+					+ '</tr>';
+			}
+			html += '<tr class="alert-success">'
 				+ '<td class="tableexport-string">' + datePaid + '</td>'
 				+ '<td class="tableexport-string">' + gb.title + '</td>'
 				+ '<td>' + '' + '</td>'
@@ -107,7 +138,15 @@
 				+ '<td>' + gb.advanceAmount + '</td>'
 				+ '<td>' + '' + '</td>'
 				+ '<td>' + gb.salesTotal + '</td>'
-				{{!-- CLEANROOM:groupbuy-erpsalesreport#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				+ '<td>' + gb.advanceTotal + '</td>'
+				+ '</tr>';
+		}
+	});
+	$('#erpTable tbody').html(html);
+}
+
+var dailyData = function(mm) {
+	var pm = $('input[name=paymentMethod]:checked').serialize();
 	$.ajax({
 		type:'POST',
 		async: true,
@@ -119,17 +158,23 @@
 		}
 	})
 	.done(function (json) {
-		{{!-- CLEANROOM:groupbuy-erpsalesreport#9 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
 		parseErp(json.data);
 		$('.tableexport-caption').remove();
 		$("#erpTable").tableExport({filename:'abc',formats:['xlsx'],position:'top'});
-		{{!-- CLEANROOM:groupbuy-erpsalesreport#10 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	});
+}
 
 $(document).ready(function() {
-	{{!-- CLEANROOM:groupbuy-erpsalesreport#11 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+	{{!-- 推導：預設載入本月、「更新」重新查詢 --}}
+	dailyData('');
+	$('#btnErpUpdate').click(function() {
+		dailyData('');
+	});
+});
+</script>
 
 </div>
 <!--#foot-->
-{{!-- CLEANROOM:groupbuy-erpsalesreport#12 此處原為 spec 缺段區內容，已移除；請依 spec/html/groupbuy-erpsalesreport.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<script src="//cdnjs.cloudflare.com/ajax/libs/FileSaver.js/1.3.8/FileSaver.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/xlsx/0.15.4/xlsx.core.min.js"></script>
 <script src="//cdnjs.cloudflare.com/ajax/libs/TableExport/5.2.0/js/tableexport.min.js"></script>

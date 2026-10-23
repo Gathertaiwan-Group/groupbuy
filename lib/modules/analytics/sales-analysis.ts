@@ -93,12 +93,10 @@ async function salesStatistics(ctx: RequestContext): Promise<Response> {
     .map((m) => ({
       amountAdvance: num(m.amountAdvance),
       amountSales: num(m.amountSales),
-      amountShipping: num(m.amountShipping),
       amountTotal: num(m.amountTotal),
       countAdvance: m.countAdvance,
       countSales: m.countSales,
       countTotal: m.countTotal,
-      dateCreatedString: tpeDateTimeSec(m.created),
       dateModifiedString: tpeDateTimeSec(refreshed),
       datePaidString: m.datePaidString,
     }));
@@ -391,7 +389,7 @@ async function analyticsAjax(ctx: RequestContext): Promise<Response> {
   return json(envelope(data, started));
 }
 
-/** 近期摘要：以日期為鍵（原站回傳物件；空時為 {}） */
+/** 近期摘要：以日期為鍵（推導；空時為 {}） */
 async function dailyReport(ctx: RequestContext): Promise<Response> {
   const started = Date.now();
   const session = requireSession(ctx);
@@ -442,6 +440,7 @@ export const salesAnalysisRoutes: RouteDef[] = [
     template: "analytics/groupbuy-analytics.html",
     title: "銷售分析",
     groupBuy: "required",
+    data: (ctx) => ({ groupBuyTitle: ctx.groupBuy?.title ?? "" }),
   }),
   route(["GET", "POST"], "/ajax/GroupBuy/analytics", analyticsAjax),
   route(["GET", "POST"], "/ajax/GroupBuy/getDailyReport", dailyReport),

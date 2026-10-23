@@ -1,6 +1,12 @@
 <!--#head-->
 {{> core/partials/dte-style.html}}
-{{!-- CLEANROOM:salesordermonthlystatistics-list#1 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+<script type="text/javascript" class="init">
+	{{!-- 推導：原站此段被擷取過濾；依 spec 後文（Editor ajax 設定、表格 #statisticsTable）補上開頭 --}}
+	$(document).ready(function() {
+		var tableName = '#statisticsTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: {
 					type: 'POST',
 					url:  '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/save.do?'
 				},
@@ -10,41 +16,79 @@
 				},
 				remove: {
 					type: 'POST',
-					{{!-- CLEANROOM:salesordermonthlystatistics-list#2 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+					url:  '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/delete.do?salesOrderMonthlyStatisticsId=_id_'
+				}
 			},
 			table: tableName,
-			{{!-- CLEANROOM:salesordermonthlystatistics-list#3 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			idSrc: 'salesOrderMonthlyStatisticsId',
+			fields: [
+				DataTableConfig.field_input('姓名', 'name'),
+				DataTableConfig.field_input('電子信箱', 'email'),
+				DataTableConfig.field_input('電話', 'telephone'),
+				DataTableConfig.field_input('消費總金額', 'amountTotal'),
+				DataTableConfig.field_input('單筆最高金額', 'amountMax'),
+				DataTableConfig.field_input('訂單數量', 'countOrderValid'),
+			]
+		} );
+
+		var table = $(tableName).DataTable( {
 			dom: 'lBrtip',
 			serverSide:true,
 			processing:true,
 			scrollX:true,
 			"lengthMenu": [10, 25, 50, 100, 250],
 			ajax: {
-				{{!-- CLEANROOM:salesordermonthlystatistics-list#4 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+				url: '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/list.do',
+				type: 'POST',
+				data: function(d) {
+					$('#SalesOrderMonthlyStatisticsForm .filters').each(function() {
+						d[this.name] = $(this).val();
+					});
+				}
+			},
+			columns: [
+				DataTableConfig.data_input('name'),
+				DataTableConfig.data_input('email'),
 				DataTableConfig.data_input('telephone'),
-				DataTableConfig.data_input('amountTotal'),
-				DataTableConfig.data_input('amountMax'),
-				DataTableConfig.data_input('countOrderValid'),
-			],
-			columnDefs: [
-				{ "orderable": false, "targets": [0, 1, 2] }
+				DataTableConfig.data_input_number('amountTotal'),
+				DataTableConfig.data_input_number('amountMax'),
+				DataTableConfig.data_input_number('countOrderValid'),
 			],
 			keys: DataTableConfig.keysInlineTab,
+			//ordering: false,
 			"order": [[ 3, "desc" ]],
-			select: DataTableConfig.selectOptionsOS,
+			columnDefs: [ { orderable: false, targets: [0,1,2] }],
+			select: false,
 			buttons: [
-				{ extend: 'excel' },
+				'excel',
 				//{ extend: 'create', editor: editor },
 				//{ extend: 'edit',   editor: editor },
 				//{ extend: 'remove', editor: editor, className:'btn-danger' },
 			],
-			{{!-- CLEANROOM:salesordermonthlystatistics-list#5 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
-			},
-			{{!-- CLEANROOM:salesordermonthlystatistics-list#6 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+			{{!-- 推導：原站此段被擷取過濾；姓名／電子信箱／電話三欄用表尾搜尋 --}}
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [0, 1, 2], [10, 20, 12]);
 			}
-		{{!-- CLEANROOM:salesordermonthlystatistics-list#7 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		} );
+
+		{{!-- 推導：月份選擇器與查詢按鈕 --}}
+		initDatetimePicker('#month', 'YYYY-MM', 'months');
+		$('#btn-search').click(function() {
+			table.ajax.reload();
 		});
-	{{!-- CLEANROOM:salesordermonthlystatistics-list#8 此處原為 spec 缺段區內容，已移除；請依 spec/html/salesordermonthlystatistics-list.html 該處前後文＋本系統 runtime＋合法 JS 資產重寫 --}}
+		$('#SalesOrderMonthlyStatisticsForm .filters').on('keypress', function(e) {
+			if (e.which == 13) {
+				e.preventDefault();
+				table.ajax.reload();
+			}
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<div class="card mt-4">
+<div class="card-header">每月消費統計</div>
+<div class="card-body">
+	<form id="SalesOrderMonthlyStatisticsForm" method="post" action="/backend/CustomerPointSummary/download">
 		<input type="hidden" name="query" value="" id='query'>
 		<div class="row">
 			<div class="input-group py-2 col-lg-6">
