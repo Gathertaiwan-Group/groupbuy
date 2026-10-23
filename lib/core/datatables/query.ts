@@ -23,7 +23,10 @@ export interface DtQuerySpec {
   searchColumns?: string[];
   /** 欄位篩選（columns[i][search][value]）用 ilike 的 DB 欄位（其餘用 eq） */
   likeColumns?: string[];
-  /** 自訂篩選（頁面 ajax.data 帶的參數在 dt.extra），回傳加好條件的 query */
+  /**
+   * 自訂篩選（頁面 ajax.data 帶的參數在 dt.extra），回傳加好條件的 query。
+   * 可用嵌入資源欄位篩選（例 `q.eq("sales_orders.uuid", x)`）：select 必須包含該嵌入，要過濾主表的列請用 `sales_orders!inner(...)`。
+   */
   where?: (q: AnyQuery, dt: DtRequest) => AnyQuery;
   /** DataTables 沒帶排序時的預設排序 */
   defaultOrder?: { column: string; ascending?: boolean }[];
@@ -133,7 +136,8 @@ export async function dtQuery<Row = Record<string, unknown>>(
     let total = count ?? 0;
     const hasFilter = !!sanitizeLike(dt.search) || dt.columns.some((c) => c.search);
     if (hasFilter) {
-      let tq = db.from(spec.table).select("*", { count: "exact", head: true });
+      // 用同一個 select（含嵌入資源）：where 若以嵌入資源欄位篩選（例 sales_orders.uuid）才不會在計數查詢失敗
+      let tq = db.from(spec.table).select(select, { count: "exact", head: true });
       tq = applyCommon(tq, dt, spec, false);
       const r = await tq;
       if (r.error) throw new Error(`[dtQuery] ${spec.table} count：${r.error.message}`);

@@ -349,6 +349,27 @@ $(document).ready(async function () {
 	var opt = $.fn.dataTable.ext.buttons;
 	T('ext.buttons.create/edit/remove/editSingle/removeSingle 已定義', function () { return !!(opt.create && opt.edit && opt.remove && opt.editSingle && opt.removeSingle); });
 
+	// dependent：以 API 設值（field.val）也會觸發（同原版 _triggerChange：setTimeout 0 後 trigger change）；undependent 可移除
+	var depEd = new E({ fields: [{ name: 'da', type: 'select', options: [{ label: '1', value: '1' }, { label: '2', value: '2' }] }, { name: 'db', type: 'radio', options: [{ label: 'p', value: 'p' }, { label: 'q', value: 'q' }] }] });
+	var depN = { da: 0, db: 0 };
+	depEd.dependent('da', function () { depN.da++; return {}; });
+	depEd.dependent('db', function () { depN.db++; return {}; });
+	depEd.create(false);
+	await wait(200);
+	var depBase = $.extend({}, depN);
+	depEd.field('da').val('2');
+	depEd.field('db').val('q');
+	await wait(200);
+	T('dependent：field.val() 設值後（非同步）觸發 select/radio 的 dependent', function () {
+		return (depN.da === depBase.da + 1 && depN.db === depBase.db + 1) || JSON.stringify({ base: depBase, now: depN });
+	});
+	depEd.undependent('da');
+	var depAfter = depN.da;
+	depEd.field('da').val('1');
+	await wait(200);
+	T('undependent：移除後不再觸發', function () { return depN.da === depAfter || ('da=' + depN.da + ' expected ' + depAfter); });
+	depEd.destroy();
+
 	// 相容層（mdb-pro-compat.js）：MDB PRO 燈箱 initPhotoSwipeFromDOM（原站 ias_v5 的 $.fn.toLightbox 會呼叫）
 	T('相容層：initPhotoSwipeFromDOM 已定義', function () { return typeof window.initPhotoSwipeFromDOM === 'function'; });
 	var lbFig = '<figure class="image"><img src="/upload/images/unsort/logo.png"></figure>';

@@ -1992,7 +1992,9 @@
         if (opts.postUpdate) opts.postUpdate(json);
         field.processing(false);
       };
-      $(field.node()).on(opts.event, function (e) {
+      // 加上 .edep 命名空間，undependent() 才移除得掉
+      var events = String(opts.event).split(/\s+/).filter(Boolean).map(function (ev) { return ev + '.edep'; }).join(' ');
+      $(field.node()).on(events, function (e) {
         if ($(field.node()).find(e.target).length === 0) return;
         field.processing(true);
         var data = {};

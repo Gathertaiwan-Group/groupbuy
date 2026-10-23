@@ -30,19 +30,22 @@ if (!target) { cleanup(); throw new Error('devtools 沒起來'); }
 const ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
 let id = 0; const pending = new Map(); const logs = []; const reqUrl = new Map();
-ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } else if (m.method === 'Network.requestWillBeSent') { reqUrl.set(m.params.requestId, m.params.request.url); } else if (m.method === 'Runtime.consoleAPICalled') { logs.push(`[console.${m.params.type}] ` + m.params.args.map((a) => a.value ?? a.description ?? '').join(' ')); } else if (m.method === 'Runtime.exceptionThrown') { logs.push('[exception] ' + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text)); } else if (m.method === 'Network.loadingFailed') { logs.push('[netfail] ' + m.params.errorText + ' ' + (reqUrl.get(m.params.requestId) || '').slice(0, 200)); } else if (m.method === 'Network.responseReceived' && m.params.response.status >= 400) { logs.push(`[http ${m.params.response.status}] ${m.params.response.url}`); } };
+let inLogin = false; // 登入前的登入頁會打 /ajax/AdminUser/info → 401（正常），不列入輸出
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } else if (m.method === 'Network.requestWillBeSent') { reqUrl.set(m.params.requestId, m.params.request.url); } else if (m.method === 'Runtime.consoleAPICalled') { logs.push(`[console.${m.params.type}] ` + m.params.args.map((a) => a.value ?? a.description ?? '').join(' ')); } else if (m.method === 'Runtime.exceptionThrown') { logs.push('[exception] ' + (m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text)); } else if (m.method === 'Network.loadingFailed') { logs.push('[netfail] ' + m.params.errorText + ' ' + (reqUrl.get(m.params.requestId) || '').slice(0, 200)); } else if (m.method === 'Network.responseReceived' && m.params.response.status >= 400) { if (inLogin && m.params.response.status === 401 && /\/ajax\/AdminUser\/(info|keepalive)/.test(m.params.response.url)) return; logs.push(`[http ${m.params.response.status}] ${m.params.response.url}`); } };
 const send = (method, params = {}) => new Promise((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
 const evaluate = async (expr) => { const r = await send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }); return r.result?.result?.value ?? r.result?.exceptionDetails?.exception?.description; };
 await send('Page.enable'); await send('Runtime.enable'); await send('Network.enable');
 await send('Emulation.setDeviceMetricsOverride', { width: W, height: H, deviceScaleFactor: 1, mobile: false });
 const wait = +(args.wait || 3000);
 if (args.login) {
+  inLogin = true;
   await send('Page.navigate', { url: args.login + '/backend/panel.do' });
   await sleep(3500);
   const acc = JSON.stringify(process.env.GB_ACC || ''), pw = JSON.stringify(process.env.GB_PW || '');
   const r = await evaluate(`(async()=>{ for(let i=0;i<40 && !$('#btn-submit').is(':visible');i++) await new Promise(r=>setTimeout(r,250)); $('#username').val(${acc}); $('#password').val(${pw}); $('#AdminUserForm').submit(); return 'submitted:' + $('#btn-submit').is(':visible'); })()`);
   logs.push('[login] ' + r);
   await sleep(3500);
+  inLogin = false;
 }
 if (args.url) { await send('Page.navigate', { url: args.url }); await sleep(wait); }
 if (args.steps) {

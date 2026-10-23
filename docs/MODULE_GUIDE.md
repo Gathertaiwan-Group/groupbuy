@@ -275,6 +275,7 @@ const tagList: ListSpec = {
   mapRow: (api, row) => ({ ...api, groupBuyTitle: row.group_buys?.title ?? "" }), // 補推導鍵（不可留 undefined）
   options: () => enumOptionsFor({ category: "GroupBuyTag.category" }),          // 列表回應 options → Editor 下拉
   // where: (q, dt, ctx) => q.eq("group_buy_id", Number(dt.extra.groupBuyId)),  // 頁面 ajax.data 的自訂參數在 dt.extra
+  //   也可用嵌入資源欄位篩選：select 要含該嵌入，例 select: "*, sales_orders!inner(uuid)" + q.eq("sales_orders.uuid", x)
 };
 
 const tagWrite: WriteSpec = {
@@ -334,7 +335,7 @@ export const routes = [
 
 ### 8.1 DataTables Editor 相容 shim（`public/compat/editor-shim.js`）
 
-照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，50 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs）；改到 shim 相關行為時自己也可以跑）。
+照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，52 項全部 ✔ 才算正常（含相容層燈箱 3 項，需能連 cdnjs）；改到 shim 相關行為時自己也可以跑）。
 
 原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
 
@@ -366,6 +367,7 @@ export const routes = [
 | DataTables 整合 | Buttons `create/edit/remove/editSingle/removeSingle`（文字取 `DataTableConfig.i18n`）、API `table.editor()`、列表回應 `options` 自動更新欄位選項、client-side 表新增/更新/刪除列、serverSide 表自動重抓、`DataTableConfig.actionButton`（以 `remove(editor,true)` 當確認框）、`duplicate` 按鈕、多列編輯「多個數值」 |
 | 顯示 | Bootstrap 4 modal：`.modal.fade.DTED > .modal-dialog.modal-dialog-scrollable > .DTE.modal-content`（Header/Processing/Body/Footer 結構與 class 同原站） |
 | 已知差異 | datetime 的日曆外觀為 flatpickr（非 Editor 內建 DateTime）；bubble 定位交給原站頁面 CSS（畫面中央）；Editor 原版英文預設字串只在沒傳 `i18n` 的 Editor 出現 |
+| 設值與 dependent | `field.val(x)`／`set()` 以 API 設值時，select/checkbox/radio/select2/text 都會在 `setTimeout 0` 後 trigger `change`（同原版 `_triggerChange`），`dependent()` 隨之執行——**是非同步的**，設值後要讀 dependent 的結果請等下一個 tick；新增表單時每個欄位會觸發兩次（multiSet＋set，同原版）。`undependent(name)` 可移除 |
 
 ### 8.2 其他相容層
 
