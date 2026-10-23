@@ -1,0 +1,21 @@
+{{!-- 推導：原站「匯出貨運清單」彈窗（/backend/ShippingCSV/exportShippingCSV）未擷取；原站列展開卡片已改用「匯出出貨紀錄」頁，
+     此彈窗列出所選團購並導向 /backend/ShippingRecord/export?groupBuyId=（出貨模組）。 --}}
+<div class="modal-header">
+	<h5>匯出貨運清單</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+</div>
+<div class="modal-body">
+	<div class="modal-message"></div>
+	<p>請選擇要匯出貨運清單的團購：</p>
+	<ul class="list-group">
+	{{#each groupBuys}}
+		<li class="list-group-item d-flex justify-content-between align-items-center">
+			<span>{{title}} <span class="badge badge-default ml-1">ID:{{groupBuyId}}</span> <span class="badge badge-default">{{shortUrl}}</span></span>
+			<a class="btn btn-primary btn-sm m-0" target="_blank" href="/backend/ShippingRecord/export?groupBuyId={{groupBuyId}}">匯出貨運清單</a>
+		</li>
+	{{/each}}
+	</ul>
+</div>
+<div class="modal-footer">
+	<button class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>

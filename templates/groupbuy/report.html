@@ -1,0 +1,120 @@
+{{!-- 推導：原站 /rp/{token} 團購業績報表未擷取（需報表密碼）。依後台風格（Bootstrap 4＋style_v4 badge 色票）做唯讀報表頁：
+     密碼輸入 → 團購摘要、商品銷售統計、訂單明細；「報表網址(需授權)」需臉書登入授權＝未串接。 --}}
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Cache-Control" content="no-store"/>
+<title>{{#if groupBuy}}{{groupBuy.title}} - {{/if}}團購業績報表</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link rel="stylesheet" href="/public/css/style_v4.min.css?v=1">
+<style>
+body {background:#eeeeee;font-family:"PingFang TC", STHeitiTC-Light, 微軟正黑體, "Helvetica Neue", Helvetica, Arial, sans-serif;}
+.rp-header {background:#2c2f34;color:#fff;padding:12px 0;margin-bottom:20px;}
+.rp-header .rp-brand {font-weight:600;letter-spacing:2px;}
+.card {border-radius:4px;margin-bottom:20px;}
+.card-header {background:rgba(0,0,0,.03);padding:12px 20px;font-weight:500;}
+.span-digit {display:block;font-size:1.6rem;font-weight:600;color:#193d5b;}
+.span-label {display:block;font-size:.85rem;color:#78909c;}
+.table td, .table th {vertical-align:middle;}
+.table td {color:#4f4f4f;}
+.rp-footer {color:rgba(0,0,0,.45);font-size:.8rem;padding:16px 0 32px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="rp-header">
+	<div class="container"><span class="rp-brand"><i class="fa-solid fa-chart-line mr-2"></i>團購業績報表</span></div>
+</div>
+<div class="container">
+{{#if errorMessage}}
+	<div class="alert alert-warning">{{errorMessage}}</div>
+{{/if}}
+{{#if needPassword}}
+	<div class="card">
+		<div class="card-header">{{groupBuy.title}}</div>
+		<div class="card-body">
+			<form method="post" action="/rp/{{token}}" class="form-inline">
+				<label class="mr-2" for="password">請輸入團購報表密碼</label>
+				<input type="password" class="form-control mr-2" id="password" name="password" maxlength="50" required autocomplete="current-password">
+				<button type="submit" class="btn btn-primary">查看報表</button>
+			</form>
+		</div>
+	</div>
+{{/if}}
+{{#if needAuth}}
+	<div class="card">
+		<div class="card-header">{{groupBuy.title}}</div>
+		<div class="card-body">
+			<p>此報表網址需經團主授權後才能瀏覽：請以臉書登入申請授權，團主可於後台「所有團購 → 報表授權」允許。</p>
+			<p class="text-danger mb-0">【未串接】臉書登入：本系統未串接臉書，請改用含報表密碼的報表網址。</p>
+		</div>
+	</div>
+{{/if}}
+{{#if report}}
+	<div class="card">
+		<div class="card-header">{{groupBuy.title}}
+			<span class="badge badge-default ml-2">ID:{{groupBuy.groupBuyId}}</span>
+			<span class="badge badge-default">{{groupBuy.shortUrl}}</span>
+			{{#if groupBuy.processing}}<span class="badge badge-primary">活動中</span>{{else}}{{#if groupBuy.notStarted}}<span class="badge badge-success">未開始</span>{{else}}<span class="badge badge-danger">已結束</span>{{/if}}{{/if}}
+		</div>
+		<div class="card-body">
+			<p class="small text-muted mb-3">活動期間：{{groupBuy.dateStartString}} ～ {{groupBuy.dateEndString}}　｜　報表產生時間：{{generatedAt}}</p>
+			<div class="row text-center">
+				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.orders}}</span><span class="span-label">訂單數量</span></div>
+				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.revenue}}</span><span class="span-label">銷售金額</span></div>
+				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.paidTotal}}</span><span class="span-label">已收付款金額</span></div>
+				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.unshippedOrders}}</span><span class="span-label">未出貨數量</span></div>
+			</div>
+		</div>
+	</div>
+	<div class="card">
+		<div class="card-header">商品銷售統計</div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+			<table class="table table-striped mb-0">
+				<thead><tr><th>商品</th><th>規格</th><th class="text-right">數量</th><th class="text-right">金額</th></tr></thead>
+				<tbody>
+				{{#each items}}
+					<tr><td>{{title}}</td><td>{{spec}}</td><td class="text-right">{{qty}}</td><td class="text-right">{{amount}}</td></tr>
+				{{else}}
+					<tr><td colspan="4" class="text-center text-muted">尚無銷售資料</td></tr>
+				{{/each}}
+				</tbody>
+			</table>
+			</div>
+		</div>
+	</div>
+	<div class="card">
+		<div class="card-header">訂單明細（{{orders.length}} 筆）</div>
+		<div class="card-body p-0">
+			<div class="table-responsive">
+			<table class="table table-striped mb-0">
+				<thead><tr><th>訂單編號</th><th>下單時間</th><th>訂購人</th><th>電話</th><th>商品</th><th class="text-right">金額</th><th>付款</th><th>狀態</th></tr></thead>
+				<tbody>
+				{{#each orders}}
+					<tr>
+						<td>{{salesOrderId}}</td>
+						<td class="text-nowrap">{{dateCreatedString}}</td>
+						<td>{{customer}}</td>
+						<td>{{telephone}}</td>
+						<td class="small">{{items}}</td>
+						<td class="text-right">{{grandTotal}}</td>
+						<td>{{#if paid}}<span class="badge badge-primary">已付款</span>{{else}}<span class="badge badge-danger">未付款</span>{{/if}}</td>
+						<td class="small">{{statusLabel}}</td>
+					</tr>
+				{{else}}
+					<tr><td colspan="8" class="text-center text-muted">尚無訂單</td></tr>
+				{{/each}}
+				</tbody>
+			</table>
+			</div>
+		</div>
+	</div>
+{{/if}}
+	<div class="rp-footer">*任何有報表網址的人均可瀏覽報表　Powered By 團購表單</div>
+</div>
+</body>
+</html>

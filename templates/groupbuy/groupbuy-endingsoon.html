@@ -608,10 +608,11 @@ $(document).ready(function() {
 		var tr = $(this).closest('tr');
 		var row = table.row(tr).data();
 		editorFeatureTag.editMode = 'updateFeatureTag';
-		editorFeatureTag
-		.title(row.title)
-		.buttons({label:'編輯', className:'btn-primary', action: function () {this.submit();}})
-		.edit(tr);
+		editorFeatureTag.bubble($(this).closest('td'), ['featureTag[]'], {
+			title: row.title,
+			message: '以下標籤只作為篩選用途並無實際功能',
+			buttons: {label:'編輯', className:'btn-primary', action: function () {this.submit();}}
+		});
 	});
 
 	//$('#example_filter').append('<input type="search" id="shortUrlFilter" class="form-control form-control-sm filters" placeholder="短五碼" aria-controls="example">')

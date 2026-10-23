@@ -7,6 +7,8 @@ import { groupBuyListRoutes } from "./groupbuy-list";
 import { groupBuyCloneRoutes } from "./groupbuy-clone";
 import { groupBuySmsRoutes } from "./groupbuy-sms";
 import { sysTagRoutes } from "./sys-tag";
+import { reportRoutes } from "./report";
+import { exportRoutes } from "./exports";
 import { preferenceRoutes } from "./preference";
 import { homeViewRoutes } from "./homeview";
 import { facebookAuthRoutes } from "./facebook-auth";
@@ -17,6 +19,8 @@ export const routes: RouteDef[] = [
   ...groupBuyCloneRoutes,
   ...groupBuySmsRoutes,
   ...sysTagRoutes,
+  ...reportRoutes,
+  ...exportRoutes,
   // 【參考實作】團購標籤（foundation 完成，見 groupbuy-tag.ts）
   ...groupBuyTagRoutes,
   ...preferenceRoutes,
