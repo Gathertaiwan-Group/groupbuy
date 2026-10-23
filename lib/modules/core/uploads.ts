@@ -18,9 +18,10 @@ export async function uploadedImage(ctx: RequestContext): Promise<Response> {
   const rel = ctx.params["*"] ?? "";
   if (!rel || rel.includes("..")) throw badRequest("不合法的路徑");
   if (rel.startsWith(UPLOAD_PREFIX)) {
-    // gb/ 底下的檔名含 UUID、內容不會變 → 轉址可讓瀏覽器與 CDN 長期快取（不必每張圖都打一次函式）
+    // gb/ 底下的檔名含 UUID、內容不會變 → 轉址可快取（不必每張圖都打一次函式）。
+    // 轉址目標含 Supabase 專案網址，日後可能更換：瀏覽器只快取 1 天；Vercel 邊緣快取較久（每次部署會清掉）。
     const res = redirect(storagePublicUrl(`images/${rel}`), 302);
-    res.headers.set("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
+    res.headers.set("Cache-Control", "public, max-age=86400, s-maxage=31536000");
     return res;
   }
   const res = redirect(`https://cdn.groupbuyforms.com/upload/images/${rel.split("/").map(encodeURIComponent).join("/")}`, 302);

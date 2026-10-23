@@ -74,7 +74,7 @@ export async function createSession(opts: {
   req: Request;
 }): Promise<{ token: string; cookie: string }> {
   const token = newToken(opts.persistent);
-  const expires = new Date(Date.now() + (opts.persistent ? PERSISTENT_MS : IDLE_MS));
+  const expires = new Date(Date.now() + (opts.persistent ? PERSISTENT_MS : IDLE_MS + SLIDE_EVERY_MS));
   const db = getServiceClient();
   const { error } = await db.from("admin_sessions").insert({
     id: hashToken(token),
@@ -151,9 +151,10 @@ export async function readSession(req: Request): Promise<AdminSession | null> {
 
   const persistent = isPersistentToken(token);
   let effectiveExpiry = expiresAt;
-  if (!persistent && expiresAt.getTime() - now < IDLE_MS - SLIDE_EVERY_MS) {
-    // 滑動延長：閒置 12 小時才過期（距上次延長超過 10 分鐘才寫 DB）
-    effectiveExpiry = new Date(now + IDLE_MS);
+  if (!persistent && expiresAt.getTime() - now < IDLE_MS) {
+    // 滑動延長：到期時間設為「現在 + 12 小時 + 10 分鐘」，剩餘不到 12 小時（距上次延長超過 10 分鐘）才寫 DB。
+    // 這樣任何一次請求之後，至少還有 12 小時的閒置時間。
+    effectiveExpiry = new Date(now + IDLE_MS + SLIDE_EVERY_MS);
     await db.from("admin_sessions").update({ expires_at: effectiveExpiry.toISOString() }).eq("id", id);
   }
 

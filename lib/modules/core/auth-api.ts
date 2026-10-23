@@ -41,6 +41,20 @@ function waitSeconds(failures: AttemptRow[], limit: number): number {
   return Math.max(1, Math.ceil((unlockAt - Date.now()) / 1000));
 }
 
+const PENDING_STALE_MS = 60 * 1000; // 超過 1 分鐘仍是 PENDING（請求中途中斷）→ 視同已完成的失敗
+const CONCURRENT_WAIT_S = 5; // 只因「同時進行中」的請求而被擋時的提示秒數
+
+/**
+ * rows＝窗口內的失敗（含驗證中的 PENDING 與自己這筆）。超過 limit 筆（其他人已有 limit 筆）→ 鎖定。
+ * 提示秒數只用已完成（或逾時）的失敗計算：鎖定若只是因為並行中的請求，回短秒數，不誤報 15 分鐘。
+ */
+function lockWait(rows: AttemptRow[], ownId: number, limit: number): number {
+  if (rows.length <= limit) return 0;
+  const staleBefore = Date.now() - PENDING_STALE_MS;
+  const settled = rows.filter((r) => r.id !== ownId && (r.reason !== "PENDING" || new Date(r.created_at).getTime() < staleBefore));
+  return settled.length >= limit ? waitSeconds(settled, limit) : CONCURRENT_WAIT_S;
+}
+
 /**
  * 登入（與改密碼的舊密碼驗證）限流閘門。
  * 先寫一筆 PENDING 紀錄、再計數（把自己算進去）：同時送 N 個請求，也只有前 MAX_FAILURES 個能進到密碼比對。
@@ -87,7 +101,7 @@ async function openAttempt(ctx: RequestContext, account: string): Promise<{ atte
     if (r.reason === "LOCKED") continue; // 舊版寫入的鎖定紀錄不算失敗
     accFailures.push(r);
   }
-  let wait = accFailures.length > MAX_FAILURES ? waitSeconds(accFailures.filter((r) => r.id !== ins.id), MAX_FAILURES) : 0;
+  let wait = lockWait(accFailures, ins.id, MAX_FAILURES);
 
   if (!wait && ip) {
     const { data: byIp, error: ipErr } = await db
@@ -97,13 +111,13 @@ async function openAttempt(ctx: RequestContext, account: string): Promise<{ atte
       .eq("success", false)
       .gte("created_at", since)
       .order("created_at", { ascending: false })
-      .limit(IP_MAX_FAILURES + 1);
+      .limit(IP_MAX_FAILURES + 50);
     if (ipErr || !byIp) {
       await db.from("admin_login_attempts").delete().eq("id", ins.id);
       throw busy();
     }
     const ipFailures = (byIp as AttemptRow[]).filter((r) => r.reason !== "LOCKED");
-    if (ipFailures.length > IP_MAX_FAILURES) wait = waitSeconds(ipFailures.filter((r) => r.id !== ins.id), IP_MAX_FAILURES);
+    wait = lockWait(ipFailures, ins.id, IP_MAX_FAILURES);
   }
 
   if (wait > 0) {

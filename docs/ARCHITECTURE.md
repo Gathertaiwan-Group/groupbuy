@@ -71,11 +71,11 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 帳號全域唯一（`groupbuy.admin_users.account`），bcrypt（`password_hash`）。
 - 登入 `POST /ajax/AdminUser/login(.do)`（原站表單：username、password、kmsi）。成功 → 32 bytes 隨機 token 放 cookie **`GBSID`**（`HttpOnly; SameSite=Lax; Path=/`；https 時 `Secure`），DB 只存 `sha256(token)`（`groupbuy.admin_sessions.id`）。
   - 勾「讓我保持登入(24小時)」：cookie `Max-Age=86400`、伺服器端固定 24 小時到期。
-  - 未勾：瀏覽器 session cookie；伺服器端閒置 12 小時到期，請求/keepalive 滑動延長（距上次延長超過 10 分鐘才寫 DB）。
+  - 未勾：瀏覽器 session cookie；伺服器端閒置 12 小時到期，請求/keepalive 滑動延長（到期設為現在＋12 小時 10 分；剩餘不到 12 小時才寫 DB，即約每 10 分鐘最多寫一次）。
 - 失敗鎖定：`groupbuy.admin_login_attempts`（migration 0100），也作為登入日誌（保存 90 天）。
   - 同帳號：最近一次成功之後、15 分鐘內失敗 5 次 → 429 `{code:429, data:等待秒數}`（原站登入頁會倒數；倒數＝第 5 新的失敗 + 15 分鐘，重試不會延長）。
   - 同 IP：15 分鐘內失敗 30 次 → 429（跨帳號猜密碼）。
-  - 先寫一筆 `PENDING` 再計數（含自己）→ 並行送 N 個請求也最多 5 次進到密碼比對；被鎖的請求刪掉自己那筆；查詢失敗一律拒絕（503）。
+  - 先寫一筆 `PENDING` 再計數（含自己）→ 並行送 N 個請求也最多 5 次進到密碼比對；被鎖的請求刪掉自己那筆；查詢失敗一律拒絕（503）。提示秒數只用已完成的失敗計算（只因同時進行中的請求被擋 → 提示 5 秒；PENDING 超過 1 分鐘視同失敗）。
   - `changePassword` 的舊密碼驗證共用同一個上限（`BAD_OLD_PASSWORD`）。
 - 登出 `GET /backend/AdminUser/logout` → 刪 session、清 cookie、導回 `/backend/panel.do`。
 - `keepalive`（每 120 秒，原站 gbs_api）、`/ajax/AdminUser/info`（徽章/鈴鐺/公告，彙整各模組 `ModuleDef`）、`switchAdmin`（**只收 POST**；僅限 `permissions.switchAccounts` 內的同租戶帳號）、`changePassword`（Editor：舊密碼驗證、6–20 碼、確認一致；成功後踢掉其他 session）。
@@ -103,7 +103,7 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 只用 `groupbuy` schema；service-role client（`lib/supabase/server.ts`，`cache: no-store`）；**每個查詢以 session 的 tenant_id 過濾**（`crud.ts`、`dtQuery` 自動加）。anon/authenticated 對所有表無權限（RLS＋revoke）。
 - 原站 JSON 鍵 ↔ 欄位：datamodel 的 `EntityDef`（`lib/db/entity-types.ts` 介面合約）＋ `rowToApi/apiToRow`。
 - 列舉：`groupbuy.enum_options` → `lib/core/enums.ts`（每個執行個體快取 10 分鐘）。
-- 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage（`gb/` 檔名含 UUID、內容不變 → 轉址可快取一年）；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN（快取一天）。
+- 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage（`gb/` 檔名含 UUID、內容不變 → 轉址可快取：瀏覽器 1 天、Vercel 邊緣一年〔每次部署清除〕；轉址目標含 Supabase 專案網址，所以瀏覽器不設長期）；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN（快取一天）。
 - Migration：`scripts/apply-migrations.mjs`（Management API，單一交易＋帳本），CI 在 main push 且 migration 有變更時自動套用；**禁止 `supabase db push`**（共用庫）。
 
 ## 8. 相容層與授權
