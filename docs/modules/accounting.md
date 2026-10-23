@@ -78,7 +78,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 ## 已知缺口
 
 - 同一天、同金額、帳號相容（帳號數字相同，或末 N 碼相同，N=min(5, 兩方長度)）的多筆匯款，若無法以時間區分（任一方沒有時間欄，例如原站文字框格式），第二筆起一律視為「可能為同一筆匯款」而略過（指定訂單編號也不例外）——這是刻意的寧可擋下（也涵蓋對帳單遮罩帳號、只打後五碼的情況），只會誤擋、不會入錯帳；包含「不同客人但帳號末 5 碼相同」的少見情況。這類款項請至訂單管理手動設為已付款。兩筆都有不同的時間時（含在文字框第 2 欄手動填入時間）可各自對應。
-- 單元測試不在 CI 內（CI 由 core 管理，Node 22 需 `--experimental-strip-types`）；本機 `node --test lib/modules/accounting/tests/*.test.mjs`。
+- 單元測試已納入 CI（Unit tests 步驟）；本機 `node --test lib/modules/accounting/tests/*.test.mjs`。
 
 - 金流對帳列表依賴 orders 模組的 `/ajax/SalesOrder/list`（需支援 `groupBuyId`、`month`、`rowId=salesOrderId` 用的 `salesOrderId` 鍵）；orders 未上線前列表為空／錯誤。
 - 銀行對帳檔只支援 CSV/TXT；`.xls/.xlsx` 會提示另存 CSV。
@@ -87,7 +87,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 
 ## 給 core 的問題
 
-- CI 沒有跑模組單元測試；建議在 `.github/workflows/ci.yml` 加 `node --experimental-strip-types --test 'lib/modules/*/tests/*.test.mjs'`（Node 22）。
+- CI 已跑模組單元測試（`.github/workflows/ci.yml` 的 Unit tests 步驟，Node 22 + `--experimental-strip-types`）。
 
 - Editor shim：`editor.field('select欄').val(x)` 不會觸發 change，所以 `dependent()` 不會跟著執行（原版 Editor 1.9 的 select/checkbox/radio `set` 會觸發 change）。使用者在畫面上操作時正常，只影響以 API 設值的程式。
 

@@ -24,6 +24,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+      # 模組單元測試（node:test，純函式、不連 DB）：各模組 lib/modules/*/tests/*.test.mjs 與 lib/modules/*/*.test.ts
+      # Node 22 需 --experimental-strip-types 才能直接載入 .ts
+      - name: Unit tests
+        run: node --experimental-strip-types --test 'lib/modules/*/tests/*.test.mjs' 'lib/modules/*/*.test.ts'
       # 不帶 Supabase env：頁面不得在 build 階段連 DB
       - run: npm run build
 
