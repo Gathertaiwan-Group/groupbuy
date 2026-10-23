@@ -1,29 +1,33 @@
 <!--#head-->
+{{!-- 無塵室重寫（2026-10-23）：骨架取自 spec/html/groupbuypreference-list.html 已擷取部分；
+      ⟦未擷取⟧ 缺段依 SPEC.md「進階設定」、spec/runtime/groupbuypreference-list.records.txt、
+      lib/modules/groupbuy/preference.ts 端點與原站自家 JS（dataTable.config/dataTable.min/dataTable.api）行為推導，推導處皆有註解。 --}}
 {{> core/partials/dte-style.html}}
 <script type="text/javascript" class="init">
-	var editor;
-	var groupBuyPreferenceTable;
-	var groupBuyId = {{groupBuyId}};
+{{!-- 推導：頁面全域（原站寫死 groupBuyId，這裡由模板帶入） --}}
+var groupBuyId = {{json groupBuyId}};
+var gbpTagCategoryOptions = {{json tagCategoryOptions}};
+{{!-- 推導：虛擬 id（未設定、來自系統設定的列）＝ 10000000 ≤ id < 20000000（見 preference.ts VIRTUAL_BASE） --}}
+var GBP_VIRTUAL_BASE = 10000000, GBP_VIRTUAL_MAX = 20000000;
+function gbpIsVirtualId(id) { id = Number(id); return id >= GBP_VIRTUAL_BASE && id < GBP_VIRTUAL_MAX; }
+function gbpEscape(s) { return $.fn.dataTable.render.text().display(s == null ? '' : String(s)); }
+
 	$.extend( true, $.fn.dataTable.defaults, {
 		"searching": true,
 		"pageLength":25,
 	} );
-	var groupBuyTagEditor = new GroupBuyTagEditor();
 	$(document).ready(function() {
 		var tableName = '#example';
-		editor = new $.fn.dataTable.Editor( {
+		{{!-- 推導：ajax 端點（edit→update、remove→removeAll；見 preference.ts 路由） --}}
+		var editor = new $.fn.dataTable.Editor( {
 			ajax: {
-				create: {
-					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyPreference/save.do?groupBuyId={{groupBuyId}}'
-				},
 				edit: {
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyPreference/update.do?groupBuyId={{groupBuyId}}&groupBuyPreferenceId=_id_'
+					url:  GBF.baseUrl + '/ajax/GroupBuyPreference/update.do?groupBuyId=' + groupBuyId + '&groupBuyPreferenceId=_id_'
 				},
 				remove: {
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyPreference/removeAll?groupBuyId={{groupBuyId}}&groupBuyPreferenceId=_id_'
+					url:  GBF.baseUrl + '/ajax/GroupBuyPreference/removeAll.do?groupBuyId=' + groupBuyId
 				}
 			},
 			table: tableName,
@@ -35,25 +39,19 @@
 			],
 			i18n:DataTableConfig.i18n,
 		} );
+		window.gbpEditor = editor;
 
-		var last_name = '';
-		var type = '';
-		var showTag = true;
-		$(tableName).on( 'click', 'tbody td:not(:first-child)', function (e) {
+		{{!-- 推導：點列開編輯器。json 型依 name 開專用編輯器；其餘依 fieldType 決定行內（text/select/checkbox）或彈窗（textarea/ckeditor/upload） --}}
+		var lastRow = null;
+		$(tableName).on('click', 'tbody td', function (e) {
 			var tr = $(this).closest('tr');
 			var row = table.row( tr );
 			var data = row.data();
+			if (!data) return;
+			if ($(this).find('div.DTE_Field').length) return;
 			var id = data.groupBuyPreferenceId;
-			type = data.fieldType;
-			showTag = type == 'ckeditor';
-			if (type.startsWith('ckeditor')) {
-				type = 'ckeditor';
-			}
-			// if (type=='textarea') type='ckeditor';
+			lastRow = data;
 			switch (data.name) {
-			case 'BLACKLIST_MESSAGE':
-				showTag = false;
-				break;
 			case 'INVOICE_SETTINGS_ECPAY':
 			case 'FUNBIZ':
 			case 'BANK_SETTINGS':
@@ -70,129 +68,134 @@
 				.show();
 				return;
 			case 'BILLING_ADDRESS_SETTINGS':
+				{{!-- 推導：show(setup) 於開啟前註冊 dependent（原站缺段 200 字元） --}}
 				groupBuyPreferenceSettings(table, groupBuyId, id, data.name)
-				.init()
-				.editor()
-				.dependent('countryMode', function(val, data, callback) {
-					var hide = [];
-					var show = [];
-					switch (val) {
-					case '':
-					case 'NATIVE':
-					case 'UNSPECIFIED':
-						return {
-							hide:['countryCodes'],
-							values:{
-								countryCodes:''
+				.show(function (cEditor) {
+					cEditor.dependent('countryMode', function (val) {
+						switch (val) {
+						case '':
+						case 'NATIVE':
+						case 'UNSPECIFIED':
+							return {
+								hide:['countryCodes'],
+								values:{
+									countryCodes:''
+								}
+							}
+						case 'SPECIFIED':
+							return {
+								show:['countryCodes']
 							}
 						}
-					case 'SPECIFIED':
-						return {
-							show:['countryCodes']
-						}
-					}
-					return {};
-				})
-				.open();
+						return {};
+					});
+				});
 				return;
 			case 'ACTIVITY_POPUP_SETTINGS':
 				new ActivityPopupSettings(groupBuyId)
 				.bind(table, id)
 				.show();
 				return;
+			{{!-- 推導：原站這兩鍵是獨立頁（customNoteSettings／deliveryTimeSettings），本系統尚未提供 --}}
 			case 'CUSTOM_NOTE_SETTINGS':
-				window.open('/backend/GroupBuyPreference/customNoteSettings.do?groupBuyId='+groupBuyId, '_blank');
-				return;
 			case 'DELIVERY_TIME_SETTINGS':
-				window.open('/backend/GroupBuyPreference/deliveryTimeSettings.do?groupBuyId='+groupBuyId, '_blank');
-				/*const delivery = new DeliveryTimeSettings({
-					table: table,
-					id: id,
-					preferencePrefix: 'GroupBuy',
-					groupBuyId: groupBuyId,
-					row: row,
-				});
-				delivery.openEditor();*/
+				displayAlertWarning('此設定尚未提供編輯介面');
 				return;
 			}
-			//if (data.fieldType != 'select' || editor.s.fields["prefValue"].s.opts.type != 'select') {
-			if (last_name != data.name) {
-				//alert(data.prefValue)
-				var options = [];
-				if (type == 'select' || type == 'checkbox') {
-					var tmpOptions = table.ajax.json().options[data.name];
-					tmpOptions.forEach(o => {
-						var o1 = (type == 'checkbox') ? {attr: {'class':'form-check-input'}} : {};
-						o1.label = o.label;
-						o1.value = o.value;
-						options.push(o1);
-					});
-				}
-				editor.clear('prefValue');
+			if (data.fieldType == 'json') {
+				displayAlertWarning('此設定請使用專用編輯器');
+				return;
+			}
 
-				if (type == 'upload') {
-					editor.add(DataTableConfig.field_upload('內容', 'prefValue'));
-				} else if (type == 'checkbox_bool') {
-					editor.add(DataTableConfig.field_checkbox_bool('確定請打勾', 'prefValue'));
-				} else {
-					var placeholder = (type == 'textarea') ? '':'';
-					if (data.name == 'SEO_DESCR') {
-						placeholder = 'Meta description(上限160字元)';
-					}
+			{{!-- 推導：依 fieldType 重建 prefValue 欄位（原站可見 editor.add({...className:'full block'})） --}}
+			var type = 'text';
+			var options = undefined;
+			var placeholder = '';
+			var jsonOptions = (table.ajax.json() || {}).options || {};
+			switch (data.fieldType) {
+			case 'textarea':
+				type = 'textarea';
+				break;
+			case 'select':
+				type = 'select';
+				options = [{label:'未設定', value:''}].concat(jsonOptions[data.name] || []);
+				break;
+			case 'checkbox':
+				type = 'checkbox';
+				options = jsonOptions[data.name] || jsonOptions['boolean[]'] || [];
+				break;
+			case 'upload':
+				type = 'upload';
+				break;
+			}
+			if (gbpIsVirtualId(id) && data.prefValue) placeholder = '(未設定時使用系統設定)';
+			editor.clear('prefValue');
+			if (type == 'upload') {
+				var uf = DataTableConfig.field_upload(data.displayName, 'prefValue');
+				uf.className = 'full block';
+				editor.add(uf);
+			} else {
 					editor.add( {
 						label: data.displayName,
 						name: 'prefValue',
 						type: type,
 						options:options,
+						separator: type == 'checkbox' ? ',' : undefined,
 						attr:{rows:10, placeholder:placeholder},
 						className:'full block'
 					} );
-				}
 			}
-			last_name = data.name;
-			if (type == 'checkbox' && data.prefValues != null) {
-				data.prefValue = data.prefValues;
-			}
-			if (type == 'ckeditor') {
-				if (data.prefValueCkEditor == null) {
-					data.prefValueCkEditor = data.prefValue;
-				}
-				editor.hide('prefValue').show('prefValueCkEditor').edit( row, {buttons: '確定'} );
-				var _cke = editor.field('prefValueCkEditor').s.opts._ckeditor;
-				$('.btn-tag').on('click', function () {
-					//CKEDITOR.instances.DTE_Field_prefValueCkEditor.insertText('##'+$(this).attr('id')+'##');
-					var txt = '##'+$(this).attr('id')+'##';
-					_cke.model.change( writer => {
-						const insertPosition = _cke.model.document.selection.getFirstPosition();
-						writer.insertText( txt, insertPosition );
-					} );
-				});
 
-			} else if (type == 'textarea') {
-				editor.show('prefValue').hide('prefValueCkEditor').edit( row, {buttons: '確定'} );
+			var buttons = [ { label: '確定', className: 'btn-primary', fn: function () { this.submit(); } } ];
+			{{!-- 推導：本團已設定（真實 id）的列可「清除設定」＝刪除單筆，回到系統設定／標籤設定 --}}
+			if (!gbpIsVirtualId(id)) {
+				buttons.push({ label: '清除設定', className: 'btn-danger', fn: function () {
+					var ed = this;
+					$.post(GBF.baseUrl + '/ajax/GroupBuyPreference/delete.do?groupBuyPreferenceId=' + encodeURIComponent(id))
+						.done(function () { ed.close(); table.ajax.reload( null, false ); })
+						.fail(function (x) { displayAlertWarning((x.responseJSON && x.responseJSON.error) || '刪除失敗'); });
+				} });
+			}
+			editor.title(data.displayName);
+			if (data.fieldType.startsWith('ckeditor')) {
+				editor.hide('prefValue').show('prefValueCkEditor').edit( row, {buttons: buttons} );
+				editor.set('prefValueCkEditor', data.prefValue || '');
+			} else if (type == 'textarea' || type == 'upload') {
+				editor.show('prefValue').hide('prefValueCkEditor').edit( row, {buttons: buttons} );
 			} else {
-				editor.inline( this, {
+				editor.show('prefValue').hide('prefValueCkEditor');
+				editor.inline( table.cell(tr, 1).node(), {
 					buttons: { label: '確定', fn: function () { this.submit(); } }
-				} )
-			};
-		} );
+				} );
+			}
+		});
 
 		var table = $(tableName).DataTable( {
 			dom: 'Bfrtip',
-			//scrollX:true,
-			ajax: '{{baseUrl}}/ajax/GroupBuyPreference/list.do?groupBuyId={{groupBuyId}}',
+			ajax: {
+				url: GBF.baseUrl + '/ajax/GroupBuyPreference/list.do?groupBuyId=' + groupBuyId,
+				type: 'GET'
+			},
 			language:DataTableConfig.i18n,
+			pageLength: 25,
+			order: [[ 0, "asc" ]],
 			columns:[
 				{ data: 'displayName' },
 				{ data: 'prefValue',
+					defaultContent: '',
 					render: function ( data, type, row ) {
-						var more = (row.groupBuyPreferenceId >= 10000000 && row.groupBuyPreferenceId < 20000000) ? '<<更多內容(來自系統設定)>>' : '<<更多內容>>';
-						data = (data == undefined || data.length == 0) ? '' :
-							row.fieldType == 'textarea' ? more :
-							row.fieldType == 'json' ? more :
-							row.fieldType.startsWith('ckeditor') ? more :
-							row.fieldType == 'select' ? renderOption(table, data, row.name) :
-							row.fieldType == 'checkbox' ? renderOption(table, row.prefValues, row.name) : data;
+						{{!-- 推導：json/ckeditor 型只顯示「<<更多內容>>」，值來自系統設定（虛擬 id）時加註；一般文字 HTML escape --}}
+						if (type !== 'display') return data == null ? '' : data;
+						var fromSystem = gbpIsVirtualId(row.groupBuyPreferenceId) && data != null && data !== '';
+						var more = (data == null || data === '') ? '' :
+							fromSystem ? '&lt;&lt;更多內容(來自系統設定)&gt;&gt;' : '&lt;&lt;更多內容&gt;&gt;';
+						data = row.fieldType == 'json' ? more :
+								row.fieldType.startsWith('ckeditor') ? more :
+								row.fieldType == 'select' ? gbpEscape(renderOption(table, data, row.name)) :
+									row.fieldType == 'checkbox' ? gbpEscape(renderOption(table, row.prefValues, row.name)) : gbpEscape(data);
+						if (fromSystem && row.fieldType != 'json' && !row.fieldType.startsWith('ckeditor')) {
+							data += ' <small class="text-muted">(來自系統設定)</small>';
+						}
 						return DataTableConfig.editIcon(data, type, row, false);
 				} },
 			],
@@ -210,140 +213,73 @@
 			$('#tag').hide();
 			$('#tag-export').hide();
 			$('#tag-resetPassword').hide();
-			if (type == 'ckeditor') {
-				if (showTag) {
-					switch(last_name) {
-					case 'EMAIL_RESET_PASSWORD_BODY':
-					case 'EMAIL_LP_UPGRADE_BODY':
-					case 'EMAIL_LP_ACTIVATED_BODY':
-						$('#tag-resetPassword').show();
-						break;
-					default:
-						$('#tag').show();
-						break;
-					}
-
-					$('#col-prefValue').attr('class', 'col-sm-6 col-md-8');
-				} else {
-					$('#col-prefValue').attr('class', 'col-12');
+			{{!-- 推導：彈窗編輯系統信／簡訊內容時顯示標籤面板（重設密碼信用專屬標籤）；匯出格式類用 #tag-export --}}
+			var name = lastRow ? lastRow.name : '';
+			if (mode == 'main' && action == 'edit' && (/^(EMAIL|SMS)_.*_BODY$/.test(name) || /EXPORT_FORMAT/.test(name))) {
+				$('#col-tag').show();
+				switch (name) {
+				case 'EMAIL_RESET_PASSWORD_BODY':
+				case 'SMS_RESET_PASSWORD_BODY':
+					$('#tag-resetPassword').show();
+					break;
+				default:
+					if (/EXPORT_FORMAT/.test(name)) $('#tag-export').show();
+					else $('#tag').show();
+					break;
 				}
-			} else if (type == 'textarea') {
-				//$('#tag-export').show();
-			}
-		})
-		.on( 'close', function (e,mode,action) {
-			$('.btn-tag').unbind('click');
-		})
 
-		$('#example tbody').on('click', 'td.details-control', function () {
-			var tr = $(this).closest('tr');
-			var row = table.row( tr );
-
-			if ( row.child.isShown() ) {
-				// This row is already open - close it
-				row.child.hide();
-				tr.removeClass('shown');
-			}
-			else {
-				// Open this row
-				row.child( format(row.data()) ).show();
-				tr.addClass('shown');
+				$('#col-prefValue').attr('class', 'col-sm-6 col-md-8');
+			} else {
+				$('#col-prefValue').attr('class', 'col-12');
+				$('#col-tag').hide();
 			}
 		} );
 
-		var removeAll = function() {
-			editor.remove();
-		};
-
-		$('button[data-action]').on('click', function() {
+		{{!-- 推導：頁面按鈕（標籤精靈／解除標籤／刪除標籤／重置所有設定） --}}
+		$('button[data-action]').on('click', function () {
 			var action = $(this).attr('data-action');
-			switch(action) {
+			switch (action) {
+			case 'tagWizard':
+				openForm('/backend/GroupBuyTag/wizard', 'groupBuyId=' + groupBuyId);
+				break;
 			case 'goTag':
-				window.open( '/backend/GroupBuyTag/list', '_blank');
+				window.open('/backend/GroupBuyTag/list');
+				break;
+			case 'deleteTag':
+				groupBuyTagEditor.removeMasterTag(groupBuyTagGroupBuyManager);
 				break;
 			case 'tag':
 				groupBuyTagGroupBuyManager.tag();
 				break;
 			case 'untag':
 				groupBuyTagGroupBuyManager.unTag();
-				groupBuyTagEditor.reloadWhenSuccess(groupBuyTagGroupBuyManager.editor);
-				break;
-			case 'deleteTag':
-				const gbtId = $(this).data('gbtId');
-				groupBuyTagEditor.remove( gbtId );
+				groupBuyTagEditor.reloadWhenSuccess(groupBuyTagGroupBuyManager);
 				break;
 			case 'removeAll':
 				editor
-				.title( '清除所有設定' )
-				.buttons( { text: '確認', className: 'btn-danger', action: function ( e, dt, node, config ){editor.submit()}} )
+				.title('重置所有設定')
+				.buttons( { label: '確認', className: 'btn-danger', fn: function () { editor.submit(); } } )
 				.message( '確定要清除所有設定?' )
 				.remove( 0 );
-				break;
-			case 'feed':
-				openForm('/ajax/Feed/feed.do?groupBuyId='+groupBuyId)
-				break;
-			case 'tagWizard':
-				openForm('/backend/GroupBuyTag/wizard.do?groupBuyId='+groupBuyId)
 				break;
 			}
 		});
 
-		groupBuyPreferenceTable = table;
-		groupBuyTagGroupBuyManager
-		.setGroupBuyId(groupBuyId)
-		.init();
+		groupBuyTagGroupBuyManager.init(groupBuyId, table).get();
 	} ); // end ready
 
-	function ActivityPopupSettings () {}
-	ActivityPopupSettings.prototype.bind = function(table, groupBuyPreferenceId) {
-		this.table = table;
-		this.id = groupBuyPreferenceId
-		return this;
-	}
-	ActivityPopupSettings.prototype.show = function () {
-		var _this = this;
-		$.ajax( {
-			url: '{{baseUrl}}/ajax/GroupBuyPreference/activityPopupSettings?groupBuyId={{groupBuyId}}',
-			dataType: 'json',
-			success: function ( json ) {
-				var data = json.data;
-				var options = json.options;
-				var _id = data.groupBuyPreferenceId ? data.groupBuyPreferenceId : _this.id;
-				var cEditor = _this.editor();
-				cEditor
-				.title('前台-官網彈出活動設定')
-				.message('圖片以及小圖示必須提供才會生效。可透過上傳圖片或是提供連結設定')
-				.buttons({label:'更新', className:'btn-primary', action: function () {this.submit();}})
-				.edit( _id, false );
-
-				$.each(data, function ( name, value ) {
-					if (typeof value == 'object') {
-						Object.keys(value).forEach(function(o,i){
-							var fname = name+'.'+o;
-							if (cEditor.s.fields[fname] != null) {
-								cEditor.set(fname, value[o]);
-							}
-						});
-					} else {
-						if (cEditor.s.fields[name] != null) {
-							cEditor.set(name, value);
-						}
-					}
-				} );
-
-				cEditor.open();
-			}
-		} );
-	}
-	ActivityPopupSettings.prototype.editor = function () {
-		if (!!this._editor) {
-			return this._editor;
-		}
+{{!-- 推導：彈出活動編輯器（可見片段：ajax 網址、idSrc、name、欄位、submitComplete 重整；GET 讀值作法同原站 dataTable.api.min.js GroupBuyPreferenceSettings.showEditor） --}}
+class ActivityPopupSettings {
+	constructor(groupBuyId) {
 		const _this = this;
+		this.groupBuyId = groupBuyId;
+		this.table = null;
+		this.id = null;
+		this.url = GBF.baseUrl + '/ajax/GroupBuyPreference/activityPopupSettings?groupBuyId=' + groupBuyId;
 		const editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				type: 'POST',
-				url:  '{{baseUrl}}/ajax/GroupBuyPreference/activityPopupSettings?groupBuyId={{groupBuyId}}'
+				url:  _this.url
 			},
 			idSrc: 'groupBuyPreferenceId',
 			name:'activityPopupSettings',
@@ -361,22 +297,57 @@
 			formOptions:DataTableConfig.formOptions,
 			i18n:DataTableConfig.i18n,
 		} ).on( 'submitComplete', function () {
-			_this.table.ajax.reload( null, false );
-		} )/* .on( 'open', function () {
-			_this.loadAjax();
-		} ) */
+			if (_this.table) _this.table.ajax.reload( null, false );
+		} )
 		;
-
-		['image', 'imageMobile', 'icon'].forEach(function (name) {
-			$( editor.field( name ).input() ).on( 'upload.editor', function (e, val) {
-				editor.field( name + 'Url' ).val(val);
-			} );
-		});
-		this._editor = editor;
-		return this._editor;
+		this.editor = editor;
 	}
+	bind(table, id) {
+		this.table = table;
+		this.id = id;
+		return this;
+	}
+	show() {
+		const _this = this;
+		$.ajax({ url: _this.url, dataType: 'json' }).done(function (json) {
+			gbpOpenSettingsEditor(_this.editor, json, '前台-官網彈出活動設定', '圖片以及小圖示必須提供才會生效。可透過上傳圖片或是提供連結設定');
+		}).fail(function (x) {
+			displayAlertWarning((x.responseJSON && x.responseJSON.error) || '讀取失敗');
+		});
+		return this;
+	}
+}
 
-	function GroupBuyTagEditor () {
+{{!-- 推導：專用編輯器共用開啟流程——先 create(false)、再依 GET 回應設值（物件攤成 a.b、陣列直接設）、套用 options、最後開啟 --}}
+function gbpOpenSettingsEditor(cEditor, json, title, message, setup) {
+	var data = (json && json.data) || {};
+	var options = (json && json.options) || {};
+	if (setup) setup(cEditor);
+	$.each(options, function (name, opts) {
+		if (cEditor.s.fields[name]) DataTableHelper.setFieldOptions(cEditor, name, options);
+	});
+	cEditor.title(title).message(message || '').buttons([
+		{label:'更新', className:'btn-primary', tabIndex:0, action: function () {this.submit();}},
+		{label:'關閉', className:'btn-default', tabIndex:1, action: function () {this.close();}}
+	]).create(false);
+	$.each(data, function (k, v) {
+		if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+			Object.keys(v).forEach(function (kk) {
+				var key = k + '.' + kk;
+				if (cEditor.s.fields[key]) cEditor.set(key, v[kk]);
+			});
+		} else if (cEditor.s.fields[k]) {
+			cEditor.set(k, v);
+		}
+	});
+	cEditor.open();
+}
+
+{{!-- 推導：團購標籤編輯器（可見片段：create→GroupBuyTag/save、remove→GroupBuyTag/delete、欄位 tag/category/groupBuyId）；
+      標籤精靈「建立標籤」與「刪除標籤」以同一組端點直接送出 --}}
+var GroupBuyTagEditor = function () {
+	this.editor = null;
+	this.init = function () {
 		this.editor = new $.fn.dataTable.Editor( {
 			ajax: {
 				create: {
@@ -397,52 +368,67 @@
 			formOptions:DataTableConfig.formOptions,
 			i18n:DataTableConfig.i18n,
 		} );
-		{{!-- 推導（相容修補）：原站「標籤用途」select 沒有選項，set('category','PREFERENCE') 選不到值；本系統 /ajax/GroupBuyTag/save 會驗證標籤用途，故補上列舉選項讓隱藏欄位能帶出 PREFERENCE --}}
-		this.editor.field('category').update({{json tagCategoryOptions}});
+		this.editor.field('category').update(gbpTagCategoryOptions || []);
+		return this;
 	}
-	GroupBuyTagEditor.prototype.create = function () {
-		this.editor
-		.title('設定成標籤')
+}
+GroupBuyTagEditor.prototype.create = function () {
+	if (!this.editor) this.init();
+	this.editor.title('新增標籤')
 		.buttons({label:'新增', className:'btn-primary', action: function () {this.submit();}})
-		.create()
-		.set('groupBuyId', groupBuyId)
-		.set('category', 'PREFERENCE')
-		.hide('groupBuyId')
-		.hide('category')
-		;
-		this.reloadWhenSuccess();
+		.create();
+	this.editor.set('category', 'PREFERENCE');
+	return this.editor;
+}
+{{!-- 推導：以本團為「團購設定來源」建立進階設定標籤（標籤精靈） --}}
+GroupBuyTagEditor.prototype.createWithName = function (tag, manager) {
+	return $.ajax({
+		type: 'POST',
+		url: GBF.baseUrl + '/ajax/GroupBuyTag/save.do?groupBuyAccount={{tenantCode}}',
+		data: { action: 'create', 'data[0][tag]': tag, 'data[0][category]': 'PREFERENCE', 'data[0][groupBuyId]': groupBuyId },
+		dataType: 'json'
+	}).done(function (r) {
+		if (r && r.fieldErrors && r.fieldErrors.length) return;
+		if (manager) manager.get();
+	});
+}
+{{!-- 推導：刪除本團為設定來源的標籤（主標籤） --}}
+GroupBuyTagEditor.prototype.removeMasterTag = function (manager) {
+	var tag = manager.masterTag;
+	if (!tag) {
+		displayAlertWarning('本團不是任何標籤的團購設定來源');
+		return;
 	}
-	GroupBuyTagEditor.prototype.remove = function ( gbtId ) {
-		this.editor
-		.title( '刪除標籤設定' )
-		.message( '刪除作為主標籤設定，會同時解除其他綁定到此標籤的團購設定，確定要刪除？' )
-		.buttons( { text: '確認', className: 'btn-danger', action: function () {this.submit();}} )
-		.remove( gbtId )
-		;
-		this.reloadWhenSuccess();
-	}
-	GroupBuyTagEditor.prototype.reloadWhenSuccess = function (editor) {
-		if (!editor) editor = this.editor;
-		editor.one('submitSuccess', function (e, json, data, action) {
-			groupBuyTagGroupBuyManager.setGroupBuyId(groupBuyId).init();
-		});
-	}
-</script><style>
+	Swal.fire({ icon: 'warning', title: '刪除標籤', text: '確定要刪除標籤「' + tag.tag + '」？套用此標籤的團購將不再使用其設定。',
+		showCancelButton: true, confirmButtonText: '確認', cancelButtonText: '取消' }).then(function (res) {
+		if (!res.isConfirmed) return;
+		var id = tag.groupBuyTagId;
+		var d = { action: 'remove' };
+		d['data[' + id + '][groupBuyTagId]'] = id;
+		$.ajax({ type: 'POST', url: GBF.baseUrl + '/ajax/GroupBuyTag/delete.do?groupBuyTagId=' + encodeURIComponent(id), data: d, dataType: 'json' })
+			.done(function () { displayAlertSuccess('已刪除標籤'); manager.get(); })
+			.fail(function (x) { displayAlertWarning((x.responseJSON && x.responseJSON.error) || '刪除失敗'); });
+	});
+}
+{{!-- 推導：解除標籤完成後重整標籤狀態（manager.unTag 內部已處理，這裡保留原站呼叫點） --}}
+GroupBuyTagEditor.prototype.reloadWhenSuccess = function (manager) {
+	return this;
+}
+var groupBuyTagEditor = new GroupBuyTagEditor();
+</script>
+<style>
 .btn-group .btn {
-padding: 0.5rem 1rem;
+padding:0.5rem 1rem;
 margin:1px !important;
 -webkit-box-shadow: none!important;box-shadow: none!important;
 }
 .btn-group .text-default {min-width:104px;}
 table.dataTable td {word-break:break-all}
-.small-ckeditor .ck-editor__editable {height: 250px;}
+{{!-- 推導：小型 CKEditor5（field_ckeditor5_s 的 small-ckeditor class）編輯區高度 --}}
+.small-ckeditor .ck-editor__editable {min-height:100px;}
+.sp_selector.active {background-color:#e0e0e0 !important;}
 </style>
-{{!-- 推導（相容修補）：原版 Editor bootstrap4 樣式讓 className 含 block 的欄位（本頁「內容」full block）標籤在上、輸入佔整列；editor-shim.css 尚未提供此規則，先在本頁補上 --}}
-<style>
-div.DTE_Body div.DTE_Body_Content div.DTE_Field.block > label, div.DTE_Body div.DTE_Body_Content div.DTE_Field.block > div {max-width:100%;flex:0 0 100%;}
-</style>
-<!--#body-->
-<div class="container-fluid ">
+<!--#body--><div class="container-fluid ">
 	<div class="card mt-4">
 <div class="card-header">進階設定</div>
 <div class="card-body">
@@ -455,10 +441,11 @@ div.DTE_Body div.DTE_Body_Content div.DTE_Field.block > label, div.DTE_Body div.
 <!-- <button type="button" data-action="goTag" class="btn btn-info">前往設定標籤</button> -->
 <button type="button" data-action="removeAll" class="btn btn-danger">重置所有設定</button>
 </div>
-<div class="card-body container-gbp-list-hide-note" style="display: none;">
-<p class="card-text">綁定標籤時，目前的「進階設定」將會關閉編輯，以綁定者設定的「進階設定」為主</p>
+{{!-- 推導：本團套用標籤時隱藏列表、改顯示此說明（原站可見 .container-gbp-list／.container-gbp-list-hide-note 切換） --}}
+<div class="card-body container-gbp-list-hide-note" style="display:none"><p class="text-warning mb-0">本團已套用團購標籤，進階設定以標籤內的設定為主；如需個別設定請先解除標籤。</p></div>
 </div>
 <div class="container-gbp-list">
+<div class="card mt-4">
 <div class="card-body" style="overflow-x:scroll">
 	<div class="btn-group">
 		<a class="btn btn-default sp_selector" data='前台-'>網站前台</a>
@@ -505,12 +492,13 @@ max-height:calc(100vh - 200px);overflow-y:scroll;
 }
 .tag-container .card-body {padding:0.25rem 0}
 .tag-container .btn {
-padding:0.5rem !important; margin:0.25rem 0px !important;
--webkit-box-shadow: none!important;box-shadow: none!important;
+padding:0.5rem !important; margin:1px !important;
 }
-</style>
-	<div id="tag-export" class='card tag-container sticky-top'>
-	<div class="card-header"><a target="_blank" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i>csv編輯器</a>
+	</style>
+	{{!-- 推導：#tag-export 外框與 csv 編輯器連結區塊（缺段 200 字元） --}}
+	<div id="tag-export" class="card tag-container">
+	<div class="card-body">
+	<a class="btn btn-default btn-sm" target="_blank" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i>csv編輯器</a>
 	<br><span class="small">可透過csv編輯器，透過匯出功能複製貼回</span>
 	</div>
 	<div class="card-header">標籤</div>
@@ -687,17 +675,16 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 		return this.each(function(i) {
 		if (document.selection) {
 			//For browsers like Internet Explorer
+			{{!-- 推導：insertAtCaret 其餘實作（標準游標位置插入） --}}
 			this.focus();
-			sel = document.selection.createRange();
+			var sel = document.selection.createRange();
 			sel.text = myValue;
 			this.focus();
-		}
-		else if (this.selectionStart || this.selectionStart == '0') {
-			//For browsers like Firefox and Webkit based
+		} else if (this.selectionStart || this.selectionStart == '0') {
 			var startPos = this.selectionStart;
 			var endPos = this.selectionEnd;
 			var scrollTop = this.scrollTop;
-			this.value = this.value.substring(0, startPos)+myValue+this.value.substring(endPos,this.value.length);
+			this.value = this.value.substring(0, startPos) + myValue + this.value.substring(endPos, this.value.length);
 			this.focus();
 			this.selectionStart = startPos + myValue.length;
 			this.selectionEnd = startPos + myValue.length;
@@ -706,13 +693,28 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 			this.value += myValue;
 			this.focus();
 		}
-		})
+		$(this).trigger('change');
+		});
 	}
 	});
-</script><div id="tag" class='card tag-container'>
-	<div class="card-header">標籤</div>
-	<div class="card-body">
-	<button type="button" id="GROUP_BUY" class="btn btn-default btn-sm btn-tag">#團購名稱</button>
+	{{!-- 推導：系統信標籤按鈕——插入「#代碼#」到內容（CKEditor5 欄位插入游標處，textarea 用 insertAtCaret） --}}
+	$(document).on('click', '.btn-tag', function () {
+		var token = '#' + $(this).attr('id') + '#';
+		var ck = window.gbpEditor ? window.gbpEditor.field('prefValueCkEditor') : null;
+		var inst = ck && ck.displayed() && typeof ck.inst === 'function' ? ck.inst() : null;
+		if (inst && inst.model) {
+			inst.model.change(function (writer) {
+				inst.model.insertContent(writer.createText(token), inst.model.document.selection);
+			});
+			return;
+		}
+		$('#DTE_Field_prefValue').insertAtCaret(token);
+	});
+</script>
+<div id="tag">
+	<h5>標籤</h5>
+	<div>
+	<button type="button" id="GROUP_BUY_TITLE" class="btn btn-default btn-sm btn-tag">#團購名稱</button>
 	<button type="button" id="GROUP_BUY_SHORT_TITLE" class="btn btn-default btn-sm btn-tag">#團購短名稱</button>
 	<button type="button" id="BILLING_NAME" class="btn btn-default btn-sm btn-tag">#訂購人姓名</button>
 	<button type="button" id="SHIPPING_NAME" class="btn btn-default btn-sm btn-tag">#收件人姓名</button>
@@ -729,7 +731,7 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 	<button type="button" id="BANK_CODE" class="btn btn-default btn-sm btn-tag">#銀行代號</button>
 	<button type="button" id="BANK_ACCOUNT_TITLE" class="btn btn-default btn-sm btn-tag">#銀行戶名</button>
 	<button type="button" id="BANK_ACCOUNT_NUMBER" class="btn btn-default btn-sm btn-tag">#銀行帳號</button>
-	<button type="button" id="BANK_VIRTUAL_ACCOUNT" class="btn btn-default btn-sm btn-tag">#銀行虛擬帳號</button> --> 
+	<button type="button" id="BANK_VIRTUAL_ACCOUNT" class="btn btn-default btn-sm btn-tag">#銀行虛擬帳號</button> -->
 	<button type="button" id="SHIPPING_PERSON_DETAIL" class="btn btn-default btn-sm btn-tag">#收件資訊</button>
 	<button type="button" id="SHIPPING_FEE_DETAIL" class="btn btn-default btn-sm btn-tag">#運費明細</button>
 	<button type="button" id="SHIPPING_AMOUNT" class="btn btn-default btn-sm btn-tag">#運費</button>
@@ -760,59 +762,46 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 	<button type="button" id="LP_UPGRADE_POINT" class="btn btn-default btn-sm btn-tag">#升等點數</button>
 </div></div>
 </div>
-</div>	
+</div>
 
 <script type="text/javascript">
+	{{!-- 推導：分類鈕＝依欄位名稱前綴篩選（再按一次取消）；「訂閱」開訂閱設定編輯器 --}}
 	$('.sp_selector').on('click', function() {
 		if ($(this).attr('data') == 'subscription') {
 			subscriptionSettings.show();
-		} else if ($(this).attr('data') == 'invoiceEcpay') {
-			groupBuyPreferenceSettings(groupBuyPreferenceTable, groupBuyId, -1, 'INVOICE_SETTINGS_ECPAY')
-			.show();
-		} else {
-			$('input[type=search]').val($(this).attr('data'));
-			$('input[type=search]').keyup();
+			return;
 		}
+		var dt = $('#example').DataTable();
+		var on = !$(this).hasClass('active');
+		$('.sp_selector').removeClass('active');
+		if (on) $(this).addClass('active');
+		dt.column(0).search(on ? $(this).attr('data') : '').draw();
 	});
 
+	{{!-- 推導：訂閱設定（可見：欄位、setFieldOptions；第五欄 daysToFirstDeliver 依 preference.ts subscriptionSettings 欄位補） --}}
 	var subscriptionSettings = {
-		show:function() {
-			var _this = this;
-			$.ajax( {
-				url: '{{baseUrl}}/ajax/GroupBuyPreference/subscriptionSettings?groupBuyId={{groupBuyId}}',
-				dataType: 'json',
-				success: function ( json ) {
-					console.log('j=:%o', json);
-					var data = json.data;
-					var options = json.options;
-					var cEditor = _this.editor();
-					cEditor
-					.title('訂閱設定')
-					.buttons({label:'更新', className:'btn-primary', action: function () {this.submit();}})
-					.edit( data.groupBuyPreferenceId, false );
-
-					DataTableHelper.setFieldOptions(cEditor, 'periodType', options);
-					DataTableHelper.setFieldOptions(cEditor, 'frequencies', options);
-					DataTableHelper.setFieldOptions(cEditor, 'weekdays', options);
-
-					$.each(data, function ( name, value ) {
-						if (cEditor.s.fields[name] != null) {
-							cEditor.set(name, value);
-						}
-					} );
-
-
-					cEditor
-					.open();
-				}
-			} );
+		cEditor: null,
+		show: function () {
+			var cEditor = this.getEditor();
+			$.ajax({
+				url: GBF.baseUrl + '/ajax/GroupBuyPreference/subscriptionSettings?groupBuyId=' + groupBuyId,
+				dataType: 'json'
+			}).done(function (json) {
+				var options = json.options || {};
+				DataTableHelper.setFieldOptions(cEditor, 'periodType', options);
+				DataTableHelper.setFieldOptions(cEditor, 'frequencies', options);
+				DataTableHelper.setFieldOptions(cEditor, 'weekdays', options);
+				gbpOpenSettingsEditor(cEditor, { data: json.data }, '訂閱設定', '');
+			}).fail(function (x) {
+				displayAlertWarning((x.responseJSON && x.responseJSON.error) || '讀取失敗');
+			});
 		},
-		editor:function() { 
-			if (this._editor != null) return this._editor;
-			this._editor = new $.fn.dataTable.Editor( {
+		getEditor: function () {
+			if (this.cEditor) return this.cEditor;
+			this.cEditor = new $.fn.dataTable.Editor( {
 				ajax: {
 					type: 'POST',
-					url:  '{{baseUrl}}/ajax/GroupBuyPreference/subscriptionSettings?groupBuyId={{groupBuyId}}'
+					url: GBF.baseUrl + '/ajax/GroupBuyPreference/subscriptionSettings?groupBuyId=' + groupBuyId
 				},
 				idSrc: 'groupBuyPreferenceId',
 				fields: [
@@ -820,16 +809,16 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 					DataTableConfig.field_checkbox('訂閱-執行頻率(多久執行一次) ','frequencies'),
 					DataTableConfig.field_input('訂閱-執行次數','execTimes',0),
 					DataTableConfig.field_checkbox('訂閱-可配達日','weekdays'),
-					DataTableConfig.field_input('訂閱-第一次配達日間隔天數','daysToFirstDeliver',0),
+					DataTableConfig.field_input('訂閱-首次配送天數','daysToFirstDeliver'),
 				],
 				formOptions:DataTableConfig.formOptions,
 				i18n:DataTableConfig.i18n,
 			} );
-
-			return this._editor;
+			return this.cEditor;
 		}
 	};
 
+	{{!-- 推導：一般專用編輯器（fs 欄位定義為原站可見內容；buildOpts／show 依 dataTable.api.min.js GroupBuyPreferenceSettings 流程推導） --}}
 	var groupBuyPreferenceSettings = function(table, groupBuyId, groupBuyPreferenceId, name) {
 		var i = {
 			table: table,
@@ -986,65 +975,18 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 			},
 			buildOpts: function(name) {
 				this.opts = this.fs[name];
+				return this.opts;
 			},
-			init: function() {
-				this.buildOpts(name);
-				return this;
-			},
-			open: function() {
-				this.editor().open();
-				return this;
-			},
-			show: function() {
-				this.init();
-				var cEditor = this.editor();
-				cEditor
-				.open();
-			},
-			loadAjax: function() {
+			show: function(setup) {
 				var _this = this;
-				$.ajax( {
-					url: '{{baseUrl}}/ajax/GroupBuyPreference/'+_this.opts.name+'?groupBuyId='+groupBuyId,
-					dataType: 'json',
-					success: function ( json ) {
-						var data = json.data;
-						var options = json.options;
-						var _id = data.groupBuyPreferenceId ? data.groupBuyPreferenceId : _this.id;
-						var cEditor = _this.editor();
-						cEditor
-						.title(_this.opts.title)
-						.message(_this.opts.message)
-						.buttons([
-							{label:'更新', className:'btn-primary', tabIndex:0, action: function () {this.submit();}},
-							{label:'關閉', className:'btn-default', tabIndex:1, action: function () {this.close();}}
-						])
-						.edit( _id, false );
-
-						$.each(data, function ( name, value ) {
-							if (typeof value == 'object' && !Array.isArray(value)) {
-								Object.keys(value).forEach(function(o,i){
-									var fname = name+'.'+o;
-									if (cEditor.s.fields[fname] != null) {
-										cEditor.set(fname, value[o]);
-									}
-								});
-							} else {
-								if (cEditor.s.fields[name] != null) {
-									cEditor.set(name, value);
-								}
-							}
-						} );
-
-					}
-				} );
-			},
-			editor:function() { 
-				if (this._editor != null) return this._editor;
-				var _this = this;
-				this._editor = new $.fn.dataTable.Editor( {
+				if (!_this.buildOpts(_this.name)) {
+					displayAlertWarning('此設定尚未提供編輯介面');
+					return _this;
+				}
+				var editor = new $.fn.dataTable.Editor( {
 					ajax: {
 						type: 'POST',
-						url:  '{{baseUrl}}/ajax/GroupBuyPreference/'+_this.opts.name+'?groupBuyId=' + _this.groupBuyId
+						url:  GBF.baseUrl + '/ajax/GroupBuyPreference/'+_this.opts.name+'?groupBuyId=' + _this.groupBuyId
 					},
 					idSrc: 'groupBuyPreferenceId',
 					fields: _this.opts.fields,
@@ -1052,155 +994,122 @@ padding:0.5rem !important; margin:0.25rem 0px !important;
 					i18n:DataTableConfig.i18n,
 				} ).on( 'submitComplete', function () {
 					_this.table.ajax.reload( null, false );
-				} ).on( 'open', function () {
-					_this.loadAjax();
-				} )
-
-				return this._editor;
+				} ).on( 'closed', function () {
+					setTimeout(function () { editor.destroy(); }, 0);
+				} );
+				$.ajax({
+					url: GBF.baseUrl + '/ajax/GroupBuyPreference/' + _this.opts.name,
+					data: { groupBuyId: _this.groupBuyId },
+					dataType: 'json'
+				}).done(function (json) {
+					gbpOpenSettingsEditor(editor, json, _this.opts.title, _this.opts.message, setup);
+				}).fail(function (x) {
+					displayAlertWarning((x.responseJSON && x.responseJSON.error) || '讀取失敗');
+				});
+				return _this;
 			}
 		};
 		return i;
-	}
+	};
 
+	{{!-- 推導：團購標籤狀態與綁定（可見：GroupBuyTagGroupBuy create/remove 編輯器、.container-gbp-list 顯示切換、always→showResult） --}}
 	var groupBuyTagGroupBuyManager = {
-		setGroupBuyId:function(groupBuyId) {
+		groupBuyId: null,
+		table: null,
+		editor: null,
+		masterTag: null,
+		boundTag: null,
+		init: function (groupBuyId, table) {
 			this.groupBuyId = groupBuyId;
+			this.table = table;
 			return this;
 		},
-		init:function() {
+		get: function () {
 			var $this = this;
-			$.ajax({
-				type: 'GET',
-				url: GBF.baseUrl+'/ajax/GroupBuyTag/get',
-				data: {
-					groupBuyId:$this.groupBuyId,
-				},
-				async: true,
-			})
-			.done(function(data) {
-				$this.json = data.data;
-				$this.showResultForGroupBuyTag();
-			})
-			.fail(function(data) {
-				$this.json = null;
-				var json = data.responseJSON;
-				$this.fetchGroupBuyTagGroupBuy();
-			})
-			.always(function(x) {
-			})
+			$this.masterTag = null;
+			$this.boundTag = null;
+			$.ajax({ url: GBF.baseUrl + '/ajax/GroupBuyTag/get', data: { groupBuyId: $this.groupBuyId }, dataType: 'json' })
+			.done(function (r) { $this.masterTag = r.data || null; })
+			.always(function () {
+				$.ajax({ url: GBF.baseUrl + '/ajax/GroupBuyTagGroupBuy/get', data: { groupBuyId: $this.groupBuyId }, dataType: 'json' })
+				.done(function (r) {
+					$this.boundTag = r.data || null;
+					$('.container-gbp-list').hide();
+					$('.container-gbp-list-hide-note').show();
+				})
+				.fail(function (x) {
+					$('.container-gbp-list').show();
+					$('.container-gbp-list-hide-note').hide();
+				})
+				.always(function(x) {
+					//$this.showEditor()
+					$this.showResult();
+				})
+			});
+			return $this;
 		},
-		fetchGroupBuyTagGroupBuy:function() {
+		showResult: function () {
+			if (this.masterTag) this.showResultForGroupBuyTag();
+			else if (this.boundTag) $('#lbGroupBuyTag').attr('class', 'badge badge-info').text(this.boundTag.tag || '');
+			else $('#lbGroupBuyTag').attr('class', 'badge badge-light').text('未使用');
+			$('button[data-action=untag]').prop('disabled', !this.boundTag);
+			$('button[data-action=deleteTag]').prop('disabled', !this.masterTag);
+			if (this.table) this.table.columns.adjust();
+		},
+		showResultForGroupBuyTag: function () {
+			$('#lbGroupBuyTag').attr('class', 'badge badge-primary').text((this.masterTag.tag || '') + '（團購設定來源）');
+		},
+		getEditor: function () {
 			var $this = this;
-			$.ajax({
-				type: 'GET',
-				url: GBF.baseUrl+'/ajax/GroupBuyTagGroupBuy/get',
-				data: {
-					groupBuyId:$this.groupBuyId,
-				},
-				async: true,
-			})
-			.done(function(data) {
-				$this.json = data.data;
-				$('.container-gbp-list').hide();
-				$('.container-gbp-list-hide-note').show();
-			})
-			.fail(function(data) {
-				$this.json = null;
-				var json = data.responseJSON;
-				$('.container-gbp-list').show();
-				$('.container-gbp-list-hide-note').hide();
-			})
-			.always(function(x) {
-				//$this.showEditor()
-				$this.showResult();
-			})
-		},
-		showResultForGroupBuyTag:function() {
-			var $b = $('#lbGroupBuyTag');
-			if (this.json) {
-				$b.text(this.json.tag).removeClass('badge-default').addClass('badge-primary');
-				$('button[data-action=tag]').hide();
-				$('button[data-action=untag]').hide();
-				$('button[data-action=tagWizard]').hide();
-				$('button[data-action=deleteTag]').show().data('gbtId', this.json.groupBuyTagId);
-			} else {
-				$b.text('無標籤').removeClass('badge-primary').addClass('badge-default');
-				$('button[data-action=untag]').hide();
-				$('button[data-action=deleteTag]').hide().removeData('gbtId');
-				$('button[data-action=tagWizard]').show();
-			}
-		},
-		showResult:function() {
-			var $b = $('#lbGroupBuyTag');
-			if (this.json) {
-				$b.text(this.json.tag).removeClass('badge-default').addClass('badge-warning');
-				var $t = $('#groupBuyTagGroupBuyEditorId');
-				if (!$t.length) {
-					$t = $('<div id="groupBuyTagGroupBuyEditorId">');
-					$t.appendTo('body');
-				}
-				$t.attr('data-editor-id', this.json.groupBuyTagGroupBuyId);
-				$('button[data-action=untag]').show();
-				$('button[data-action=tagWizard]').hide();
-			} else {
-				$b.text('無標籤').removeClass('badge-warning').removeClass('badge-primary').addClass('badge-default');
-				$('button[data-action=untag]').hide();
-				$('button[data-action=tagWizard]').show();
-			}
-			$('button[data-action=deleteTag]').hide().removeData('gbtId');
-		},
-		tag:function() {
-			if (this.editor == null) {
-				this.editor = this.createEditor();
-			}
-			var rpEditor = this.editor;
-			rpEditor
-			.title( '設定標籤' )
-			.buttons( { text: '確認', className: 'btn-primary', action: function ( e, dt, node, config ){rpEditor.submit()}} )
-			.message( '設定標籤後，若團購無設定該設定，會優先使用標籤團購內的設定' )
-			.create( );
-		},
-		unTag:function() {
-			if (this.editor == null) {
-				this.editor = this.createEditor();
-			}
-			var rpEditor = this.editor;
-			rpEditor
-			.title( '解除標籤' )
-			.buttons( { text: '確認', className: 'btn-danger', action: function ( e, dt, node, config ){rpEditor.submit()}} )
-			.message( '確定要解除標籤?' )
-			.remove( this.json.groupBuyTagGroupBuyId );
-		},
-		createEditor:function() {
-			var $this = this; 
-			return new $.fn.dataTable.Editor( {
-				ajax: {
-					create: {
-						type: 'POST',
-						url: GBF.baseUrl+ '/ajax/GroupBuyTagGroupBuy/save?',
+			if ($this.editor) return $this.editor;
+			$this.editor = new $.fn.dataTable.Editor( {
+					ajax: {
+						create: {
+							type: 'POST',
+							url: GBF.baseUrl+ '/ajax/GroupBuyTagGroupBuy/save?',
+						},
+						remove: {
+							type: 'POST',
+							url:GBF.baseUrl + '/ajax/GroupBuyTagGroupBuy/delete?groupBuyTagGroupBuyId=_id_',
+						},
 					},
-					remove: {
-						type: 'POST',
-						url:GBF.baseUrl + '/ajax/GroupBuyTagGroupBuy/delete?groupBuyTagGroupBuyId=_id_',
-					},
-				},
-				idSrc: 'groupBuyTagGroupBuyId',
-				fields: [
-					DataTableConfig.field_hidden('groupBuyId', $this.groupBuyId),
-					DataTableConfig.field_select2('標籤','groupBuyTagId','','選擇', GBF.baseUrl + '/ajax/Lookup/groupBuyTag?category=PREFERENCE'),
-				],
-				formOptions:DataTableConfig.formOptions,
-				i18n:DataTableConfig.i18n,
-			} )
-			.on( 'postCreate', function (e, json, data, id) {
-				$this.json = json.data[0];
-				$this.showResult();
-			} )
-			.on( 'postRemove', function () {
-				$this.json = null;
-				$this.showResult();
-			} )
+					idSrc: 'groupBuyTagGroupBuyId',
+					fields: [
+						DataTableConfig.field_hidden('groupBuyId', $this.groupBuyId),
+						DataTableConfig.field_select2('標籤','groupBuyTagId','','選擇', GBF.baseUrl + '/ajax/Lookup/groupBuyTag?category=PREFERENCE'),
+					],
+					formOptions:DataTableConfig.formOptions,
+					i18n:DataTableConfig.i18n,
+			} ).on( 'submitComplete', function () {
+				$this.get();
+			} );
+			return $this.editor;
 		},
-	}
+		tag: function () {
+			this.getEditor()
+				.title('綁定標籤')
+				.buttons({label:'綁定', className:'btn-primary', action: function () {this.submit();}})
+				.create();
+			return this;
+		},
+		unTag: function () {
+			var $this = this;
+			if (!$this.boundTag) {
+				displayAlertWarning('本團目前沒有套用標籤');
+				return $this;
+			}
+			var id = $this.boundTag.groupBuyTagGroupBuyId;
+			Swal.fire({ icon: 'warning', title: '解除標籤', text: '確定要解除標籤「' + ($this.boundTag.tag || '') + '」？',
+				showCancelButton: true, confirmButtonText: '確認', cancelButtonText: '取消' }).then(function (res) {
+				if (!res.isConfirmed) return;
+				var d = { action: 'remove' };
+				d['data[' + id + '][groupBuyTagGroupBuyId]'] = id;
+				$.ajax({ type: 'POST', url: GBF.baseUrl + '/ajax/GroupBuyTagGroupBuy/delete?groupBuyTagGroupBuyId=' + encodeURIComponent(id), data: d, dataType: 'json' })
+					.done(function () { displayAlertSuccess('已解除標籤'); $this.get(); if ($this.table) $this.table.ajax.reload( null, false ); })
+					.fail(function (x) { displayAlertWarning((x.responseJSON && x.responseJSON.error) || '解除失敗'); });
+			});
+			return $this;
+		}
+	};
 </script>
 </div>

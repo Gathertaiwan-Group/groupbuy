@@ -851,69 +851,86 @@ async function getGroupBuyTagGroupBuy(ctx: RequestContext): Promise<Response> {
   });
 }
 
-// 標籤精靈彈窗：原站 /backend/GroupBuyTag/wizard.do?groupBuyId=（2026-10-23 唯讀擷取，內容與原站相同）。
-// 片段內的 groupBuyTagEditor / groupBuyTagGroupBuyManager 為進階設定頁的全域物件。
-const TAG_WIZARD_HTML = `<style>
-.breadcrumb-item {cursor: pointer;}
-/*.wizard-body {min-height:678px;}*/
-.card-wizard.card {border:1px solid #dee2e6;text-align:center;letter-spacing: 2px;transform: scale(1);transition-duration: 0.3s;}
-.card-wizard.card:hover {border: solid 1px #7f8c98;transform: scale(1.05);transition-duration: 0.3s;}
-.card-wizard .card-header {font-size: 16pt;font-weight: 400;}
-.card-wizard .card-body {display: flex;justify-content: center;min-height: 158px;align-items: center;flex-wrap: wrap;font-size: 14px;text-align:left;}
-.wizard-step1 .card-wizard .card-body {min-height: 232px;}
-
-.card-wizard span {display:inline-block;}
-.wizard-stepfinal .modal-footer {position: absolute;bottom: 0px;width: 100%;}
-.btn-input-check,.btn-input-check:hover,.btn-input-check.active {min-width:72px !important;background-color: #fff!important;color: black;border: 1px solid #ced4da;}
-.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\\f00C";font-size: 12px;color:#10ad1d}
-.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
-label.error {display: flex;justify-content: center;align-items: center;height: 38px;margin: 0;padding: 0 2px;background-color: red;color: #fff;font-weight: 500;}
-</style>
-
-<div class="modal-header">
-	<h5>團購標籤精靈</h5>
-	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+// 標籤精靈彈窗（GET /backend/GroupBuyTag/wizard?groupBuyId=，openForm 載入 #myModalContent）。
+// 無塵室推導（2026-10-23）：依 SPEC.md「標籤精靈／解除標籤／刪除標籤（團購標籤套用設定）」、本檔 GroupBuyTag／GroupBuyTagGroupBuy
+// 端點與頁面說明「當有使用團購標籤時，進階設定若不設定會以標籤內的設定為主」設計兩條路徑：
+//   1) 建立新標籤：以本團為「團購設定來源」建立進階設定標籤（POST /ajax/GroupBuyTag/save，category=PREFERENCE）
+//   2) 套用既有標籤：開啟綁定表單（POST /ajax/GroupBuyTagGroupBuy/save，select2 /ajax/Lookup/groupBuyTag?category=PREFERENCE）
+// 片段不含任何伺服器插值；呼叫進階設定頁的全域物件 groupBuyTagEditor／groupBuyTagGroupBuyManager。
+const TAG_WIZARD_HTML = `<div class="modal-header">
+	<h5 class="modal-title">標籤精靈 <i class="fa-solid fa-sparkles"></i></h5>
+	<button type="button" class="close" data-dismiss="modal" aria-label="Close"><i class="fa-light fa-xmark"></i></button>
 </div>
-<div class="modal-body modal-body-wizard">
-	<div class="modal-message"></div>
-	<div class="wizard-body">
-		<div class="row">
-			<div class="col-6 mb-4">
-				<div class="card card-wizard" data-wizard-card-index="1">
-					<div class="card-header">新增</div>
-					<div class="card-body">
-						<p>設定為標籤</p>
-					</div>
-				</div>
+<div class="modal-body" id="tagWizard">
+	<p class="small text-info">團購標籤可讓多個團購共用同一份進階設定；套用標籤的團購，未個別設定的項目會以標籤內的設定為主。</p>
+	<div class="alert alert-warning small d-none" id="tagWizardStatus"></div>
+	<div class="card mb-3">
+		<div class="card-body">
+			<h6 class="card-title">建立新標籤</h6>
+			<p class="small text-muted">以本團目前的進階設定作為「團購設定來源」，建立新的團購進階設定標籤。</p>
+			<div class="form-group mb-2">
+				<input type="text" class="form-control" id="tagWizardTag" maxlength="100" placeholder="標籤名稱" autocomplete="off">
+				<div class="invalid-feedback" id="tagWizardTagError"></div>
 			</div>
-			<div class="col-6 mb-4">
-				<div class="card card-wizard" data-wizard-card-index="">
-					<div class="card-header">選擇</div>
-					<div class="card-body">
-						<p>綁定標籤</p>
-					</div>
-				</div>
-			</div>
+			<button type="button" class="btn btn-primary btn-sm" data-wizard="create">建立標籤</button>
 		</div>
 	</div>
-</div> <!-- modal-body -->
-
-<script>
-$(document).ready(function() {
-	$('[data-wizard-card-index]').click(function() {
-		const index = this.dataset.wizardCardIndex;
-		if (index === '1') {
-			// set to be tag
-			$('#myModal').modal('hide');
-			groupBuyTagEditor.create();
-		} else {
-			// bind tag
-			$('#myModal').modal('hide');
-			groupBuyTagGroupBuyManager.tag();
-			groupBuyTagEditor.reloadWhenSuccess(groupBuyTagGroupBuyManager.editor);
+	<div class="card">
+		<div class="card-body">
+			<h6 class="card-title">套用既有標籤</h6>
+			<p class="small text-muted">選擇已建立的團購進階設定標籤，本團將以該標籤的設定為主。</p>
+			<button type="button" class="btn btn-info btn-sm" data-wizard="bind">選擇標籤</button>
+		</div>
+	</div>
+</div>
+<div class="modal-footer">
+	<button type="button" class="btn btn-default" data-dismiss="modal">取消</button>
+</div>
+<script type="text/javascript">
+(function () {
+	var $w = $('#tagWizard');
+	var mgr = window.groupBuyTagGroupBuyManager;
+	var tagEditor = window.groupBuyTagEditor;
+	var $status = $('#tagWizardStatus');
+	if (mgr && mgr.masterTag) {
+		$status.removeClass('d-none').text('本團已是標籤「' + (mgr.masterTag.tag || '') + '」的團購設定來源。');
+		$w.find('[data-wizard=create]').prop('disabled', true);
+	} else if (mgr && mgr.boundTag) {
+		$status.removeClass('d-none').text('本團目前已套用標籤「' + (mgr.boundTag.tag || '') + '」，如需更換請先解除標籤。');
+		$w.find('[data-wizard=create], [data-wizard=bind]').prop('disabled', true);
+	}
+	$w.find('[data-wizard=create]').on('click', function () {
+		var $btn = $(this);
+		var $input = $('#tagWizardTag');
+		var tag = $.trim($input.val());
+		$input.removeClass('is-invalid');
+		if (!tag) {
+			$input.addClass('is-invalid');
+			$('#tagWizardTagError').text('需要填寫內容');
+			return;
 		}
+		if (!tagEditor || !mgr) return;
+		$btn.prop('disabled', true);
+		tagEditor.createWithName(tag, mgr).done(function (r) {
+			if (r && r.fieldErrors && r.fieldErrors.length) {
+				$input.addClass('is-invalid');
+				$('#tagWizardTagError').text(r.fieldErrors[0].status || '建立失敗');
+				$btn.prop('disabled', false);
+				return;
+			}
+			$('#myModal').modal('hide');
+			if (typeof displayAlertSuccess === 'function') displayAlertSuccess('已建立標籤');
+		}).fail(function (x) {
+			$input.addClass('is-invalid');
+			$('#tagWizardTagError').text((x.responseJSON && x.responseJSON.error) || '建立失敗');
+			$btn.prop('disabled', false);
+		});
 	});
-} ); // end ready
+	$w.find('[data-wizard=bind]').on('click', function () {
+		$('#myModal').modal('hide');
+		if (mgr) mgr.tag();
+	});
+})();
 </script>`;
 
 async function tagWizard(ctx: RequestContext): Promise<Response> {
