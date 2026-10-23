@@ -12,6 +12,7 @@ import * as bundle from "./bundle";
 import * as io from "./template-io";
 import * as lookup from "./lookup";
 import { extraRoutes } from "./extras";
+import { itemModalRoutes } from "./item-modals";
 
 const LIST: ("GET" | "POST")[] = ["GET", "POST"];
 
@@ -83,8 +84,7 @@ export const routes: RouteDef[] = [
   get("/ajax/Lookup/itemSet", lookup.lookupItemSet),
   get("/ajax/Lookup/groupBuyItemSet", lookup.lookupGroupBuyItemSet),
   get("/ajax/Lookup/item", lookup.lookupItem),
-  // 運費規則屬 shipping 模組；此處以低優先權暫代（shipping 登錄同路徑後由其處理）
-  get("/ajax/Lookup/flatRateShipping", lookup.lookupFlatRateShipping, { priority: 900 }),
 
+  ...itemModalRoutes,
   ...extraRoutes,
 ];

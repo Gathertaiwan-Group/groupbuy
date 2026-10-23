@@ -1,0 +1,94 @@
+<style>
+.btn-input-check {min-width:72px !important;}
+.btn-input-check.active:before {font-family: "Font Awesome 6 Pro";font-weight: 600;content: "\f00C";font-size: 12px;}
+.input-error {background-color: #fff !important;text-align: right;color: #fb3;font-weight: 500;}
+.modal-body {    max-height: calc(100vh - 164px) !important;}
+span.input-group-text.md-addon {min-width: 152px;}
+.input-group-inventory .item-stock {width:200px !important; flex:0}
+.input-group-inventory .input-error {width:180px !important; flex:0}
+.input-group-inventory .input-group-text {
+	display: -webkit-box;
+	white-space: normal;
+	-webkit-line-clamp: 1;
+	-webkit-box-orient: vertical;
+	flex: 1 1;
+	text-align: left;
+	overflow:hidden;
+}
+.input-group-inventory .input-group-prepend {flex:1}
+</style>
+
+
+<form name="ItemForm" method="post" action="{{baseUrl}}/ajax/Item/inventory.do" class="form-horizontal" id="ItemForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><div class="modal-header">
+		<h5 style="overflow:hidden">盤點&raquo;</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+	</div>
+	<div class="modal-body">
+	<div class="modal-message"></div>
+	<div class="mb-2">
+	<small>
+	***僅供倉儲商品使用
+	<br>盤點後，所有已出貨訂單商品將被標註為「已盤點」將不在列入庫存計算內
+	<br>商品原始庫存以及可售庫存將會被調整為：
+	</small>
+	<br><small class="font-weight-500">原始庫存=可售庫存+商品未出貨數量</small>
+	<br><small>*****按下[確認]後即對當前商品進行盤點</small>
+	</div>
+
+<div class="card mt-4">
+<div class="card-header">盤點</div>
+<div class="card-body"></div>
+<div class="card-body p-0">
+	<table id="invTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>原始現貨庫存</th>
+				<th>可售現貨數量</th>
+				<th></th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th>名稱</th>
+				<th>商品代碼</th>
+				<th>原始現貨庫存</th>
+				<th>可售現貨數量</th>
+				<th></th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+
+
+	</div> <!-- modal-body -->
+
+	<div class="progress">
+		<div class="progress-bar" role="progressbar"></div>
+	</div>
+	<div class="modal-footer">
+		<button class="btn btn-default" data-dismiss="modal">關閉</button>
+	</div>
+</form><script type="text/javascript">
+$(function () {
+	$('.form-detail').hide();
+	$('input[name=rule]').click(e=>{
+		$('.form-detail').show();
+	});
+	console.log('x')
+	var itemId = {{json itemId}};
+	inventoryManager.init(itemId);
+});
+
+var success = function(json) {
+	table.ajax.reload( null, false);
+	msg = '成功';
+	modalShowSuccess($('#myModal'), msg);
+	$('#submitButton').prop('disabled',true);
+}
+initAjaxForm('ItemForm', success);
+
+</script>
+<script src="/scripts/inventory.js?v=250529"></script>

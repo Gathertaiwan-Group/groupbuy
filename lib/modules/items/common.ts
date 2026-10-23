@@ -91,6 +91,9 @@ export async function groupBuyFromCtx(ctx: RequestContext): Promise<GroupBuyRow>
 export function relImage(v: unknown): string {
   const x = s(v);
   if (x.startsWith(ORIGINAL_IMAGE_PREFIX)) return x.slice(ORIGINAL_IMAGE_PREFIX.length);
+  // 本系統上傳（/upload/images/gb/... 或含網域的完整網址）→ 存相對 id（gb/...），與 Editor 上傳欄位一致
+  const m = /^(?:https?:\/\/[^/]+)?\/upload\/images\/(gb\/[^?#]+)$/.exec(x);
+  if (m) return m[1];
   return x;
 }
 

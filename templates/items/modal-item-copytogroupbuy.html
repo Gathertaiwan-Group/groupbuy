@@ -1,0 +1,234 @@
+<style>
+        .selected-items {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .item-list {
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            padding: 10px;
+            min-height: 100px;
+            background-color: white;
+        }
+        .selected-target {
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        .remove-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .form-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #495057;
+        }
+        .select2-container {
+            width: 100% !important;
+        }
+        .help-text {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 5px;
+        }
+        .modal-header {
+            border-bottom: 1px solid #dee2e6;
+        }
+        .modal-header h5 {
+            margin: 0;
+            font-size: 1.25rem;
+        }
+        .close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            line-height: 1;
+            color: #000;
+            opacity: 0.5;
+            cursor: pointer;
+        }
+        .close:hover {
+            opacity: 0.75;
+        }
+    </style>
+    <div class="modal-header">
+        <h5 style="overflow:hidden">複製下列商品其他團購</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div class="container mt-4">
+	        <div class="row">
+	            <div class="col-12">
+	                <h2 class="mb-4">複製下列商品其他團購</h2>
+	            </div>
+	        </div>
+
+	        <div class="row">
+	            <!-- 左側區域 (桌機版 col-6，手機版 col-12) -->
+	            <div class="col-12 col-lg-6">
+	                <!-- 選中的商品顯示區域 -->
+	                <div class="form-section">
+	                    <div class="section-title">選中的商品</div>
+	                    <div class="selected-items">
+	                        <div id="selectedItems" class="item-list">
+	                            <div class="text-muted">尚未選中任何商品</div>
+	                        </div>
+	                    </div>
+	                </div>
+
+	                <!-- 複製選項 -->
+	                <div class="form-section">
+	                    <div class="section-title">複製選項</div>
+	                    <div class="row">
+	                        <div class="col-md-6">
+	                            <div class="form-check">
+	                                <input class="form-check-input" type="checkbox" id="shareStock" name="shareStock">
+	                                <label class="form-check-label" for="shareStock">
+	                                    共用庫存
+	                                </label>
+	                            </div>
+	                        </div>
+	                        <div class="col-md-6">
+	                            <div class="form-check">
+	                                <input class="form-check-input" type="checkbox" id="toSameName" name="toSameName">
+	                                <label class="form-check-label h-100" for="toSameName">
+	                                    複製到相同品項名稱
+	                                </label>
+	                                <div class="help-text">相同品項名稱未存在時，系統將會自動新增</div>
+	                            </div>
+	                        </div>
+	                    </div>
+	                </div>
+	            </div>
+
+	            <!-- 右側區域 (桌機版 col-6，手機版 col-12) -->
+	            <div class="col-12 col-lg-6">
+	                <!-- 團購選擇 -->
+	                <div class="form-section">
+	                    <div class="section-title">選擇目標團購</div>
+	                    <div class="mb-3">
+	                        <label for="groupBuySelect" class="form-label">團購</label>
+	                        <select id="groupBuySelect" class="form-select" style="width: 100%;">
+	                            <option value="">請選擇團購...</option>
+	                        </select>
+	                    </div>
+
+	                    <div class="mb-3" id="itemSetSection" style="display: none;">
+	                        <label for="itemSetSelect" class="form-label">品項組</label>
+	                        <select id="itemSetSelect" class="form-select" style="width: 100%;">
+	                            <option value="">請選擇品項組...</option>
+	                        </select>
+	                    </div>
+
+	                    <button type="button" class="btn btn-primary" id="addTarget">
+	                        <i class="bi bi-plus"></i> 新增目標
+	                    </button>
+	                </div>
+
+	                <!-- 已選擇的目標列表 -->
+	                <div class="form-section">
+	                    <div class="section-title">已選擇的目標</div>
+	                    <div id="selectedTargets">
+	                        <div class="text-muted">尚未選擇任何目標</div>
+	                    </div>
+	                </div>
+	            </div>
+	        </div>
+
+	        <div class="row">
+	            <!-- 操作按鈕 (全寬) -->
+	            <div class="col-12">
+	                <div class="form-section">
+	                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+	                        <button type="button" class="btn btn-secondary me-md-2" onclick="resetForm()">重置</button>
+	                        <button type="button" class="btn btn-success" id="submitButton" onclick="submitCopy()">執行複製</button>
+	                    </div>
+	                </div>
+	            </div>
+	        </div>
+	    </div>
+    </div>
+
+    <!-- 引入團購複製模組 -->
+    <script>
+        // 避免重複載入模組
+        if (!window.GroupBuyCopyModule) {
+            const script = document.createElement('script');
+            script.src = '/modules/items/itemCopy.js?v=20250630';
+            script.onload = function() {
+                initializeGroupBuyCopyModal();
+            };
+            document.head.appendChild(script);
+        } else {
+            // 如果模組已經載入，直接初始化
+            $(document).ready(function() {
+                initializeGroupBuyCopyModal();
+            });
+        }
+
+        /**
+         * 初始化 Modal 中的團購複製功能
+         */
+        function initializeGroupBuyCopyModal() {
+            const modalId = 'groupBuyCopyModal_' + Date.now(); // 使用時間戳創建唯一ID
+
+            /**
+             * 初始化團購複製功能
+             * @param {string} tableName - DataTable的選擇器，例如 '#myTable'
+             */
+            window.initGroupBuyCopy = function(tableName = '#dataTable') {
+                // 銷毀舊的模組實例（如果存在）
+                if (window.groupBuyCopyModule) {
+                    try {
+                        window.groupBuyCopyModule.destroy();
+                    } catch (e) {
+                        console.warn('Error destroying previous module:', e);
+                    }
+                }
+
+                // 創建新的模組實例
+                window.groupBuyCopyModule = new GroupBuyCopyModule({
+                    tableName: tableName,
+                    modalId: modalId
+                });
+
+                // 初始化模組
+                window.groupBuyCopyModule.init();
+
+                console.log('GroupBuyCopyModule initialized with table:', tableName);
+            };
+
+            // 頁面載入完成後自動初始化
+            $(document).ready(function() {
+                // 如果有全局的 tableName 變數，使用它；否則使用預設值
+                window.initGroupBuyCopy('#itemDataTable');
+            });
+
+            // 暴露獲取模組實例的函數
+            window.getGroupBuyCopyModule = function() {
+                return window.groupBuyCopyModule;
+            };
+        }
+    </script>

@@ -169,7 +169,13 @@ export function buildItemPatch(values: Row, existing: Row | null): Row {
     const def = ITEM_COLS[key];
     if (!def) continue;
     const [col, type] = def;
-    patch[col] = coerce(type, v);
+    patch[col] = col === "image" || col === "image_popup" ? relImage(v) : coerce(type, v);
+  }
+  // 新增商品精靈（createWizard.js）送來的商品說明圖 → 分頁1說明（推導：原站存法未擷取；只收 http(s) 或本站路徑）
+  const descrImgs = values["productDescrImg[]"] ?? values.productDescrImg;
+  if (descrImgs !== undefined && !("tab1Descr" in values)) {
+    const urls = (Array.isArray(descrImgs) ? descrImgs : [descrImgs]).map((u) => s(u).trim()).filter((u) => /^(https?:\/\/|\/)[^\s"'<>]+$/.test(u));
+    if (urls.length) patch.tab1_descr = urls.map((u) => `<p><img src="${u.replace(/&/g, "&amp;")}" style="max-width:100%"></p>`).join("");
   }
   if (settings) patch.item_settings = settings;
   if (theme) patch.theme = theme;
@@ -707,9 +713,11 @@ export async function createItems(session: AdminSession, gb: GroupBuyRow, values
   const itemSetId = Number(values.itemSetId);
   const base = buildItemPatch(values, null);
   for (const [k, v] of Object.entries(CREATE_DEFAULTS)) if (base[k] === undefined || base[k] === null) base[k] = v;
-  // 新增時可售數量未填 → 等於原始數量
-  if (!("stockAvailable" in values) || s(values.stockAvailable) === "") base.stock_available = base.stock;
-  if (!("stockBackOrderAvailable" in values) || s(values.stockBackOrderAvailable) === "") base.stock_back_order_available = base.stock_back_order;
+  // 新增時可售數量未填（或維持預設 0）→ 等於原始數量（推導：避免新商品一上架就顯示缺貨）
+  if (!("stockAvailable" in values) || s(values.stockAvailable) === "" || (n(values.stockAvailable) === 0 && n(base.stock) > 0)) base.stock_available = base.stock;
+  if (!("stockBackOrderAvailable" in values) || s(values.stockBackOrderAvailable) === "" || (n(values.stockBackOrderAvailable) === 0 && n(base.stock_back_order) > 0)) {
+    base.stock_back_order_available = base.stock_back_order;
+  }
   if (s(values.title) && !s(values.shortName)) base.short_name = base.short_name || s(values.title);
   if (s(values.title) && !s(values.shortNameDisplay)) base.short_name_display = base.short_name_display || s(values.title);
   const batch = expandBatch(values);

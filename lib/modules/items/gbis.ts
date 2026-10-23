@@ -449,7 +449,7 @@ async function validateGbis(values: Row, action: "create" | "edit") {
   if (errors.length) throw new FieldErrors(errors);
 }
 
-async function nextSeq(session: AdminSession, groupBuyId: number): Promise<number> {
+export async function nextSeq(session: AdminSession, groupBuyId: number): Promise<number> {
   const { data } = await db()
     .from("group_buy_item_sets")
     .select("seq")
@@ -768,10 +768,16 @@ export async function cloneItemSet(session: AdminSession, itemSetId: number): Pr
   return newId;
 }
 
-export async function insertItemCopy(session: AdminSession, it: Row, itemSetId: number, opts: { resetSold: boolean; shareStock?: boolean }): Promise<number> {
+export async function insertItemCopy(
+  session: AdminSession,
+  it: Row,
+  itemSetId: number,
+  opts: { resetSold: boolean; shareStock?: boolean; detach?: boolean; seq?: number },
+): Promise<number> {
   const row = copyItemRow(it);
   row.item_set_id = itemSetId;
   row.tenant_id = session.tenantId;
+  if (opts.seq !== undefined) row.seq = opts.seq;
   if (opts.resetSold) {
     row.stock_available = it.stock;
     row.stock_back_order_available = it.stock_back_order;
@@ -780,6 +786,10 @@ export async function insertItemCopy(session: AdminSession, it: Row, itemSetId: 
   if (opts.shareStock) {
     row.parent_item_id = it.parent_item_id ?? it.id;
     row.share_stock = true;
+  } else if (opts.detach) {
+    // 不共用庫存：複製出的商品自成一筆（不沿用來源的主庫存綁定）
+    row.parent_item_id = null;
+    row.share_stock = false;
   }
   const ins = await db().from("items").insert(row).select("id").single();
   dbErr(ins.error, "複製商品");
