@@ -302,10 +302,28 @@ function validateValues(values: Values, action: "create" | "edit", existing?: Ro
   return errors;
 }
 
+/** group_buys 的 NOT NULL 欄位（DB 有預設值）：Editor 送空字串轉成 null 時改為不寫入（新增用預設值、編輯保留原值） */
+const NOT_NULL_COLUMNS = new Set([
+  "title", "render", "payment_methods", "feature_tags", "blogger_share", "tax_rate", "shipping_tag", "payment_valid_days_type",
+  "payment_valid_days", "payment_valid_days_cc", "allow_join_sales_order", "auto_cancel_expired", "invoice_disabled", "island_disabled",
+  "oversea_disabled", "disable_einvoice_receipt_title", "coupon_enabled", "checkoutable", "preview_countdown", "have_user_agreement",
+  "option_section_shipping_address", "option_section_note", "option_fb_nickname", "option_address", "option_email", "option_telephone",
+  "option_payment_method", "option_note", "option_deliver_time", "currency", "language_tag", "sms_count", "group_buy_settings", "group_buy_statistics",
+]);
+
 /** Editor 值 → DB 列（含付款方式位元、特殊標籤、jsonb 子鍵型別轉換） */
 function toDbRow(values: Values, existing: Row | undefined): Row {
   const base = existing ?? { group_buy_settings: DEFAULT_GROUP_BUY_SETTINGS };
   const dbRow = apiToRow(groupBuyEntity, values, base);
+  for (const [k, v] of Object.entries(dbRow)) if (v === null && NOT_NULL_COLUMNS.has(k)) delete dbRow[k];
+  // jsonb 數字子鍵送空字串 → 回到原值／預設值（不存 null）
+  const gs = dbRow.group_buy_settings as Row | undefined;
+  if (gs) {
+    const prev = ((existing?.group_buy_settings as Row | undefined) ?? DEFAULT_GROUP_BUY_SETTINGS) as Row;
+    for (const [k, def] of Object.entries(DEFAULT_GROUP_BUY_SETTINGS)) {
+      if (gs[k] === null && (typeof def === "number" || typeof def === "boolean")) gs[k] = prev[k] ?? def;
+    }
+  }
   // 不可由 Editor 改的欄位
   for (const k of ["short_url", "uuid", "group_buy_statistics", "date_first_order", "invitation_code_enabled", "alias_id", "sms_count"]) delete dbRow[k];
   const pm = arrayValue(values, "paymentMethod");

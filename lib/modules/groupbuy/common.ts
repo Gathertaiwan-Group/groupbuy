@@ -98,6 +98,7 @@ export async function insertGroupBuyWithShortUrl(db: Db, row: Row, select = "*")
 }
 
 export function dbFriendlyError(error: { code?: string; message: string; details?: string | null }, verb: string): Error {
+  console.warn(`[groupbuy] ${verb}失敗 ${error.code ?? ""}: ${error.message}${error.details ? ` (${error.details})` : ""}`);
   if (error.code === "23505") return badRequest("資料重複（已存在相同的資料）");
   if (error.code === "23503") return badRequest(`無法${verb}：此資料仍被其他資料使用中`);
   if (error.code === "23514" || error.code === "22P02" || error.code === "23502" || error.code === "22007" || error.code === "22008")
