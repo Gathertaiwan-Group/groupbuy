@@ -4,5 +4,7 @@
 import type { RouteDef } from "@/lib/core/http/types";
 import { flatRateRoutes } from "./flat-rate";
 import { groupBuyShippingRoutes } from "./groupbuy-shipping";
+import { shippingTagRoutes } from "./shipping-tag";
+import { pickupStoreRoutes } from "./pickup-store";
 
-export const routes: RouteDef[] = [...flatRateRoutes, ...groupBuyShippingRoutes];
+export const routes: RouteDef[] = [...flatRateRoutes, ...groupBuyShippingRoutes, ...shippingTagRoutes, ...pickupStoreRoutes];
