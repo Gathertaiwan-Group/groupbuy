@@ -5,6 +5,8 @@
 
 	$(document).ready(function () {
 		var tableName = '#rpTable';
+		{{!-- 原站把標籤／團購名稱直接串進 HTML；含 < " 等字元時會破版，這裡先跳脫（顯示結果相同） --}}
+		var escHtml = function (s) { return $('<div>').text(s == null ? '' : String(s)).html().replace(/"/g, '&quot;'); };
 
 		// 建立 DataTables Editor 實例
 		var editor = new $.fn.dataTable.Editor({
@@ -50,7 +52,7 @@
 					data: "groupBuyCount",
 					render: function (data, type, row, meta) {
 						if (type === 'display') {
-							return '<a href="javascript:void(0)" class="view-associated-gbs text-primary" data-tag="' + row.tag + '"><i class="fa fa-link mr-1"></i>' + data + ' 筆表單</a>';
+							return '<a href="javascript:void(0)" class="view-associated-gbs text-primary" data-tag="' + escHtml(row.tag) + '"><i class="fa fa-link mr-1"></i>' + data + ' 筆表單</a>';
 						}
 						return data;
 					}
@@ -232,7 +234,7 @@
 
 						if (list && list.length > 0) {
 							list.forEach(function (item) {
-								$ul.append('<li class="list-group-item">' + item.title + '</li>');
+								$ul.append('<li class="list-group-item">' + escHtml(item.title) + '</li>');
 								batchGroupBuyIds.push(item.groupBuyId);
 							});
 							if (totalCount > list.length) {

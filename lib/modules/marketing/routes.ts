@@ -9,6 +9,9 @@ import { couponRoutes } from "./coupon";
 import { couponTemplateRoutes } from "./coupon-template";
 import { lotteryRoutes } from "./lottery";
 import { itemTagRoutes } from "./item-tags";
+import { sysTagRefRoutes } from "./sys-tag-ref";
+import { shortUrlRoutes } from "./shorturl";
+import { blacklistRoutes } from "./blacklist";
 
 export const routes: RouteDef[] = [
   ...salesRuleRoutes,
@@ -18,4 +21,7 @@ export const routes: RouteDef[] = [
   ...couponTemplateRoutes,
   ...lotteryRoutes,
   ...itemTagRoutes,
+  ...sysTagRefRoutes,
+  ...shortUrlRoutes,
+  ...blacklistRoutes,
 ];
