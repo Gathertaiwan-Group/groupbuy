@@ -453,18 +453,20 @@ async function insertSection(tenantId: number, homeViewId: number, section: Part
 /**
  * ANY /ajax/HomeView/cloneFromV1?groupBuyId=
  * 推導：舊版（V1）官網首頁＝團購的跑馬燈圖片（carousel1-4，沒有時用置頂橫幅 image）＋團購敘述（descr）。
- * 建成一筆網頁頁面（沒有「網頁 首頁」時為 RELEASE，否則 DRAFT），含 BANNER 區塊與 HTML 區塊，並產生暫存。
+ * 一次性搬移（原站成功後移除按鈕）：只接受官網型團購、且尚無任何網頁頁面；
+ * 建成一筆「網頁 首頁」（RELEASE），含 BANNER 區塊與 HTML 區塊，並產生暫存。
  */
 async function cloneFromV1(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const gb = await groupBuyOf(ctx, "descr, image, carousel1, carousel2, carousel3, carousel4");
+  if (gb.render !== "HOME") throw badRequest("此團購不是官網型團購");
+  const views = await loadViews(session.tenantId, gb.id);
+  if (views.some((v) => PAGE_CATEGORIES.includes(v.category))) throw badRequest("已有官網網頁，無法再從舊版複製");
   let images = [gb.carousel1, gb.carousel2, gb.carousel3, gb.carousel4].map((x) => String(x ?? "").trim()).filter(Boolean);
   if (images.length === 0 && String(gb.image ?? "").trim()) images = [String(gb.image).trim()];
   const descr = String(gb.descr ?? "").trim();
   if (images.length === 0 && !descr) throw badRequest("沒有舊版首頁內容可以複製");
-  const views = await loadViews(session.tenantId, gb.id);
-  const category = views.some((v) => v.category === "RELEASE") ? "DRAFT" : "RELEASE";
-  const view = await insertView(session.tenantId, gb.id, category, gb.title || "首頁", "home");
+  const view = await insertView(session.tenantId, gb.id, "RELEASE", gb.title || "首頁", "home");
   let seq = 1;
   if (images.length) {
     const sectionId = await insertSection(session.tenantId, view.id, { title: "", category: "BANNER", seq: seq++ });
@@ -481,16 +483,18 @@ async function cloneFromV1(ctx: RequestContext): Promise<Response> {
 /**
  * ANY /ajax/HomeViewCache/cloneFooterV1?groupBuyId=
  * 推導：舊版（V1）Footer＝團購的「Footer敘述」（descr_footer，原站 /backend/WebEditor/footer.do 編輯）。
- * 建成一筆 FOOTER（沒有「FOOTER 預設」時為 FOOTER_RELEASE，否則 FOOTER_DRAFT），內容放在一個 HTML 區塊，並產生暫存。
+ * 一次性搬移（原站成功後移除按鈕）：只接受官網型團購、且尚無任何 FOOTER；
+ * 建成一筆「FOOTER 預設」（FOOTER_RELEASE），內容放在一個 HTML 區塊，並產生暫存。
  */
 async function cloneFooterV1(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const gb = await groupBuyOf(ctx, "descr_footer");
+  if (gb.render !== "HOME") throw badRequest("此團購不是官網型團購");
+  const views = await loadViews(session.tenantId, gb.id);
+  if (views.some((v) => FOOTER_CATEGORIES.includes(v.category))) throw badRequest("已有 FOOTER，無法再從舊版複製");
   const html = String(gb.descr_footer ?? "").trim();
   if (!html) throw badRequest("沒有舊版 Footer 內容可以複製");
-  const views = await loadViews(session.tenantId, gb.id);
-  const category = views.some((v) => v.category === "FOOTER_RELEASE") ? "FOOTER_DRAFT" : "FOOTER_RELEASE";
-  const view = await insertView(session.tenantId, gb.id, category, "Footer", "footer");
+  const view = await insertView(session.tenantId, gb.id, "FOOTER_RELEASE", "Footer", "footer");
   await insertSection(session.tenantId, view.id, { title: "", category: "HTML", seq: 1, html });
   await rebuildCache(session.tenantId, view);
   return actionOk("成功複製");
