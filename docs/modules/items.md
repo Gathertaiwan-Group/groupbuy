@@ -13,6 +13,7 @@
 | itembundlev2-create | `/backend/ItemBundleV2/create?groupBuyId=[&groupBuyItemSetId=\|itemId=]`、`/backend/ItemBundleV2/edit(.do)?itemId=\|itemBundleV2Id=` | 完成 | 擷取檔缺段破壞解析，無法量化；依 itemBundle.min.js 推導 |
 | modal-itemtemplate-import | `/backend/ItemTemplate/importItemTemplate?groupBuyId=` | 完成 | 可見 14/16（缺段區不計） |
 | modal-groupbuyitemset-import | `/backend/GroupBuyItemSet/importGroupBuyItemSet?groupBuyId=` | 完成 | 擷取檔缺段破壞解析，無法量化 |
+| scheduler-list（排程） | `/backend/Scheduler/list(.do)?entity=GroupBuyItemSet\|Item&foreignId=` | 完成（見下方「排程」） | spec 未擷取；2026-10-25 以原站唯讀結構描述重建 |
 
 相似度工具：`node lib/modules/items/tools/dom-compare.mjs --orig <原站 HTML 目錄> --base <網址> --jar <cookie 檔> [--diff]`（骨架＝側欄 script 之後到 `</main>`（彈窗＝整段）的「標籤#id.class＋可見文字（數字→#）」，相似度＝2×LCS／兩邊長度和）。
 相似度以 spec 擷取檔（含缺段）為基準，只能衡量原站「可見」部分是否完整出現；規則公布前曾以讀回內容做的「即時頁面 100%」比對已作廢。
@@ -42,6 +43,23 @@
 資料表：`group_buy_item_sets`、`item_sets`、`items`、`item_bundles`、`item_sales_rules`、`item_sales_rule_tags`、`group_buy_item_set_sales_rules`、`group_buy_item_set_sales_rule_tags`、`group_buy_item_set_flat_rate_shippings`；唯讀 `group_buys`、`sales_rules`、`shipping_tags`、`flat_rate_shippings`、`order_items`＋`sales_orders`（盤點／未盤點數）。
 Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock()`（原子增減、下限 0、只給 service_role）。
 
+## 排程（/backend/Scheduler/list）
+
+- 入口：團購品項頁品項表格下方 card-footer「排程」（`target=_blank`，`foreignId={groupBuyId}`，同原站）；品項列展開卡片的「排程」帶的是團購品項 id，伺服器會換成其團購（推導）。
+- 程式：`lib/modules/items/scheduler.ts`（頁面、端點、執行器）、`scheduler-logic.ts`（純邏輯，`scheduler.test.ts` 單元測試）；模板 `templates/items/scheduler-list.html`；原站自家前端檔原樣：`public/modules/items/scheduler/scheduler.js`、`style.css`（原站 `/backend/Scheduler/scheduler.js`、`style.css` 公開靜態檔，直接 HTTP 下載）。
+- 頁面結構：原站分頁以 fetch＋DOMParser 輸出「標籤＋id＋class＋葉節點文字」唯讀觀察（未對原站做任何寫入）。下列片段擷取時被安全過濾擋下，未繞過、改為推導：精靈第 3 步「設定模式」標題文字、「預定生效時間」標題與時間輸入框（name 取頁尾 editor-field 的 `dateScheduleString`）、表單 `action`（`../ajax/Scheduler/save.do`）、各按鈕 onclick（依 scheduler.js 公開函式）、`#schedulerCreateContainer` 預設隱藏、`GroupBuyScheduler.init({ctx:'', gba:租戶代碼, foreignId, entity})` 呼叫。FA Pro 圖示 `fa-arrow-down-to-bracket` 以頁內 CSS 換成 Free 的 download 字形。
+- 端點（全部以 session 租戶過濾，foreignId 必須是本租戶的團購〔或其團購品項〕，否則 404；目標品項／商品必須屬於該團購，否則 400）：
+  - `GET|POST /ajax/Scheduler/list?entity=&foreignId=`：DataTables（client-side），列鍵 `schedulerId, entity, entityId, action:'UPDATE', dateScheduleString, extraData:{title, fieldValues:[{field,value,fieldString,valueString}]}`；`options` 與原站實測回傳相同（含原站錯字「組合坧」）。
+  - `GET /ajax/Scheduler/summary?foreignId=` → `{data:{pendingCount, onlineCount, priceCount, completedTodayCount}}`（鍵與原站實測相同）。
+  - `POST /ajax/Scheduler/save`（精靈表單：`batchConfigs` JSON 為主，無則用 `entityIds＋field＋fieldValue＋dateScheduleString`）、`POST /ajax/Scheduler/testSc`（立即執行）、`POST /ajax/Scheduler/delete`。
+  - `/ajax/Lookup/groupBuyItemSet` 結果加 `itemSetId`、`/ajax/Lookup/item` 支援 `isFetchAll=true`（「組合內全商品 批次設定價格」展開品項內商品用）。
+- 資料（推導）：`groupbuy.schedulers` 一列＝一個目標。`entity`＝GroupBuyItemSet／Item、`foreign_id`＝團購 id、`action`＝ONLINE／OFFLINE／PRICE、`params`＝`{entityId, title, field(online|price|set_all_items_price), value, syncParentChild, actionKey, createdBy}`、`date_scheduled`（台灣時間輸入轉 UTC）。舊格式列（`params` 無 entityId，例：示範資料 958601）視為 `foreign_id`＝目標本身，列表與執行都支援。
+- 執行（不用 cron、未改 vercel.json）：`runDueSchedulers(tenantId)` 惰性執行本租戶到期（`date_scheduled ≤ 現在`）的 PENDING 排程，依時間先後、每次最多 50 筆；同一執行個體同一租戶 20 秒內只查一次（排程頁開啟、新增、立即執行時強制）。觸發點：排程頁與其 list／summary、團購品項頁、`/ajax/GroupBuyItemSet/list`、`/ajax/Item/list`、前台 `lib/modules/storefront/catalog.ts` 的 `loadCatalog()`（下單頁／購物袋／結帳讀品項前；失敗只記 log，不影響前台）。
+  - 防重複：`update … set status='DONE', result='執行中…' where id=? and status='PENDING' and date_scheduled<=now()` 只有一個請求會更新到 1 列，其他略過；套用完寫 `status`（DONE／FAILED）、`date_executed`、`result`（例：「[品項]：已下架」「…價格改為 NT$ 88（同步 1 筆關聯主／子商品）」）。實測 4 個並發「立即執行」只有 1 個成功。
+  - 生效：品項上／下架＝`group_buy_item_sets.option_offline`；商品上／下架＝`items.offline`；商品變價＝`items.price`；`set_all_items_price`＝該品項本體全部商品 `price`。同步主／子商品：主商品（或自己）＋其所有子商品，只限開團期間（`date_start ≤ 現在 ≤ date_end`）團購中的商品。
+  - 已知限制：沒有請求進來時不會執行（下一個後台／前台讀取時補執行，以預定時間先後套用）；執行中途程序被終止的列會停在 DONE／「執行中…」。
+- 列表顯示（推導）：原站列表沒有狀態欄；非排程中的列在「變更內容預覽」多一個「狀態: 已執行 時間／結果」標籤；已執行的列再按「立即執行」回「此排程已執行完成」。
+
 ## 擷取來源與重寫紀錄
 
 - 規則公布（2026-10-23）前，曾以瀏覽器工具唯讀 GET 原站，把輸出中的 `= ? &`、空白等字元換成其他符號再讀出，以避開工具對「Cookie／網址參數」的輸出過濾。讀回範圍：6 頁 spec 擷取缺段（團購品項、商品明細、組合商品列表／編輯器、匯入商品XLS、複製其他團購品項）、`/ajax/Item/displayCopyToGroupBuy`、`/backend/Item/inventory`、`/backend/Item/createWizardModal` 彈窗 HTML、原站 `/scripts/itemCopy.js`、組合商品編輯器骨架 token 清單；另有 5 個推導彈窗（綁定主庫存、複製其他品項商品、盤點(品項)、批次改名、匯入商品庫存）以讀回內容為底改寫。
@@ -65,7 +83,6 @@ Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock
 
 ## 已知缺口
 
-- **排程**（團購品項頁「排程」按鈕 → `/backend/Scheduler/list.do?entity=GroupBuyItemSet&foreignId=`）：不在任何模組的頁面清單內，未實作（目前 404）。原站是 4 步驟精靈（`/backend/Scheduler/scheduler.js`：上下架／改價、統一或逐項設定、立即測試執行），且需要排程執行器（cron）——建議由指揮官另派。資料表 `groupbuy.schedulers` 已存在。
 - **盤點（商品）彈窗**：HTML 與 inventory.js 同原站，但其列表端點 `/ajax/Item/getWarehouseItems`（warehouse 模組）在本機與正式站都回 500：`wms_warehouse_items_v` 沒有 `id` 欄，而 `wmsList` 一律 `order("id")`。待 warehouse 修。
 - **從網址解析商品**：未串接外部網站（見推導 5）。
 - **綁定主庫存**：彈窗只列「主表單」團購的品項；測試租戶沒有主表單團購 → 列表為空，綁定本身以 API（同彈窗送出的 Editor remove 請求）驗證。

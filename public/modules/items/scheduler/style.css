@@ -1,0 +1,424 @@
+/* Group Buy Scheduler Modern UI/UX Styles */
+
+:root {
+	--scheduler-primary: #4f46e5;
+	--scheduler-primary-hover: #4338ca;
+	--scheduler-primary-light: #eeeffe;
+	--scheduler-primary-border: #6366f1;
+	--scheduler-text-dark: #1e293b;
+	--scheduler-text-muted: #64748b;
+	--scheduler-bg-card: #ffffff;
+	--scheduler-border-color: #e2e8f0;
+}
+
+/* Header & Stat Cards Grid */
+.scheduler-header-banner {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 1.5rem;
+}
+
+.scheduler-title-main {
+	font-size: 1.5rem;
+	font-weight: 800;
+	color: #0f172a;
+	margin-bottom: 0.25rem;
+}
+
+.scheduler-subtitle {
+	font-size: 0.875rem;
+	color: #64748b;
+}
+
+.scheduler-activity-badge {
+	background-color: #1e1b4b;
+	color: #c7d2fe;
+	font-weight: 600;
+	font-size: 0.85rem;
+	padding: 0.5rem 1rem;
+	border-radius: 9999px;
+	border: 1px solid #3730a3;
+}
+
+.stat-card-grid {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 1.25rem;
+	margin-bottom: 1.5rem;
+}
+
+@media (max-width: 1200px) {
+	.stat-card-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@media (max-width: 576px) {
+	.stat-card-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+.stat-card {
+	background: #ffffff;
+	border: 1px solid var(--scheduler-border-color);
+	border-radius: 12px;
+	padding: 1rem 1.25rem;
+	display: flex;
+	align-items: center;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+	min-width: 0;
+	white-space: nowrap;
+}
+
+.stat-card-icon {
+	width: 44px;
+	height: 44px;
+	border-radius: 12px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.2rem;
+	margin-right: 0.85rem;
+	flex-shrink: 0;
+}
+
+.stat-card-icon.blue { background-color: #e0e7ff; color: #4338ca; }
+.stat-card-icon.green { background-color: #d1fae5; color: #047857; }
+.stat-card-icon.yellow { background-color: #fef3c7; color: #b45309; }
+.stat-card-icon.teal { background-color: #ccfbf1; color: #0f766e; }
+
+.stat-card-val {
+	font-size: 1.4rem;
+	font-weight: 800;
+	color: #0f172a;
+	line-height: 1.2;
+}
+
+.stat-card-lbl {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: #64748b;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* Reusable Universal Switch Button Group (.pro-switch-group) */
+.pro-switch-group {
+	display: inline-flex;
+	background-color: #f1f5f9;
+	padding: 4px;
+	border-radius: 10px;
+	border: 1px solid var(--scheduler-border-color);
+}
+
+.pro-switch-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.5rem 1.25rem;
+	font-size: 0.875rem;
+	font-weight: 600;
+	color: #64748b;
+	border-radius: 7px;
+	border: none;
+	background: transparent;
+	cursor: pointer;
+	transition: all 0.2s ease-in-out;
+	text-decoration: none !important;
+}
+
+.pro-switch-btn:hover {
+	color: #1e293b;
+}
+
+.pro-switch-btn.active {
+	background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+	color: #ffffff !important;
+	box-shadow: 0 2px 6px rgba(79, 70, 229, 0.3);
+}
+
+/* Card & Container Layout */
+.scheduler-card {
+	border: 1px solid var(--scheduler-border-color);
+	border-radius: 12px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+	background-color: var(--scheduler-bg-card);
+	overflow: hidden;
+}
+
+.scheduler-card-header {
+	background: #ffffff;
+	border-bottom: 1px solid var(--scheduler-border-color);
+	padding: 1.25rem 1.5rem;
+}
+
+/* Step Wizard Indicator (Circle Modern Style) */
+.step-wizard-container {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	position: relative;
+	padding: 0.5rem 1rem;
+	margin-bottom: 2rem;
+}
+
+.step-wizard-item {
+	display: flex;
+	align-items: center;
+	position: relative;
+	z-index: 1;
+	cursor: pointer;
+}
+
+.step-wizard-number {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: 0.95rem;
+	margin-right: 0.5rem;
+	transition: all 0.2s ease-in-out;
+}
+
+.step-wizard-item.active .step-wizard-number {
+	background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+	color: #ffffff;
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+
+.step-wizard-item.completed .step-wizard-number {
+	background-color: #10b981;
+	color: #ffffff;
+}
+
+.step-wizard-item.disabled .step-wizard-number {
+	background-color: #f1f5f9;
+	color: #94a3b8;
+	border: 1px solid var(--scheduler-border-color);
+}
+
+.step-wizard-label {
+	font-size: 0.9rem;
+	font-weight: 600;
+	color: var(--scheduler-text-muted);
+}
+
+.step-wizard-item.active .step-wizard-label {
+	color: var(--scheduler-primary);
+	font-weight: 700;
+}
+
+/* Big Entity Selection Cards */
+.entity-card-group {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1.25rem;
+}
+
+.entity-card-option {
+	position: relative;
+}
+
+.entity-card-option input[type="radio"] {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+
+.entity-card-content {
+	display: flex;
+	align-items: center;
+	padding: 1.25rem 1.5rem;
+	border: 2px solid var(--scheduler-border-color);
+	border-radius: 12px;
+	background-color: #ffffff;
+	cursor: pointer;
+	transition: all 0.25s ease;
+}
+
+.entity-card-icon {
+	width: 48px;
+	height: 48px;
+	border-radius: 10px;
+	background-color: #f1f5f9;
+	color: #64748b;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.5rem;
+	margin-right: 1rem;
+	transition: all 0.25s ease;
+}
+
+.entity-card-title {
+	font-size: 1.1rem;
+	font-weight: 700;
+	color: var(--scheduler-text-dark);
+	margin-bottom: 0.2rem;
+}
+
+.entity-card-subtitle {
+	font-size: 0.85rem;
+	color: var(--scheduler-text-muted);
+}
+
+/* Active State for Entity Card */
+.entity-card-option input[type="radio"]:checked + .entity-card-content,
+.mode-card-option input[type="radio"]:checked + .mode-card-content {
+	border-color: var(--scheduler-primary-border);
+	background-color: var(--scheduler-primary-light);
+	box-shadow: 0 4px 12px rgba(79, 70, 229, 0.12);
+}
+
+.entity-card-option input[type="radio"]:checked + .entity-card-content .entity-card-icon,
+.mode-card-option input[type="radio"]:checked + .mode-card-content .mode-card-icon {
+	background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+	color: #ffffff;
+}
+
+.entity-card-option input[type="radio"]:checked + .entity-card-content .entity-card-title,
+.mode-card-option input[type="radio"]:checked + .mode-card-content .mode-card-title {
+	color: var(--scheduler-primary);
+}
+
+/* Mode Selection Cards (Step 2) */
+.mode-card-group {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 1rem;
+}
+
+.mode-card-option {
+	position: relative;
+	margin-bottom: 0;
+}
+
+.mode-card-option input[type="radio"] {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+
+.mode-card-content {
+	display: flex;
+	align-items: center;
+	padding: 1rem 1.25rem;
+	border: 2px solid var(--scheduler-border-color);
+	border-radius: 10px;
+	background-color: #ffffff;
+	cursor: pointer;
+	transition: all 0.25s ease;
+}
+
+.mode-card-icon {
+	width: 40px;
+	height: 40px;
+	border-radius: 8px;
+	background-color: #f1f5f9;
+	color: #64748b;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.2rem;
+	margin-right: 0.85rem;
+	flex-shrink: 0;
+	transition: all 0.25s ease;
+}
+
+.mode-card-title {
+	font-size: 0.98rem;
+	font-weight: 700;
+	color: var(--scheduler-text-dark);
+	margin-bottom: 0.15rem;
+}
+
+.mode-card-subtitle {
+	font-size: 0.8rem;
+	color: var(--scheduler-text-muted);
+}
+
+/* Select2 Input Customization */
+.select2-container--default .select2-selection--multiple {
+	border: 2px solid var(--scheduler-border-color);
+	border-radius: 10px;
+	min-height: 48px;
+	padding: 4px 8px;
+	background-color: #ffffff;
+}
+
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+	border-color: var(--scheduler-primary-border);
+	box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice {
+	background-color: var(--scheduler-primary-light);
+	border: 1px solid #c7d2fe;
+	color: var(--scheduler-primary);
+	font-weight: 600;
+	border-radius: 6px;
+	padding: 4px 10px;
+	margin-top: 4px;
+}
+
+.select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+	color: var(--scheduler-primary);
+	margin-right: 6px;
+}
+
+/* Form Action Buttons */
+.btn-scheduler-next, .btn-scheduler-submit {
+	background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+	border: none;
+	color: #ffffff !important;
+	font-weight: 600;
+	padding: 0.65rem 1.75rem;
+	border-radius: 8px;
+	box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+	transition: all 0.2s ease;
+}
+
+.btn-scheduler-next:hover, .btn-scheduler-submit:hover {
+	background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+	box-shadow: 0 6px 14px rgba(79, 70, 229, 0.35);
+	transform: translateY(-1px);
+}
+
+.btn-scheduler-prev {
+	border: 1px solid var(--scheduler-border-color);
+	background-color: #ffffff;
+	color: var(--scheduler-text-dark);
+	font-weight: 600;
+	border-radius: 8px;
+	padding: 0.65rem 1.5rem;
+}
+
+.btn-scheduler-prev:hover {
+	background-color: #f8fafc;
+}
+
+/* Table Itemized Config Matrix */
+.itemized-table-container {
+	border: 1px solid var(--scheduler-border-color);
+	border-radius: 10px;
+	overflow: hidden;
+}
+
+.itemized-table th {
+	background-color: #f8fafc;
+	color: var(--scheduler-text-dark);
+	font-weight: 600;
+	padding: 0.75rem 1rem;
+}
+
+.itemized-table td {
+	padding: 0.75rem 1rem;
+	vertical-align: middle;
+}

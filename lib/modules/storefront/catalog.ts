@@ -1,6 +1,7 @@
 // 團購商品目錄：讀取團購的品項（group_buy_item_sets × item_sets）與商品（items），計算可售數量。
 // 一律以團購的 tenant_id 過濾。下單頁顯示、購物袋、結帳計價都從這裡取「伺服器端的真實價格與庫存」。
 import { getServiceClient } from "@/lib/supabase/server";
+import { runDueSchedulersSafe } from "@/lib/modules/items/scheduler";
 
 export interface CatalogItemSet {
   groupBuyItemSetId: number;
@@ -83,6 +84,7 @@ function tabsOf(r: Record<string, unknown>): { n: number; title: string; descr: 
 
 /** 讀團購的上架品項與商品（不含下架品項/商品） */
 export async function loadCatalog(tenantId: number, groupBuyId: number, opts: { includeOffline?: boolean } = {}): Promise<Catalog> {
+  await runDueSchedulersSafe(tenantId); // items 排程：前台讀品項前先惰性執行到期的上下架／變價排程
   const db = getServiceClient();
   let q = db
     .from("group_buy_item_sets")

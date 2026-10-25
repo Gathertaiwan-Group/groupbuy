@@ -1170,6 +1170,7 @@ function loadCouponTemplate(couponTemplateId, callback) {
 <a class="btn btn-default" href="/backend/ItemTemplate/exportItemTemplate.do?groupBuyId={{groupBuyId}}">匯出商品XLS</a>
 <a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openForm('/backend/ItemTemplate/importItemTemplate', 'groupBuyId={{groupBuyId}}')">匯入商品XLS</a>
 <a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openFormF('/backend/GroupBuyItemSet/importGroupBuyItemSet', 'groupBuyId={{groupBuyId}}')">複製其他團購品項</a>
+<a target="_blank" class="btn btn-default" href="/backend/Scheduler/list.do?entity=GroupBuyItemSet&foreignId={{groupBuyId}}">排程</a>
 	</div>
 	<div class='card-footer'>
 		<p>額外條件</p>

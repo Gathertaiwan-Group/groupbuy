@@ -12,6 +12,7 @@ import * as bundle from "./bundle";
 import * as io from "./template-io";
 import * as lookup from "./lookup";
 import { itemModalRoutes } from "./item-modals";
+import { runDueSchedulersSafe, schedulerRoutes } from "./scheduler";
 
 const LIST: ("GET" | "POST")[] = ["GET", "POST"];
 
@@ -25,11 +26,19 @@ function only(action: "create" | "edit" | "remove", h: RouteHandler): RouteHandl
   };
 }
 
+/** 讀取品項／商品列表前先惰性執行本租戶到期排程（見 scheduler.ts） */
+function withSchedulers(h: RouteHandler): RouteHandler {
+  return async (ctx: RequestContext) => {
+    if (ctx.session) await runDueSchedulersSafe(ctx.session.tenantId);
+    return h(ctx);
+  };
+}
+
 export const routes: RouteDef[] = [
   ...pageRoutes,
 
   /* 團購品項 */
-  route(LIST, "/ajax/GroupBuyItemSet/list", gbis.listGbis),
+  route(LIST, "/ajax/GroupBuyItemSet/list", withSchedulers(gbis.listGbis)),
   post("/ajax/GroupBuyItemSet/save", only("create", gbis.editorGbis)),
   post("/ajax/GroupBuyItemSet/update", only("edit", gbis.editorGbis)),
   post("/ajax/GroupBuyItemSet/delete", only("remove", gbis.editorGbis)),
@@ -43,7 +52,7 @@ export const routes: RouteDef[] = [
   post("/ajax/GroupBuyItemSet/cloneGroupBuyItemSets", gbis.cloneGroupBuyItemSets),
 
   /* 商品 */
-  route(LIST, "/ajax/Item/list", item.listItems),
+  route(LIST, "/ajax/Item/list", withSchedulers(item.listItems)),
   post("/ajax/Item/save", only("create", item.editorItems)),
   post("/ajax/Item/update", only("edit", item.editorItems)),
   post("/ajax/Item/delete", only("remove", item.editorItems)),
@@ -85,4 +94,7 @@ export const routes: RouteDef[] = [
   get("/ajax/Lookup/item", lookup.lookupItem),
 
   ...itemModalRoutes,
+
+  /* 排程 */
+  ...schedulerRoutes,
 ];

@@ -55,7 +55,7 @@ export async function lookupGroupBuyItemSet(ctx: RequestContext): Promise<Respon
     (f, to) =>
       db()
         .from("group_buy_item_sets")
-        .select("id, seq, item_sets(title)")
+        .select("id, seq, item_set_id, item_sets(title)")
         .eq("tenant_id", t)
         .eq("group_buy_id", gbId)
         .order("seq")
@@ -63,8 +63,9 @@ export async function lookupGroupBuyItemSet(ctx: RequestContext): Promise<Respon
     "group_buy_item_sets",
   );
   const term = likeTerm(p.term).toLowerCase();
+  // itemSetId：排程精靈（scheduler.js）「組合內全商品改價」用來展開品項內商品
   const list = rows
-    .map((r) => ({ id: Number(r.id), text: `${n(r.seq)}.${s((r.item_sets as Row | null)?.title)}` }))
+    .map((r) => ({ id: Number(r.id), text: `${n(r.seq)}.${s((r.item_sets as Row | null)?.title)}`, itemSetId: Number(r.item_set_id) }))
     .filter((r) => !term || r.text.toLowerCase().includes(term) || String(r.id) === term);
   const from = (p.page - 1) * PAGE;
   return json({ results: list.slice(from, from + PAGE), pagination: { more: list.length > from + PAGE } });
@@ -98,12 +99,15 @@ export async function lookupItem(ctx: RequestContext): Promise<Response> {
     if (byUid) q = q.or(`uid.ilike.*${term}*,upc.ilike.*${term}*,id.eq.${Number(term) || 0}`);
     else q = q.or(`title.ilike.*${term}*,uid.ilike.*${term}*,short_name.ilike.*${term}*`);
   }
-  const from = (p.page - 1) * PAGE;
-  const { data, error } = await q.order("item_set_id").order("seq").order("id").range(from, from + PAGE);
+  // isFetchAll=true（排程精靈展開品項內全部商品）：一次回傳全部（上限 1000）
+  const fetchAll = s(await ctx.param("isFetchAll")) === "true";
+  const size = fetchAll ? 1000 : PAGE;
+  const from = fetchAll ? 0 : (p.page - 1) * PAGE;
+  const { data, error } = await q.order("item_set_id").order("seq").order("id").range(from, from + size);
   if (error) throw new Error(`[lookup item] ${error.message}`);
   const rows = (data ?? []) as Row[];
-  const more = rows.length > PAGE;
-  const results = rows.slice(0, PAGE).map((r) => ({
+  const more = rows.length > size;
+  const results = rows.slice(0, size).map((r) => ({
     id: Number(r.id),
     text: s(r.title) + (s(r.uid) ? ` (${s(r.uid)})` : ""),
     title: s(r.title),

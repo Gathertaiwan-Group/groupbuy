@@ -5,6 +5,7 @@ import { json } from "@/lib/core/http/responses";
 import { fragment, page, post, requireSession } from "@/lib/core/http/route-helpers";
 import { db, loadGroupBuy, n, nOrNull, parseIds, s, selectIn, type Row } from "./common";
 import { archiveItemOrderItems, STOCK_FIELD_LABEL } from "./item";
+import { runDueSchedulersSafe } from "./scheduler";
 
 async function gbisInfo(session: AdminSession, gbisId: number | null): Promise<{ id: number; itemSetId: number; title: string; groupBuyId: number } | null> {
   if (!gbisId) return null;
@@ -56,6 +57,11 @@ export const pageRoutes = [
     template: "items/groupbuy-show-items.html",
     title: "團購品項",
     groupBuy: "required",
+    // 開頁前先惰性執行本租戶到期排程（/backend/Scheduler/list）
+    async data(ctx) {
+      await runDueSchedulersSafe(ctx.session.tenantId);
+      return {};
+    },
   }),
   // 檢視全部商品（原站頁面已註解掉的連結；導向商品明細）
   page("/backend/GroupBuy/items", {

@@ -1,0 +1,336 @@
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<link href="/modules/items/scheduler/style.css?v={{assetVersion}}" rel="stylesheet">
+{{!-- FA Pro 專屬圖示 arrow-down-to-bracket → Free 版最接近的 download 字形 --}}
+<style>
+.fa-arrow-down-to-bracket::before { content: "\f019"; }
+</style>
+<script src="/modules/items/scheduler/scheduler.js?v={{assetVersion}}"></script>
+<!--#body-->
+<div class="container-fluid ">
+	<div id="schedulerListContainer">
+		<div class="scheduler-header-banner">
+			<div>
+				<div class="scheduler-title-main"><i class="fa-solid fa-clock-rotate-left text-primary mr-2"></i>排程管理</div>
+				<div class="scheduler-subtitle">規劃品項與商品排程</div>
+			</div>
+		</div>
+
+		<div class="stat-card-grid">
+			<div class="stat-card">
+				<div class="stat-card-icon blue"><i class="fa-solid fa-hourglass-half"></i></div>
+				<div>
+					<div class="stat-card-val" id="statPendingCount">0</div>
+					<div class="stat-card-lbl">等待執行排程</div>
+				</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-card-icon green"><i class="fa-solid fa-toggle-on"></i></div>
+				<div>
+					<div class="stat-card-val" id="statOnlineCount">0</div>
+					<div class="stat-card-lbl">上下架變更預定</div>
+				</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-card-icon yellow"><i class="fa-solid fa-tags"></i></div>
+				<div>
+					<div class="stat-card-val" id="statPriceCount">0</div>
+					<div class="stat-card-lbl">價格調整預定</div>
+				</div>
+			</div>
+			<div class="stat-card">
+				<div class="stat-card-icon teal"><i class="fa-solid fa-circle-check"></i></div>
+				<div>
+					<div class="stat-card-val" id="statCompletedCount">0</div>
+					<div class="stat-card-lbl">今日已完成排程</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="card shadow-sm border-0 scheduler-card">
+			<div class="card-header bg-white d-flex justify-content-between align-items-center py-3 scheduler-card-header">
+				<div class="pro-switch-group" id="entityTabGroup">
+					<button type="button" class="pro-switch-btn{{#if (eq schedEntity 'GroupBuyItemSet')}} active{{/if}}" data-value="GroupBuyItemSet"><i class="fa-solid fa-layer-group mr-2"></i>團購品項</button>
+					<button type="button" class="pro-switch-btn{{#if (eq schedEntity 'Item')}} active{{/if}}" data-value="Item"><i class="fa-solid fa-box mr-2"></i>商品</button>
+				</div>
+				<button type="button" class="btn btn-scheduler-next font-weight-bold" onclick="GroupBuyScheduler.showCreateView()"><i class="fa-solid fa-plus mr-1"></i>新增排程</button>
+			</div>
+			<div class="card-body p-3">
+				<table id="example" class="table table-hover display w-100 border-bottom">
+					<thead class="thead-light">
+						<tr>
+							<th></th>
+							<th>排程對象</th>
+							<th>排程動作</th>
+							<th>預定生效時間</th>
+							<th>變更內容預覽</th>
+							<th>操作</th>
+						</tr>
+					</thead>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	{{!-- 推導：新增精靈預設隱藏（showCreateView 以 slideDown 顯示） --}}
+	<div id="schedulerCreateContainer" class="mt-4" style="display: none;">
+		<div class="card shadow-sm border-0 scheduler-card">
+			{{!-- 推導：表單送出位址（initAjaxForm 依 form action 送出） --}}
+			<form id="SchedulerForm" name="SchedulerForm" class="form-horizontal" method="post" action="../ajax/Scheduler/save.do">
+				<input type="hidden" id="foreignId" name="foreignId" value="{{schedForeignId}}">
+				<input type="hidden" id="entity" name="entity" value="GroupBuyItemSet">
+				<input type="hidden" id="action" name="action" value="UPDATE">
+				<input type="hidden" id="field" name="field" value="online">
+				<input type="hidden" id="fieldValue" name="fieldValue" value="1">
+				<input type="hidden" id="batchConfigsInput" name="batchConfigs" value="">
+
+				<div class="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom">
+					<h5 class="card-title font-weight-bold text-primary mb-0"><i class="fa-solid fa-calendar-plus mr-2"></i>新增排程設定 (4 步驟嚮導)</h5>
+					<button type="button" class="btn btn-sm btn-outline-secondary font-weight-bold" onclick="GroupBuyScheduler.hideCreateView()"><i class="fa-solid fa-arrow-left mr-1"></i>返回清單</button>
+				</div>
+
+				<div class="card-body p-4">
+					<div class="step-wizard-container">
+						<div class="step-wizard-item active" id="stepIndicator1">
+							<div class="step-wizard-number">1</div>
+							<div class="step-wizard-label">排程動作</div>
+						</div>
+						<div class="step-wizard-item disabled" id="stepIndicator2">
+							<div class="step-wizard-number">2</div>
+							<div class="step-wizard-label">選取對象</div>
+						</div>
+						<div class="step-wizard-item disabled" id="stepIndicator3">
+							<div class="step-wizard-number">3</div>
+							<div class="step-wizard-label">排程參數設定</div>
+						</div>
+						<div class="step-wizard-item disabled" id="stepIndicator4">
+							<div class="step-wizard-number">4</div>
+							<div class="step-wizard-label">確認預覽</div>
+						</div>
+					</div>
+
+					<!-- Step 1 -->
+					<div class="wizard-step" id="wizardStep1">
+						<div class="form-group mb-4">
+							<label class="font-weight-bold text-dark mb-2">1. 請選擇欲執行的排程動作 (Schedule Action)</label>
+							<div class="row">
+								<div class="col-md-6 mb-3">
+									<label class="entity-card-option w-100 mb-0 active" id="lblActGBISOnline">
+										<input type="radio" name="selectedActionRadio" value="ITEM_SET_ONLINE" checked>
+										<div class="entity-card-content">
+											<div class="entity-card-icon text-success"><i class="fa-solid fa-arrow-up-from-bracket"></i></div>
+											<div>
+												<div class="entity-card-title">組合品項 設定上架</div>
+												<div class="entity-card-subtitle">將指定的 GroupBuyItemSet 組合開啟上架</div>
+											</div>
+										</div>
+									</label>
+								</div>
+								<div class="col-md-6 mb-3">
+									<label class="entity-card-option w-100 mb-0" id="lblActGBISOffline">
+										<input type="radio" name="selectedActionRadio" value="ITEM_SET_OFFLINE">
+										<div class="entity-card-content">
+											<div class="entity-card-icon text-secondary"><i class="fa-solid fa-arrow-down-to-bracket"></i></div>
+											<div>
+												<div class="entity-card-title">組合品項 設定下架</div>
+												<div class="entity-card-subtitle">將指定的 GroupBuyItemSet 組合設定下架</div>
+											</div>
+										</div>
+									</label>
+								</div>
+								<div class="col-md-6 mb-3">
+									<label class="entity-card-option w-100 mb-0" id="lblActGBISAllPrice">
+										<input type="radio" name="selectedActionRadio" value="ITEM_SET_ALL_ITEMS_PRICE">
+										<div class="entity-card-content">
+											<div class="entity-card-icon text-warning"><i class="fa-solid fa-layer-group"></i></div>
+											<div>
+												<div class="entity-card-title">組合內全商品 批次設定價格</div>
+												<div class="entity-card-subtitle">選取組合，自動展開並批量設定內部商品價格</div>
+											</div>
+										</div>
+									</label>
+								</div>
+								<div class="col-md-6 mb-3">
+									<label class="entity-card-option w-100 mb-0" id="lblActItemPrice">
+										<input type="radio" name="selectedActionRadio" value="ITEM_PRICE">
+										<div class="entity-card-content">
+											<div class="entity-card-icon text-primary"><i class="fa-solid fa-tag"></i></div>
+											<div>
+												<div class="entity-card-title">單一商品 變更價格 (PRICE)</div>
+												<div class="entity-card-subtitle">針對特定單品商品變更售價</div>
+											</div>
+										</div>
+									</label>
+								</div>
+								<div class="col-md-6 mb-3">
+									<label class="entity-card-option w-100 mb-0" id="lblActItemOnline">
+										<input type="radio" name="selectedActionRadio" value="ITEM_ONLINE">
+										<div class="entity-card-content">
+											<div class="entity-card-icon text-info"><i class="fa-solid fa-box-open"></i></div>
+											<div>
+												<div class="entity-card-title">單一商品 設定上架 (ONLINE)</div>
+												<div class="entity-card-subtitle">將特定單一商品品項開啟上架</div>
+											</div>
+										</div>
+									</label>
+								</div>
+								<div class="col-md-6 mb-3">
+									<label class="entity-card-option w-100 mb-0" id="lblActItemOffline">
+										<input type="radio" name="selectedActionRadio" value="ITEM_OFFLINE">
+										<div class="entity-card-content">
+											<div class="entity-card-icon text-dark"><i class="fa-solid fa-box-archive"></i></div>
+											<div>
+												<div class="entity-card-title">單一商品 設定下架 (OFFLINE)</div>
+												<div class="entity-card-subtitle">將特定單一商品品項設定下架</div>
+											</div>
+										</div>
+									</label>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 2 -->
+					<div class="wizard-step d-none" id="wizardStep2">
+						<div class="form-group mb-3">
+							<label class="font-weight-bold text-dark mb-2" id="targetSelectLabel">2. 搜尋與選取目標對象 (Target Selection)</label>
+							<select class="form-control select2" id="entityIdSelect" name="entityIds" multiple="multiple" style="width: 100%;"></select>
+							<small class="form-text text-muted mt-2" id="targetSelectHint">可在搜尋框輸入關鍵字查找，支援選取多個項目進行批次排程。</small>
+						</div>
+					</div>
+
+					<!-- Step 3 -->
+					<div class="wizard-step d-none" id="wizardStep3">
+						<div class="form-group mb-4 d-none" id="statusPreviewGroup">
+							<label class="font-weight-bold text-dark mb-2">預定執行之狀態變更 (Status Action)</label>
+							<div class="border rounded p-3 bg-light" id="statusBadgeContainer"></div>
+						</div>
+
+						<div class="form-group mb-4 d-none" id="configModeToggleGroup">
+							{{!-- 推導：此標題文字擷取時被過濾 --}}
+							<label class="font-weight-bold text-dark mb-2">設定模式 (Config Mode)</label>
+							<div class="mode-card-group">
+								<label class="mode-card-option" id="btnModeUnified">
+									<input type="radio" name="configMode" value="unified" checked>
+									<div class="mode-card-content">
+										<div class="mode-card-icon"><i class="fa-solid fa-list-check"></i></div>
+										<div>
+											<div class="mode-card-title">統一設定模式</div>
+											<div class="mode-card-subtitle">全體項目設定相同價格與生效時間</div>
+										</div>
+									</div>
+								</label>
+								<label class="mode-card-option" id="btnModeItemized">
+									<input type="radio" name="configMode" value="itemized">
+									<div class="mode-card-content">
+										<div class="mode-card-icon"><i class="fa-solid fa-sliders"></i></div>
+										<div>
+											<div class="mode-card-title">個別差異設定模式</div>
+											<div class="mode-card-subtitle">為每筆項目獨立設定不同新價格與時間</div>
+										</div>
+									</div>
+								</label>
+							</div>
+						</div>
+
+						<div class="form-group mb-4 d-none" id="priceInputGroup">
+							<label class="font-weight-bold">統一定價 (NT$)</label>
+							<input type="number" class="form-control form-control-lg" id="newPriceInput" min="0" step="1">
+						</div>
+
+						<div class="form-group mb-4 d-none" id="itemizedConfigGroup">
+							<label class="font-weight-bold text-primary mb-2"><i class="fa-solid fa-tags mr-1"></i>各項目獨立價格與生效時間設定</label>
+							<div class="table-responsive border rounded bg-white p-2">
+								<table class="table table-sm table-hover mb-0" id="itemizedTable">
+									<thead class="thead-light">
+										<tr>
+											<th>項目名稱</th>
+											<th>目標新價格 (NT$)</th>
+											<th>個別生效時間</th>
+										</tr>
+									</thead>
+									<tbody id="itemizedTableBody"></tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="form-group mb-4" id="unifiedTimeGroup">
+							{{!-- 推導：此段標題與時間輸入框擷取時被過濾；欄名 dateScheduleString 依頁尾 editor-field --}}
+							<label class="font-weight-bold text-dark">預定生效時間 (Schedule Time)</label>
+							<input type="text" class="form-control" id="dateScheduleInput" name="dateScheduleString" placeholder="YYYY-MM-DD HH:mm:ss" autocomplete="off">
+							<div class="d-flex justify-content-start gap-2 mt-2">
+								<span class="align-self-center font-weight-bold text-muted mr-2 small">快速帶入時間:</span>
+								<button type="button" class="btn btn-sm btn-outline-secondary mr-2" onclick="GroupBuyScheduler.setQuickTime(10, 'm')">+10 分鐘</button>
+								<button type="button" class="btn btn-sm btn-outline-secondary mr-2" onclick="GroupBuyScheduler.setQuickTime(1, 'h')">+1 小時</button>
+								<button type="button" class="btn btn-sm btn-outline-secondary" onclick="GroupBuyScheduler.setQuickTimeMidnight()">明日 00:00</button>
+							</div>
+						</div>
+
+						<div class="form-group border rounded p-3 bg-light d-none" id="syncParentGroup">
+							<div class="custom-control custom-switch mb-2">
+								<input type="checkbox" class="custom-control-input" id="syncParentChildSwitch" name="syncParentChild" value="true" checked disabled>
+								<label class="custom-control-label font-weight-bold text-dark" for="syncParentChildSwitch">同時同步關聯主商品 / 子商品 (parentItem &amp; children)</label>
+							</div>
+							<div class="alert alert-warning py-2 px-3 mb-0 small text-dark border-warning">
+								<i class="fa-solid fa-triangle-exclamation text-warning mr-1"></i><strong>時間範圍限制：</strong>系統僅會同步正處於開團期間 (<code>dateStart</code>~<code>dateEnd</code>) 內的關聯商品，非開團中商品將保持原狀態。
+							</div>
+						</div>
+					</div>
+
+					<!-- Step 4 -->
+					<div class="wizard-step d-none" id="wizardStep4">
+						<div class="card border-primary mb-3">
+							<div class="card-header bg-primary text-white font-weight-bold"><i class="fa-solid fa-magnifying-glass mr-1"></i>排程設定預覽對比</div>
+							<div class="card-body">
+								<div class="row mb-2">
+									<div class="col-4 text-muted">排程對象筆數:</div>
+									<div class="col-8 font-weight-bold text-dark" id="prevTargetText">-</div>
+								</div>
+								<div class="row mb-2">
+									<div class="col-4 text-muted">執行動作:</div>
+									<div class="col-8 font-weight-bold text-primary" id="prevActionText">-</div>
+								</div>
+								<div class="row mb-2">
+									<div class="col-4 text-muted">預計生效時間:</div>
+									<div class="col-8 font-weight-bold text-success" id="prevTimeText">-</div>
+								</div>
+								<div class="row">
+									<div class="col-4 text-muted">變更細節與清單:</div>
+									<div class="col-8 text-dark font-weight-bold" id="prevDetailsText">-</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<div class="card-footer bg-white border-top d-flex justify-content-between py-3 px-4">
+					<div>
+						<button type="button" class="btn btn-scheduler-prev mr-2" onclick="GroupBuyScheduler.hideCreateView()"><i class="fa-solid fa-xmark mr-1"></i>取消</button>
+						<button type="button" class="btn btn-scheduler-prev" id="btnPrevStep" onclick="GroupBuyScheduler.navigateStep(-1)" disabled><i class="fa-solid fa-arrow-left mr-1"></i>上一步</button>
+					</div>
+					<div>
+						<button type="button" class="btn btn-scheduler-next" id="btnNextStep" onclick="GroupBuyScheduler.navigateStep(1)">下一步 <i class="fa-solid fa-arrow-right ml-1"></i></button>
+						<button type="submit" class="btn btn-scheduler-submit d-none" id="btnSubmitForm"><i class="fa-solid fa-check mr-1"></i>確認建立排程</button>
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<div>
+		<div id="customForm" class="dtForm row">
+			<div class="col-sm-12">
+				<fieldset>
+					<editor-field name="dateScheduleString"></editor-field>
+					<editor-field name="field"></editor-field>
+				</fieldset>
+			</div>
+		</div>
+	</div>
+</div>
+<!--#foot-->
+<script type="text/javascript">
+$(function () {
+	GroupBuyScheduler.init({{json schedulerOpts}});
+});
+</script>
