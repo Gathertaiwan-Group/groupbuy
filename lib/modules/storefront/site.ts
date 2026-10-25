@@ -7,6 +7,7 @@ import { notFound } from "@/lib/core/http/errors";
 import { PLATFORM_THEME, TENANT_THEME, resolveTheme, type ThemePalette } from "./theme";
 import type { CustomerSession } from "./customer-session";
 import { customerMenuHtml } from "./customer-menu";
+import { UI_TEXT, uiLang } from "./i18n";
 
 export interface SfTenant {
   id: number;
@@ -200,6 +201,7 @@ export function feVars(ctx: RequestContext, o: FeVarsOpts): Record<string, unkno
   const gbfBaseUrl = `/${tenantCode}/p/${short}`;
   const theme: ThemePalette = resolveTheme(o.themeSource === "platform" ? PLATFORM_THEME : TENANT_THEME, o.themeOverrides);
   const logo = String(gbSetting(o.groupBuy, "logo", "") || "");
+  const lang = uiLang(ctx, o.groupBuy?.language_tag);
   return {
     assetVersion: base.assetVersion,
     origin: base.origin,
@@ -221,5 +223,7 @@ export function feVars(ctx: RequestContext, o: FeVarsOpts): Record<string, unkno
     year: taipeiYear(),
     customer: o.customer ?? null,
     customerMenuHtml: o.customer ? customerMenuHtml(gbfBaseUrl, o.customer) : "",
+    uiLang: lang,
+    ui: UI_TEXT[lang],
   };
 }

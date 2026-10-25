@@ -125,7 +125,8 @@ async function addressSession(ctx: RequestContext) {
 
 async function addressList(ctx: RequestContext): Promise<Response> {
   const { tenant, s } = await addressSession(ctx);
-  if (!s) return json({ code: 403, error: "尚未登入" });
+  // 訪客：原站下單頁仍顯示「常用地址」下拉＋「管理常用地址」（空清單）→ 回 200 空陣列；新增／修改／刪除仍需登入（403）
+  if (!s) return json({ code: 200, data: [], maxAddresses: MAX_ADDRESSES });
   const { data } = await getServiceClient()
     .from("customer_addresses")
     .select("uuid, firstname, telephone, country, city, district, postcode, street")

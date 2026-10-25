@@ -9,6 +9,8 @@ import { gbSetting, groupBuyPreferences, scopeFromTenantPath, tenantByCode, type
 import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext } from "./cart-data";
 import { saveCheckout, setCartItem, type AddressDraft, type CvsMapInfo } from "./cart-store";
 import { clean, ipOf, rateLimit } from "./guard";
+import { checkPointsRequest } from "./points";
+import { pointsEnabled } from "./pricing";
 import { enumOptions } from "@/lib/core/enums";
 
 type Nested = Record<string, unknown>;
@@ -146,9 +148,25 @@ async function removeCoupon(ctx: RequestContext): Promise<Response> {
 async function usePoints(ctx: RequestContext): Promise<Response> {
   const sc = await scope(ctx);
   const cc = await loadCartContext(ctx, sc, { create: true });
-  if (!cc.customer) return json({ error: "請先登入會員" });
   const pts = Math.max(0, int(await ctx.param("rpDiscount")));
-  if (pts > cc.customer.customer.points) return json({ error: `點數不足（目前 ${cc.customer.customer.points} 點）` });
+  const enabled = pointsEnabled(cc.gb);
+  // 上限＝min(會員餘額, marketing 折扣後商品金額)；以目前購物袋（不含點數）重算一次
+  let amountAfterDiscount = 0;
+  if (enabled && cc.customer && pts > 0) {
+    const prev = cc.cart!.checkout;
+    cc.cart!.checkout = { ...prev, points: 0 };
+    const b = await buildCartData(cc, { consumeFlash: false });
+    cc.cart!.checkout = prev;
+    amountAfterDiscount = Math.max(0, b.pricing.subtotal - b.pricing.totalDiscount);
+  }
+  const err = checkPointsRequest({
+    enabled,
+    isMember: !!cc.customer,
+    requested: pts,
+    balance: Number(cc.customer?.customer.points) || 0,
+    amountAfterDiscount,
+  });
+  if (err) return json({ error: err });
   await saveCheckout(cc.cart!, { points: pts });
   return respond(cc);
 }
@@ -210,8 +228,8 @@ async function getFormSettings(ctx: RequestContext): Promise<Response> {
       disableInvoice: !!gb.invoice_disabled,
       supportEInvoice: einvoice !== "NONE",
       disableEInvoiceReceiptTitle: !!gb.disable_einvoice_receipt_title,
-      // Facebook 快速登入未串接 → 不顯示
-      fbLoginDisabled: true,
+      // 依團購設定「關閉FB快速登入」（預設顯示，同原站）；按鈕按下只顯示【未串接】（form.html 覆寫 EPFBUtils.onFbLoginClick）
+      fbLoginDisabled: ["true", "1"].includes(String(gbSetting(gb, "fbLoginDisabled", false))),
       flatpickrOptions,
       contentIds,
       checkoutDescrSettings: {
@@ -221,7 +239,10 @@ async function getFormSettings(ctx: RequestContext): Promise<Response> {
       },
       formattedNotes: [],
       commonNoteOption: [],
-      deliverTimeOption: deliverOpts.filter((o) => String(o.value) !== "0").map((o) => ({ key: String(o.value), label: o.label })),
+      // 原站選項含「不指定」(0) 且排第一個 → 未選時預設「不指定」
+      deliverTimeOption: [...deliverOpts]
+        .sort((a, b) => Number(a.value) - Number(b.value))
+        .map((o) => ({ key: String(o.value), label: o.label })),
       countryOption: [],
       theme: {},
       einvoiceDonationSettings: { valid: false, available: [] },

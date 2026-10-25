@@ -38,13 +38,14 @@ export function validVatId(v: string): boolean {
   return sum % 5 === 0 || sum % 10 === 0 || (v[6] === "7" && ((sum + 1) % 5 === 0 || (sum + 1) % 10 === 0));
 }
 
-type Form = { get(k: string): string; all(k: string): string[] };
+type Form = { get(k: string): string; all(k: string): string[]; entries(): [string, string[]][] };
 
 async function readForm(ctx: RequestContext): Promise<Form> {
   const b = await ctx.body();
   return {
     get: (k: string) => String(b.flat.get(k)?.[0] ?? "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim(),
     all: (k: string) => (b.flat.get(k) ?? []).map((x) => String(x).trim()),
+    entries: () => [...b.flat].map(([k, v]) => [k, v.map((x) => String(x))] as [string, string[]]),
   };
 }
 
@@ -96,8 +97,20 @@ function validate(gb: SfGroupBuy, shippingType: string, cvsType: string, pm: num
     ["地址", s.street],
     ["地址", b.street],
     ["備註", f.get("note")],
+    ["臉書名稱", b.fbNickname],
+    ["發票抬頭", b.receiptTitle],
+    ["訂購人鄉鎮市區", b.district],
+    ["收件人鄉鎮市區", s.district],
+    ["訂購人縣市", b.city],
+    ["收件人縣市", s.city],
+    ["銀行名稱", b.bankName],
   ] as const) {
     if (v && BAD_CHARS.test(v)) return `${label}含有不允許的字元`;
+  }
+  // 自訂格式化備註 fnote(名稱)=值：名稱與值都不可含 < >
+  for (const [k, vals] of f.entries()) {
+    if (!/^fnote\(/.test(k)) continue;
+    if (BAD_CHARS.test(k) || vals.some((x) => BAD_CHARS.test(x))) return "備註欄位含有不允許的字元";
   }
   // 收件人
   if (!s.firstname || s.firstname.length < 2) return "請填寫收件人姓名（至少兩個字）";
@@ -335,6 +348,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     shipping_amount: p.shipping.shippingAmount + p.shipping.codFee,
     cod_fee: p.shipping.codFee,
     discount_amount: p.totalDiscount,
+    points_used: p.pointsUsed,
     total_paid: 0,
     commission_amount: Math.round(commission),
     payment_method: pm,
@@ -403,6 +417,8 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     salesRuleIds: p.salesRules.map((r) => r.salesRuleId),
     coupons: usedCoupons.map((c) => ({ group_buy_coupon_id: c.groupBuyCouponId, coupon_code_id: c.couponCodeId, coupon: c.code, discount: c.discount })),
     salesRules: p.salesRules.map((r) => ({ sales_rule_id: r.salesRuleId, title: r.title, discount: r.discount })),
+    // 會員點數折抵：sf_place_order 在同一交易內扣點（餘額不足整筆回滾）並寫 point_transactions(USE_POINT)
+    ...(p.pointsUsed > 0 && cc.customer ? { points: { customerId: cc.customer.customer.id, points: p.pointsUsed } } : {}),
   };
 
   // 5) 原子下單
@@ -417,9 +433,14 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     }
     if (/SF_COUPON_USED_UP|SF_GROUP_BUY_COUPON_USED_UP/.test(msg)) return fail(cc, "優惠碼已達使用上限，請移除後再結帳");
     if (/SF_SALES_RULE_QUOTA/.test(msg)) return fail(cc, "優惠活動名額已滿，請重新整理後再結帳");
+    if (/SF_POINTS_NOT_ENOUGH/.test(msg)) {
+      await saveCheckout(cc.cart!, { points: 0 });
+      return fail(cc, "會員點數不足，已取消點數折抵，請重新確認金額後再結帳");
+    }
     return fail(cc, "訂單送出失敗，請稍後再試");
   }
   const result = data as { salesOrderId: number; uuid: string };
+  if (p.pointsUsed > 0) await saveCheckout(cc.cart!, { points: 0 });
   if (hit) await logBlacklist(tenant.id, hit, `可下單但無法付款：訂單 ${result.uuid}（IP ${ip}）`);
   // 折扣碼使用次數已在 sf_place_order 交易內原子遞增；這裡同步優惠卷的總數／已使用／可用數（marketing）
   for (const gcId of new Set(usedCoupons.map((c) => c.groupBuyCouponId))) {

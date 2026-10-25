@@ -60,7 +60,7 @@ if (typeof GBF  == 'undefined') {
 GBF.ctx = '';
 GBF.shortUrl = {{json gbfShortUrl}};
 GBF.baseUrl = {{json gbfBaseUrl}};
-GBF.language = 'zh-TW';
+GBF.language = {{json ui.gbfLanguage}};
 </script><title>{{groupBuy.title}}</title>
 <style>
 .fb-comments, .fb-comments span, .fb-comments iframe {width: 100% !important;}
@@ -177,7 +177,26 @@ style="display: none;" aria-hidden="true">
 		<!-- 快速登入由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 動態渲染 -->
 	</div>
 
-	<!-- 1. 配送方式區塊 (Shipping Method) -->
+{{#if pointsCard}}{{!-- 推導：會員點數折抵（原站未擷取；團購開啟 ptEnabled 且會員已登入時顯示，欄位名 rpDiscount 與 #points-result 依原站 gb_shopping_cart.js 的 handlePoints） --}}	<div class="card  mb-4" id="section-points">
+		<div class="card-body form section-address-body section-points-body">
+			<div data-aos="fade-up" class="theme-bg-default section-title section-address-title section-points-title">
+				<h5 class="pt-2"><i class="fa-light fa-coins"></i> <span id="section-points-title">會員點數折抵</span></h5>
+			</div>
+			<div class="card-text card-text-gb">
+				<p class="small mb-2">目前點數：<span id="points-balance">{{pointsCard.balance}}</span> 點（1 點折抵 1 元，僅折抵商品金額，不含運費）</p>
+				<div class="input-group">
+					<input type="number" min="0" step="1" inputmode="numeric" class="form-control" name="rpDiscount" id="rpDiscount" value="{{pointsCard.used}}" placeholder="輸入要使用的點數" form="points-form-none">
+					<div class="input-group-append">
+						<button class="btn btn-sm btn-primary m-0 px-3" type="button" id="btn_points" onclick="GBShoppingCart.getInstance('{{groupBuy.uuid}}').handlePoints()">使用點數</button>
+						<button class="btn btn-sm btn-outline-secondary m-0 px-3" type="button" id="btn_points_remove" onclick="$('#rpDiscount').val('0');GBShoppingCart.getInstance('{{groupBuy.uuid}}').handlePoints('0')">不使用</button>
+					</div>
+				</div>
+				<div class="d-none mt-2"><span class="text-success small" id="points-result"></span></div>
+				<div class="d-none mt-2"><span class="text-danger small" id="points-result-error"></span></div>
+			</div>
+		</div>
+	</div>
+{{/if}}	<!-- 1. 配送方式區塊 (Shipping Method) -->
 	<div class="card  mb-4" id="section-shipping-method">
 		<!-- 配送方式由 GBCheckoutForm (gb_checkout_form.js) 透過 AJAX 100% Client-side 動態渲染 -->
 	</div>
@@ -312,7 +331,7 @@ style="display: none;" aria-hidden="true">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/i18next/23.16.4/i18next.min.js" integrity="sha512-nU8gAqIe6O5vtOf4OCB4H9rZnHyp4s/ioafd2hcjagY2ALuwLu8t7EGmzUmEjULi9qf1TaMRNVHBYF+fK/xF1A==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/zh-tw.min.js"></script>
-<script src="/public/scripts/locale/i18n.zh-tw.js?v=9"></script>
+<script src="{{ui.localeScript}}"></script>
 <script src="/public/scripts/ias_v5.min.js?v=251109"></script>
 <script src="/public/scripts/gbfmain.min.js?v=1"></script>
 <script src="/public/scripts/ep.widget.min.js?v=250908"></script>
@@ -341,8 +360,8 @@ $(document).ready(function() {
 		
 		itemRoom: {{#if itemRoom}}{{json itemRoom}}{{else}}null{{/if}},
 		countdown: {
-			title: '活動剩餘時間',
-			clockLabel: '活動剩餘時間',
+			title: {{json ui.countdownTitle}},
+			clockLabel: {{json ui.countdownTitle}},
 			clockTheme: ' ',
 			timeRemainToEnd: {{timeRemainToEnd}},
 			countdownDays: {{countdownDays}},
@@ -358,6 +377,23 @@ $(document).ready(function() {
 			addrInputSelectClass: ' '
 		}
 	});
+
+	// 未串接：Facebook 快速登入（原站 EPFBUtils.onFbLoginClick 走 FB SDK／OAuth；本系統只顯示提示）
+	if (typeof EPFBUtils !== 'undefined') {
+		EPFBUtils.onFbLoginClick = function() { alert('【未串接】Facebook 快速登入尚未串接，請改用「登入/註冊」或直接填寫訂購資料。'); return false; };
+	}
+
+	// 常用地址：原站 ep.widget.address 只在 ready 後 1 秒檢查一次 #addressbook；結帳表單由 AJAX 產生，
+	// 回應較慢時會錯過 → 補做同一段初始化（最多等 15 秒，選取後帶入收件人欄位，與原站相同）
+	(function waitAddressbook(n) {
+		var $ab = $('#addressbook');
+		if ($ab.length && !$ab.data('cas-inited') && typeof CustomerAddressSelector !== 'undefined') {
+			$ab.data('cas-inited', true);
+			new CustomerAddressSelector('#addressbook', { onSelect: function(a) { if (a) CustomerAddressSelector.utils.cloneAddressToForm(a, 'salesOrderShippingAddressForm', '#section-shipping-address'); } }).init();
+			return;
+		}
+		if (!$ab.data('cas-inited') && n < 30) setTimeout(function() { waitAddressbook(n + 1); }, 500);
+	})(0);
 
 	// 2. 初始化獨立購物車模組 (綁定抽屜動畫與觸發首次狀態加載)
 	GBShoppingCart.init({{json groupBuy.uuid}}, {

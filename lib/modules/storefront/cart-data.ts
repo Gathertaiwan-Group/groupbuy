@@ -11,12 +11,14 @@ import { isIslandPostcode } from "@/lib/modules/shipping/shipping-fee";
 import { groupBuyState } from "./form-page";
 
 import { PM_CODES } from "./payment-codes";
+import { PM_LABEL_EN, uiLang, type UiLang } from "./i18n";
 export { PM_CODES };
 const PM_ORDER = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384];
-/** 前台付款方式文字（i18n.zh-tw.js 的 i18n.zh_tw.paymentMethodN；其餘取列舉中文） */
+/** 前台付款方式文字（取原站付款方式列舉中文；英文介面用 i18n.ts 的 PM_LABEL_EN） */
 export const PM_LABEL: Record<number, string> = {
-  1: "轉帳匯款",
-  2: "轉帳匯款(虛擬帳號)",
+  // 依原站付款方式列舉（SPEC 5 章 paymentMethod：銀行轉帳=BANK_ACCOUNT、轉帳匯款(虛擬帳戶)=VIRTUAL_BANK）；原站下單頁顯示「銀行轉帳」
+  1: "銀行轉帳",
+  2: "轉帳匯款(虛擬帳戶)",
   4: "信用卡",
   8: "自取",
   16: "貨到付款",
@@ -186,7 +188,7 @@ function codesToBits(codes: string[]): number[] {
   return codes.map((c) => PM_CODES[c]).filter((b): b is number => !!b);
 }
 
-export function paymentOptions(gb: SfGroupBuy, rule: FlatRateShippingRow | null, island: boolean) {
+export function paymentOptions(gb: SfGroupBuy, rule: FlatRateShippingRow | null, island: boolean, lang: UiLang = "zh-TW") {
   const gbBits = PM_ORDER.filter((b) => (Number(gb.payment_methods) & b) !== 0);
   let allowed = gbBits;
   if (rule) {
@@ -195,7 +197,7 @@ export function paymentOptions(gb: SfGroupBuy, rule: FlatRateShippingRow | null,
     if (ruleBits.length) allowed = gbBits.filter((b) => ruleBits.includes(b));
   }
   const custom = String(gbSetting(gb, "customPaymentMethod", "") || "").trim();
-  const label = (b: number) => (b === 256 && custom ? custom : PM_LABEL[b] ?? String(b));
+  const label = (b: number) => (b === 256 && custom ? custom : (lang === "en" ? PM_LABEL_EN[b] : undefined) ?? PM_LABEL[b] ?? String(b));
   const fee = (b: number) => (b === 16 && rule ? Number(rule.pay_on_delivery_fee) || 0 : 0);
   return {
     available: allowed.map((b) => ({ value: b, label: label(b), fee: fee(b) })),
@@ -284,7 +286,7 @@ export async function buildCartData(
   if (!sel) sel = opts.find((o) => !o.disabled) ?? null;
   const rule = sel ? cc.rules.find((r) => r.groupBuyFlatRateShippingId === sel!.groupBuyFlatRateShippingId) ?? null : null;
   const island = !!rule && rule.shipping_type === "NORMAL" && (shipAddr.country || "TW") === "TW" && isIslandPostcode(shipAddr.postcode);
-  const pm = paymentOptions(cc.gb, rule, island);
+  const pm = paymentOptions(cc.gb, rule, island, uiLang(cc.ctx, cc.gb.language_tag));
   let paymentMethod = Number(checkout.paymentMethod) || 0;
   if (!pm.available.some((p) => p.value === paymentMethod)) paymentMethod = pm.available[0]?.value ?? 0;
   const pricing = await priceCart(
@@ -297,6 +299,7 @@ export async function buildCartData(
       flatRateShippingId: rule?.id ?? null,
       paymentMethod,
       shippingAddress: shipAddr,
+      points: cc.customer ? { requested: Number(checkout.points) || 0, balance: Number(cc.customer.customer.points) || 0 } : undefined,
     },
     { rules: cc.rules, shipping: shipPre },
   );
@@ -344,8 +347,12 @@ export async function buildCartData(
     shippingAmount: pricing.shipping.shippingAmount + pricing.shipping.codFee,
     grandTotal: pricing.grandTotal,
     grandTotalWithoutShipping: pricing.grandTotalWithoutShipping,
-    totalDiscount: pricing.totalDiscount,
+    // 原站 JS 以 grandTotal＋totalDiscount 還原原價（劃線價），故顯示用的 totalDiscount 含點數折抵
+    totalDiscount: pricing.totalDiscount + pricing.pointsDiscount,
     couponTotalDiscount: pricing.couponTotalDiscount,
+    rpDiscount: pricing.pointsUsed,
+    pointsDiscount: pricing.pointsDiscount,
+    pointsMax: pricing.pointsMax,
     tax: pricing.tax,
     subscriptionSetting: null,
   };
@@ -355,7 +362,11 @@ export async function buildCartData(
     salesOrder,
     salesRuleResult: {
       discountResults: [],
-      salesRules: pricing.salesRules.map((r) => ({ title: r.title, sessionDiscount: r.discount })),
+      salesRules: [
+        ...pricing.salesRules.map((r) => ({ title: r.title, sessionDiscount: r.discount })),
+        // 點數折抵以同一種折扣列呈現（原站購物袋 JS 只渲染 salesRules／salesOrderCoupons 的折扣列；推導）
+        ...(pricing.pointsDiscount > 0 ? [{ title: `會員點數折抵（${pricing.pointsUsed} 點）`, sessionDiscount: pricing.pointsDiscount, points: true }] : []),
+      ],
       htmlNote: blocked ? blocked : "",
       targetItemSetId: 0,
       disableCheckout: !!blocked,

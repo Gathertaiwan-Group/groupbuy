@@ -13,8 +13,8 @@
 			<!-- Links -->
 			<div></div>
 			<ul class="navbar-nav">
-				<li class="nav-item"><a class="nav-link " href="/{{navShortUrl}}/order"><i class="fa-light fa-list mr-1"></i>訂單進度查詢</a></li>
-<li class="nav-item"><a class="nav-link " href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/OnlineHelp/show.do', 'v=4&uuid={{onlineHelpUuid}}')"><i class="fa-light fa-comments mr-1"></i>我想問問題</a></li>
+				<li class="nav-item"><a class="nav-link " href="/{{navShortUrl}}/order"><i class="fa-light fa-list mr-1"></i>{{#if ui}}{{ui.navOrders}}{{else}}訂單進度查詢{{/if}}</a></li>
+<li class="nav-item"><a class="nav-link " href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onClick="openForm('{{gbfBaseUrl}}/OnlineHelp/show.do', 'v=4&uuid={{onlineHelpUuid}}')"><i class="fa-light fa-comments mr-1"></i>{{#if ui}}{{ui.navOnlineHelp}}{{else}}我想問問題{{/if}}</a></li>
 </ul>
 			<!-- Links -->
 			<!-- Social Icon  -->

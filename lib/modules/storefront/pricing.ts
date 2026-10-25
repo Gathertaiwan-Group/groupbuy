@@ -11,6 +11,7 @@ import { calculateShippingFee, type CartLine as ShipCartLine, type ShippingFeeRe
 import { cartLineFromItem, loadGroupBuyShipping, type GroupBuyShippingData } from "@/lib/modules/shipping/shipping-data";
 import { marketingPricingRules } from "./pricing-marketing";
 import { PM_CODE_BY_BIT } from "./payment-codes";
+import { applyPoints } from "./points";
 import type { SfGroupBuy } from "./site";
 
 // ───────────────────────── 型別 ─────────────────────────
@@ -51,6 +52,8 @@ export interface PricingInput {
   /** 付款方式位元（1 銀行轉帳、4 信用卡、16 貨到付款…）；0＝尚未選擇 */
   paymentMethod: number;
   shippingAddress: ShippingAddressInput;
+  /** 會員點數折抵（points.ts）：想使用的點數與會員餘額；團購未開啟 ptEnabled 或非會員時不折抵 */
+  points?: { requested: number; balance: number };
 }
 
 export interface AppliedSalesRule {
@@ -127,6 +130,12 @@ export interface PricingResult {
   shipping: ShippingQuote;
   tax: number;
   grandTotal: number;
+  /** 實際使用的會員點數（下單時扣點） */
+  pointsUsed: number;
+  /** 點數折抵金額（不含在 totalDiscount 內；grandTotalWithoutShipping／grandTotal 已扣除） */
+  pointsDiscount: number;
+  /** 本筆最多可使用的點數 */
+  pointsMax: number;
   totalPieces: number;
   /** 優惠卷未成立的原因（例如未達門檻） */
   couponNotes: string[];
@@ -482,6 +491,12 @@ export const fallbackPricingRules: PricingRulesProvider = {
 // ───────────────────────── provider 切換點 ─────────────────────────
 let shippingProvider: ShippingFeeProvider = shippingModuleFee;
 let rulesProvider: PricingRulesProvider = marketingPricingRules;
+/** 團購是否開啟會員點數功能（group_buy_settings.ptEnabled） */
+export function pointsEnabled(gb: SfGroupBuy): boolean {
+  const v = gb.group_buy_settings?.ptEnabled;
+  return v === true || v === "true" || v === 1 || v === "1";
+}
+
 export function setPricingProviders(p: { shipping?: ShippingFeeProvider; rules?: PricingRulesProvider }): void {
   if (p.shipping) shippingProvider = p.shipping;
   if (p.rules) rulesProvider = p.rules;
@@ -503,7 +518,17 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
   const ruleDiscount = applied.salesRules.reduce((s, r) => s + r.discount, 0);
   const couponDiscount = applied.coupons.reduce((s, c) => s + c.discount, 0);
   const totalDiscount = Math.min(subtotal, ruleDiscount + couponDiscount);
-  const grandTotalWithoutShipping = Math.max(0, subtotal - totalDiscount);
+  // 優惠引擎（marketing）先算；運費門檻以點數折抵「前」的商品金額判斷
+  const amountAfterDiscount = Math.max(0, subtotal - totalDiscount);
+  // 會員點數最後折抵（只折商品金額，不折運費／手續費）
+  const pts = applyPoints({
+    enabled: pointsEnabled(input.groupBuy),
+    isMember: input.customerId != null,
+    requested: input.points?.requested ?? 0,
+    balance: input.points?.balance ?? 0,
+    amountAfterDiscount,
+  });
+  const grandTotalWithoutShipping = amountAfterDiscount - pts.discount;
   const rules = preloaded?.rules ?? [];
   const quoted = await shippingProvider.quote({
     tenantId: input.tenantId,
@@ -511,7 +536,7 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     rules,
     flatRateShippingId: input.flatRateShippingId,
     lines,
-    amount: grandTotalWithoutShipping,
+    amount: amountAfterDiscount,
     paymentMethod: input.paymentMethod,
     address: input.shippingAddress,
     couponCodes: input.couponCodes,
@@ -532,6 +557,9 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     shipping,
     tax,
     grandTotal,
+    pointsUsed: pts.points,
+    pointsDiscount: pts.discount,
+    pointsMax: pts.max,
     totalPieces,
     couponNotes: [...applied.couponNotes, ...(applied.giftNotes ?? [])],
     errors: [...(applied.blockers ?? []), ...(shipping.errors ?? [])],

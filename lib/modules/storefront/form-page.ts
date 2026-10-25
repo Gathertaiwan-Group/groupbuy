@@ -9,7 +9,8 @@ import { feVars, gbSetting, groupBuyPreferences, imageUrl, tenantById, type SfGr
 import { readCustomerSession } from "./customer-session";
 import { loadCatalog, formatPrice, type CatalogItem, type CatalogItemSet } from "./catalog";
 import { findCart } from "./cart-store";
-import { loadGroupBuyShippingRules } from "./pricing";
+import { loadGroupBuyShippingRules, pointsEnabled } from "./pricing";
+import { uiLang } from "./i18n";
 
 /** 商品樣式 → 卡片欄寬與樣式 class（STYLE5＝原站擷取值；其餘依樣式名稱推導） */
 const STYLE_LAYOUT: Record<string, { col: string; card: string }> = {
@@ -155,7 +156,12 @@ export async function renderFormPage(ctx: RequestContext, gb: SfGroupBuy): Promi
     itemSets,
     closedHtml,
     countryCode: String(gbSetting(gb, "country", "TW")),
-    languageCode: gb.language_tag === "en" || gb.language_tag === "en_US" ? "en" : "zh-TW",
+    languageCode: uiLang(ctx, gb.language_tag),
+    // 推導：會員點數折抵卡片（團購開啟 ptEnabled 且會員已登入）
+    pointsCard:
+      customer && pointsEnabled(gb)
+        ? { balance: Number(customer.customer.points) || 0, used: Number(cart?.checkout.points) || 0 }
+        : null,
     itemRoom: null,
     timeRemainToEnd: Math.max(0, end - Date.now()),
     countdownDays: Number(gbSetting(gb, "countdownDays", 7)) || 7,

@@ -1,6 +1,6 @@
 # storefront 模組（消費者前台）
 
-擁有者：storefront agent。程式：`lib/modules/storefront/**`、模板：`templates/storefront/**`、靜態檔：`public/modules/storefront/**`、migration：`supabase/migrations/6000–6002_storefront_*.sql`（6000 限流表、6001 原子下單函式 `sf_place_order`、6002 購物袋暫存表）。
+擁有者：storefront agent。程式：`lib/modules/storefront/**`、模板：`templates/storefront/**`、靜態檔：`public/modules/storefront/**`、migration：`supabase/migrations/6000–6002_storefront_*.sql`（6000 限流表、6001 原子下單函式 `sf_place_order`、6002 購物袋暫存表）＋ `0104_points_refund_on_cancel.sql`（取消／刪除訂單回補點數）、`0106_storefront_demo_ak98i_checkout.sql`（示範團購 ak98i 付款方式與訂購須知）、`0107_storefront_help_demo_data.sql`（說明中心／公告示範資料）。
 對外服務（Email、簡訊、金流、超商電子地圖／物流、Facebook 登入、reCAPTCHA）**一律未串接**：介面照原站，動作只寫 DB 紀錄（`email_messages`、`conversations`），回應／畫面帶【未串接】。
 
 ## 頁面與狀態
@@ -9,7 +9,7 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 
 | 代號 | 網址 | HTTP | 狀態 | 相似度 | 剩餘差異 |
 |---|---|---|---|---|---|
-| fe-form-ak98i | `/ak98i` | 200 | 完成 | 87.75%（排除他人測試資料 99.34%） | items agent 的 `[測試-items]` 品項分類掛在同一團購；示範商品 1 沒有說明分頁所以沒有放大鏡圖示；不輸出原站平台的 FB Pixel `<noscript><img>`；MDB PRO 改 MDB Free＋相容層多一個 `<script>` |
+| fe-form-ak98i | `/ak98i` | 200 | 完成 | 99.34%（fix-front 後本機重測） | items agent 的 `[測試-items]` 品項分類掛在同一團購；示範商品 1 沒有說明分頁所以沒有放大鏡圖示；不輸出原站平台的 FB Pixel `<noscript><img>`；MDB PRO 改 MDB Free＋相容層多一個 `<script>` |
 | fe-order-query | `/ak98i/order` | 200 | 完成 | 99.27% | 平台 Pixel `<img>`、MDB 相容層 `<script>` |
 | fe-onlinehelp-modal | `/guest_ep/p/ak98i/OnlineHelp/show.do?v=4` | 200 | 完成 | 100%（`--root all`） | — |
 | fe-customer-login-modal | `/guest_ep/p/ak98i/ajax/web/Customer/showLoginForm` | 200 | 完成 | 100%（`--root all`） | — |
@@ -17,9 +17,9 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 | fe-terms | `/guest_ep/GroupBuy/terms.do` | 200 | 完成 | 99.54% | 同上兩項 |
 | fe-error-403 | `/ak98i?preview=true`（未登入後台） | 403 | 完成 | 98.97% | 隨機錯誤追蹤代碼 |
 | fe-seller-page | `/guest_ep/p/ak98i` | 404 | 完成 | 98.95% | 同上兩項 |
-| fe-help-home-jranv | `/jranv` | 200 | 完成 | 54.63%（以原站資料渲染本模板 100%） | 示範資料：選單 13 節點 vs 原站約 40、文章數不同 |
-| fe-help-menu-4411 | `/jranv/menu/4411/所有教學` | 200 | 完成 | 56.55%（原站資料 100%） | 示範資料：文章 13 篇、無標籤 |
-| fe-news-list | `/groupbuyforms/News/list.do?gid=34565` | 200 | 完成 | 39.46%（原站資料 100%） | 示範資料：公告 14 則、內文只有一行 |
+| fe-help-home-jranv | `/jranv` | 200 | 完成 | 87.06%（`--no-text` 結構 100%；原站資料渲染本模板 100%） | 只剩文字：示範資料為中性名稱（選單節點、文章標題／內文），結構數量已對齊（選單 18 個第一層＋30 個子節點，最新文章 4 篇） |
+| fe-help-menu-4411 | `/jranv/menu/4411/所有教學` | 200 | 完成 | 87.38%（`--no-text` 結構 100%；原站資料 100%） | 只剩文字：中性示範文章／標籤／節點名稱；結構已對齊（265 篇＝每頁 10 篇共 27 頁、每篇有分類徽章與摘要、標籤 8 個） |
+| fe-news-list | `/groupbuyforms/News/list.do?gid=34565` | 200 | 完成 | 74.94%（`--no-text` 結構 100%；原站資料 100%） | 只剩文字：公告 20 則（1 則置頂），內文為中性示範文字，HTML 骨架（段落、清單、粗體、標記、圖片）逐則對齊原站 |
 
 「原站資料 100%」的驗證：把 `spec/html` 擷取出的資料餵給本模組模板渲染後再比對（scratchpad `sf/web/fidelity/`），證明落差全在示範資料。
 
@@ -46,6 +46,13 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 優惠：`pricing-marketing.ts` 包裝 marketing 正式版（`loadSalesRulesForGroupBuy`→`loadCartLines`→`findCouponByCode`→`evaluatePricing`→`resolveGifts`）；免運優惠會把運費歸零；限制類優惠不允許結帳時擋下；折扣碼不符條件時回原因且不保留。`fallbackPricingRules` 保留作緊急切回（`setPricingProviders`）。
 - 運費：shipping 模組正式版（`pricing.ts` 的 `shippingModuleFee` → `lib/modules/shipping/shipping-data.ts` 的 `loadGroupBuyShipping`／`cartLineFromItem` ＋ `shipping-fee.ts` 的 `calculateShippingFee`）。購物袋與送出訂單共用同一份預載（`loadShippingPreload`）；配送方式清單的可用性（`disabled`／`disabledReason`）也取同一個計算結果（`shippingAvailability`）；付款方式位元轉 shipping 的付款代碼（`payment-codes.ts`）。選定的配送方式不可用時，計算錯誤會擋下結帳。伺服器端重算原則不變（不採用前端金額）。
 - 下單：`sf_place_order` 單一交易內鎖庫存列→扣現貨／預購→折扣碼／優惠卷／優惠條件名額遞增（超額整筆回滾）→點數折抵→寫訂單與明細→清空購物袋；成功後 `syncCouponTotals`。
+- 會員點數折抵（`points.ts`，單元測試 `points.test.ts`）：
+  - 條件：團購 `group_buy_settings.ptEnabled`＝true 且會員已登入。前台 `usePoints(rpDiscount)` 只記錄「想用幾點」到購物袋，金額一律在 `priceCart` 重算。
+  - **先後順序**：① marketing 優惠引擎（優惠條件＋優惠卷／折扣碼）→ ② 運費（以①折扣後、點數折抵**前**的商品金額判斷免運門檻與運費）→ ③ 會員點數折抵（只折①之後的商品金額，不折運費／貨到付款手續費）→ ④ 稅額（以③之後的商品金額計算）。
+  - 1 點＝1 元；實際使用＝min(想用的點數, 會員餘額, ①之後的商品金額)。超過餘額或上限時 `usePoints` 回錯誤並不保存。
+  - 訂單：`discount_amount` 只含優惠引擎折扣，點數存 `points_used`，`grand_total` 已扣點數；購物袋 JSON 的 `totalDiscount` 為顯示用（含點數，原站 JS 以 grandTotal＋totalDiscount 還原原價），另有 `rpDiscount`、`pointsDiscount`、`pointsMax`，折扣列以「會員點數折抵（N 點）」呈現。
+  - 扣點：`sf_place_order` 同一交易內扣點並寫 `point_transactions(USE_POINT)`，餘額不足整筆回滾（`SF_POINTS_NOT_ENOUGH` → 取消點數折抵並提示）。
+  - 回補：任何路徑把訂單 `state` 改成 `CANCELED`／`DELETED`，DB 觸發器（0104）依點數帳本回補 `USE_POINT − 已 REFUND_POINT`，寫 `REFUND_POINT`；重複取消／取消後刪除不會重複回補。訂單改回處理中不會自動再扣點（原站行為未擷取，由管理者手動調整）。
 - 黑名單：marketing `findBlacklistMatch`（訂購人、收件人電話／Email）＋本模組補查 IP；`SILENT_BLOCK` 假裝成功不建單、`BLOCK_PAYMENT` 可下單不可付款；命中以 `appendBlacklistLog` 記錄。
 - 限流（`sf_rate_limits`）：登入（帳號 15 分 5 次、IP 15 分 30 次）、訂單查詢失敗、查訂單號、優惠碼、客服、會員資料修改。
 - 所有查詢以網址租戶＋session 的 tenant_id 過濾；換租戶前綴打 AJAX／訂單明細回 404。
@@ -59,17 +66,23 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 佈景主題：團購進階設定 `THEME_SETTINGS` 可覆寫租戶色票。
 - 追蹤碼：只載入團購自己設定的 facebookPixel／gaCode，不輸出原站平台的 Pixel／GA／GTM／FB app id。
 - 「訂購人與收件人為同一人」且未帶訂購人地址時，伺服器比照前端把收件地址複製給訂購人。
+- 會員點數折抵卡片（`#section-points`，放在配送方式之前）：原站未擷取點數畫面；只在 ptEnabled 且會員登入時輸出（訪客 DOM 不變），欄位 `rpDiscount`、`#points-result`／`#points-result-error` 依原站 `gb_shopping_cart.js` 的 `handlePoints`。原站全域 `handlePoints(uuid)` 會把 null 傳進去而永遠不送出，按鈕改直接呼叫 `GBShoppingCart.getInstance(uuid).handlePoints()`。
+- 下單頁 ak98i 對齊原站（驗收報告 §0）：訂購須知卡片（示範團購 `descr_billing` 中性文字，0106）；快速結帳卡片（`fbLoginDisabled` 依團購設定，預設顯示；按鈕覆寫 `EPFBUtils.onFbLoginClick` 只跳【未串接】提示）；訪客 `CustomerAddress/list` 回 200 空清單（原站訪客也看得到「常用地址」下拉＋「管理常用地址」；新增／修改／刪除仍須登入）；原站 `ep.widget.address` 只在 ready 後 1 秒找一次 `#addressbook`，AJAX 較慢時會錯過，下單頁補做同一段初始化；配送時間選項含「不指定」(0) 並排第一個（未選時預設不指定）；付款方式文字改依原站付款方式列舉（1＝銀行轉帳、2＝轉帳匯款(虛擬帳戶)），示範團購付款方式改為只有銀行轉帳（0106，資料調整，非寫死）。
+- 英文介面（`i18n.ts`）：原站以 i18next／`i18n.{zh-tw|en}.js` 依瀏覽器語言切換。本系統依 `Accept-Language` 權重最高的語言（或團購語系明確為英文）切換：`GBF.language`、載入 `/public/scripts/locale/i18n.en.js`（原站語系檔）、付款方式英文名（原站 `i18n.zh-tw.js` 的 `i18n.en.label.paymentMethodN`）、導覽列「Orders」「Online Help」與倒數「EVENT REMAINING」（來源：驗收報告記錄的原站英文畫面）。其他伺服器輸出的文字沒有合法英文來源，維持中文。
+- 說明中心／公告示範資料（migration `0107_storefront_help_demo_data.sql`）：內容一律是中性示範文字（「教學分類 A」「教學子分類 02-1」「示範教學文章 014」「示範標籤A」「這是示範公告 01 的說明文字…」），不抄原站標題或內文；只對齊原站擷取頁的結構數量——選單 18 個第一層（其中 10 個有子節點，共 30 個子節點，與原站同順序）、「所有教學」265 篇文章（27 頁）、標籤 8 個、公告 20 則與每則內文的 HTML 骨架（圖片換成本站 logo）。保留既有 id／網址（4411、964111、964120–964130、965001–965013、966001–966014）；既有 14 則公告只換內文。新增列使用保留區段（節點 964301–964399、文章 965101–965499、公告 966101–966199），可重跑。因原站的「全部文章」是第一層節點、本系統文章列表只收該節點與子孫的文章，示範文章全部掛在 4411，其餘分類節點目前沒有文章。`scripts/seed-demo.mjs` 重跑會把 964120–964130 改回 4411 的子節點並 cascade 刪除 0107 的子節點，需要時手動重跑 0107 的 SQL。
 - 說明中心（help.ts / web-site.ts）：無 home_views 時用原站 /jranv 擷取的預設區塊；文章內頁版面；選單節點無網址時連到該節點文章列表；網址標題段 `/ - . 空白`→`_` 後以 Java URLEncoder 規則編碼；上方／側欄只設一種時共用；標籤列最多 30 個；搜尋比對標題／摘要／內文；分頁目前頁 ±3；公告置頂優先再依日期；預設頁尾；自訂 CSS 讀 `group_buy_settings.customCss`；平台租戶珊瑚色票。
 
 ## 已知缺口
 
 - 贈品：引擎算出的自動／可選贈品目前只以提示呈現（`salesRuleResult.note`），尚未自動加入購物袋與訂單明細。
-- 點數回饋（引擎 `points`）未入帳；點數折抵已實作。
+- 點數回饋（引擎 `points`，會員獲點）未入帳；點數折抵（含取消回補）已實作。
 - Email 未串接時的註冊流程：註冊／未驗證帳號登入／「寄送帳號認證信」都會產生 6 碼驗證碼，只寫入 `email_messages`（狀態 `NOT_SENT_UNINTEGRATED`，後台寄信紀錄可查），回應只帶「【未串接】」提示與帳號 uuid，**不含驗證碼**。因此在正式站（`VERCEL_ENV=production`）消費者收不到碼、無法自行完成註冊驗證，須由管理者從寄信紀錄取得驗證碼轉交，或等 Email 串接後才開放。
   - 本機／預覽部署測試用：同時滿足 `VERCEL_ENV !== "production"` 且設定 `GROUPBUY_DEV_EXPOSE_CODES=1` 時，回應訊息尾端才附「（測試用驗證碼：xxxxxx）」。正式站絕不可設此旗標（即使設了，production 判斷仍會擋下）。
   - 重設密碼代碼一律只寫寄信紀錄、不放回應（不受旗標影響）。
-- 超商電子地圖／門市查詢未串接（回一筆標示【未串接】的測試門市）；Facebook 快速登入、reCAPTCHA 未載入。
-- 說明中心：快訊跑馬燈、導覽列樣式 2–8 與選單樣式 2–3 的差異、深色主題、文章瀏覽數未做；示範資料「所有教學」子分類無文章。
+- 超商電子地圖／門市查詢未串接（回一筆標示【未串接】的測試門市）；Facebook 快速登入只有卡片與按鈕（按下顯示【未串接】）、不載入 FB SDK；reCAPTCHA 未載入。
+- 會員註冊：同 Email 的未驗證帳號重新註冊時只重發驗證碼，不覆寫原本的姓名、電話、生日、密碼（驗證後自動登入，忘記原密碼可用忘記密碼）。
+- 輸入驗證：姓名、地址、備註之外，臉書名稱、發票抬頭、縣市、鄉鎮市區、銀行名稱、`fnote(...)` 鍵與值都擋 `<` `>`（縱深防禦；顯示處本來就跳脫）。
+- 說明中心：快訊跑馬燈、導覽列樣式 2–8 與選單樣式 2–3 的差異、深色主題、文章瀏覽數未做；示範資料的分類節點（4411 以外）目前沒有文章（見推導段 0107 說明）。
 - 說明中心／公告／403 等沒有團購的官網頁：購物袋小工具在沒有購物袋 uuid（無團購）時不發 `addToShoppingCart` 請求（`web-foot-scripts.html` 的 `ShoppingCart.load()`），不再出現 `/p/null/...` 404；原站此情境的行為未擷取（推導）。
 - 正式網址的「送出訂單」「會員登入／註冊」未由 agent 執行（見下方驗證紀錄），需 user 同意後再做或由 user 手動點一次。
 
