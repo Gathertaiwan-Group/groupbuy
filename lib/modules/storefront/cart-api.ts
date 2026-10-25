@@ -12,6 +12,7 @@ import { clean, ipOf, rateLimit } from "./guard";
 import { checkPointsRequest } from "./points";
 import { pointsEnabled } from "./pricing";
 import { enumOptions } from "@/lib/core/enums";
+import { storefrontDeliveryFlatpickrOptions, storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
 
 type Nested = Record<string, unknown>;
 
@@ -180,6 +181,30 @@ async function updateSubscriptionSettings(ctx: RequestContext): Promise<Response
 }
 
 // ───────────── 結帳表單 ─────────────
+/**
+ * 結帳頁「期望／不期望配送日期」選項（ep.widget $.fn.deliveryTimeSettings）。
+ * 優先用進階設定「前台-期望配送時間設定」（groupbuy 模組 DELIVERY_TIME_SETTINGS）；未設定或停用時沿用舊版
+ * 團購設定 groupBuySettings.optionDateExpectedShipping（H=隱藏、O=選填、M=必填）。order-place.ts 也用它做伺服器端驗證。
+ */
+export async function deliveryFlatpickrOptions(tenantId: number, gb: SfGroupBuy): Promise<Record<string, unknown> | null> {
+  const dts = await storefrontDeliveryFlatpickrOptions(tenantId, gb);
+  if (dts) return dts;
+  const set = gb.group_buy_settings ?? {};
+  const optExp = String(set.optionDateExpectedShipping ?? "H");
+  if (optExp === "H") return null;
+  return {
+    deliveryTimeSettingType: "PREFERRED",
+    mandatory: optExp === "M",
+    disable: String(set.dateExpectedShippingExceptDates ?? "")
+      .split(/[,\s]+/)
+      .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)),
+    language: "zh-TW",
+    dateFormat: "Y-m-d",
+    minDate: String(set.dateExpectedShippingStart ?? "") || "today",
+    ...(set.dateExpectedShippingEnd ? { maxDate: String(set.dateExpectedShippingEnd) } : {}),
+  };
+}
+
 async function getFormSettings(ctx: RequestContext): Promise<Response> {
   const { tenant, gb } = await scope(ctx);
   const prefs = await groupBuyPreferences(tenant.id, gb.id);
@@ -198,21 +223,10 @@ async function getFormSettings(ctx: RequestContext): Promise<Response> {
     const { data: its } = await getServiceClient().from("items").select("id").eq("tenant_id", tenant.id).in("item_set_id", setIds).eq("offline", false);
     contentIds = ((its ?? []) as { id: number }[]).map((r) => String(r.id));
   }
-  let flatpickrOptions: Record<string, unknown> | null = null;
-  const optExp = String(set.optionDateExpectedShipping ?? "H");
-  if (optExp !== "H") {
-    flatpickrOptions = {
-      deliveryTimeSettingType: "PREFERRED",
-      mandatory: optExp === "M",
-      disable: String(set.dateExpectedShippingExceptDates ?? "")
-        .split(/[,\s]+/)
-        .filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)),
-      language: "zh-TW",
-      dateFormat: "Y-m-d",
-      minDate: String(set.dateExpectedShippingStart ?? "") || "today",
-      ...(set.dateExpectedShippingEnd ? { maxDate: String(set.dateExpectedShippingEnd) } : {}),
-    };
-  }
+  const [flatpickrOptions, formattedNotes] = await Promise.all([
+    deliveryFlatpickrOptions(tenant.id, gb),
+    storefrontFormattedNotes(tenant.id, gb.id),
+  ]);
   return json({
     code: 200,
     data: {
@@ -237,7 +251,7 @@ async function getFormSettings(ctx: RequestContext): Promise<Response> {
         shipping: String(checkoutDescr.shipping ?? ""),
         note: String(checkoutDescr.note ?? ""),
       },
-      formattedNotes: [],
+      formattedNotes,
       commonNoteOption: [],
       // 原站選項含「不指定」(0) 且排第一個 → 未選時預設「不指定」
       deliverTimeOption: [...deliverOpts]

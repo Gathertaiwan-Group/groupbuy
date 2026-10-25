@@ -96,10 +96,12 @@ function gbpEscape(s) { return $.fn.dataTable.render.text().display(s == null ? 
 				.bind(table, id)
 				.show();
 				return;
-			{{!-- 推導：原站這兩鍵是獨立頁（customNoteSettings／deliveryTimeSettings），本系統尚未提供 --}}
+			{{!-- 原站（GAP_SPEC §3）：這兩鍵以 window.open 新分頁開啟獨立子頁 --}}
 			case 'CUSTOM_NOTE_SETTINGS':
+				window.open('/backend/GroupBuyPreference/customNoteSettings?groupBuyId=' + groupBuyId);
+				return;
 			case 'DELIVERY_TIME_SETTINGS':
-				displayAlertWarning('此設定尚未提供編輯介面');
+				window.open('/backend/GroupBuyPreference/deliveryTimeSettings?groupBuyId=' + groupBuyId);
 				return;
 			}
 			if (data.fieldType == 'json') {

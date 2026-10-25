@@ -1,0 +1,131 @@
+#dtsRoot { font-size: .95rem; }
+.dts-loading { color: var(--bs-secondary-color, #6c757d); padding: 2rem 0; text-align: center; }
+
+.dts-status-chip {
+	display: inline-flex; align-items: center; gap: .4rem;
+	font-size: .75rem; font-weight: 600; padding: .2rem .6rem; border-radius: 999px;
+}
+.dts-status-chip.inherited { background: #f1f3f5; color: #6c757d; }
+.dts-status-chip.custom { background: rgba(var(--bs-primary-rgb, 13,110,253), .12); color: var(--bs-primary, #0d6efd); }
+.dts-status-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.dts-banner {
+	display: flex; gap: .6rem; align-items: flex-start;
+	background: #fff8ec; border: 1px solid #ffe3ad; color: #7a5b12;
+	border-radius: .5rem; padding: .7rem .9rem; font-size: .85rem; margin-bottom: 1rem;
+}
+.dts-inherited-banner {
+	display: flex; gap: .6rem; align-items: flex-start;
+	background: #f1f3f5; border: 1px solid #dee2e6; color: #495057;
+	border-radius: .5rem; padding: .7rem .9rem; font-size: .85rem; margin-bottom: 1rem;
+}
+
+.dts-section { padding: 1.1rem 0; border-top: 1px solid #eceef1; }
+.dts-section:first-child { border-top: none; padding-top: 0; }
+.dts-section[data-disabled="true"],
+#dtsFieldset[data-disabled="true"] { opacity: .45; pointer-events: none; }
+.dts-section-title { font-weight: 700; font-size: .88rem; margin-bottom: .2rem; }
+label.dts-section-title { cursor: pointer; }
+.dts-section-help { font-size: .78rem; color: #6c757d; margin-bottom: .7rem; }
+
+.dts-hint {
+	border: 0; background: none; padding: 0 .25rem; margin: 0;
+	color: #adb5bd; font-size: .8rem; line-height: 1; vertical-align: baseline; cursor: help;
+}
+.dts-hint:hover, .dts-hint:focus { color: #6c757d; }
+.dts-hint:focus-visible { outline: 2px solid var(--bs-primary, #0d6efd); outline-offset: 1px; border-radius: .2rem; }
+
+.dts-seg { display: flex; background: #f1f3f5; border-radius: .6rem; padding: 3px; gap: 3px; }
+.dts-seg button {
+	flex: 1; border: none; background: transparent; border-radius: .5rem;
+	font-size: .82rem; font-weight: 600; color: #6c757d; padding: .5rem .5rem; cursor: pointer;
+}
+.dts-seg button.active { background: #fff; color: #212529; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+
+.dts-callout { display: flex; gap: .5rem; font-size: .8rem; line-height: 1.5; border-radius: .5rem; padding: .6rem .75rem; margin-top: .7rem; }
+.dts-callout.info { background: rgba(var(--bs-primary-rgb, 13,110,253), .08); color: #0a4fb5; }
+.dts-callout.calc { background: #f8f9fa; color: #6c757d; border: 1px dashed #dee2e6; }
+.dts-callout.warn { background: #fdeee7; color: #b02a37; border: 1px solid #f5c2c7; font-weight: 600; }
+
+.dts-field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .8rem; }
+/* Field labels and anchor titles share the same visual tier under section titles. */
+.dts-field label { display: block; font-size: .78rem; font-weight: 700; color: #495057; margin-bottom: .3rem; }
+.dts-optional { margin-left: .35rem; font-weight: 600; color: #adb5bd; }
+.dts-field .err { font-size: .72rem; color: #dc3545; margin-top: .3rem; display: none; font-weight: 600; }
+
+.dts-wd-row { display: flex; gap: .4rem; margin-top: .8rem; flex-wrap: wrap; }
+.dts-wd-row > span { display: inline-flex; }
+.dts-wd-chip {
+	width: 38px; height: 38px; border-radius: .5rem; border: 1px solid #dee2e6; background: #fff;
+	font-weight: 700; font-size: .8rem; cursor: pointer; position: relative;
+}
+.dts-wd-chip.on { background: #fdeee7; border-color: #dc3545; color: #dc3545; }
+.dts-wd-chip[disabled] { background: #f8f9fa; color: #ced4da; cursor: not-allowed; border-color: #eceef1; }
+
+.dts-tag-row { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .7rem; min-height: 30px; }
+.dts-tag { display: inline-flex; align-items: center; gap: .35rem; background: #fdeee7; color: #dc3545; border-radius: .4rem; padding: .25rem .3rem .25rem .55rem; font-size: .78rem; font-weight: 600; }
+.dts-tag button { border: none; background: transparent; color: inherit; cursor: pointer; font-weight: 700; border-radius: .3rem; padding: 0 .3rem; }
+.dts-tag button:hover { background: rgba(0,0,0,.08); }
+.dts-tag-empty { display: inline-flex; align-items: center; color: #adb5bd; font-size: .78rem; }
+.dts-overlap-note { font-size: .75rem; color: #6c757d; margin-top: .5rem; display: none; gap: .4rem; }
+
+.dts-preview-card { background: #f8f9fa; border: 1px solid #eceef1; border-radius: .7rem; padding: 1rem; }
+.dts-cal-card { background: #fff; border: 1px solid #eceef1; border-radius: .6rem; padding: .8rem .8rem .6rem; }
+.dts-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+.dts-cal-nav button { width: 26px; height: 26px; border-radius: .4rem; border: 1px solid #dee2e6; background: #fff; cursor: pointer; }
+.dts-cal-nav .month-label { font-weight: 700; font-size: .95rem; }
+.dts-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.dts-cal-dow { text-align: center; font-size: .68rem; font-weight: 700; color: #adb5bd; padding-bottom: .3rem; }
+.dts-cal-cell {
+	aspect-ratio: 1/.9; display: flex; align-items: center; justify-content: center;
+	border-radius: .4rem; font-size: .78rem; font-variant-numeric: tabular-nums; border: 1px solid transparent;
+}
+.dts-cal-cell.pad { visibility: hidden; }
+.dts-cal-cell.out-of-range { color: #ced4da; }
+.dts-cal-cell.available { background: #e6f6ee; color: #198754; font-weight: 700; cursor: pointer; }
+.dts-cal-cell.excluded-weekday { color: #adb5bd; background: repeating-linear-gradient(135deg, #f8f9fa, #f8f9fa 3px, #eceef1 3px, #eceef1 4px); }
+.dts-cal-cell.excluded-date { background: #fdeee7; color: #dc3545; font-weight: 700; }
+.dts-cal-cell.today { border-color: var(--bs-primary, #0d6efd); font-weight: 700; }
+.dts-cal-cell.picked { background: var(--bs-primary, #0d6efd); color: #fff; font-weight: 700; }
+.dts-legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin-top: .7rem; font-size: .72rem; color: #6c757d; }
+.dts-legend-item { display: flex; align-items: center; gap: .3rem; }
+.dts-legend-swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+.dts-summary { margin-top: .8rem; display: flex; align-items: baseline; justify-content: space-between; padding: .6rem .8rem; border-radius: .5rem; background: rgba(var(--bs-primary-rgb, 13,110,253), .08); color: #0a4fb5; }
+.dts-summary .n { font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.dts-summary .lbl { font-size: .68rem; font-weight: 600; }
+
+.dts-buyer { margin-top: .8rem; background: #fff; border: 1px solid #eceef1; border-radius: .6rem; padding: .7rem .8rem; }
+.dts-buyer .eyebrow { font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: #adb5bd; margin-bottom: .5rem; }
+.dts-buyer-field { display: flex; align-items: center; gap: .5rem; font-size: .82rem; }
+.dts-buyer-field input { flex: 1; font-size: .8rem; }
+.dts-buyer-hint { font-size: .75rem; color: #6c757d; margin-top: .5rem; line-height: 1.6; }
+.dts-buyer-hint .reason { color: #dc3545; font-weight: 600; }
+
+.dts-footer { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.3rem; padding-top: 1rem; border-top: 1px solid #eceef1; }
+
+.dts-switch { position: relative; display: inline-block; width: 40px; height: 23px; flex: none; }
+.dts-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; top: 0; left: 0; cursor: pointer; }
+.dts-switch .track { position: absolute; inset: 0; background: #ced4da; border-radius: 999px; transition: background .15s; }
+.dts-switch .thumb { position: absolute; top: 2px; left: 2px; width: 19px; height: 19px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s; }
+.dts-switch input:checked + .track { background: var(--bs-primary, #0d6efd); }
+.dts-switch input:checked + .track + .thumb { transform: translateX(17px); }
+.dts-switch input:focus-visible + .track { outline: 2px solid var(--bs-primary, #0d6efd); outline-offset: 2px; }
+
+/* 配送起訖的錨點列：來源選擇 + 偏移天數 + 即時換算結果 */
+.dts-anchor { border: 1px solid #eceef1; border-radius: .6rem; padding: .75rem .85rem; margin-top: .7rem; background: #fff; }
+.dts-anchor-head { display: flex; align-items: baseline; gap: .5rem; margin-bottom: .5rem; }
+.dts-anchor-title { display: block; font-size: .78rem; font-weight: 700; color: #495057; }
+/* 換算結果貼著算式同列的右端；窄畫面時整段換行到算式下方 */
+.dts-anchor-calc { margin-top: .6rem; display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
+.dts-anchor-result { font-size: .78rem; font-weight: 700; color: #0a4fb5; font-variant-numeric: tabular-nums; text-align: right; margin-left: auto; }
+.dts-anchor-result.muted { color: #adb5bd; font-weight: 600; }
+.dts-anchor-body { display: flex; align-items: center; gap: .45rem; font-size: .82rem; flex-wrap: wrap; min-height: 31px; }
+.dts-anchor-body input[type=number] { width: 78px; }
+.dts-anchor-body input[type=date] { max-width: 185px; }
+.dts-anchor-base { font-variant-numeric: tabular-nums; color: #495057; font-weight: 600; background: #f1f3f5; border-radius: .35rem; padding: .2rem .45rem; }
+.dts-anchor-note { font-size: .78rem; color: #6c757d; font-weight: 400; }
+
+/* 買家預覽區多了團購起訖兩列，標籤要對齊 */
+.dts-buyer-field { margin-bottom: .35rem; }
+.dts-buyer-field > span:first-child { flex: none; min-width: 6.5em; }

@@ -18,6 +18,9 @@ import { ipOf, isEmail, isPhone, rateLimit } from "./guard";
 import { grantOrderView } from "./order-grant";
 import { appendBlacklistLog, findBlacklistMatch } from "@/lib/modules/marketing/blacklist";
 import { syncCouponTotals } from "@/lib/modules/marketing/pricing-loader";
+import { storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
+import { deliveryFlatpickrOptions } from "./cart-api";
+import { taipeiDate } from "@/lib/core/time";
 
 const NA = (v: string | undefined) => {
   const t = String(v ?? "").trim();
@@ -163,6 +166,57 @@ function validate(gb: SfGroupBuy, shippingType: string, cvsType: string, pm: num
   if (note.length > 500) return "備註最多不超過 500 個字";
   if (gb.option_note === "M" && !note) return "請填寫備註";
   return null;
+}
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
+/** 期望／不期望配送日期：與結帳頁 flatpickr 同一組選項（cart-api deliveryFlatpickrOptions）在伺服器端再驗一次 */
+function validateDeliveryDates(opts: Record<string, unknown> | null, s: AddressDraft): string | null {
+  if (!opts) return null;
+  const restricted = opts.deliveryTimeSettingType === "RESTRICTED";
+  const label = restricted ? "不期望配送日期" : "期望配送日期";
+  const raw = (restricted ? s.restrictedDeliveryDates : s.preferredDeliveryDates) ?? "";
+  if (!raw) return opts.mandatory === true ? `請選擇${label}` : null;
+  const today = taipeiDate(new Date());
+  const minRaw = String(opts.minDate ?? "");
+  const min = !minRaw || minRaw === "today" ? today : minRaw;
+  const max = YMD.test(String(opts.maxDate ?? "")) ? String(opts.maxDate) : "";
+  const disable = new Set(Array.isArray(opts.disable) ? (opts.disable as unknown[]).map(String) : []);
+  const days = restricted ? raw.split(/\s*~\s*/) : [raw];
+  if (days.length > 2 || days.some((d) => !YMD.test(d) || Number.isNaN(Date.parse(d)))) return `${label}格式不正確，請重新選擇`;
+  if (days.length === 2 && days[0] > days[1]) return `${label}格式不正確，請重新選擇`;
+  for (const d of days) {
+    if (d < min || (max && d > max)) return `${label}不在可配送的日期範圍內，請重新選擇`;
+  }
+  // 期望配送：選的那天不可是排除日；不期望配送（一段區間）：起訖日不可落在排除日（同前台 flatpickr 規則，區間中間可跨過排除日）
+  if (days.some((d) => disable.has(d))) return restricted ? `${label}的起訖日不可選在不配送的日子，請重新選擇` : `${label}當天不配送，請重新選擇`;
+  return null;
+}
+
+/** 自定義格式化備註 fnote(名稱)：必填、選項必須是設定中的值、日期格式 */
+function validateFormattedNotes(notes: Record<string, unknown>[], f: Form): string | null {
+  for (const n of notes) {
+    const name = String(n.name ?? "");
+    if (!name) continue;
+    const title = String(n.title ?? "") || name;
+    const type = String(n.htmlType ?? "").toLowerCase();
+    const vals = f.all(`fnote(${name})`).filter((v) => v !== "");
+    if (!vals.length) {
+      if (n.mandatory) return type === "text" || type === "textarea" ? `請填寫${title}` : `請選擇${title}`;
+      continue;
+    }
+    const opts = Array.isArray(n.options) ? (n.options as unknown[]).map((o) => (o && typeof o === "object" ? String((o as Record<string, unknown>).value ?? (o as Record<string, unknown>).label ?? "") : String(o))) : [];
+    if (["checkbox", "radio", "select"].includes(type) && opts.length && vals.some((v) => !opts.includes(v))) return `${title}的選項不正確，請重新選擇`;
+    if (type !== "checkbox" && vals.length > 1) return `${title}只能填一個值`;
+    if (type === "date" && !vals.every((v) => /^\d{4}(-\d{2}(-\d{2})?)?$/.test(v))) return `${title}日期格式不正確`;
+    if (vals.some((v) => v.length > (type === "textarea" ? 500 : 200))) return `${title}內容過長`;
+  }
+  return null;
+}
+
+async function validateDeliveryAndNotes(tenantId: number, gb: SfGroupBuy, s: AddressDraft, f: Form): Promise<string | null> {
+  const [opts, notes] = await Promise.all([deliveryFlatpickrOptions(tenantId, gb), storefrontFormattedNotes(tenantId, gb.id)]);
+  return validateDeliveryDates(opts, s) ?? validateFormattedNotes(notes as Record<string, unknown>[], f);
 }
 
 function statusFor(pm: number): string {
@@ -312,6 +366,8 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   }
   const err = validate(gb, shippingType, cvsType, pm, billing, shipping, f);
   if (err) return fail(cc, err);
+  const err2 = await validateDeliveryAndNotes(tenant.id, gb, shipping, f);
+  if (err2) return fail(cc, err2);
 
   // 3) 黑名單
   const hit = await blacklistHit(tenant.id, ip, [
@@ -335,6 +391,8 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     const m = /^fnote\((.{1,40})\)$/.exec(k);
     if (m) noteParts.push(`${m[1]}:${vals.join(",").slice(0, 200)}`);
   }
+  // 不期望配送日期（RESTRICTED）沒有專屬欄位：記在備註（期望配送日期存 preferred_delivery_dates）
+  if (shipping.restrictedDeliveryDates) noteParts.push(`不期望配送日期:${shipping.restrictedDeliveryDates}`);
   const isCvs = shippingType === "CVS";
   const island = !!p.shipping.island;
   const order: Record<string, unknown> = {

@@ -1,0 +1,39 @@
+<!--#head-->
+{{!-- 原站：spec/html/gap-groupbuypreference-deliverytimesettings.html（畫面全由 deliveryTimeSettings.js 的 Template 產生） --}}
+<link rel="stylesheet" href="/css/backend/deliveryTimeSettings.css">
+<script>
+{{!-- 原站 inline script 以執行期 window.DTS_PAGE 取得（GAP_SPEC §3.1）。
+     推導：removeParams 函式內容未擷取 → 依 deliveryTimeSettings.js Gateway.remove(fromId) 的用法，
+     fromId＝本團 DELIVERY_TIME_SETTINGS 設定列 id，送 /ajax/GroupBuyPreference/delete 的 groupBuyPreferenceId。 --}}
+window.DTS_PAGE = {
+	showInheritedUi: true,
+	allowCustomDate: true,
+	simulatedCampaign: false,
+	urls: {
+		fetch: '/ajax/GroupBuyPreference/deliveryTimeSettings.do',
+		save: '/ajax/GroupBuyPreference/deliveryTimeSettings.do?groupBuyId=' + {{json groupBuyId}},
+		remove: '/ajax/GroupBuyPreference/delete.do'
+	},
+	fetchParams: { groupBuyId: {{json groupBuyId}} },
+	removeParams: function (fromId) {
+		return { groupBuyPreferenceId: fromId, groupBuyId: {{json groupBuyId}} };
+	}
+};
+</script>
+<script src="/scripts/backend/deliveryTimeSettings.js"></script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/GroupBuyPreference/list?groupBuyId={{groupBuyId}}">進階設定</a></li>
+		<li class="breadcrumb-item active" aria-current="page">前台-期望配送時間設定</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-header d-flex align-items-center justify-content-between">
+	<span>前台-期望配送時間設定</span>
+	<span class="dts-status-chip inherited" id="dtsStatusChip"><span class="dot"></span>套用系統預設值</span>
+</div>
+<div class="card-body" id="dtsRoot"></div>
+</div>
+</div>

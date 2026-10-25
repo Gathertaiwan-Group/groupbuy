@@ -1,0 +1,503 @@
+<!--#head-->
+{{!-- 原站：spec/html/gap-groupbuypreference-customnotesettings.html（DOM 完整擷取）＋ /css/backend/custom-note-board.css。
+     推導：原站 inline script（CustomNoteCanvas，32KB）原文被擷取過濾擋下 → 行為依 DOM、custom-note-board.css 的 class 與
+     舊版 customNote 文字格式（#標題#name#type[選項]#O#說明）重寫：欄位卡片（類型/標題/選項/說明/必填/進階代碼）、
+     拖曳排序、插入帶、刪除確認遮罩、自動儲存＋立即儲存、#cnFieldCount 計數。儲存端點推導為 POST 同路徑（JSON {data:[…]}）。 --}}
+<link rel="stylesheet" href="/css/backend/custom-note-board.css">
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb">
+	<ol class="breadcrumb">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item"><a href="/backend/GroupBuyPreference/list?groupBuyId={{groupBuyId}}">進階設定</a></li>
+		<li class="breadcrumb-item active" aria-current="page">自定義格式化備註設定</li>
+	</ol>
+</nav>
+<div class="card mt-4">
+<div class="card-body">
+	<div class="cn-board">
+		<div class="cn-board-header">
+			<div class="cn-board-header__title">
+				自定義格式化備註設定<span id="cnFieldCount" class="text-muted font-weight-normal small"></span>
+			</div>
+			<div class="cn-autosave-indicator is-saved" id="cnAutosaveIndicator">
+				<i class="fa-solid fa-check"></i> 已儲存
+			</div>
+		</div>
+		<div id="cnCanvas"><div class="cn-empty"><i class="fa-light fa-inbox fa-2x d-block mb-2"></i>尚未設定任何自訂備註欄位</div></div>
+		<div class="cn-add-cta mt-2" id="cnBtnAdd" role="button" tabindex="0">
+			<i class="fa-solid fa-plus"></i> 新增自訂欄位
+		</div>
+	</div>
+</div>
+</div>
+<div class="cn-fab-dock" id="cnFabDock">
+	<button type="button" class="btn btn-outline-primary cn-fab cn-btn-save waves-effect waves-light" id="cnBtnSave" title="立即儲存">
+		<i class="fa-solid fa-floppy-disk"></i>
+	</button>
+	<button type="button" class="btn btn-primary cn-fab cn-fab-trigger waves-effect waves-light" id="cnFabTrigger" title="新增欄位">
+		<i class="fa-solid fa-plus"></i>
+	</button>
+</div>
+<div class="cn-type-picker-overlay" id="cnTypePickerOverlay" aria-hidden="true">
+	<div class="cn-type-picker-backdrop" id="cnTypePickerBackdrop"></div>
+	<div class="cn-type-picker-panel" role="dialog" aria-labelledby="cnTypePickerTitle">
+		<div class="cn-type-picker-header" id="cnTypePickerTitle">選擇欄位類型</div>
+		<div class="cn-type-picker-grid" id="cnTypePickerGrid"><button type="button" class="cn-type-picker-item" data-type="TEXT"><i class="fa-solid fa-i-cursor"></i><span>單行文字輸入</span></button><button type="button" class="cn-type-picker-item" data-type="CHECKBOX"><i class="fa-solid fa-square-check"></i><span>多選選項（方框）</span></button><button type="button" class="cn-type-picker-item" data-type="RADIO"><i class="fa-solid fa-circle-dot"></i><span>單選選項（圓點）</span></button><button type="button" class="cn-type-picker-item" data-type="SELECT"><i class="fa-solid fa-caret-down"></i><span>下拉式選單</span></button><button type="button" class="cn-type-picker-item" data-type="DATE"><i class="fa-solid fa-calendar-days"></i><span>日期</span></button><button type="button" class="cn-type-picker-item" data-type="TEXTAREA"><i class="fa-solid fa-align-left"></i><span>多行文字輸入</span></button></div>
+	</div>
+</div>
+</div>
+<script>
+var CustomNoteCanvas = (function ($) {
+	'use strict';
+
+	var CHOICE = { CHECKBOX: true, RADIO: true, SELECT: true };
+	var BULLET = { CHECKBOX: 'fa-regular fa-square', RADIO: 'fa-regular fa-circle', SELECT: 'fa-solid fa-angle-right' };
+	var NAME_RE = /^[\p{L}\p{N}]{1,40}$/u;
+	var UNSAFE = /[<>"'`]/;
+	var AUTOSAVE_MS = 1200;
+
+	var cfg = null;
+	var types = [];
+	var fields = [];
+	var dirty = false;
+	var saving = false;
+	var timer = null;
+	var insertAt = null;
+	var openDrawers = {};
+	var uid = 0;
+
+	function esc(s) {
+		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+		});
+	}
+	function typeLabel(v) {
+		for (var i = 0; i < types.length; i++) if (types[i].value === v) return types[i].label;
+		return v;
+	}
+	function nextName() {
+		var used = {};
+		fields.forEach(function (f) { used[f.name] = true; });
+		for (var i = fields.length + 1; ; i++) if (!used['note' + i]) return 'note' + i;
+	}
+	function newField(type) {
+		var f = { _k: ++uid, name: nextName(), title: typeLabel(type), htmlType: type, mandatory: false, options: [], descr: '', placeholder: '', selectFirstOptionEnabled: false };
+		if (CHOICE[type]) f.options = ['選項1', '選項2'];
+		if (type === 'DATE') f.dateMode = 'days';
+		return f;
+	}
+
+	// ---------- 驗證（與後端 normalizeFields 一致） ----------
+	function validate() {
+		var names = {};
+		for (var i = 0; i < fields.length; i++) {
+			var f = fields[i], no = '第 ' + (i + 1) + ' 個欄位';
+			if (!String(f.title || '').trim()) return { idx: i, msg: no + '請輸入欄位標題' };
+			if (!NAME_RE.test(f.name || '')) return { idx: i, msg: no + '的欄位代碼只能為文字及數字（不能帶符號）', field: 'name' };
+			if (names[f.name]) return { idx: i, msg: '欄位代碼「' + f.name + '」重複', field: 'name' };
+			names[f.name] = true;
+			var texts = [f.title, f.descr, f.placeholder].concat(f.options || []);
+			for (var j = 0; j < texts.length; j++) if (UNSAFE.test(texts[j] || '')) return { idx: i, msg: no + '不可包含 < > " \' ` 等符號' };
+			if (CHOICE[f.htmlType]) {
+				var opts = (f.options || []).map(function (o) { return String(o).trim(); }).filter(Boolean);
+				if (!opts.length) return { idx: i, msg: no + '（' + f.title + '）至少需要一個選項' };
+				var seen = {};
+				for (var k = 0; k < opts.length; k++) {
+					if (seen[opts[k]]) return { idx: i, msg: no + '（' + f.title + '）的選項重複' };
+					if (opts[k].indexOf(',') >= 0) return { idx: i, msg: no + '（' + f.title + '）的選項不可包含逗號' };
+					seen[opts[k]] = true;
+				}
+			}
+		}
+		return null;
+	}
+
+	// ---------- 狀態列 ----------
+	function indicator(state, msg) {
+		var $i = $('#cnAutosaveIndicator').removeClass('is-editing is-saved is-blocked');
+		if (state === 'editing') $i.addClass('is-editing').html('<i class="fa-solid fa-pen"></i> 編輯中…');
+		else if (state === 'saving') $i.addClass('is-editing').html('<i class="fa-solid fa-spinner fa-spin"></i> 儲存中…');
+		else if (state === 'blocked') $i.addClass('is-blocked').html('<i class="fa-solid fa-triangle-exclamation"></i> ' + esc(msg));
+		else $i.addClass('is-saved').html('<i class="fa-solid fa-check"></i> 已儲存');
+	}
+	function updateCount() {
+		$('#cnFieldCount').text(fields.length ? '（共 ' + fields.length + ' 個欄位）' : '');
+	}
+
+	// ---------- 繪製 ----------
+	function controlHtml(f) {
+		if (CHOICE[f.htmlType]) {
+			var h = '';
+			(f.options || []).forEach(function (o, i) {
+				h += '<div class="cn-opt-row" data-opt="' + i + '">'
+					+ '<span class="cn-opt-drag" draggable="true" title="拖曳排序"><i class="fa-solid fa-grip-vertical"></i></span>'
+					+ '<span class="cn-opt-bullet">' + (f.htmlType === 'SELECT' ? (i + 1) + '.' : '<i class="' + BULLET[f.htmlType] + '"></i>') + '</span>'
+					+ '<input type="text" class="form-control form-control-sm cn-opt-input" maxlength="100" value="' + esc(o) + '" placeholder="選項 ' + (i + 1) + '">'
+					+ '<button type="button" class="cn-opt-remove" title="移除選項"><i class="fa-solid fa-xmark"></i></button>'
+					+ '</div>';
+			});
+			return h + '<button type="button" class="cn-opt-add"><i class="fa-solid fa-plus mr-1"></i>新增選項</button>';
+		}
+		var ph = esc(f.placeholder || '');
+		if (f.htmlType === 'TEXTAREA') return '<textarea class="form-control form-control-sm" rows="2" disabled placeholder="' + ph + '"></textarea>';
+		if (f.htmlType === 'DATE') return '<input type="text" class="form-control form-control-sm" disabled placeholder="' + (ph || (f.dateMode === 'years' ? 'YYYY-MM-DD（先選年份）' : 'YYYY-MM-DD')) + '">';
+		return '<input type="text" class="form-control form-control-sm" disabled placeholder="' + ph + '">';
+	}
+	function drawerHtml(f) {
+		var h = '<div class="form-row">'
+			+ '<div class="form-group col-sm-6 mb-2"><label>欄位代碼（name）</label>'
+			+ '<input type="text" class="form-control form-control-sm cn-name" maxlength="40" value="' + esc(f.name) + '">'
+			+ '<div class="invalid-feedback cn-name-error"></div>'
+			+ '<small class="form-text text-muted">name只能為文字及數字，不能帶符號；訂單備註以「代碼:內容」記錄</small></div>';
+		if (!CHOICE[f.htmlType] || f.htmlType === 'CHECKBOX') {
+			h += '<div class="form-group col-sm-6 mb-2"><label>提示文字（placeholder）</label>'
+				+ '<input type="text" class="form-control form-control-sm cn-placeholder" maxlength="100" value="' + esc(f.placeholder) + '"' + (f.htmlType === 'CHECKBOX' ? ' disabled' : '') + '></div>';
+		}
+		if (f.htmlType === 'RADIO' || f.htmlType === 'SELECT') {
+			h += '<div class="form-group col-sm-6 mb-2"><label>預設值</label><div class="custom-control custom-checkbox">'
+				+ '<input type="checkbox" class="custom-control-input cn-select-first" id="cnSelFirst' + f._k + '"' + (f.selectFirstOptionEnabled ? ' checked' : '') + '>'
+				+ '<label class="custom-control-label font-weight-normal" for="cnSelFirst' + f._k + '">預設選取第一個選項</label></div></div>';
+		}
+		if (f.htmlType === 'DATE') {
+			h += '<div class="form-group col-sm-6 mb-2"><label>日期選擇方式</label>'
+				+ '<select class="form-control form-control-sm cn-date-mode">'
+				+ '<option value="days"' + (f.dateMode !== 'years' ? ' selected' : '') + '>直接選日期</option>'
+				+ '<option value="years"' + (f.dateMode === 'years' ? ' selected' : '') + '>先選年份（例：生日）</option>'
+				+ '</select></div>';
+		}
+		return h + '</div>';
+	}
+	function cardHtml(f, i) {
+		var opts = types.map(function (t) {
+			return '<option value="' + t.value + '"' + (t.value === f.htmlType ? ' selected' : '') + '>' + esc(t.label) + '</option>';
+		}).join('');
+		return '<div class="cn-card' + (openDrawers[f._k] ? ' is-drawer-open' : '') + '" data-idx="' + i + '">'
+			+ '<div class="cn-card__toolbar">'
+			+ '<span class="cn-drag-handle" draggable="true" title="拖曳排序"><i class="fa-solid fa-grip-vertical"></i></span>'
+			+ '<select class="form-control form-control-sm cn-type-select" title="欄位類型">' + opts + '</select>'
+			+ '<span class="cn-toolbar-spacer"></span>'
+			+ '<div class="cn-mandatory-wrap custom-control custom-checkbox mr-1"><input type="checkbox" class="custom-control-input cn-mandatory" id="cnMand' + f._k + '"' + (f.mandatory ? ' checked' : '') + '>'
+			+ '<label class="custom-control-label" for="cnMand' + f._k + '">必填</label></div>'
+			+ '<button type="button" class="cn-toolbar-btn" data-act="up" title="上移"' + (i === 0 ? ' disabled' : '') + '><i class="fa-solid fa-arrow-up"></i></button>'
+			+ '<button type="button" class="cn-toolbar-btn" data-act="down" title="下移"' + (i === fields.length - 1 ? ' disabled' : '') + '><i class="fa-solid fa-arrow-down"></i></button>'
+			+ '<button type="button" class="cn-toolbar-btn' + (openDrawers[f._k] ? ' is-active' : '') + '" data-act="drawer" title="進階設定"><i class="fa-solid fa-gear"></i></button>'
+			+ '<button type="button" class="cn-toolbar-btn" data-act="copy" title="複製欄位"><i class="fa-regular fa-copy"></i></button>'
+			+ '<button type="button" class="cn-toolbar-btn" data-act="delete" title="刪除欄位"><i class="fa-regular fa-trash-can"></i></button>'
+			+ '</div>'
+			+ '<div class="cn-label-row"><span class="cn-label" contenteditable="true" spellcheck="false">' + esc(f.title) + '</span>'
+			+ '<span class="text-danger cn-required-mark"' + (f.mandatory ? '' : ' style="display:none"') + '>*</span></div>'
+			+ '<div class="cn-control">' + controlHtml(f) + '</div>'
+			+ '<div class="cn-caption" contenteditable="true" spellcheck="false" data-placeholder="點此輸入欄位說明（選填）">' + esc(f.descr) + '</div>'
+			+ '<div class="cn-drawer">' + drawerHtml(f) + '</div>'
+			+ '<div class="cn-delete-mask"><div class="cn-delete-mask__msg">確定要刪除「' + esc(f.title || typeLabel(f.htmlType)) + '」？</div>'
+			+ '<button type="button" class="cn-delete-mask__trash" data-act="confirm-delete" title="刪除"><i class="fa-regular fa-trash-can"></i></button>'
+			+ '<button type="button" class="cn-delete-mask__cancel" data-act="cancel-delete">取消</button></div>'
+			+ '</div>';
+	}
+	function gapHtml(at) {
+		return '<div class="cn-insert-gap" data-at="' + at + '"><button type="button" class="cn-insert-btn" title="在此插入欄位"><i class="fa-solid fa-plus"></i></button></div>';
+	}
+	function render() {
+		var $c = $('#cnCanvas');
+		if (!fields.length) {
+			$c.html('<div class="cn-empty"><i class="fa-light fa-inbox fa-2x d-block mb-2"></i>尚未設定任何自訂備註欄位</div>');
+		} else {
+			var h = '';
+			fields.forEach(function (f, i) {
+				if (i > 0) h += gapHtml(i);
+				h += cardHtml(f, i);
+			});
+			$c.html(h);
+		}
+		updateCount();
+	}
+
+	// ---------- 儲存 ----------
+	function payload() {
+		return fields.map(function (f) {
+			var o = { name: f.name, title: String(f.title || '').trim(), htmlType: f.htmlType, mandatory: !!f.mandatory,
+				options: CHOICE[f.htmlType] ? (f.options || []).map(function (x) { return String(x).trim(); }).filter(Boolean) : [],
+				descr: String(f.descr || '').trim(), placeholder: String(f.placeholder || '').trim(),
+				selectFirstOptionEnabled: !!f.selectFirstOptionEnabled };
+			if (f.htmlType === 'DATE') o.dateMode = f.dateMode === 'years' ? 'years' : 'days';
+			return o;
+		});
+	}
+	function changed() {
+		dirty = true;
+		indicator('editing');
+		clearTimeout(timer);
+		timer = setTimeout(function () { save(false); }, AUTOSAVE_MS);
+	}
+	function save(manual) {
+		clearTimeout(timer);
+		var err = validate();
+		if (err) {
+			indicator('blocked', err.msg + '，尚未儲存');
+			markError(err);
+			if (manual) toastr.error(err.msg);
+			return $.Deferred().reject().promise();
+		}
+		if (saving) {
+			timer = setTimeout(function () { save(manual); }, 400);
+			return $.Deferred().resolve().promise();
+		}
+		saving = true;
+		indicator('saving');
+		var sentDirty = dirty;
+		dirty = false;
+		return $.ajax({
+			url: cfg.url, type: 'POST', contentType: 'application/json', dataType: 'json',
+			data: JSON.stringify({ data: payload() })
+		}).done(function () {
+			if (dirty) { indicator('editing'); } else { indicator('saved'); }
+			if (manual) toastr.success('已儲存自訂備註欄位');
+		}).fail(function (xhr) {
+			dirty = dirty || sentDirty;
+			var msg = (xhr.responseJSON && (xhr.responseJSON.error || xhr.responseJSON.message)) || '儲存失敗，請再試一次';
+			indicator('blocked', msg);
+			toastr.error(msg);
+		}).always(function () {
+			saving = false;
+		});
+	}
+	function markError(err) {
+		$('.cn-name').removeClass('is-invalid');
+		$('.cn-name-error').text('');
+		if (err.field === 'name') {
+			var f = fields[err.idx];
+			openDrawers[f._k] = true;
+			var $card = $('.cn-card[data-idx=' + err.idx + ']');
+			if (!$card.hasClass('is-drawer-open')) { render(); $card = $('.cn-card[data-idx=' + err.idx + ']'); }
+			$card.find('.cn-name').addClass('is-invalid');
+			$card.find('.cn-name-error').text(err.msg);
+		}
+	}
+
+	// ---------- 類型選擇器 ----------
+	function openPicker(at) {
+		insertAt = at == null ? fields.length : at;
+		$('#cnTypePickerOverlay').addClass('is-open').attr('aria-hidden', 'false');
+		$('#cnTypePickerGrid .cn-type-picker-item').first().trigger('focus');
+	}
+	function closePicker() {
+		$('#cnTypePickerOverlay').removeClass('is-open').attr('aria-hidden', 'true');
+	}
+
+	// ---------- 事件 ----------
+	function idxOf(el) { return Number($(el).closest('.cn-card').attr('data-idx')); }
+	function move(from, to) {
+		if (to < 0 || to >= fields.length || from === to) return;
+		var f = fields.splice(from, 1)[0];
+		fields.splice(to, 0, f);
+		render();
+		changed();
+	}
+	function bind() {
+		var $c = $('#cnCanvas');
+		$('#cnBtnAdd').on('click', function () { openPicker(null); })
+			.on('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPicker(null); } });
+		$('#cnFabTrigger').on('click', function () { openPicker(null); });
+		$('#cnBtnSave').on('click', function () { save(true); });
+		$('#cnTypePickerBackdrop').on('click', closePicker);
+		$(document).on('keydown', function (e) { if (e.key === 'Escape') closePicker(); });
+		$('#cnTypePickerGrid').on('click', '.cn-type-picker-item', function () {
+			var f = newField($(this).attr('data-type'));
+			fields.splice(insertAt, 0, f);
+			closePicker();
+			render();
+			changed();
+			var $card = $('.cn-card[data-idx=' + insertAt + ']');
+			if ($card.length) {
+				$card[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+				var lab = $card.find('.cn-label')[0];
+				if (lab) { lab.focus(); var r = document.createRange(); r.selectNodeContents(lab); var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); }
+			}
+		});
+		$c.on('click', '.cn-insert-btn', function () { openPicker(Number($(this).closest('.cn-insert-gap').attr('data-at'))); });
+
+		// 標題／說明（contenteditable：只取純文字，不重繪避免失焦）
+		$c.on('input', '.cn-label', function () { fields[idxOf(this)].title = this.textContent.replace(/\s+/g, ' '); changed(); });
+		$c.on('input', '.cn-caption', function () { fields[idxOf(this)].descr = this.textContent.replace(/\s+/g, ' '); changed(); });
+		$c.on('keydown', '.cn-label, .cn-caption', function (e) { if (e.key === 'Enter') { e.preventDefault(); this.blur(); } });
+		$c.on('paste', '.cn-label, .cn-caption', function (e) {
+			e.preventDefault();
+			var t = ((e.originalEvent || e).clipboardData || window.clipboardData).getData('text');
+			document.execCommand('insertText', false, String(t || '').replace(/\s+/g, ' '));
+		});
+		$c.on('blur', '.cn-label, .cn-caption', function () {
+			var v = $(this).hasClass('cn-label') ? fields[idxOf(this)].title : fields[idxOf(this)].descr;
+			if (this.textContent !== v) this.textContent = v;
+			if (!String(v || '').trim()) this.textContent = '';
+		});
+
+		$c.on('change', '.cn-type-select', function () {
+			var f = fields[idxOf(this)], t = $(this).val();
+			if (CHOICE[t] && !(f.options || []).length) f.options = ['選項1', '選項2'];
+			if (t === 'DATE' && !f.dateMode) f.dateMode = 'days';
+			f.htmlType = t;
+			render();
+			changed();
+		});
+		$c.on('change', '.cn-mandatory', function () {
+			var i = idxOf(this);
+			fields[i].mandatory = this.checked;
+			$(this).closest('.cn-card').find('.cn-required-mark').toggle(this.checked);
+			changed();
+		});
+		$c.on('click', '[data-act]', function () {
+			var i = idxOf(this), act = $(this).attr('data-act'), f = fields[i], $card = $(this).closest('.cn-card');
+			if (act === 'up') move(i, i - 1);
+			else if (act === 'down') move(i, i + 1);
+			else if (act === 'drawer') {
+				openDrawers[f._k] = !openDrawers[f._k];
+				$card.toggleClass('is-drawer-open', !!openDrawers[f._k]);
+				$(this).toggleClass('is-active', !!openDrawers[f._k]);
+			} else if (act === 'copy') {
+				var c = JSON.parse(JSON.stringify(f));
+				c._k = ++uid;
+				c.name = nextName();
+				c.title = f.title + '（複製）';
+				fields.splice(i + 1, 0, c);
+				render();
+				changed();
+			} else if (act === 'delete') {
+				$('.cn-card.is-confirm-delete').removeClass('is-confirm-delete');
+				$card.addClass('is-confirm-delete');
+				$card.find('.cn-delete-mask__trash').trigger('focus');
+			} else if (act === 'cancel-delete') {
+				$card.removeClass('is-confirm-delete');
+			} else if (act === 'confirm-delete') {
+				delete openDrawers[f._k];
+				fields.splice(i, 1);
+				render();
+				changed();
+			}
+		});
+
+		// 選項
+		$c.on('input', '.cn-opt-input', function () {
+			fields[idxOf(this)].options[Number($(this).closest('.cn-opt-row').attr('data-opt'))] = this.value;
+			changed();
+		});
+		$c.on('keydown', '.cn-opt-input', function (e) {
+			if (e.key !== 'Enter') return;
+			e.preventDefault();
+			var i = idxOf(this), o = Number($(this).closest('.cn-opt-row').attr('data-opt'));
+			fields[i].options.splice(o + 1, 0, '');
+			render();
+			changed();
+			$('.cn-card[data-idx=' + i + '] .cn-opt-row[data-opt=' + (o + 1) + '] .cn-opt-input').trigger('focus');
+		});
+		$c.on('click', '.cn-opt-add', function () {
+			var i = idxOf(this), f = fields[i];
+			f.options.push('選項' + (f.options.length + 1));
+			render();
+			changed();
+			$('.cn-card[data-idx=' + i + '] .cn-opt-row').last().find('.cn-opt-input').trigger('focus').trigger('select');
+		});
+		$c.on('click', '.cn-opt-remove', function () {
+			var i = idxOf(this);
+			fields[i].options.splice(Number($(this).closest('.cn-opt-row').attr('data-opt')), 1);
+			render();
+			changed();
+		});
+
+		// 進階抽屜
+		$c.on('input', '.cn-name', function () {
+			fields[idxOf(this)].name = this.value.trim();
+			$(this).removeClass('is-invalid');
+			changed();
+		});
+		$c.on('input', '.cn-placeholder', function () { fields[idxOf(this)].placeholder = this.value; changed(); });
+		$c.on('change', '.cn-select-first', function () { fields[idxOf(this)].selectFirstOptionEnabled = this.checked; changed(); });
+		$c.on('change', '.cn-date-mode', function () { fields[idxOf(this)].dateMode = $(this).val(); render(); changed(); });
+
+		// 拖曳排序：卡片（.cn-drag-handle）與選項（.cn-opt-drag）
+		var drag = null;
+		$c.on('dragstart', '.cn-drag-handle', function (e) {
+			drag = { kind: 'card', from: idxOf(this) };
+			var $card = $(this).closest('.cn-card').addClass('is-dragging');
+			var dt = e.originalEvent.dataTransfer;
+			dt.effectAllowed = 'move';
+			dt.setData('text/plain', 'cn-card');
+			try { dt.setDragImage($card[0], 20, 20); } catch (x) {}
+		});
+		$c.on('dragstart', '.cn-opt-drag', function (e) {
+			e.stopPropagation();
+			drag = { kind: 'opt', card: idxOf(this), from: Number($(this).closest('.cn-opt-row').attr('data-opt')) };
+			var $row = $(this).closest('.cn-opt-row').addClass('is-dragging');
+			$('body').addClass('cn-opt-dragging');
+			var dt = e.originalEvent.dataTransfer;
+			dt.effectAllowed = 'move';
+			dt.setData('text/plain', 'cn-opt');
+			try { dt.setDragImage($row[0], 10, 10); } catch (x) {}
+		});
+		$c.on('dragover', '.cn-card, .cn-opt-row', function (e) {
+			if (!drag) return;
+			var isOpt = $(this).hasClass('cn-opt-row');
+			if (drag.kind === 'card' && isOpt) return;
+			if (drag.kind === 'opt' && (!isOpt || idxOf(this) !== drag.card)) return;
+			e.preventDefault();
+			e.stopPropagation();
+			$c.find('.is-drag-over').removeClass('is-drag-over');
+			$(this).addClass('is-drag-over');
+		});
+		$c.on('drop', '.cn-card, .cn-opt-row', function (e) {
+			if (!drag) return;
+			var isOpt = $(this).hasClass('cn-opt-row');
+			if (drag.kind === 'card' && !isOpt) {
+				e.preventDefault();
+				var to = idxOf(this), d = drag;
+				drag = null;
+				move(d.from, to);
+			} else if (drag.kind === 'opt' && isOpt && idxOf(this) === drag.card) {
+				e.preventDefault();
+				e.stopPropagation();
+				var opts = fields[drag.card].options, o = drag.from, t = Number($(this).attr('data-opt'));
+				drag = null;
+				if (o !== t) {
+					var v = opts.splice(o, 1)[0];
+					opts.splice(t, 0, v);
+					render();
+					changed();
+				}
+			}
+		});
+		$c.on('dragend', function () {
+			drag = null;
+			$('body').removeClass('cn-opt-dragging');
+			$c.find('.is-dragging, .is-drag-over').removeClass('is-dragging is-drag-over');
+		});
+
+		window.addEventListener('beforeunload', function (e) {
+			if (dirty || saving) { e.preventDefault(); e.returnValue = ''; }
+		});
+	}
+
+	function load() {
+		return $.get(cfg.url).done(function (json) {
+			types = (json.options && json.options.htmlType) || [];
+			fields = (json.data || []).map(function (f) {
+				return $.extend({ options: [], descr: '', placeholder: '', mandatory: false, selectFirstOptionEnabled: false }, f, { _k: ++uid });
+			});
+			render();
+			indicator('saved');
+		}).fail(function () {
+			indicator('blocked', '讀取設定失敗，請重新整理');
+		});
+	}
+
+	return {
+		init: function (options) {
+			cfg = options;
+			bind();
+			load();
+		}
+	};
+})(jQuery);
+
+$(document).ready(function () {
+	CustomNoteCanvas.init({ url: '/ajax/GroupBuyPreference/customNoteSettings.do?groupBuyId=' + {{json groupBuyId}} });
+});
+</script>

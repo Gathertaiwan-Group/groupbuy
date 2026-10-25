@@ -13,6 +13,11 @@ import { preferenceRoutes } from "./preference";
 import { homeViewRoutes } from "./homeview";
 import { facebookAuthRoutes } from "./facebook-auth";
 import { uploadVideoRoutes } from "./upload-video";
+import { webContentRoutes } from "./web-content";
+import { homeViewSectionRoutes } from "./homeview-section";
+import { webEditorRoutes } from "./web-editor";
+import { fbGroupRoutes } from "./fb-group";
+import { preferencePageRoutes } from "./preference-pages";
 
 export const routes: RouteDef[] = [
   ...groupBuyListRoutes,
@@ -27,4 +32,9 @@ export const routes: RouteDef[] = [
   ...homeViewRoutes,
   ...facebookAuthRoutes,
   ...uploadVideoRoutes,
+  ...webContentRoutes,
+  ...homeViewSectionRoutes,
+  ...webEditorRoutes,
+  ...fbGroupRoutes,
+  ...preferencePageRoutes,
 ];

@@ -1,0 +1,450 @@
+/*
+ * custom-note-board.css
+ *
+ * Shared styles for the custom-note / attribute-note canvas editor (cn-* classes).
+ * Consumers:
+ *   - web/backend/GroupBuyPreference/list_customNote_v2.jsp
+ *   - web/backend/Item/list_attributeNotes_v2.jsp
+ *
+ * Do not change for a single page; override at the call site instead.
+ * Cache-busting (?v=N) can be added to the <link> when this file stabilizes.
+ */
+
+/* ---- 畫布容器 ---- */
+.cn-board {
+	max-width: 760px;
+	margin: 0 auto;
+}
+.cn-board-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0.65rem 0;
+	margin-bottom: 0.5rem;
+}
+.cn-board-header__title {
+	font-weight: 600;
+	font-size: 0.95rem;
+	color: #193d5b;
+}
+.cn-autosave-indicator {
+	font-size: 0.78rem;
+	color: #78909c;
+}
+.cn-autosave-indicator.is-editing { color: #b06000; }
+.cn-autosave-indicator.is-saved { color: #1e9e6a; }
+.cn-autosave-indicator.is-blocked { color: #dc3545; }
+
+/* ---- 卡片 ---- */
+.cn-card {
+	background: #fff;
+	border: 1px solid #dee2e6;
+	border-radius: 0.375rem;
+	box-shadow: 0 1px 3px rgba(25, 61, 91, 0.08);
+	padding: 1rem 1.15rem 1.15rem;
+	margin-bottom: 0;
+	position: relative;
+	transition: box-shadow 0.15s, border-color 0.15s;
+}
+.cn-card:hover,
+.cn-card:focus-within,
+.cn-card.is-drawer-open {
+	border-color: #c7d7e6;
+	box-shadow: 0 4px 16px rgba(25, 61, 91, 0.12);
+}
+.cn-card.is-dragging { opacity: 0.4; }
+.cn-card.is-drag-over { box-shadow: inset 0 2px 0 #4285f4; }
+
+/* ---- hover 工具列 ---- */
+.cn-card__toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.35rem;
+	margin-bottom: 0.6rem;
+	opacity: 0;
+	transform: translateY(-4px);
+	transition: opacity 0.15s, transform 0.15s;
+	pointer-events: none;
+}
+.cn-card:hover .cn-card__toolbar,
+.cn-card:focus-within .cn-card__toolbar,
+.cn-card.is-drawer-open .cn-card__toolbar {
+	opacity: 1;
+	transform: translateY(0);
+	pointer-events: auto;
+}
+.cn-drag-handle {
+	cursor: grab;
+	color: #adb5bd;
+	font-size: 1rem;
+}
+.cn-drag-handle:active { cursor: grabbing; }
+.cn-toolbar-spacer { flex: 1 1 auto; }
+.cn-type-select {
+	max-width: 11rem;
+	font-size: 0.78rem;
+}
+.cn-mandatory-wrap {
+	display: flex;
+	align-items: center;
+	gap: 0.3rem;
+	font-size: 0.76rem;
+	color: #78909c;
+}
+.cn-toolbar-btn {
+	width: 1.85rem;
+	height: 1.85rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 50%;
+	color: #78909c;
+	border: none;
+	background: transparent;
+	padding: 0;
+}
+.cn-toolbar-btn:hover { background: #eef4fb; color: #4285f4; }
+.cn-toolbar-btn.is-active { background: #e3edf9; color: #4285f4; }
+
+/* ---- 刪除確認遮罩（蓋住整張 .cn-card）---- */
+.cn-delete-mask {
+	display: none;
+	position: absolute;
+	inset: 0;
+	z-index: 6;
+	border-radius: inherit;
+	background: rgba(255, 255, 255, 0.88);
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 0.7rem;
+	text-align: center;
+	padding: 1rem;
+}
+.cn-card.is-confirm-delete {
+	border-color: #f1b0b7;
+	box-shadow: 0 4px 16px rgba(220, 53, 69, 0.12);
+}
+.cn-card.is-confirm-delete .cn-delete-mask {
+	display: flex;
+}
+.cn-delete-mask__msg {
+	font-weight: 600;
+	font-size: 1rem;
+	color: #2b3a45;
+}
+.cn-delete-mask__trash {
+	width: 3.25rem;
+	height: 3.25rem;
+	border-radius: 50%;
+	border: 1px solid #f1b0b7;
+	background: #fff;
+	color: #dc3545;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 1.25rem;
+	padding: 0;
+	box-shadow: 0 1px 4px rgba(25, 61, 91, 0.08);
+}
+.cn-delete-mask__trash:hover,
+.cn-delete-mask__trash:focus {
+	background: #fde8ea;
+	border-color: #dc3545;
+	color: #dc3545;
+	outline: none;
+}
+.cn-delete-mask__cancel {
+	border: none;
+	background: none;
+	color: #78909c;
+	font-size: 0.85rem;
+	padding: 0.2rem 0.3rem;
+}
+.cn-delete-mask__cancel:hover,
+.cn-delete-mask__cancel:focus {
+	color: #4285f4;
+	text-decoration: underline;
+	outline: none;
+}
+
+/* ---- 標題（contenteditable）---- */
+.cn-label-row {
+	display: flex;
+	align-items: baseline;
+	gap: 0.25rem;
+	margin-bottom: 0.55rem;
+}
+.cn-label {
+	font-weight: 600;
+	font-size: 1rem;
+	color: #2b3a45;
+	outline: none;
+	border-radius: 0.25rem;
+	padding: 0.1rem 0.3rem;
+	margin: -0.1rem -0.3rem;
+	display: inline-block;
+	min-width: 4rem;
+}
+.cn-label:hover,
+.cn-label:focus { background: #f4f7fa; }
+.cn-label:empty::before {
+	content: '點此輸入欄位標題…';
+	color: #78909c;
+	font-weight: 400;
+	font-style: italic;
+}
+
+/* ---- 控制區 ---- */
+.cn-control { max-width: 420px; }
+.cn-caption {
+	font-size: 0.8rem;
+	color: #78909c;
+	margin-top: 0.4rem;
+	outline: none;
+	border-radius: 0.2rem;
+	padding: 0.1rem 0.25rem;
+	margin-left: -0.25rem;
+}
+.cn-caption:hover,
+.cn-caption:focus { background: #f4f7fa; }
+.cn-caption:empty::before {
+	content: attr(data-placeholder);
+	color: #b7c2cb;
+}
+
+/* ---- 選項 inline 編輯 ---- */
+.cn-opt-row {
+	display: flex;
+	align-items: center;
+	margin-bottom: 0.4rem;
+}
+.cn-opt-bullet {
+	flex: 0 0 auto;
+	color: #78909c;
+	font-size: 0.85rem;
+	width: 1.1rem;
+	text-align: center;
+	margin-right: 0.35rem;
+}
+.cn-opt-row .form-control { flex: 1 1 auto; }
+.cn-opt-remove {
+	flex: 0 0 auto;
+	color: #adb5bd;
+	background: none;
+	border: none;
+	padding: 0.2rem 0.35rem;
+	margin-left: 0.25rem;
+}
+.cn-opt-remove:hover { color: #dc3545; }
+.cn-opt-drag {
+	cursor: grab;
+	color: #c3ccd4;
+	margin-right: 0.35rem;
+	font-size: 0.8rem;
+	touch-action: none;
+}
+.cn-opt-drag:active { cursor: grabbing; }
+body.cn-opt-dragging {
+	user-select: none;
+	cursor: grabbing;
+}
+.cn-opt-row.is-dragging { opacity: 0.4; }
+.cn-opt-row.is-drag-over { box-shadow: inset 0 2px 0 #4285f4; }
+.cn-opt-add {
+	border: none;
+	background: none;
+	color: #4285f4;
+	font-size: 0.85rem;
+	padding: 0.2rem 0.3rem;
+}
+.cn-opt-add:hover { text-decoration: underline; }
+
+/* ---- 進階抽屜 ---- */
+.cn-drawer {
+	margin-top: 0.85rem;
+	padding-top: 0.85rem;
+	border-top: 1px dashed #dee2e6;
+	display: none;
+}
+.cn-card.is-drawer-open .cn-drawer { display: block; }
+.cn-drawer label {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: #78909c;
+	margin-bottom: 0.2rem;
+}
+.cn-drawer .invalid-feedback { display: block; }
+
+/* ---- 新增 CTA ---- */
+.cn-add-cta {
+	border: 1.5px dashed #dee2e6;
+	border-radius: 0.375rem;
+	padding: 0.85rem;
+	text-align: center;
+	color: #78909c;
+	cursor: pointer;
+	transition: all 0.15s;
+	background: rgba(255, 255, 255, 0.5);
+}
+.cn-add-cta:hover {
+	border-color: #4285f4;
+	color: #4285f4;
+	background: #fff;
+}
+
+/* ---- 欄位間插入帶 ---- */
+.cn-insert-gap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 1.5rem;
+	margin: 0.65rem 0;
+	position: relative;
+}
+.cn-insert-gap::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	border-top: 1px dashed #e8ecef;
+	transition: border-color 0.15s;
+}
+.cn-insert-gap:hover::before,
+.cn-insert-gap:focus-within::before {
+	border-top-color: #4285f4;
+}
+.cn-insert-btn {
+	position: relative;
+	z-index: 1;
+	opacity: 0;
+	width: 1.75rem;
+	height: 1.75rem;
+	border-radius: 50%;
+	border: 1px solid #dee2e6;
+	background: #fff;
+	color: #4285f4;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 0.75rem;
+	cursor: pointer;
+	transition: opacity 0.15s, border-color 0.15s, box-shadow 0.15s;
+	box-shadow: 0 1px 4px rgba(25, 61, 91, 0.08);
+}
+.cn-insert-gap:hover .cn-insert-btn,
+.cn-insert-gap:focus-within .cn-insert-btn {
+	opacity: 1;
+}
+.cn-insert-btn:hover {
+	border-color: #4285f4;
+	box-shadow: 0 2px 8px rgba(66, 133, 244, 0.2);
+}
+
+.cn-empty {
+	padding: 3rem 1rem;
+	text-align: center;
+	color: #78909c;
+}
+
+/* ---- 右下浮動操作區 ---- */
+.cn-fab-dock {
+	position: fixed;
+	right: 1.25rem;
+	bottom: 1.5rem;
+	z-index: 1030;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 0.5rem;
+}
+.cn-fab-dock .btn.cn-fab {
+	width: 3rem;
+	height: 3rem;
+	min-width: 3rem;
+	border-radius: 50%;
+	padding: 0;
+	flex: 0 0 auto;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.cn-fab-dock .btn.cn-fab i {
+	font-size: 1.15rem;
+	line-height: 1;
+}
+.cn-btn-save {
+	background: #fff;
+	box-shadow: 0 2px 8px rgba(25, 61, 91, 0.15);
+}
+.cn-fab-trigger {
+	box-shadow: 0 4px 12px rgba(66, 133, 244, 0.35);
+}
+
+/* ---- 欄位類型選擇器（FAB / 底部 CTA 共用）---- */
+.cn-type-picker-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 1040;
+	display: none;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 1rem;
+}
+.cn-type-picker-overlay.is-open {
+	display: flex;
+}
+.cn-type-picker-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(25, 61, 91, 0.25);
+}
+.cn-type-picker-panel {
+	position: relative;
+	width: 100%;
+	max-width: 420px;
+	background: #fff;
+	border-radius: 0.5rem;
+	box-shadow: 0 8px 32px rgba(25, 61, 91, 0.18);
+	padding: 1rem 1rem 0.85rem;
+	margin-bottom: 0.5rem;
+}
+.cn-type-picker-header {
+	font-weight: 600;
+	font-size: 0.9rem;
+	color: #193d5b;
+	margin-bottom: 0.75rem;
+}
+.cn-type-picker-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 0.5rem;
+}
+.cn-type-picker-item {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.35rem;
+	padding: 0.65rem 0.4rem;
+	border: 1px solid #dee2e6;
+	border-radius: 0.375rem;
+	background: #fff;
+	color: #2b3a45;
+	font-size: 0.78rem;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+}
+.cn-type-picker-item:hover,
+.cn-type-picker-item:focus {
+	border-color: #4285f4;
+	background: #f4f8fd;
+	color: #4285f4;
+	outline: none;
+}
+.cn-type-picker-item i {
+	font-size: 1.1rem;
+	color: #4285f4;
+}

@@ -1,51 +1,86 @@
-{{!-- 推導：原站 /rp/{token} 團購業績報表未擷取（需報表密碼）。依後台風格（Bootstrap 4＋style_v4 badge 色票）做唯讀報表頁：
-     密碼輸入 → 團購摘要、商品銷售統計、訂單明細；「報表網址(需授權)」需臉書登入授權＝未串接。 --}}
+{{!-- 原站 /rp/{token} 團購業績報表（spec/GAP_SPEC.md §4）。原始 HTML 被擷取過濾擋下，依擷取到的 id／可見文字重建：
+     前台樣式頂列（logo「團購表單」、無側欄）→ #newsBanner → #detailCard（訂單數量(已付款)／銷售金額／已收付款金額）
+     → #row-chart canvas#chart（近 14 天）→「近期銷售分析」collapsible（#headingSales/#collapseSales、canvas#salesChart、tbody#salesTableBody）
+     →「銷售月份」#dateCreatedBegin →「訂單」卡片：搜尋篩選＋#salesOrderTable（ss、dom lrtip、order [[1,desc]]、len 10）→ 頁尾。
+     推導：版面間距與配色、最新消息點擊內容、近期銷售分析的圖表型態、b2sTotal 顯示位置、報表密碼／需授權畫面。 --}}
 <!DOCTYPE html>
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <meta name="robots" content="noindex,nofollow">
+<meta name="googlebot" content="noindex">
 <meta http-equiv="Cache-Control" content="no-store"/>
+<meta name="format-detection" content="telephone=no">
 <title>{{#if groupBuy}}{{groupBuy.title}} - {{/if}}團購業績報表</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css">
+<link rel="shortcut icon" href="/upload/images/unsort/favicon.png"/>
+<!-- 授權政策：原站 Font Awesome Pro 6 → Font Awesome Free 6（cdnjs）＋相容層 -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
-<link rel="stylesheet" href="/public/css/style_v4.min.css?v=1">
+<link rel="stylesheet" href="/compat/fa-pro-compat.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css">
+<!-- 授權政策：原站 MDB PRO 4.8.8 → MDB Free 4.8.8（cdnjs）＋PRO 元件補丁 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/mdbootstrap/4.8.8/css/mdb.min.css">
+<link rel="stylesheet" href="/compat/mdb-pro-compat.css">
+<link rel="stylesheet" href="/compat/mdb-pro-frontend.css">
+<link rel="stylesheet" href="/public/css/style_v4.min.css?260906">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.10.20/css/dataTables.bootstrap4.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/style.css">
 <style>
-body {background:#eeeeee;font-family:"PingFang TC", STHeitiTC-Light, 微軟正黑體, "Helvetica Neue", Helvetica, Arial, sans-serif;}
-.rp-header {background:#2c2f34;color:#fff;padding:12px 0;margin-bottom:20px;}
-.rp-header .rp-brand {font-weight:600;letter-spacing:2px;}
-.card {border-radius:4px;margin-bottom:20px;}
-.card-header {background:rgba(0,0,0,.03);padding:12px 20px;font-weight:500;}
-.span-digit {display:block;font-size:1.6rem;font-weight:600;color:#193d5b;}
-.span-label {display:block;font-size:.85rem;color:#78909c;}
-.table td, .table th {vertical-align:middle;}
-.table td {color:#4f4f4f;}
-.rp-footer {color:rgba(0,0,0,.45);font-size:.8rem;padding:16px 0 32px;text-align:center;}
+body {background:#f4f6f9;letter-spacing:1px;}
+main {padding-top:64px;padding-bottom:24px;}
+.navbar-custom {background:#fff;}
+#newsBanner {display:flex;align-items:center;background:#1e88e5;color:#fff;border-radius:6px;padding:10px 16px;margin-bottom:16px;cursor:pointer;box-shadow:0 2px 6px rgba(30,136,229,.25);}
+#newsBanner:hover {background:#1976d2;}
+#newsBanner .badge-new {background:#ff5252;color:#fff;font-size:11px;border-radius:10px;padding:2px 8px;margin:0 8px;}
+#newsBanner .news-label {font-weight:600;}
+#newsBanner .news-more {margin-left:auto;font-size:13px;opacity:.9;white-space:nowrap;}
+#detailCard .card-header {background:#37474f;color:#fff;font-weight:600;padding:12px 20px;}
+#detailCard .list-group-item {display:flex;justify-content:space-between;align-items:center;padding:12px 20px;}
+#detailCard .list-group-item .rp-label {color:#546e7a;}
+#detailCard .list-group-item .rp-value {font-size:1.15rem;font-weight:600;color:#193d5b;}
+#detailCard .list-group-item.rp-highlight {background:#fff8e1;}
+.rp-card {border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:16px;}
+.rp-card .card-header {background:#fff;font-weight:600;}
+#row-chart .chart-wrap {position:relative;height:280px;}
+#collapseSales .chart-wrap {position:relative;height:220px;}
+#headingSales a {display:flex;justify-content:space-between;align-items:center;color:#37474f;font-weight:600;}
+#headingSales a .fa-angle-down {transition:transform .2s;}
+#headingSales a.collapsed .fa-angle-down {transform:rotate(-90deg);}
+#salesOrderTable td, #salesOrderTable th {vertical-align:middle;}
+.rp-filter .form-control {font-size:.85rem;}
+.rp-month {max-width:260px;}
+.rp-sum {font-size:.9rem;color:#546e7a;}
+.rp-sum b {color:#193d5b;}
+.page-footer {background:transparent;color:#78909c;}
+.page-footer a {color:#546e7a;}
 </style>
 </head>
 <body>
-<div class="rp-header">
-	<div class="container"><span class="rp-brand"><i class="fa-solid fa-chart-line mr-2"></i>團購業績報表</span></div>
-</div>
+<nav class="navbar navbar-expand-md navbar-custom fixed-top scrolling-navbar">
+	<div class="container">
+		<a class="navbar-brand mr-0" href="javascript:void(0)"><img src="/upload/images/unsort/logo.png" alt="團購表單"></a>
+	</div>
+</nav>
+<main>
 <div class="container">
 {{#if errorMessage}}
-	<div class="alert alert-warning">{{errorMessage}}</div>
+	<div class="alert alert-warning mt-3">{{errorMessage}}</div>
 {{/if}}
 {{#if needPassword}}
-	<div class="card">
+	<div class="card rp-card mt-3">
 		<div class="card-header">{{groupBuy.title}}</div>
 		<div class="card-body">
 			<form method="post" action="/rp/{{token}}" class="form-inline">
 				<label class="mr-2" for="password">請輸入團購報表密碼</label>
 				<input type="password" class="form-control mr-2" id="password" name="password" maxlength="50" required autocomplete="current-password">
-				<button type="submit" class="btn btn-primary">查看報表</button>
+				<button type="submit" class="btn btn-primary btn-sm">查看報表</button>
 			</form>
 		</div>
 	</div>
 {{/if}}
 {{#if needAuth}}
-	<div class="card">
+	<div class="card rp-card mt-3">
 		<div class="card-header">{{groupBuy.title}}</div>
 		<div class="card-body">
 			<p>此報表網址需經團主授權後才能瀏覽：請以臉書登入申請授權，團主可於後台「所有團購 → 報表授權」允許。</p>
@@ -54,67 +89,235 @@ body {background:#eeeeee;font-family:"PingFang TC", STHeitiTC-Light, 微軟正�
 	</div>
 {{/if}}
 {{#if report}}
-	<div class="card">
-		<div class="card-header">{{groupBuy.title}}
-			<span class="badge badge-default ml-2">ID:{{groupBuy.groupBuyId}}</span>
-			<span class="badge badge-default">{{groupBuy.shortUrl}}</span>
-			{{#if groupBuy.processing}}<span class="badge badge-primary">活動中</span>{{else}}{{#if groupBuy.notStarted}}<span class="badge badge-success">未開始</span>{{else}}<span class="badge badge-danger">已結束</span>{{/if}}{{/if}}
+	<div id="newsBanner" role="button" tabindex="0" data-toggle="modal" data-target="#newsModal">
+		<i class="fa-solid fa-bullhorn mr-2"></i><span class="news-label">最新消息</span><span class="badge-new">NEW</span>
+		<span>『團主銷售統計後台』！</span><span class="news-more">點擊了解詳情 <i class="fa-solid fa-angle-right"></i></span>
+	</div>
+
+	<div class="card rp-card" id="detailCard">
+		<div class="card-header">{{groupBuy.title}}</div>
+		<ul class="list-group list-group-flush">
+			<li class="list-group-item"><span class="rp-label">訂單數量 (已付款)</span><span class="rp-value" id="statOrders">{{stats.orders}} ({{stats.paidOrders}})</span></li>
+			<li class="list-group-item rp-highlight"><span class="rp-label">銷售金額 / 銷售金額（扣除運費）</span><span class="rp-value" id="statRevenue">{{stats.revenue}} / {{stats.revenueWithoutShipping}}</span></li>
+			<li class="list-group-item"><span class="rp-label">已收付款金額 / 已收付款金額(扣除運費)</span><span class="rp-value" id="statPaid">{{stats.paidTotal}} / {{stats.paidTotalWithoutShipping}}</span></li>
+		</ul>
+	</div>
+
+	<div class="card rp-card" id="row-chart">
+		<div class="card-header">近 14 天銷售金額</div>
+		<div class="card-body"><div class="chart-wrap"><canvas id="chart"></canvas></div></div>
+	</div>
+
+	<div class="card rp-card" id="accordionSales">
+		<div class="card-header" id="headingSales">
+			<a class="collapsed" data-toggle="collapse" href="#collapseSales" aria-expanded="false" aria-controls="collapseSales">
+				<span><i class="fa-solid fa-chart-column mr-2"></i>近期銷售分析</span><i class="fa-solid fa-angle-down"></i>
+			</a>
 		</div>
+		<div id="collapseSales" class="collapse" aria-labelledby="headingSales" data-parent="#accordionSales">
+			<div class="card-body">
+				<div class="chart-wrap mb-3"><canvas id="salesChart"></canvas></div>
+				<div class="table-responsive">
+				<table class="table table-sm table-striped mb-0">
+					<thead><tr><th>日期</th><th class="text-right">銷售金額</th><th class="text-right">訂單數</th></tr></thead>
+					<tbody id="salesTableBody"><tr><td colspan="3" class="text-center text-muted">載入中…</td></tr></tbody>
+				</table>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="md-form rp-month mt-4 mb-3">
+		<label for="dateCreatedBegin" class="active">銷售月份</label>
+		<input type="text" id="dateCreatedBegin" name="dateCreatedBegin" class="form-control" placeholder="輸入銷售月份" autocomplete="off">
+	</div>
+
+	<div class="card rp-card">
+		<div class="card-header">訂單</div>
 		<div class="card-body">
-			<p class="small text-muted mb-3">活動期間：{{groupBuy.dateStartString}} ～ {{groupBuy.dateEndString}}　｜　報表產生時間：{{generatedAt}}</p>
-			<div class="row text-center">
-				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.orders}}</span><span class="span-label">訂單數量</span></div>
-				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.revenue}}</span><span class="span-label">銷售金額</span></div>
-				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.paidTotal}}</span><span class="span-label">已收付款金額</span></div>
-				<div class="col-6 col-md-3 mb-3"><span class="span-digit">{{stats.unshippedOrders}}</span><span class="span-label">未出貨數量</span></div>
+			<div class="rp-filter mb-3">
+				<div class="mb-2 font-weight-bold"><i class="fa-solid fa-magnifying-glass mr-1"></i>搜尋</div>
+				<div class="form-row">
+					<div class="form-group col-md-3 col-6"><input type="text" class="form-control form-control-sm" name="filter-uuid" placeholder="訂單編號"></div>
+					<div class="form-group col-md-3 col-6"><input type="text" class="form-control form-control-sm" name="filter-customerFirstname" placeholder="顧客姓名"></div>
+					<div class="form-group col-md-3 col-6"><input type="text" class="form-control form-control-sm" name="filter-salesOrderBillingAddress.fbNickname" placeholder="臉書暱稱"></div>
+					<div class="form-group col-md-3 col-6"><input type="text" class="form-control form-control-sm" name="filter-customerEmail" placeholder="顧客Email"></div>
+					<div class="form-group col-md-4 col-12"><select class="form-control form-control-sm browser-default" name="filter-status"><option value="">狀態(全部)</option></select></div>
+					<div class="form-group col-md-4 col-6"><select class="form-control form-control-sm browser-default" name="filter-state"><option value="">階段(全部)</option></select></div>
+					<div class="form-group col-md-4 col-6"><select class="form-control form-control-sm browser-default" name="filter-paymentMethod"><option value="">付款方式(全部)</option></select></div>
+				</div>
 			</div>
-		</div>
-	</div>
-	<div class="card">
-		<div class="card-header">商品銷售統計</div>
-		<div class="card-body p-0">
 			<div class="table-responsive">
-			<table class="table table-striped mb-0">
-				<thead><tr><th>商品</th><th>規格</th><th class="text-right">數量</th><th class="text-right">金額</th></tr></thead>
-				<tbody>
-				{{#each items}}
-					<tr><td>{{title}}</td><td>{{spec}}</td><td class="text-right">{{qty}}</td><td class="text-right">{{amount}}</td></tr>
-				{{else}}
-					<tr><td colspan="4" class="text-center text-muted">尚無銷售資料</td></tr>
-				{{/each}}
-				</tbody>
+			<table id="salesOrderTable" class="table table-striped display nowrap small" style="width:100%">
+				<thead>
+					<tr><th>訂單編號</th><th>訂單日期</th><th>顧客姓名</th><th>臉書暱稱</th><th>顧客Email</th><th>狀態</th><th>階段</th><th>付款方式</th><th class="text-right">結帳金額</th></tr>
+				</thead>
 			</table>
 			</div>
+			<div class="rp-sum text-right mt-2">符合條件訂單結帳金額合計：<b id="b2sTotal">0</b></div>
 		</div>
 	</div>
-	<div class="card">
-		<div class="card-header">訂單明細（{{orders.length}} 筆）</div>
-		<div class="card-body p-0">
-			<div class="table-responsive">
-			<table class="table table-striped mb-0">
-				<thead><tr><th>訂單編號</th><th>下單時間</th><th>訂購人</th><th>電話</th><th>商品</th><th class="text-right">金額</th><th>付款</th><th>狀態</th></tr></thead>
-				<tbody>
-				{{#each orders}}
-					<tr>
-						<td>{{salesOrderId}}</td>
-						<td class="text-nowrap">{{dateCreatedString}}</td>
-						<td>{{customer}}</td>
-						<td>{{telephone}}</td>
-						<td class="small">{{items}}</td>
-						<td class="text-right">{{grandTotal}}</td>
-						<td>{{#if paid}}<span class="badge badge-primary">已付款</span>{{else}}<span class="badge badge-danger">未付款</span>{{/if}}</td>
-						<td class="small">{{statusLabel}}</td>
-					</tr>
-				{{else}}
-					<tr><td colspan="8" class="text-center text-muted">尚無訂單</td></tr>
-				{{/each}}
-				</tbody>
-			</table>
+
+	<div class="modal fade" id="newsModal" tabindex="-1" role="dialog" aria-labelledby="newsModalLabel" aria-hidden="true">
+		<div class="modal-dialog modal-dialog-centered" role="document">
+			<div class="modal-content">
+				<div class="modal-header"><h5 class="modal-title" id="newsModalLabel">『團主銷售統計後台』</h5>
+					<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+				<div class="modal-body">
+					{{!-- 推導：原站點擊後的內容未擷取 --}}
+					<p>團主可隨時以此報表網址查看團購的銷售統計：訂單數量、銷售金額、已收付款金額、近 14 天銷售趨勢與訂單明細。</p>
+					<p class="mb-0 text-muted small">*任何有報表網址的人均可瀏覽報表，請妥善保管網址；可於後台「所有團購」設定團購報表密碼。</p>
+				</div>
+				<div class="modal-footer"><button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">知道了</button></div>
 			</div>
 		</div>
 	</div>
 {{/if}}
-	<div class="rp-footer">*任何有報表網址的人均可瀏覽報表　Powered By 團購表單</div>
 </div>
+</main>
+<footer class="page-footer center-on-small-only">
+	<div class="container">
+		<ul class="footer-links list-inline text-center mb-1">
+			<li class="list-inline-item"><a href="/GroupBuy/terms.do">服務條款</a></li>
+		</ul>
+	</div>
+	<div class="footer-copyright text-center">
+		<div class="page-footer-text-color py-1">Powered By <a href="https://groupbuyforms.tw" class="page-footer-text-color">團購表單</a> 2024.</div>
+	</div>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.4/umd/popper.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/js/bootstrap.min.js"></script>
+{{#if report}}
+<script src="https://cdn.datatables.net/1.10.20/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.10.20/js/dataTables.bootstrap4.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/l10n/zh-tw.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/plugins/monthSelect/index.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function ($) {
+	'use strict';
+	var RP = {{json rp}};
+	var OPTS = {{json filterOptions}};
+	var labelMaps = {};
+	['status', 'state', 'paymentMethod'].forEach(function (k) {
+		var m = {};
+		(OPTS[k] || []).forEach(function (o) {
+			m[String(o.value)] = o.label;
+			$('select[name="filter-' + k + '"]').append($('<option>').val(o.value).text(o.label));
+		});
+		labelMaps[k] = m;
+	});
+	function esc(s) {
+		return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+			return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+		});
+	}
+	function money(n) { return Math.round(Number(n) || 0).toLocaleString('en-US'); }
+	function pad(n) { return n < 10 ? '0' + n : '' + n; }
+	function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+	function label(k) { return function (v, type) { var t = labelMaps[k][String(v)]; return type === 'display' ? esc(t != null ? t : v) : v; }; }
+
+	// ---------- 訂單表格（原站：ss、dom lrtip、order [[1,desc]]、len 10；全站 legacy ajax 參數） ----------
+	$.fn.dataTable.ext.legacy.ajax = true;
+	var table = $('#salesOrderTable').DataTable({
+		serverSide: true,
+		processing: true,
+		dom: 'lrtip',
+		order: [[1, 'desc']],
+		pageLength: 10,
+		autoWidth: false,
+		ajax: {
+			url: '/ajax/SalesOrder/report.do',
+			type: 'POST',
+			data: function (d) {
+				d.rp = RP;
+				$('.rp-filter [name^="filter-"]').each(function () { d[this.name] = $(this).val(); });
+				d.dateCreatedBegin = $('#dateCreatedBegin').val();
+			},
+			dataSrc: function (json) {
+				$('#b2sTotal').text(money(json.b2sTotal));
+				return json.data || [];
+			}
+		},
+		columns: [
+			{ data: 'uuid', render: function (v, t) { return t === 'display' ? esc(v) : v; } },
+			{ data: 'dateCreatedString' },
+			{ data: 'customerFirstname', render: function (v, t) { return t === 'display' ? esc(v) : v; } },
+			{ data: 'salesOrderBillingAddress.fbNickname', defaultContent: '', render: function (v, t) { return t === 'display' ? esc(v) : v; } },
+			{ data: 'customerEmail', render: function (v, t) { return t === 'display' ? esc(v) : v; } },
+			{ data: 'status', render: label('status') },
+			{ data: 'state', render: label('state') },
+			{ data: 'paymentMethod', render: label('paymentMethod') },
+			{ data: 'grandTotal', className: 'text-right', render: function (v, t) { return t === 'display' ? money(v) : v; } }
+		],
+		language: {
+			processing: '處理中...', lengthMenu: '顯示 _MENU_ 項結果', zeroRecords: '沒有符合的結果', emptyTable: '尚無訂單',
+			info: '顯示第 _START_ 至 _END_ 項結果，共 _TOTAL_ 項', infoEmpty: '顯示第 0 至 0 項結果，共 0 項', infoFiltered: '(從 _MAX_ 項結果中過濾)',
+			paginate: { first: '第一頁', previous: '上一頁', next: '下一頁', last: '最後一頁' }
+		}
+	});
+	var reloadTimer = null;
+	$('.rp-filter input').on('input', function () {
+		clearTimeout(reloadTimer);
+		reloadTimer = setTimeout(function () { table.ajax.reload(); }, 400);
+	});
+	$('.rp-filter select').on('change', function () { table.ajax.reload(); });
+
+	// ---------- 銷售月份 ----------
+	flatpickr('#dateCreatedBegin', {
+		locale: 'zh_tw',
+		disableMobile: true,
+		plugins: [new monthSelectPlugin({ shorthand: false, dateFormat: 'Y-m', altFormat: 'Y-m' })],
+		onChange: function () { table.ajax.reload(); },
+		onReady: function (sel, str, fp) {
+			var clear = $('<button type="button" class="btn btn-sm btn-link">清除</button>').on('click', function () { fp.clear(); fp.close(); table.ajax.reload(); });
+			$(fp.calendarContainer).append($('<div class="text-center">').append(clear));
+		}
+	});
+
+	// ---------- 圖表（近 14 天） ----------
+	var today = new Date();
+	var from = new Date(today.getTime() - 14 * 86400000);
+	var chartLoaded = $.get('/ajax/GroupBuyDailyStatistics/chartData', { rp: RP, today: iso(today), fromday: iso(from) });
+	chartLoaded.done(function (json) {
+		var d = json.data || { labels: [], chartData: [] };
+		new Chart(document.getElementById('chart'), {
+			type: 'line',
+			data: { labels: d.labels, datasets: [{ label: '銷售金額', data: d.chartData, borderColor: '#1e88e5', backgroundColor: 'rgba(30,136,229,.15)', fill: true, tension: 0.3 }] },
+			options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+		});
+	}).fail(function () {
+		$('#row-chart .chart-wrap').html('<div class="text-center text-muted pt-5">圖表載入失敗</div>');
+	});
+	var salesDrawn = false;
+	$('#collapseSales').on('shown.bs.collapse', function () {
+		if (salesDrawn) return;
+		salesDrawn = true;
+		chartLoaded.done(function (json) {
+			var d = json.data || { labels: [], chartData: [], countData: [] };
+			var counts = d.countData || [];
+			new Chart(document.getElementById('salesChart'), {
+				type: 'bar',
+				data: { labels: d.labels, datasets: [
+					{ type: 'bar', label: '銷售金額', data: d.chartData, backgroundColor: 'rgba(30,136,229,.6)', yAxisID: 'y' },
+					{ type: 'line', label: '訂單數', data: counts, borderColor: '#ff7043', backgroundColor: '#ff7043', yAxisID: 'y1', tension: 0.3 }
+				] },
+				options: { maintainAspectRatio: false, scales: { y: { beginAtZero: true, position: 'left' }, y1: { beginAtZero: true, position: 'right', grid: { drawOnChartArea: false }, ticks: { precision: 0 } } } }
+			});
+			var rows = '';
+			for (var i = d.labels.length - 1; i >= 0; i--) {
+				rows += '<tr><td>' + esc(d.labels[i]) + '</td><td class="text-right">' + money(d.chartData[i]) + '</td><td class="text-right">' + (Number(counts[i]) || 0) + '</td></tr>';
+			}
+			$('#salesTableBody').html(rows || '<tr><td colspan="3" class="text-center text-muted">尚無銷售資料</td></tr>');
+		}).fail(function () {
+			$('#salesTableBody').html('<tr><td colspan="3" class="text-center text-muted">載入失敗</td></tr>');
+		});
+	});
+	$('#newsBanner').on('keydown', function (e) { if (e.key === 'Enter') $('#newsModal').modal('show'); });
+})(jQuery);
+</script>
+{{/if}}
 </body>
 </html>
