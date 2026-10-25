@@ -7,7 +7,8 @@ import type { AdminSession, AuthMode, HttpMethod, RegisteredRoute, RequestContex
 import { parseBody, type ParsedBody } from "./body";
 import { FieldErrors, HttpError } from "./errors";
 import { errorToJson, html, json, jsonError } from "./responses";
-import { readSession } from "@/lib/core/auth/session";
+import { isSecureRequest, readSession } from "@/lib/core/auth/session";
+import { CSRF_FIELD, CSRF_HEADER, csrfCookieIfNeeded, csrfTokenMatches, expectedCsrfToken, injectCsrfScript } from "./csrf";
 import { allRoutes } from "@/lib/modules";
 import { renderLoginPage } from "@/lib/modules/core/auth-pages";
 import { renderBackendPage, renderNoPermission } from "@/lib/core/render/layout";
@@ -95,6 +96,21 @@ function withCookies(res: Response, ctx: RequestContext): Response {
   const headers = new Headers(res.headers);
   for (const c of ctx.cookies.set) headers.append("set-cookie", c);
   return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+/** 後台回應：補 GBXSRF cookie；HTML 頁面插入 /compat/csrf.js */
+async function withCsrf(res: Response, req: Request, expected: string, injectHtml = false): Promise<Response> {
+  const cookie = csrfCookieIfNeeded(req, expected, isSecureRequest(req));
+  const isHtml = injectHtml && (res.headers.get("content-type") || "").includes("text/html");
+  if (!cookie && !isHtml) return res;
+  const headers = new Headers(res.headers);
+  if (cookie) headers.append("set-cookie", cookie);
+  let body: BodyInit | null = res.body;
+  if (isHtml) {
+    body = injectCsrfScript(await res.text(), "1");
+    headers.delete("content-length");
+  }
+  return new Response(body, { status: res.status, statusText: res.statusText, headers });
 }
 
 function notFoundResponse(ctx: RequestContext): Response {
@@ -190,6 +206,16 @@ export async function dispatch(req: Request): Promise<Response> {
     // SameSite=Lax 已讓跨站 POST 不帶 cookie，但跨站「頂層 GET 導覽」仍會帶 → 以 GET 做事的 AJAX 端點也擋。
     // 後台頁面本身（GET、非 AJAX）仍可從外部連結（Email、書籤）開啟。
     if (isCrossSite(req) && (ctx.isAjax || method !== "GET")) return jsonError(403, "不接受跨站請求");
+    // 第二層：寫入請求必須帶與 session 綁定的 CSRF token（舊瀏覽器沒有 Sec-Fetch-* 時仍有保護；見 csrf.ts）
+    if (method !== "GET" && method !== "HEAD") {
+      const expected = expectedCsrfToken(req);
+      let given = req.headers.get(CSRF_HEADER);
+      if (!given) given = (await ctx.body()).flat.get(CSRF_FIELD)?.[0] ?? null;
+      if (!expected || !csrfTokenMatches(expected, given)) {
+        const r = jsonError(403, "安全驗證已失效，請重新整理頁面後再試");
+        return expected ? withCsrf(r, req, expected) : r;
+      }
+    }
     // 網址帶的租戶前綴必須與登入者相同（資料一律以 session.tenantId 為準）
     if (tenantPrefix && tenantPrefix !== ctx.session.tenantCode && tenantPrefix !== "demo") {
       return ctx.isAjax ? jsonError(403, "無權限") : renderNoPermission(ctx);
@@ -201,6 +227,10 @@ export async function dispatch(req: Request): Promise<Response> {
 
   let res = await runHandler(route, ctx);
   res = withCookies(res, ctx);
+  if (auth === "admin" && ctx.session) {
+    const expected = expectedCsrfToken(req);
+    if (expected) res = await withCsrf(res, req, expected, !ctx.isAjax && method === "GET");
+  }
   if (method === "HEAD") return new Response(null, { status: res.status, headers: res.headers });
   return res;
 }

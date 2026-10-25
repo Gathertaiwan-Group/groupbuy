@@ -175,16 +175,10 @@ export async function signup(ctx: RequestContext): Promise<Response> {
   if (existing && existing.is_activated) {
     throw badRequest("此電子信箱已經註冊，請直接登入或使用忘記密碼");
   } else if (existing) {
-    // 尚未驗證的帳號可重新註冊（覆寫資料並重發驗證碼），避免被他人以同 Email 佔用
-    const { data, error } = await db
-      .from("customers")
-      .update({ firstname, telephone, birthday: birthday || null, password_hash: hash })
-      .eq("id", existing.id)
-      .eq("tenant_id", tenant.id)
-      .select("id, uuid, email")
-      .single();
-    if (error || !data) throw new Error(`更新會員失敗：${error?.message}`);
-    row = data as typeof row;
+    // 尚未驗證的帳號：同 Email 重新註冊只「重發驗證碼」，不覆寫原本的姓名、電話、生日、密碼
+    // （避免他人改掉後台建立、尚未啟用之會員的資料，或預先設好密碼在對方驗證後登入）。
+    // 驗證碼只寄到該 Email；完成驗證後會自動登入，忘記原密碼可用「忘記密碼」重設。
+    row = { id: existing.id, uuid: existing.uuid, email: existing.email ?? email };
   } else {
     const { data, error } = await db
       .from("customers")

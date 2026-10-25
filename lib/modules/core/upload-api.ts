@@ -20,6 +20,11 @@ const IMAGE_TYPES: Record<string, string> = {
   "image/webp": "webp",
 };
 
+/** FILE 類另外允許的類型（目前後台上傳端點只收圖片；保留給檔案欄位用） */
+const FILE_TYPES: Record<string, string> = { ...IMAGE_TYPES, "application/pdf": "pdf" };
+/** bucket 層級允許的 MIME（縱深防禦：即使程式漏檢，Storage 也拒收其他類型）；須與 FILE_TYPES 一致 */
+export const UPLOAD_ALLOWED_MIME = Object.keys(FILE_TYPES);
+
 let bucketReady: Promise<void> | null = null;
 async function ensureBucket(): Promise<void> {
   if (!bucketReady) {
@@ -27,7 +32,7 @@ async function ensureBucket(): Promise<void> {
       const db = getServiceClient();
       const { data } = await db.storage.getBucket(UPLOAD_BUCKET);
       if (!data) {
-        const { error } = await db.storage.createBucket(UPLOAD_BUCKET, { public: true, fileSizeLimit: MAX_BYTES });
+        const { error } = await db.storage.createBucket(UPLOAD_BUCKET, { public: true, fileSizeLimit: MAX_BYTES, allowedMimeTypes: UPLOAD_ALLOWED_MIME });
         if (error && !/already exists/i.test(error.message)) throw new Error(`建立 Storage bucket 失敗：${error.message}`);
       }
     })().catch((e) => {
@@ -48,9 +53,9 @@ export interface StoredUpload {
 export async function storeUpload(ctx: RequestContext, file: File, category: "IMAGE" | "FILE" | "CSV" | "VIDEO" = "IMAGE"): Promise<StoredUpload> {
   const session = requireSession(ctx);
   if (file.size > MAX_BYTES) throw new UploadError(`檔案過大（上限 ${MAX_BYTES / 1024 / 1024}MB）`);
-  let ext = IMAGE_TYPES[file.type];
-  if (category === "IMAGE" && !ext) throw new UploadError("僅支援 JPG、PNG、GIF、WEBP 圖片");
-  if (!ext) ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
+  // 只接受白名單類型（副檔名由 MIME 決定，不採用使用者檔名的副檔名）
+  const ext = category === "IMAGE" ? IMAGE_TYPES[file.type] : FILE_TYPES[file.type];
+  if (!ext) throw new UploadError(category === "IMAGE" ? "僅支援 JPG、PNG、GIF、WEBP 圖片" : "僅支援 JPG、PNG、GIF、WEBP 圖片與 PDF 檔");
   await ensureBucket();
   const now = new Date();
   const ym = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, "0")}`;

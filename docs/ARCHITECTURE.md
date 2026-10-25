@@ -140,7 +140,10 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 ## 11. 安全注意
 
 - 所有後台 AJAX 需登入；租戶隔離在每個查詢；網址租戶前綴需與 session 相符。
-- `session` cookie HttpOnly＋SameSite=Lax（跨站 POST 不帶 cookie）；另外 dispatch 對後台 AJAX／非 GET 請求檢查 `Sec-Fetch-Site`，`cross-site` 一律 403（擋跨站頂層 GET 導覽觸發的動作）。原站同樣無 CSRF token。
+- `session` cookie HttpOnly＋SameSite=Lax（跨站 POST 不帶 cookie）；另外 dispatch 對後台 AJAX／非 GET 請求檢查 `Sec-Fetch-Site`，`cross-site` 一律 403（擋跨站頂層 GET 導覽觸發的動作）。第二層 CSRF token（`lib/core/http/csrf.ts`）：token＝HMAC(SESSION_SECRET, session cookie)，伺服器在後台回應帶可讀 cookie `GBXSRF`（SameSite=Strict），並在每個後台 HTML 頁 `</head>` 前自動插入 `/compat/csrf.js`；該檔以 jQuery 全域 ajax 設定（`$.ajaxPrefilter`，只對同源）帶 `X-CSRF-Token`，並補非 jQuery 的 XHR／fetch 與原生表單（隱藏欄位 `_csrf`、含 `form.submit()`）。後台所有非 GET/HEAD 請求缺 token 或不符 → 403「安全驗證已失效，請重新整理頁面後再試」。原站前端 JS 不需修改；新寫的後台頁照常用 `$.ajax`／表單即可。
+- 防點擊劫持：`next.config.mjs` 全站回應 `Content-Security-Policy: frame-ancestors 'self'`＋`X-Frame-Options: SAMEORIGIN`（同源 iframe 仍可用）。
+- 上傳：`groupbuy-uploads` bucket 限 `image/jpeg|png|gif|webp`＋`application/pdf`；`storeUpload` 只收白名單 MIME，副檔名由 MIME 決定。
+- DB：anon／authenticated 沒有 groupbuy schema 的 USAGE（0105），所有存取走 service_role；之後新增的函式即使忘了 revoke 也無法被 anon 呼叫。
 - 模板預設 HTML escape；`{{{ }}}` 僅用於伺服器自產 HTML；`{{json}}` 只能放 `<script>` 內；`on*="…"` 屬性內的值用 `{{jsattr x}}`（JSON 再 HTML escape）或 `data-*`。
 - 請求解析：巢狀鍵只寫自有屬性（`toString[x]` 之類不會改到內建物件）、擋 `__proto__/prototype/constructor`；DataTables `iColumns`≤500、`iSortingCols`≤50。
 - crudRoutes：save/update/delete 端點只接受各自的 Editor action（沒有專屬端點的動作才由其他端點代收；可用 `actions` 收緊）。樂觀鎖條件放進 UPDATE（並行編輯只有一個成功）；列表排序最後補唯一鍵。
