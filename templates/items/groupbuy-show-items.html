@@ -467,6 +467,10 @@ var reseqEditor = new $.fn.dataTable.Editor( {
 		};
 	});
 		 
+	{{!-- 「複製其他表單優惠」（dataTable.api.min.js 的 salesRuleCopyManager）送出後原站 Editor 不會把新列加進表格 → 完成後重新載入優惠列表 --}}
+	$(document).ajaxComplete(function (e, xhr, settings) {
+		if (settings && /\/ajax\/SalesRule\/clone(From|To)/.test(settings.url || '') && salesRuleTable) salesRuleTable.ajax.reload(null, false);
+	});
 	salesRuleTable = $(salesRuleTableName).DataTable( {
 		dom: 'lBrtip',
 		searching:true,
