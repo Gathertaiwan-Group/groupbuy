@@ -48,7 +48,7 @@
 		</div>
 		<div class="card-footer">
 			<input type="checkbox" name="recalculate" value="1" id="recalculate" class="form-check-input" checked>
-			<label for="recalculate" class="pl-4">重新計算總額跟運費<br><span class="small">目前運費 ${{order.shippingAmount}}</span></label>
+			<label for="recalculate" class="pl-4">重新計算總額跟運費<br><span class="small">目前運費 $<span class="current-shipping-amount">{{order.shippingAmount}}</span></span></label>
 		</div>
 	</div>
 </div> <!-- modal-body -->
@@ -63,6 +63,8 @@
 </form><script>
 var success = function(json) {
 	table.ajax.reload( null, false);
+	{{!-- 重算後把「目前運費」換成新運費 --}}
+	if (json && json.data && json.data.shippingAmount !== null && json.data.shippingAmount !== undefined) $('#ShippingRuleForm .current-shipping-amount').text(json.data.shippingAmount);
 	modalShowSuccess($('#myModal'), json.error);
 }
 

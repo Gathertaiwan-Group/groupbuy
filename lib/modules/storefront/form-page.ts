@@ -150,6 +150,10 @@ export async function renderFormPage(ctx: RequestContext, gb: SfGroupBuy): Promi
   }
   const vars = {
     ...feVars(ctx, { tenant, groupBuy: gb, customer }),
+    // 進階設定「SEO描述」「自定義-CSS」（推導：原站示範團未設定，無法觀察輸出位置；放在 <head>）。
+    // CSS 去掉 < 字元，避免以 </style> 跳出樣式區塊。
+    seoDescr: (prefs.SEO_DESCR?.value ?? "").trim() || null,
+    customCss: (prefs.CSS?.value ?? "").replace(/</g, "").trim() || null,
     ogImage: imageUrl(String(gbSetting(gb, "logo", "") || ""), "/upload/images/unsort/logo.png"),
     descrHtml: gb.descr ?? "",
     descrFooterHtml: gb.descr_footer ?? "",

@@ -145,7 +145,8 @@ async function saveGbfrs(ctx: RequestContext): Promise<Response> {
     const v = flattenDotted(r.values);
     ruleIds.push(...parseIds(v.flatRateShippingId, v["flatRateShippingId[]"]));
   }
-  if (!ruleIds.length) return json({ fieldErrors: [{ name: "flatRateShippingId_2", status: "請選擇運費規則" }, { name: "flatRateShippingId_3", status: "請選擇運費規則" }], data: [] });
+  // 只回 Editor 有定義的欄位（flatRateShippingId_3）；回不存在的欄位名會讓 Editor 丟例外、錯誤訊息不顯示
+  if (!ruleIds.length) return json({ fieldErrors: [{ name: "flatRateShippingId_3", status: "請選擇運費規則" }], data: [] });
   const owned = await selectIn<Row>("flat_rate_shippings", "id", "id", ruleIds, session.tenantId);
   if (owned.length !== new Set(ruleIds).size) throw badRequest("找不到運費規則");
   const inserted = await bindGroupBuyRules(session.tenantId, gb.id, ruleIds);

@@ -7,7 +7,7 @@
 
 | 代號 | 網址 | 狀態 | 說明 |
 |---|---|---|---|
-| groupbuy-importbanktransactioncsv | `/backend/GroupBuy/importBankTransactionCSV?groupBuyId=` | 完成 | 匯款對帳：貼上明細或上傳銀行對帳檔 → 解析 → 比對訂單 → 「確認入帳」把訂單設為已付款（可「取消入帳」還原） |
+| groupbuy-importbanktransactioncsv | `/backend/GroupBuy/importBankTransactionCSV?groupBuyId=` | 完成 | 匯款對帳：貼上明細或上傳銀行對帳檔 → 解析 → 比對訂單 → 唯一符合的明細**匯入即入帳**（2026-10-25 fix-back 起；工具列同原站只有「新增」） |
 | salesordertransaction-list | `/backend/SalesOrderTransaction/list?groupBuyId=` | 完成（列表依賴 orders） | 列表呼叫 orders 模組 `POST /ajax/SalesOrder/list`（`groupBuyId`、`month=100`）；「檢核」＝`POST /ajax/SalesOrderTransaction/verify` |
 | refundrequisition-list | `/backend/RefundRequisition/list` | 完成（推導頁） | 權限旗標 `refundRequisition`；guest1_a 無權限 → 原站 error.jsp「無權限」；有權限者可新增／編輯／刪除／核准／駁回／已退款／取消／匯出 |
 | invoice-list | `/backend/Invoice/list[?groupBuyId=]` | 完成 | 狀態篩選、編輯（狀態／開立時間）、重新排程、取消預約、作廢發票（彈窗）、開立折讓（彈窗）、開立電子發票、匯出 Excel、上方 24 小時開立／預約／失敗數量 |
@@ -61,7 +61,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 6. **重複入帳防呆**：訂單已被既有明細（含已入帳）或同批前一行對應 → `訂單 X 已有…，請確認是否重複付款`；確認入帳時 DB 函式再檢查一次：同一訂單已有有效入帳（另有唯一索引）、**同租戶「可能為同一筆匯款」的明細已入帳**（與上面第 1 點相同的容錯規則，migration 3502 的 `DUPLICATE_PAYMENT`），並以 `pg_advisory_xact_lock(租戶, 金額, 付款日)` 讓同時確認的請求依序執行。
 7. **指定訂單**：文字框第 4 欄（或檔案備註中的 12 碼訂單編號）＝只比該訂單（仍檢查階段、應付金額）。
 
-**確認入帳**（DB 函式，同一交易）：`set_config('groupbuy.actor','ADMIN')`＋`admin_user_id` → 只更新訂單 `status='PAID_EMAIL_SENT'`、`total_paid += 金額`、`date_paid=付款日` → `log_sales_order_history()` 觸發器寫歷程；同時寫 `bank_transaction_confirmations`（入帳前快照）與付款成功通知信紀錄（`email_messages`，NOT_SENT_UNINTEGRATED）。
+**確認入帳**（DB 函式，同一交易）：`set_config('groupbuy.actor','ADMIN')`＋`admin_user_id` → 更新訂單 `total_paid += 金額`、`date_paid`；`status` 只有在尚未付款的狀態（SEND_ORDER_EMAIL／ORDER_EMAIL_SENT／ORDER_EMAIL_FAILED／PAID_AMOUNT_MISMATCHED／PENDING_*）才推進為 `PAID_EMAIL_SENT`，已出貨等後段狀態維持不變（migration 8000）、`date_paid=付款日` → `log_sales_order_history()` 觸發器寫歷程；同時寫 `bank_transaction_confirmations`（入帳前快照）與付款成功通知信紀錄（`email_messages`，NOT_SENT_UNINTEGRATED）。
 **取消入帳**（migration 3501）：只有訂單自入帳後**完全沒有異動**（`updated_at` 與入帳當下相同、階段仍為 NEW/PROCESSING、status 與已付金額如入帳後）且**沒有佔用中的退款單**（待審核／已核准／已退款）才可還原 status/total_paid/date_paid；通知信紀錄改 FAILED（已取消，未寄出）；明細不再佔用訂單（`sales_order_id` 清空、狀態記「已取消入帳（原對應訂單 X）」，要重新入帳請以指定訂單編號重新匯入）。有入帳紀錄（含已取消）的明細不可刪除，以保留軌跡。
 
 ## 推導（原站未擷取或無權限，依原站風格與相鄰頁補完）
@@ -70,7 +70,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 - **金流對帳**：採用已擷取的欄位、按鈕（全選／檢核／Excel）、footer 搜尋與檢核 ajax（`merp`＋`salesOrderId`）。自行設計：`epst` 物件依選取列逐筆呼叫 verify、結果依 salesOrderId 暫存並在重繪時填回；結果欄三種呈現──成功（相符／金額不符＋差額）、退款（有退款：收款、退款、淨額）、錯誤（紅字原因）；完成後顯示【未串接】提示。原站頁面另有一個未被按鈕使用的 Editor（欄位「類別」），不搬；頁面上沒有 `#merp_select`，`merp` 不會送出。
 - **電子發票**：採用已擷取的 Editor 欄位、DataTable 設定、重新排程（含確認文字）、作廢發票（`displayIssueInvalid`）、匯出 Excel、狀態卡與單選篩選 DOM、引用 `/scripts/invoice.js`。自行設計：Editor 新增／編輯網址（依 SPEC 端點）、篩選參數、狀態欄附錯誤訊息、發票號碼欄附隨機碼、取消預約（本系統 `statusCancel`）、重新排程／取消預約成功後顯示伺服器訊息並更新狀態卡、列操作欄（訂單發票 → `displaySalesOrderInvoices`、開立折讓 → `displayAllowance`、已作廢／已取消的列「重新開立」→ `displayIssueInvoice`）。表格實例同時放在全域 `table`（invoice.js 用）與 `invoiceTable`（彈窗送出後重載）。四個彈窗 HTML 依 modal 表單樣式與 `invoice.js`／`invoice_v2.min.js` 所需元素 id 補完。
 - **月結單**：採用已擷取的 DataTable 設定、欄位、「明細」按鈕、子列 textarea 顯示 `descr`、方案區儲值／折抵文字。自行設計：`appendExtra`（本頁無篩選，不加參數）、方案區畫在「月結單」卡片第一個 card-body（標題、計費方式、費率、固定月費／最低費用、期間）、「明細」展開為 DataTables 子列並呼叫 `/ajax/BillingTransaction/details` 顯示團購別計費（期間內沒有可計算的團購時顯示空狀態，以帳單摘要為準）；`descr` 由伺服器依月結單欄位組成。儲值／折抵額度本系統方案表沒有欄位 → 回 null，不顯示。
-- **匯款對帳**：原站只有「新增」（解析＋比對）；本系統把比對與入帳拆成兩步，工具列另加「確認入帳」「取消入帳」「刪除」（未入帳明細）「下載範本」，匯入後顯示筆數摘要。Editor 原有的 `checked` 欄位（無選項）照原站保留、不使用；明細 `checked`＝已入帳。42 種銀行格式的實際欄位未擷取 → 以表頭關鍵字（交易日期／存入金額／轉出帳號／備註…）通用解析、無表頭的 TXT 逐列找日期／金額／帳號；文字框支援民國年（0105/06/22）。
+- **匯款對帳**：原站工具列只有「新增」。2026-10-25（fix-back）起與原站一致：工具列只留「新增」，匯入時金額／帳號唯一符合（`符合`）的明細直接經 DB 函式入帳（防呆同上），其他明細只記錄比對結果；匯入後顯示筆數摘要與入帳結果。確認入帳／取消入帳／刪除／下載範本的端點仍保留（無畫面入口），需要還原時可由端點或訂單管理處理。Editor 原有的 `checked` 欄位（無選項）照原站保留、不使用；明細 `checked`＝已入帳。42 種銀行格式的實際欄位未擷取 → 以表頭關鍵字（交易日期／存入金額／轉出帳號／備註…）通用解析、無表頭的 TXT 逐列找日期／金額／帳號；文字框支援民國年（0105/06/22）。
 - **金流對帳檢核（後端）**：未串接金流後台，改比對本系統 `sales_order_transactions`（成功收款、退款）與訂單已付金額，並把檢核結果寫回交易紀錄。
 - **退款單據（整頁）**：狀態 radio 篩選（全部／待審核／已核准／已駁回／已退款／已取消）、欄位、Editor（訂單編號、退款金額、退款方式、退款原因、銀行代碼/名稱/帳號/戶名、備註）、核准／駁回／已退款／取消；可退金額＝訂單已付 − 其他佔用中的退款單；「已退款」寫一筆 `sales_order_transactions`（REFUND），**不改訂單金額**；狀態轉換為條件式更新（同時按兩次只有一個成功、只寫一筆退款交易），核准／已退款時重新檢查可退金額；退款方式「退回點數」標示已退款時提示點數未自動回補。狀態與退款方式代碼沿用 datamodel 推定值。
 - **電子發票（後端）**：開立＝建立「發送電子發票[預約中]」紀錄（品項由訂單商品＋運費／手續費／折扣推導，稅額以 5% 內含計算）；作廢：預約中→已取消發送、已開立→作廢發票（勾「只記錄」→發票已作廢）；折讓：開立折讓（勾「只記錄」→折讓已開立）。**不改訂單 status**。

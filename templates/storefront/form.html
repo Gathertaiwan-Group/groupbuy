@@ -4,6 +4,7 @@
 {{!-- 原站 fb:app_id 為原站 Facebook App（未串接，不輸出值） --}}<meta property="fb:app_id" content="" />
 <meta property="og:image" content="{{ogImage}}">
 <meta property="og:title" content="{{groupBuy.title}}">
+{{#if seoDescr}}<meta name="description" content="{{seoDescr}}">{{/if}}
 <meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/>
 <meta http-equiv="Cache-Control" content="no-store"/>
 <meta http-equiv="Pragma" content="no-cache"/>
@@ -98,6 +99,7 @@ GBF.language = {{json ui.gbfLanguage}};
 	padding-right: 1rem;
 }
 </style>
+{{#if customCss}}<style type="text/css">{{{customCss}}}</style>{{/if}}
 </head>
 <body class=" gb-theme gb-v6">
 <div id="fb-root"></div>

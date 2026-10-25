@@ -786,11 +786,13 @@ async function updateShippingRule(ctx: RequestContext): Promise<Response> {
   }
   await adminUpdateOrders(session, [id], patch, `更改配送方式：${r.title}`);
   let msg = `已更改配送方式為「${r.title}」`;
+  let shippingAmount: number | null = null;
   if ((await strParam(ctx, "recalculate")) === "1") {
     const rr = await recalcOrderAmounts(session, id, { shipping: true, salesRules: false });
     msg += `，結帳金額 $${rr.grandTotal}（運費 $${rr.shippingAmount}）`;
+    shippingAmount = Number(rr.shippingAmount);
   }
-  return json({ code: 200, error: msg, message: msg });
+  return json({ code: 200, error: msg, message: msg, data: { shippingAmount } });
 }
 
 /* ─────────────────────────── 顧客資訊（推導） ─────────────────────────── */
