@@ -168,14 +168,11 @@ var convEscape = function (v) {
 				data:{
 
 				},
-				{{!-- 推導：狀態統計（helpdesk.ts 回 data.waitingForReply／replied／closed）顯示在頁首；等待回覆中以紅色徽章標示。 --}}
+				{{!-- 原站：#statusCard 內一個 list-group，「尚未回覆數量」＋藍色徽章（helpdesk.ts 回 data.waitingForReply） --}}
 				success: function (json) {
 					var d = (json && json.data) || {};
-					var n = function (v) { return parseInt(v, 10) || 0; };
-					$('#statusWaitingForReply').text(n(d.waitingForReply)).toggleClass('badge-danger', n(d.waitingForReply) > 0).toggleClass('badge-default', n(d.waitingForReply) == 0);
-					$('#statusReplied').text(n(d.replied));
-					$('#statusClosed').text(n(d.closed));
-					$('#conversationStatus').show();
+					var n = parseInt(d.waitingForReply, 10) || 0;
+					$('#statusCard .card-body').html('<ul class="list-group"><li class="list-group-item d-flex justify-content-between align-items-center">尚未回覆數量<span class="badge badge-primary badge-pill">' + n + '</span></li></ul>');
 				}
 			});
 		}
@@ -183,9 +180,11 @@ var convEscape = function (v) {
 	} ); // end ready
 </script>
 <!--#body--><div class="container-fluid ">
+<div id="statusCard" class="card mt-4">
+	<div class="card-body p-0"></div>
+</div>
 <div class="card mt-4">
-{{!-- 推導：頁首與狀態統計（原站本段未擷取；showStatus() 取 /ajax/helpdesk/Conversation/status 填入）。 --}}
-<div class="card-header">客服對話<span id="conversationStatus" class="small ml-3" style="display:none">尚未回覆 <span id="statusWaitingForReply" class="badge badge-default">0</span><span class="ml-2">已回覆 <span id="statusReplied" class="badge badge-default">0</span></span><span class="ml-2">已結案 <span id="statusClosed" class="badge badge-default">0</span></span></span></div>
+<div class="card-header">客服對話</div>
 <div class='card-footer pb-0'>
 		<input type="radio" name="status" id="status_WAITING_FOR_REPLY" class="filters form-check-input" value="WAITING_FOR_REPLY"  checked ><label for="status_WAITING_FOR_REPLY" class="form-check-label pl-4 mr-2">等待回覆中</label>
 <input type="radio" name="status" id="status_REPLIED" class="filters form-check-input" value="REPLIED" ><label for="status_REPLIED" class="form-check-label pl-4 mr-2">已回覆</label>

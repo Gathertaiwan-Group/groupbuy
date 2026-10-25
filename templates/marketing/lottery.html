@@ -146,22 +146,15 @@
 				{
 					text: '抽獎',
 					action: function ( e, dt, node, config ) {
-						Swal.fire({
-							title: '抽獎',
-							text: '抽獎結果是否遮罩顧客個資？',
-							showDenyButton: true,
-							showCancelButton: true,
-							confirmButtonText: '遮罩',
-							denyButtonText: '不遮罩',
-							cancelButtonText: '取消',
-						}).then(function (r) {
-							if (r.isConfirmed) drawLottery(true);
-							else if (r.isDenied) drawLottery(false);
-						});
+						{{!-- 原站：工具列「隱藏部分個資」勾選決定抽獎結果是否遮罩顧客個資 --}}
+						drawLottery($('#mask').prop('checked'));
 					}
 				},
 			]
 		} );
+
+		$(tableName + '_wrapper .dt-buttons').append('<div class="ml-2 mt-2"><input type="checkbox" id="mask" class="filters form-check-input" value="1"><label for="mask" class="pl-4 mr-2">隱藏部分個資</label></div>');
+		$('#btn-rules-close').on('click', function () { $('#rules').hide(); });
 
 		$(tableName).on( 'click', 'tbody td:not(:first-child)', function (e) {
 			editor.inline( this, {
@@ -206,6 +199,13 @@
 	<table id="drawResultTable" class="table table-borderless w-100">
 	</table>
 </div>
+</div>
+<div id="rules" class="card-footer mt-4">
+	<button type="button" id="btn-rules-close" class="close">×</button>
+	<p>＊系統不會永久保留抽獎相關設定及紀錄</p>
+	<p>＊獎項名稱必填，未填獎項不會參加抽獎</p>
+	<p>＊抽獎結果顯示金額為分割訂單後之金額</p>
+	<p>＊系統會重複抽獎三次以最後一次為結果</p>
 </div>
 </div>
 <!--#foot-->
