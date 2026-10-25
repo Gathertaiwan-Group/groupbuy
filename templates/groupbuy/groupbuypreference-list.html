@@ -495,10 +495,10 @@ max-height:calc(100vh - 200px);overflow-y:scroll;
 padding:0.5rem !important; margin:1px !important;
 }
 	</style>
-	{{!-- 推導：#tag-export 外框與 csv 編輯器連結區塊（缺段 200 字元） --}}
-	<div id="tag-export" class="card tag-container">
-	<div class="card-body">
-	<a class="btn btn-default btn-sm" target="_blank" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i>csv編輯器</a>
+	{{!-- 原站：#tag-export（sticky-top）第一個 card-header 為 csv 編輯器連結＋說明 --}}
+	<div id="tag-export" class="card tag-container sticky-top">
+	<div class="card-header">
+	<a target="_blank" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i>csv編輯器</a>
 	<br><span class="small">可透過csv編輯器，透過匯出功能複製貼回</span>
 	</div>
 	<div class="card-header">標籤</div>
@@ -714,7 +714,7 @@ padding:0.5rem !important; margin:1px !important;
 <div id="tag">
 	<h5>標籤</h5>
 	<div>
-	<button type="button" id="GROUP_BUY_TITLE" class="btn btn-default btn-sm btn-tag">#團購名稱</button>
+	<button type="button" id="GROUP_BUY" class="btn btn-default btn-sm btn-tag">#團購名稱</button>
 	<button type="button" id="GROUP_BUY_SHORT_TITLE" class="btn btn-default btn-sm btn-tag">#團購短名稱</button>
 	<button type="button" id="BILLING_NAME" class="btn btn-default btn-sm btn-tag">#訂購人姓名</button>
 	<button type="button" id="SHIPPING_NAME" class="btn btn-default btn-sm btn-tag">#收件人姓名</button>

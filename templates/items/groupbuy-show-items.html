@@ -229,9 +229,7 @@ table = $(tableName).DataTable( {
 		}
 	},
 	],
-	initComplete: function () {
-		DataTableConfig.initFooterSearch(this, [3,6,9],[16,0,16]);
-	},
+	{{!-- 原站品項表的表尾為純文字（不掛欄位搜尋框） --}}
 } );
 
 $('#showUnarchivedOrderItemTotal').on('change', function() {

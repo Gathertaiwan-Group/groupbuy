@@ -341,9 +341,10 @@
 	<div class="container-fluid mt-4 mb-5">
 
                     <!-- Header -->
-                    <div class="d-flex justify-content-between align-items-center mb-4 sticky-top bg-white py-2 border-bottom" style="z-index: 1020;">
-                        <div class="d-flex align-items-center flex-wrap">
-                            <h4 class="mb-0 mr-3" id="pageTitle">新增組合商品</h4>
+                    {{!-- 原站：標題列為 h4.mb-0「新增/編輯 組合商品」＋右側按鈕區（編輯時的同步按鈕放在按鈕區，位置推導） --}}
+                    <div class="d-flex justify-content-between align-items-center mb-4 sticky-top bg-white py-1 shadow-sm border-bottom" style="z-index: 1020;">
+                        <h4 class="mb-0">新增/編輯 組合商品</h4>
+                        <div>
 {{#if itemBundleV2Id}}
                             <button type="button" class="btn btn-outline-info btn-sm my-1 mr-1" id="btnSyncAllNames" title="以本組合各候選單品的自訂品名，同步覆蓋其他組合包內相同商品的名稱">
                                 <i class="fas fa-sync-alt mr-1"></i>同步所有自訂名稱
@@ -352,8 +353,6 @@
                                 <i class="fas fa-bolt mr-1"></i>跨團同步至子表單 <span id="syncContentBadge">(0)</span>
                             </button>
 {{/if}}
-                        </div>
-                        <div>
                             <a href="/backend/ItemBundleV2/list?groupBuyId={{groupBuyId}}" target="_blank" class="btn btn-outline-info btn-sm mr-1">瀏覽所有組合</a>
                             <a href="/backend/ItemBundleV2/list?groupBuyId={{groupBuyId}}"
                                 class="btn btn-outline-secondary btn-sm">取消</a>
@@ -670,9 +669,9 @@
                                                     <th class="text-center align-middle" style="width: 40px;">
                                                         <input type="checkbox" id="chkSyncHeaderSelectAll" checked>
                                                     </th>
-                                                    <th class="align-middle">商品名稱</th>
-                                                    <th class="align-middle">同步後名稱 (本組合設定)</th>
-                                                    <th class="text-center align-middle" style="width: 110px;">影響筆數</th>
+                                                    <th class="align-middle">商品名稱 (ID)</th>
+                                                    <th class="align-middle">本組合新設定名稱</th>
+                                                    <th class="text-center align-middle" style="width: 110px;">預計影響筆數</th>
                                                     <th class="text-center align-middle" style="width: 90px;">明細</th>
                                                 </tr>
                                             </thead>
@@ -815,7 +814,7 @@
                                                         <div class="custom-control custom-checkbox">
                                                             <input type="checkbox" class="custom-control-input sync-dim-opt" id="chkSyncSafetyStock" checked>
                                                             <label class="custom-control-label font-weight-bold" for="chkSyncSafetyStock">
-                                                                安全庫存 (Safety Stock)
+                                                                安全庫存 (現貨與預購)
                                                             </label>
                                                             <div class="text-muted" style="font-size: 0.78rem;">同步各候選單品的安全庫存與預購安全庫存門檻。</div>
                                                         </div>
@@ -881,9 +880,9 @@
                                                     <th class="text-center align-middle" style="width: 40px;">
                                                         <input type="checkbox" id="chkSyncContentHeaderSelectAll" checked>
                                                     </th>
-                                                    <th class="align-middle">子表單 (團購活動)</th>
-                                                    <th class="align-middle" style="width: 170px;">團購期間</th>
-                                                    <th class="text-center align-middle" style="width: 110px;">目前單品數</th>
+                                                    <th class="align-middle">目標子表單活動</th>
+                                                    <th class="align-middle" style="width: 170px;">活動期間</th>
+                                                    <th class="text-center align-middle" style="width: 110px;">現有品項</th>
                                                 </tr>
                                             </thead>
                                             <tbody id="syncContentTableBody">
@@ -912,7 +911,7 @@
                         <div class="modal-content">
                             <div class="modal-header bg-light py-2">
                                 <h5 class="modal-title font-weight-bold">
-                                    <i class="fas fa-th text-primary mr-2"></i>規格標籤矩陣快速設定
+                                    <i class="fas fa-th text-primary mr-2"></i>規格標籤矩陣批次設定
                                     <span class="text-muted mx-1">-</span><span class="text-primary" id="matrixModalGroupTitle"></span>
                                 </h5>
                                 <div class="d-flex align-items-center">

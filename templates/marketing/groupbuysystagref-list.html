@@ -2,7 +2,7 @@
      來源：spec/html/groupbuysystagref-list.html 已擷取段落（Editor/表格設定、批次標注按鈕、關聯清單與解除關聯的 ajax、
      showBatchTaggingModal 的重設步驟、確認新增的 confirm 與回應處理、兩個彈窗的可見結構、tagify 4.35.4 的 cdnjs 引用）、
      spec/runtime/groupbuysystagref-list.records.txt、SPEC「團購關鍵字標籤」、lib/modules/marketing/sys-tag-ref.ts（端點契約）。
-     推導：卡片標頭文字（取側欄／SPEC 頁名）、說明第一行開頭、關聯數量欄的連結內容、關聯清單表頭（團購編號／團購名稱）、
+     推導：卡片標頭文字（取側欄／SPEC 頁名）、說明第一行開頭、關聯數量欄的連結內容、關聯清單表頭（團購名稱／操作，同原站）、
      關聯清單列的組法與「解除關聯」按鈕、批次彈窗標題、預覽區（#batchPreviewArea／#batchPreviewList）的內容與文字、
      預覽按鈕呼叫 previewBatchTagging、Tagify 初始化參數、刪除後的提示文字、Editor 欄位標籤沿用原站顯示的 ???GroupBuySysTag.tag???。 --}}
 <!--#head-->
@@ -101,7 +101,6 @@
 							if (list.length > 0) {
 								$.each(list, function (i, gb) {
 									var tr = $('<tr>');
-									tr.append($('<td>').text(gb.gbId));
 									tr.append($('<td>').append($('<a target="_blank">').attr('href', '/backend/GroupBuy/show.do?groupBuyId=' + encodeURIComponent(gb.gbId)).text(gb.title)));
 									tr.append($('<td class="text-center">').append(
 										$('<button type="button" class="btn btn-sm btn-outline-danger btn-remove-tag-ref m-0">解除關聯</button>').attr('data-tag', tag).attr('data-gbid', gb.gbId)
@@ -109,7 +108,7 @@
 									tbody.append(tr);
 								});
 							} else {
-								tbody.append('<tr><td colspan="3" class="text-center text-muted">無關聯團購</td></tr>');
+								tbody.append('<tr><td colspan="2" class="text-center text-muted">無關聯團購</td></tr>');
 							}
 							$('#associatedGroupBuysModal').modal('show');
 						},
@@ -332,10 +331,9 @@
 					</button>
 				</div>
 				<div class="modal-body">
-					<table class="table table-sm table-striped">
+					<table class="table table-bordered table-sm">
 						<thead>
 							<tr>
-								<th width="100px">團購編號</th>
 								<th>團購名稱</th>
 								<th width="100px" class="text-center">操作</th>
 							</tr>

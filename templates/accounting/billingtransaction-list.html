@@ -11,14 +11,11 @@
 	}
 	function escHtml(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
 
-	{{!-- 推導：方案區畫在「月結單」卡片的第一個 card-body --}}
+	{{!-- 原站：方案區為卡片上方的 #billingPlanArea（沒有方案時為空）；內容版型為推導 --}}
 	function renderBillingPlans(json) {
-		var $area = $('#example').closest('.card').children('.card-body').first();
+		var $area = $('#billingPlanArea');
 		var plans = (json && json.billingPlans) || [];
 		var html = '';
-		if (!plans.length) {
-			html = '<div class="small text-muted">目前沒有啟用中的計費方案</div>';
-		}
 		plans.forEach(function(p) {
 			var credit = p.credit, creditUsed = p.creditUsed || 0, creditRegularlyLimit = p.creditRegularlyLimit;
 			html += '<div class="row mb-2">';
@@ -138,6 +135,7 @@
 	});
 	</script>
 <!--#body--><div class="container-fluid ">
+<div id="billingPlanArea"></div>
 <div class="card mt-4">
 <div class="card-header">月結單</div>
 <div class="card-body">

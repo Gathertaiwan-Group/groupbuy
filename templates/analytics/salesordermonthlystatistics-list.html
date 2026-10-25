@@ -41,7 +41,7 @@
 				url: '{{baseUrl}}/ajax/SalesOrderMonthlyStatistics/list.do',
 				type: 'POST',
 				data: function(d) {
-					$('#SalesOrderMonthlyStatisticsForm .filters').each(function() {
+					$('#queryForm .filters').each(function() {
 						d[this.name] = $(this).val();
 					});
 				}
@@ -76,7 +76,7 @@
 		$('#btn-search').click(function() {
 			table.ajax.reload();
 		});
-		$('#SalesOrderMonthlyStatisticsForm .filters').on('keypress', function(e) {
+		$('#queryForm .filters').on('keypress', function(e) {
 			if (e.which == 13) {
 				e.preventDefault();
 				table.ajax.reload();
@@ -88,7 +88,7 @@
 <div class="card mt-4">
 <div class="card-header">每月消費統計</div>
 <div class="card-body">
-	<form id="SalesOrderMonthlyStatisticsForm" method="post" action="/backend/CustomerPointSummary/download">
+	<form id="queryForm" method="POST" action="/backend/CustomerPointSummary/download">
 		<input type="hidden" name="query" value="" id='query'>
 		<div class="row">
 			<div class="input-group py-2 col-lg-6">
