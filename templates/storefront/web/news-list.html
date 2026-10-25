@@ -3,7 +3,7 @@
 {{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
 <!-- <base href="/web/News/list.jsp"> -->
 
-<title>最新消息</title>
+<title>{{#if listTitle}}{{listTitle}}{{else}}最新消息{{/if}}</title>
 <style>
 .accordion {max-width: initial !important;letter-spacing:2px}
 .accordion .card-header {font-size:1.25rem;letter-spacing:4px;}
@@ -21,7 +21,7 @@ a.collapsed[data-toggle="collapse"]:after {content: "\f0d7";}
 </script>
 {{/if}}{{> storefront/partials/web-header.html}}
 {{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
-{{> storefront/partials/messagebox.html}}<div class="breadcrumb-wrapper"><div class="container"><nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">首頁</li><li class="breadcrumb-item">最新消息</li></ol></nav></div></div><section id="news-section">
+{{> storefront/partials/messagebox.html}}<div class="breadcrumb-wrapper"><div class="container"><nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item">首頁</li><li class="breadcrumb-item">{{#if listTitle}}{{listTitle}}{{else}}最新消息{{/if}}</li></ol></nav></div></div><section id="news-section">
 		<div class="container">
 			<div class="accordion md-accordion" id="accordionEx" role="tablist" aria-multiselectable="true">
 			{{#each news}}<div class="card"><div class="card-header" role="tab" id="heading_newsId{{id}}"><h6 class=" "><a class="link-body-emphasis collapsed" data-toggle="collapse" data-bs-toggle="collapse"  data-parent="#accordionEx" href="#newsId{{id}}" aria-controls="newsId{{id}}"  role="button" aria-expanded="false" >{{title}}</a></h6><span class="small pull-right">{{date}}</span></div><div id="newsId{{id}}" class="collapse" role="tabpanel" aria-labelledby="heading_newsId{{id}}" data-parent="#accordionEx"><div class="card-body">{{{body}}}</div></div></div>{{/each}}</div>

@@ -1,0 +1,215 @@
+<!--#head-->
+{{!-- 網站選單（/backend/WebMenu/list?groupBuyId=）。原站：spec/GAP_SPEC.md §1.1、spec/gapnotes/webmenu.json。
+      可擷取：表格 #webMenuTable（title 選單名稱、category 類別、最後一欄 render inline-disabled）、按鈕 新增/編輯/刪除、Editor 欄位 title/category、
+      標題「網站選單」、說明文字、可見文字「主選單(上方) 啟用」。原站 inline script（3908 字元，節點樹編輯等）被擋。
+      推導：①「主選單(上方) 啟用」＝尚未建立主選單時顯示的提示列與「啟用」鈕（開新增表單並預設類別＝主選單(上方)）；
+            ②最後一欄＝「編輯節點」鈕，於表格下方開啟該選單的節點卡片（#webMenuNodeTable：名稱/網址/排序/上層，樹狀縮排），
+              節點新增/編輯/刪除用另一個 Editor（/ajax/WebMenuNode/*）。 --}}
+{{> core/partials/dte-style.html}}
+<style>
+	#webMenuNodeTable td.node-title .node-indent { color: #9e9e9e; }
+</style>
+<script type="text/javascript" class="init">
+var GROUP_BUY_ID = '{{groupBuyId}}';
+var currentMenu = null;
+var nodeTable = null;
+
+$(document).ready(function() {
+	var tableName = '#webMenuTable';
+	var editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/WebMenu/save.do?groupBuyId={{groupBuyId}}'
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/WebMenu/update.do?groupBuyId={{groupBuyId}}&webMenuId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/WebMenu/delete.do?groupBuyId={{groupBuyId}}&webMenuId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'webMenuId',
+		fields: [
+			DataTableConfig.field_input('選單名稱', 'title'),
+			DataTableConfig.field_select('類別', 'category'),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/WebMenu/list.do?groupBuyId={{groupBuyId}}',
+			type: "POST",
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_input('title', true),
+			DataTableConfig.data_select('category', null, true),
+			{
+				data:null,
+				'class':'inline-disabled',
+				orderable:false,
+				render: function ( data, type, row ) {
+					return '<button class="btn btn-default text-nowrap" data-action="nodes">編輯節點</button>'
+						+ '<span class="small grey-text ml-2">' + (row.nodeCount || 0) + ' 個節點</span>';
+				}
+			},
+		],
+		"order": [[ 0, "desc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+		],
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	DataTableHelper.initEditorOnCallback(table, editor);
+	DataTableHelper.injectInline(table, editor, true);
+
+	editor.on('postSubmit', function (e, json, data, action) {
+		if (action === 'remove' && currentMenu && data && data.data && data.data[currentMenu.webMenuId] !== undefined) closeNodes();
+		if (action === 'create') $('#enableTopMenu').closest('.card-body').remove();
+	});
+
+	$('#enableTopMenu').on('click', function () {
+		editor
+			.title(editor.i18n.create.title)
+			.buttons([{ label: editor.i18n.create.submit, className: 'btn-primary', fn: function () { this.submit(); } }])
+			.create();
+		editor.set('category', 'TOP').set('title', '主選單');
+	});
+
+	$(tableName + ' tbody').on('click', 'button[data-action=nodes]', function () {
+		var row = table.row($(this).closest('tr')).data();
+		if (row) openNodes(row);
+	});
+
+	/* ───── 推導：選單節點 ───── */
+	var nodeEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: { type: 'POST', url: '{{baseUrl}}/ajax/WebMenuNode/save.do?groupBuyId={{groupBuyId}}', data: function (d) { d.webMenuId = currentMenu.webMenuId; } },
+			edit:   { type: 'POST', url: '{{baseUrl}}/ajax/WebMenuNode/update.do?groupBuyId={{groupBuyId}}&webMenuNodeId=_id_', data: function (d) { d.webMenuId = currentMenu.webMenuId; } },
+			remove: { type: 'POST', url: '{{baseUrl}}/ajax/WebMenuNode/delete.do?groupBuyId={{groupBuyId}}&webMenuNodeId=_id_', data: function (d) { d.webMenuId = currentMenu.webMenuId; } }
+		},
+		table: '#webMenuNodeTable',
+		idSrc: 'webMenuNodeId',
+		fields: [
+			DataTableConfig.field_input('節點名稱', 'title'),
+			DataTableConfig.field_input('網址', 'url', '', '/短網址/... 或 https://...', '', '空白＝連到此節點的文章列表'),
+			DataTableConfig.field_input('排序', 'seq', '0', '', '排序影響顯示時的先後順序，數字小的顯示於前面'),
+			DataTableConfig.field_select('上層節點', 'parentId', ''),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+	nodeEditor.on('postSubmit', function () {
+		if (nodeTable) nodeTable.ajax.reload(null, false);
+		table.ajax.reload(null, false);
+	});
+
+	function openNodes(menu) {
+		currentMenu = menu;
+		$('#nodeCardTitle').text(menu.title);
+		$('#nodeCard').show();
+		if (nodeTable) {
+			nodeTable.ajax.reload();
+		} else {
+			nodeTable = $('#webMenuNodeTable').DataTable( {
+				dom: 'Brtip',
+				serverSide:false,
+				ordering:false,
+				paging:false,
+				scrollX:true,
+				ajax: {
+					url:'{{baseUrl}}/ajax/WebMenuNode/list.do?groupBuyId={{groupBuyId}}',
+					type: "POST",
+					data: function (d) { d.webMenuId = currentMenu ? currentMenu.webMenuId : ''; return d; }
+				},
+				language:DataTableConfig.i18n,
+				columns:[
+					DataTableConfig.data_select_checkbox,
+					{ data: 'title', className: 'node-title', render: function (data, type, row) {
+						if (type !== 'display') return data;
+						var pad = '';
+						for (var i = 0; i < row.depth; i++) pad += '　';
+						return pad + (row.depth > 0 ? '<span class="node-indent">└ </span>' : '') + $('<div>').text(data).html();
+					} },
+					DataTableConfig.data_input('url'),
+					DataTableConfig.data_input('seq'),
+					DataTableConfig.data_input('parentTitle'),
+				],
+				select: DataTableConfig.selectOptionsOS,
+				buttons: [
+					{ extend: 'create', editor: nodeEditor },
+					{ extend: 'edit',   editor: nodeEditor },
+					{ extend: 'remove', editor: nodeEditor, className:'btn-danger' },
+				],
+			} );
+			DataTableHelper.initEditorOnCallback(nodeTable, nodeEditor);
+		}
+		$('html, body').animate({ scrollTop: $('#nodeCard').offset().top - 70 }, 300);
+	}
+
+	function closeNodes() {
+		currentMenu = null;
+		$('#nodeCard').hide();
+	}
+	$('#closeNodeCard').on('click', closeNodes);
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">網站選單</div>
+{{#unless hasTopMenu}}
+<div class="card-body border-bottom">
+	<span class="mr-2">主選單(上方)</span>
+	<button type="button" id="enableTopMenu" class="btn btn-primary btn-sm">啟用</button>
+</div>
+{{/unless}}
+<div class="card-body">
+	<p class="text-muted">至少需啟用主選單，如果側邊選單與主選單內容相同，無需特別啟用側邊選單。</p>
+	<table id="webMenuTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>選單名稱</th>
+				<th>類別</th>
+				<th></th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+	{{!-- 推導：選單節點卡片（點「編輯節點」後顯示） --}}
+	<div class="card mt-4" id="nodeCard" style="display:none;">
+<div class="card-header">選單節點：<span id="nodeCardTitle"></span>
+	<button type="button" id="closeNodeCard" class="close" aria-label="關閉"><span aria-hidden="true">&times;</span></button>
+</div>
+<div class="card-body">
+	<table id="webMenuNodeTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>節點名稱</th>
+				<th>網址</th>
+				<th>排序</th>
+				<th>上層節點</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

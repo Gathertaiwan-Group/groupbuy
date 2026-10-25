@@ -344,14 +344,25 @@ export interface PostRow {
   image: string | null;
   tags: string | null;
   date_published: string;
+  /** 只填「文章圖片網址」時的圖（image 為空才用） */
+  image_url?: string | null;
+  /** NORMAL／PREMIUM（限閱文章） */
+  post_type?: string | null;
+  /** 限閱會員等級（逗號分隔的會員方案 id 或名稱；空＝登入會員即可） */
+  access_level?: string | null;
 }
 
-const POST_COLS = "id, group_buy_id, web_menu_node_id, title, summary, image, tags, date_published";
+const POST_COLS = "id, group_buy_id, web_menu_node_id, title, summary, image, tags, date_published, image_url, post_type, access_level";
 
 /** 網站的文章範圍：同租戶、已發布、屬於此團購（或租戶共用 group_buy_id 為空） */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function postScope(q: any, site: { tenant: SfTenant; groupBuy: SfGroupBuy }): any {
-  return q.eq("tenant_id", site.tenant.id).eq("is_published", true).or(`group_buy_id.eq.${site.groupBuy.id},group_buy_id.is.null`);
+  // 已發布，或「排程發布」(status=FUTURE) 且發佈時間已到（後台 Post 編輯器的排程發布：到時間自動上架，不需排程器）
+  const now = new Date().toISOString();
+  return q
+    .eq("tenant_id", site.tenant.id)
+    .or(`is_published.eq.true,and(status.eq.FUTURE,date_published.lte.${now})`)
+    .or(`group_buy_id.eq.${site.groupBuy.id},group_buy_id.is.null`);
 }
 
 export interface PostQuery {
@@ -502,7 +513,7 @@ export function postCard(site: WebSite, r: PostRow, titles: Map<number, string>,
     href: postHref(site.short, r.id, r.title),
     date: dateStyle === "date" ? taipeiDate(r.date_published) : taipeiDateTime(r.date_published),
     summary: r.summary ?? "",
-    image: imageUrl(r.image),
+    image: imageUrl(r.image) || (/^https?:\/\//i.test(String(r.image_url ?? "").trim()) ? String(r.image_url).trim() : ""),
     category:
       catTitle !== undefined && r.web_menu_node_id !== null
         ? { title: catTitle, href: categoryHref(site.short, r.web_menu_node_id, catTitle) }

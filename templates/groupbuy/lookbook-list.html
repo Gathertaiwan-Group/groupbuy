@@ -1,0 +1,242 @@
+<!--#head-->
+{{!-- 橫幅／小圖／Lookbook（/backend/Lookbook/list?category=BANNER|SMALL|LOOKBOOK&groupBuyId=）。
+      原站：spec/GAP_SPEC.md §1.3、spec/gapnotes/faq_lookbook_post.json（lookbook）。
+      可擷取：#example（serverSide、dom lBrtip、order [[1,desc]]）、欄位、Editor 欄位與預設值、按鈕 新增/編輯/刪除/重新排序、
+      一般模式／行內編輯模式、「隱藏已結束」（BANNER/SMALL）；無單一團購側欄。inline script 與 select2 網址被擋。
+      推導：①select2 標籤 → /ajax/Lookup/lookbookTag；綁定項目 → /ajax/Lookup/lookbookReference（依「類別」linkCategory 查詢，網址帶目前類別）；
+            ②「重新排序」→ 同品項頁（groupbuy-show-items）reseq Editor：排序方式／起始排序／排序間隔，送 /ajax/Lookbook/reseq（有勾選列＝只排勾選的）；
+            ③「隱藏已結束」→ 列表參數 hideEnded=1（結束時間早於現在的不顯示）；
+            ④Editor create/edit 的 data 函式帶 groupBuyId、category（原站有 data fn，內容被擋）；
+            ⑤「使用新標籤」勾選時顯示「新標籤」輸入框、隱藏 select2 標籤；「網頁連結」只在類別＝外部連結時顯示、「綁定項目」只在需要綁定的類別顯示。 --}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var GROUP_BUY_ID = '{{groupBuyId}}';
+var LOOKBOOK_CATEGORY = '{{category}}';
+var IS_LOOKBOOK = LOOKBOOK_CATEGORY === 'LOOKBOOK';
+var REF_CATEGORIES = ['ITEM', 'ITEM_SET', 'POST', 'POST_CATEGORY', 'MENU_BIND', 'CUSTOM_WEB', 'ITEM_SYS'];
+var editor;
+
+$(document).ready(function() {
+	var tableName = '#example';
+	var withParams = function (d) {
+		d.groupBuyId = GROUP_BUY_ID;
+		d.category = LOOKBOOK_CATEGORY;
+	};
+	var referenceUrl = function () {
+		var lc = editor ? editor.field('linkCategory').val() : '';
+		return GBF.baseUrl + '/ajax/Lookup/lookbookReference?groupBuyId=' + GROUP_BUY_ID + '&linkCategory=' + encodeURIComponent(lc || '');
+	};
+	var fields = [
+		DataTableConfig.field_input('排序:', 'seq', '0'),
+		DataTableConfig.field_input('標題:', 'title'),
+	];
+	if (!IS_LOOKBOOK) {
+		fields.push(
+			DataTableConfig.field_input('新標籤', 'tagInput', ''),
+			DataTableConfig.field_select2('標籤', 'tag', '', '選擇(輸入關鍵字)', GBF.baseUrl + '/ajax/Lookup/lookbookTag?groupBuyId=' + GROUP_BUY_ID + '&category=' + LOOKBOOK_CATEGORY, false),
+			DataTableConfig.field_checkbox_bool('使用新標籤', 'isNewTag', 0),
+			DataTableConfig.field_datetime('開始時間', 'dateStartString', 'YYYY-MM-DD HH:mm'),
+			DataTableConfig.field_datetime('結束時間', 'dateEndString', 'YYYY-MM-DD HH:mm')
+		);
+	}
+	fields.push(
+		DataTableConfig.field_upload('圖片:', 'image'),
+		DataTableConfig.field_input('圖片連結', 'imagePath', '', '', '', '支援圖片/Youtube/臉書影片連結')
+	);
+	if (!IS_LOOKBOOK) {
+		fields.push(
+			DataTableConfig.field_upload('圖片（手機版）:', 'lookbookSettings.imageSM'),
+			DataTableConfig.field_input('圖片（手機版）連結', 'lookbookSettings.imageSMPath', '')
+		);
+	}
+	fields.push(
+		DataTableConfig.field_select('類別', 'linkCategory', 'EXTERNAL_LINK'),
+		DataTableConfig.field_input('網頁連結', 'linkUrl', ''),
+		DataTableConfig.field_checkbox_bool('連結使用新視窗開啟', 'lookbookSettings.linkTargetBlank', 0),
+		DataTableConfig.field_select2('綁定項目', 'reference', '', '選擇(輸入關鍵字)', referenceUrl, false)
+	);
+
+	editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/Lookbook/save.do?groupBuyId={{groupBuyId}}&category={{category}}',
+				data: withParams
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/Lookbook/update.do?groupBuyId={{groupBuyId}}&category={{category}}&lookbookId=_id_',
+				data: withParams
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/Lookbook/delete.do?groupBuyId={{groupBuyId}}&category={{category}}&lookbookId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'lookbookId',
+		fields: fields,
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+
+	// 推導：欄位顯示規則
+	if (!IS_LOOKBOOK) {
+		editor.dependent('isNewTag', function (val) {
+			var on = String(val) === '1' || (Array.isArray(val) && val.length > 0 && String(val[0]) === '1');
+			return on ? { show: ['tagInput'], hide: ['tag'] } : { show: ['tag'], hide: ['tagInput'] };
+		});
+	}
+	editor.dependent('linkCategory', function (val) {
+		var show = [], hide = [];
+		(val === 'EXTERNAL_LINK' ? show : hide).push('linkUrl');
+		(REF_CATEGORIES.indexOf(val) >= 0 ? show : hide).push('reference');
+		return { show: show, hide: hide };
+	});
+	editor.field('linkCategory').input().on('change', function (e, d) {
+		if (d && d.editor) return;
+		editor.field('reference').val('');
+	});
+
+	var columns = [
+		{ width:'48px', data:null, defaultContent:'', className:'select-checkbox', orderable:false },
+		DataTableConfig.data_input('seq'),
+		DataTableConfig.data_input('title'),
+	];
+	if (!IS_LOOKBOOK) {
+		columns.push(
+			DataTableConfig.data_input('tag'),
+			DataTableConfig.data_input('dateStartString'),
+			DataTableConfig.data_input('dateEndString')
+		);
+	}
+	columns.push(
+		DataTableConfig.data_image('圖片', 'image'),
+		{ data: 'imagePath', className: 'bubble', defaultContent: '', render: $.fn.dataTable.render.text() },
+		{
+			data: null,
+			className: 'inline-disabled',
+			orderable: false,
+			render: function (data, type, row) {
+				var opts = (table && table.ajax.json() && table.ajax.json().options) ? table.ajax.json().options.linkCategory : [];
+				var label = row.linkCategory;
+				$.each(opts || [], function (i, o) { if (o.value === row.linkCategory) label = o.label; });
+				var detail = row.referenceText || (row.linkCategory === 'EXTERNAL_LINK' ? row.linkUrl : '') || '';
+				var html = $('<div>').text(label || '').html();
+				if (detail) html += '：' + $('<div>').text(detail).html();
+				if (row.ended) html += ' <span class="badge badge-secondary">已結束</span>';
+				return html;
+			}
+		}
+	);
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/Lookbook/list.do?groupBuyId={{groupBuyId}}&category={{category}}',
+			type: "POST",
+			data: function (d) {
+				d.hideEnded = $('#hideEnded').is(':checked') ? 1 : 0;
+				return d;
+			}
+		},
+		language:DataTableConfig.i18n,
+		columns: columns,
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 1, "desc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+			{
+				text: '重新排序',
+				action: function ( e, dt, node, config ) {
+					reseqEditor
+					.title('重新排序')
+					.buttons([
+						{ label:'確定', className:'btn-primary', fn: function () { this.submit(); } },
+						{ text:'關閉', className:'btn-default', action: function () { this.close(); } }
+					])
+					.create();
+				}
+			},
+		],
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	var reseqEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/Lookbook/reseq.do?groupBuyId={{groupBuyId}}&category={{category}}',
+				data: function ( d ) {
+					d.lookbookId = joinIds('lookbookId', table, false);
+				}
+			}
+		},
+		fields: [
+			{
+				label:'排序方式',
+				name:'orderBy',
+				type:'radio',
+				def:'seq asc',
+				options:[
+					{label:'依目前順序', value:'seq asc'},
+					{label:'依目前順序(反排)', value:'seq desc'},
+				]
+			},
+			DataTableConfig.field_input('起始排序','seq','10'),
+			DataTableConfig.field_input('排序間隔','gap','10'),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} )
+	.on( 'postSubmit', function (e,mode,action) {
+		table.ajax.reload(null, false);
+	});
+
+	DataTableHelper.initEditorOnCallback(table, editor);
+	DataTableHelper.inlineModePlugin(table);
+	DataTableHelper.injectInline(table, editor);
+
+	$('#hideEnded').on('change', function () {
+		table.ajax.reload();
+	});
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">{{pageTitle}}</div>
+{{#unless isLookbook}}
+<div class="card-body border-bottom py-2">
+	<input type="checkbox" id="hideEnded" class="filters form-check-input" value="1"><label for="hideEnded" class="pl-4 mr-2">隱藏已結束</label>
+</div>
+{{/unless}}
+<div class="card-body">
+	<table id="example" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>選擇</th>
+				<th>排序</th>
+				<th>標題</th>
+{{#unless isLookbook}}
+				<th>標籤</th>
+				<th>開始時間</th>
+				<th>結束時間</th>
+{{/unless}}
+				<th>圖片</th>
+				<th>圖片連結</th>
+				<th>綁定項目</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

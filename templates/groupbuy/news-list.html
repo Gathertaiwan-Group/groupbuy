@@ -1,0 +1,114 @@
+<!--#head-->
+{{!-- 最新消息／常見問題（/backend/News/list?tag=NEWS|FAQ&groupBuyId=）。原站：spec/GAP_SPEC.md §1.2、spec/gapnotes/news.json、faq_lookbook_post.json。
+      可擷取：#example（serverSide、dom lBfrtip、lengthMenu 10/25/50/100）、欄位與 Editor 欄位、一般模式／行內編輯模式、搜尋框；無單一團購側欄。
+      inline script 被擋 → 版面依同類列表頁（groupbuytag-list）推導：card-header 標題＋inlineModePlugin。 --}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var GROUP_BUY_ID = '{{groupBuyId}}';
+var NEWS_TAG = '{{tag}}';
+
+$(document).ready(function() {
+	var tableName = '#example';
+	var editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/News/save.do?tag={{tag}}&groupBuyId={{groupBuyId}}'
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/News/update.do?tag={{tag}}&groupBuyId={{groupBuyId}}&newsId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/News/delete.do?tag={{tag}}&groupBuyId={{groupBuyId}}&newsId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'newsId',
+		fields: [
+{{#if isFaq}}
+			DataTableConfig.field_input('標題:', 'title'),
+			DataTableConfig.field_input('排序:', 'seq', '0'),
+			{ label: '分類:', name: 'category[]', type: 'select', multiple: true, separator: null, options: [] },
+			DataTableConfig.field_input('新增分類:', 'newCategory', ''),
+			DataTableConfig.field_ckeditor5('內容', 'descr'),
+{{else}}
+			DataTableConfig.field_input('標題:', 'title'),
+			DataTableConfig.field_datetime('發布日期:', 'datePublishedString', 'YYYY-MM-DD HH:mm'),
+			DataTableConfig.field_ckeditor5('內容', 'descr'),
+{{/if}}
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBfrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100],
+		ajax: {
+			url:'{{baseUrl}}/ajax/News/list.do?tag={{tag}}&groupBuyId={{groupBuyId}}',
+			type: "POST",
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			{ width:'48px', data:null, defaultContent:'', className:'select-checkbox inline-disabled', orderable:false },
+{{#if isFaq}}
+			DataTableConfig.data_input('seq'),
+			{ data: 'category', className: 'inline-disabled', render: function (data, type, row) {
+				var v = Array.isArray(data) ? data.join(', ') : (data || '');
+				return type === 'display' ? $('<div>').text(v).html() : v;
+			} },
+			DataTableConfig.data_input('title'),
+{{else}}
+			DataTableConfig.data_input('datePublishedString'),
+			DataTableConfig.data_input('title'),
+{{/if}}
+		],
+		keys: DataTableConfig.keysInlineTab,
+{{#if isFaq}}
+		"order": [[ 1, "asc" ]],
+{{else}}
+		"order": [[ 1, "desc" ]],
+{{/if}}
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+		],
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	DataTableHelper.initEditorOnCallback(table, editor);
+	DataTableHelper.inlineModePlugin(table);
+	DataTableHelper.injectInline(table, editor);
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">{{pageTitle}}</div>
+<div class="card-body">
+	<table id="example" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>選擇</th>
+{{#if isFaq}}
+				<th>排序</th>
+				<th>分類</th>
+				<th>標題</th>
+{{else}}
+				<th>發布日期</th>
+				<th>標題</th>
+{{/if}}
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

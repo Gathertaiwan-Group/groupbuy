@@ -11,6 +11,7 @@ import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import { getServiceClient } from "@/lib/supabase/server";
 import type { AdminNewsItem } from "../types";
 import { sellerNotFound } from "./pages-static";
+import { readCustomerSession } from "./customer-session";
 import { groupBuyByShortUrl, imageUrl, PLATFORM_TENANT_CODE, scopeFromTenantPath, tenantById, tenantByCode, type SfGroupBuy, type SfTenant } from "./site";
 import {
   categoryHref,
@@ -93,7 +94,8 @@ async function homePostCards(site: WebSite, limit: number): Promise<HvItemView["
     site,
     rows.map((r) => r.web_menu_node_id).filter((x): x is number => x !== null),
   );
-  return rows.map((r) => ({ ...postCard(site, r, titles, "date"), excerpt: textExcerpt(r.body) }));
+  // 限閱文章不在列表露出內文，只用摘要
+  return rows.map((r) => ({ ...postCard(site, r, titles, "date"), excerpt: r.post_type === "PREMIUM" ? r.summary ?? "" : textExcerpt(r.body) }));
 }
 
 /** HomeView 區塊（home_view_sections → home_view_items）。隱藏（settings.hidden）的區塊/項目不輸出 */
@@ -294,6 +296,29 @@ async function searchPage(ctx: RequestContext): Promise<Response> {
 // ───────────────────────── 文章內頁 ─────────────────────────
 
 /** /{短網址}/post/{id}/{標題}：原站未擷取，依同版面推導（標題、日期、分類、內文、標籤） */
+/**
+ * 限閱文章（後台 Post「文章類型」＝PREMIUM）：需登入會員；有填「限閱會員等級」時，會員所屬方案（royalty_program_id 或方案名稱）
+ * 須在逗號分隔清單內。推導：原站前台限閱畫面未擷取，未通過時只顯示摘要＋登入提示。
+ */
+async function premiumAllowed(ctx: RequestContext, tenantId: number, row: { post_type?: string | null; access_level?: string | null }): Promise<boolean> {
+  if (row.post_type !== "PREMIUM") return true;
+  const cs = await readCustomerSession(ctx, tenantId);
+  if (!cs) return false;
+  const levels = String(row.access_level ?? "").split(/[,，\s]+/).map((x) => x.trim()).filter(Boolean);
+  if (!levels.length) return true;
+  const rpId = cs.customer.royalty_program_id;
+  if (rpId === null) return false;
+  if (levels.includes(String(rpId))) return true;
+  const { data } = await getServiceClient().from("royalty_programs").select("title").eq("tenant_id", tenantId).eq("id", rpId).maybeSingle();
+  const title = String((data as { title?: string } | null)?.title ?? "");
+  return !!title && levels.includes(title);
+}
+
+function premiumLockedHtml(row: { summary: string | null }): string {
+  const summary = row.summary ? `<p>${escapeHtml(row.summary)}</p>` : "";
+  return `${summary}<div class="alert alert-warning text-center my-4"><i class="fa-solid fa-lock mr-2"></i>此為限閱文章，請先登入符合資格的會員後再閱讀。</div>`;
+}
+
 async function postPage(ctx: RequestContext): Promise<Response> {
   const site = await siteByShortUrl(ctx.params.shortUrl);
   if (!site) return sellerNotFound(ctx);
@@ -312,7 +337,7 @@ async function postPage(ctx: RequestContext): Promise<Response> {
     post: {
       ...card,
       // 內文是網站管理員以編輯器撰寫的 HTML，與原站一樣原樣輸出
-      body: row.body ?? "",
+      body: (await premiumAllowed(ctx, site.tenant.id, row)) ? row.body ?? "" : premiumLockedHtml(row),
       tags: parseTags(row.tags).map((name) => ({ name, href: tagHref(site.short, name) })),
     },
   });
@@ -346,6 +371,8 @@ interface NewsRow {
 
 async function queryNews(tenantId: number, groupBuyId: number | null, limit: number, pinnedFirst: boolean): Promise<NewsRow[]> {
   let q = db().from("news").select("id, title, body, is_pinned, date_published").eq("tenant_id", tenantId);
+  // news 同表也存官網「常見問題」（tag=FAQ，groupbuy 模組 News/list?tag=FAQ）；最新公告只取 NEWS 或未標記
+  q = q.or("tag.is.null,tag.eq.NEWS,tag.eq.");
   if (groupBuyId !== null) q = q.or(`group_buy_id.eq.${groupBuyId},group_buy_id.is.null`);
   if (pinnedFirst) q = q.order("is_pinned", { ascending: false });
   const { data, error } = await q.order("date_published", { ascending: false }).order("id", { ascending: false }).limit(limit);
@@ -379,6 +406,31 @@ async function newsListPage(ctx: RequestContext): Promise<Response> {
 }
 
 /** /{短網址}/news：網站側欄「最新公告」連結（原站未擷取，推導＝同公告列表、套網站導覽列與頁尾） */
+/**
+ * /{短網址}/faq：官網「常見問題」（後台 News/list?tag=FAQ 管理；推導：原站前台 FAQ 頁網址與版面未擷取，沿用最新消息的手風琴版面）。
+ * 依排序（seq）小到大，再依標題前綴分類。
+ */
+async function siteFaqPage(ctx: RequestContext): Promise<Response> {
+  const site = await siteByShortUrl(ctx.params.shortUrl);
+  if (!site) return sellerNotFound(ctx);
+  const { data, error } = await db()
+    .from("news")
+    .select("id, title, body, is_pinned, date_published, seq, categories")
+    .eq("tenant_id", site.tenant.id)
+    .eq("tag", "FAQ")
+    .or(`group_buy_id.eq.${site.groupBuy.id},group_buy_id.is.null`)
+    .order("seq", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(`查詢常見問題失敗：${error.message}`);
+  const rows = (data ?? []) as (NewsRow & { categories?: string[] | null })[];
+  const news = rows.map((r) => {
+    const cats = Array.isArray(r.categories) ? r.categories.filter(Boolean) : [];
+    return { id: r.id, title: cats.length ? `【${cats.join("／")}】${r.title}` : r.title, date: "", body: r.body ?? "" };
+  });
+  return page("storefront/web/news-list.html", { ...webVars(ctx, { tenant: site.tenant, site }), news, listTitle: "常見問題" });
+}
+
 async function siteNewsPage(ctx: RequestContext): Promise<Response> {
   const site = await siteByShortUrl(ctx.params.shortUrl);
   if (!site) return sellerNotFound(ctx);
@@ -423,6 +475,7 @@ export const helpRoutes: RouteDef[] = [
   get("/:shortUrl/post/:postId/:title", postPage, SITE),
   get("/:shortUrl/post/:postId", postPage, SITE),
   get("/:shortUrl/news", siteNewsPage, SITE),
+  get("/:shortUrl/faq", siteFaqPage, SITE),
   get("/:shortUrl/posts", searchPage, SITE),
   get("/News/list", newsListPage, { auth: "public" }),
   get("/p/:shortUrl/ajax/web/Post/lookup", postLookup, { auth: "public" }),

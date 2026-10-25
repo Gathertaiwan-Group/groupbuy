@@ -1,0 +1,221 @@
+<!--#head-->
+{{!-- 文章（/backend/Post/list?groupBuyId=）。原站：spec/GAP_SPEC.md §1.4、spec/gapnotes/faq_lookbook_post.json（post）。
+      可擷取：單一團購側欄、breadcrumb 首頁 > 文章、分頁籤「文章」「文章分類」、#pTable / #pcTable 的 ajax、dom、order、lengthMenu、欄位、Editor 欄位與 options。
+      inline script 被擋 → 推導：①分頁籤用 bootstrap nav-tabs（切換時 columns.adjust）；②#pTable 最後一欄（render inline-disabled）＝「預覽」前台文章連結；
+            ③表尾 status 欄用 DataTableConfig.initFooterSearch 的下拉（選項取列表 options.status）；④「選擇作者」有選時以它為作者；
+            ⑤「新分類標籤」＝自動建立同名文章分類並勾選；⑥行內編輯：欄位上的鉛筆圖示（injectInline icon 模式）。 --}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var GROUP_BUY_ID = '{{groupBuyId}}';
+var SHORT_URL = {{json shortUrl}};
+
+var labelsOf = function (table, key, vals) {
+	var json = table.ajax.json();
+	var opts = json && json.options ? json.options[key] : null;
+	if (!Array.isArray(vals)) return '';
+	return vals.map(function (v) {
+		var label = v;
+		$.each(opts || [], function (i, o) { if (String(o.value) === String(v)) label = o.label; });
+		return label;
+	}).join(', ');
+};
+
+$(document).ready(function() {
+	/* ───── 文章 ───── */
+	var postEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: { type: 'POST', url: '{{baseUrl}}/ajax/Post/save.do?groupBuyId={{groupBuyId}}' },
+			edit:   { type: 'POST', url: '{{baseUrl}}/ajax/Post/update.do?groupBuyId={{groupBuyId}}&postId=_id_' },
+			remove: { type: 'POST', url: '{{baseUrl}}/ajax/Post/delete.do?groupBuyId={{groupBuyId}}&postId=_id_' }
+		},
+		table: '#pTable',
+		idSrc: 'postId',
+		fields: [
+			DataTableConfig.field_input('文章標題', 'title'),
+			DataTableConfig.field_select('選擇作者', 'authors', ''),
+			DataTableConfig.field_input('作者', 'author', ''),
+			DataTableConfig.field_datetime('發佈日期:', 'datePostString', 'YYYY-MM-DD HH:mm'),
+			DataTableConfig.field_input('排序', 'seq', '0'),
+			DataTableConfig.field_select('文章狀態', 'status', 'DRAFT'),
+			DataTableConfig.field_select('文章類型', 'postType', 'NORMAL'),
+			DataTableConfig.field_input('限閱會員等級:', 'accessLevel', ''),
+			DataTableConfig.field_upload('文章圖片:', 'image'),
+			DataTableConfig.field_input('文章圖片網址', 'imageUrl', ''),
+			{ label: '分類標籤', name: 'categoryTagIds[]', type: 'checkbox', separator: null, options: [] },
+			DataTableConfig.field_input('新分類標籤', 'tag', ''),
+			DataTableConfig.field_ckeditor5('文章內容', 'content'),
+			DataTableConfig.field_textarea('SEO敘述', 'seoDescr', '', 3),
+			DataTableConfig.field_input('備註', 'postSettings.comment', ''),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+	postEditor.dependent('postType', function (val) {
+		return val === 'PREMIUM' ? { show: ['accessLevel'] } : { hide: ['accessLevel'] };
+	});
+
+	var pTable = $('#pTable').DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/Post/list.do?groupBuyId={{groupBuyId}}',
+			type: "POST",
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('seq', true),
+			DataTableConfig.data_input('datePostString', true),
+			DataTableConfig.data_input('title', true),
+			DataTableConfig.data_select('status', null, true),
+			{ data: 'categoryTagIds[]', className: 'inline-disabled', orderable: false, render: function (data, type, row) {
+				var v = labelsOf(pTable, 'categoryTagIds[]', row.categoryTagIds);
+				return type === 'display' ? $('<div>').text(v).html() : v;
+			} },
+			DataTableConfig.data_input('postSettings.comment', true),
+			{
+				data: null,
+				className: 'inline-disabled',
+				orderable: false,
+				render: function (data, type, row) {
+					if (!SHORT_URL) return '';
+					return '<a class="btn btn-default text-nowrap" target="_blank" rel="noopener noreferrer" href="/' + encodeURIComponent(SHORT_URL) + '/post/' + row.postId + '">預覽</a>';
+				}
+			},
+		],
+		"order": [[ 1, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: postEditor },
+			{ extend: 'edit',   editor: postEditor },
+			{ extend: 'remove', editor: postEditor, className:'btn-danger' },
+		],
+		initComplete: function () {
+			DataTableConfig.initFooterSearch(this, [4], [0]);
+		},
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+	DataTableHelper.initEditorOnCallback(pTable, postEditor);
+	DataTableHelper.injectInline(pTable, postEditor, true);
+
+	/* ───── 文章分類 ───── */
+	var pcEditor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: { type: 'POST', url: '{{baseUrl}}/ajax/PostCategory/save.do?groupBuyId={{groupBuyId}}' },
+			edit:   { type: 'POST', url: '{{baseUrl}}/ajax/PostCategory/update.do?groupBuyId={{groupBuyId}}&postCategoryId=_id_' },
+			remove: { type: 'POST', url: '{{baseUrl}}/ajax/PostCategory/delete.do?groupBuyId={{groupBuyId}}&postCategoryId=_id_' }
+		},
+		table: '#pcTable',
+		idSrc: 'postCategoryId',
+		fields: [
+			DataTableConfig.field_input('分類名稱', 'title'),
+			DataTableConfig.field_input('分類標籤', 'tag', ''),
+			DataTableConfig.field_select('文章排序規則', 'postCategorySettings.postSortType', 'DATE_POST_DES'),
+		],
+		formOptions:DataTableConfig.formOptions,
+		i18n:DataTableConfig.i18n,
+	} );
+	pcEditor.on('postSubmit', function () {
+		// 分類異動 → 文章的分類標籤選項／顯示跟著更新
+		pTable.ajax.reload(null, false);
+	});
+
+	var pcTable = $('#pcTable').DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/PostCategory/list.do?groupBuyId={{groupBuyId}}',
+			type: "POST",
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('title', true),
+			DataTableConfig.data_input('tag', true),
+		],
+		"order": [[ 1, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			{ extend: 'create', editor: pcEditor },
+			{ extend: 'edit',   editor: pcEditor },
+			{ extend: 'remove', editor: pcEditor, className:'btn-danger' },
+		],
+	} );
+	DataTableHelper.initEditorOnCallback(pcTable, pcEditor);
+	DataTableHelper.injectInline(pcTable, pcEditor, true);
+
+	$('a[data-toggle="tab"]').on('shown.bs.tab', function () {
+		$.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+	});
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+<nav aria-label="breadcrumb">
+	<ol class="breadcrumb white mt-3 mb-0">
+		<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+		<li class="breadcrumb-item active" aria-current="page">文章</li>
+	</ol>
+</nav>
+	<div class="card mt-3">
+<div class="card-header">文章 - {{groupBuy.title}}</div>
+<div class="card-body">
+	<ul class="nav nav-tabs" id="postTab" role="tablist">
+		<li class="nav-item">
+			<a class="nav-link active" id="post-tab" data-toggle="tab" href="#postPane" role="tab" aria-controls="postPane" aria-selected="true">文章</a>
+		</li>
+		<li class="nav-item">
+			<a class="nav-link" id="postcategory-tab" data-toggle="tab" href="#postCategoryPane" role="tab" aria-controls="postCategoryPane" aria-selected="false">文章分類</a>
+		</li>
+	</ul>
+	<div class="tab-content pt-3">
+		<div class="tab-pane fade show active" id="postPane" role="tabpanel" aria-labelledby="post-tab">
+			<table id="pTable" class="table table-striped display nowrap" width="100%">
+				<thead>
+					<tr>
+						<th></th>
+						<th>排序</th>
+						<th>發佈日期</th>
+						<th>文章標題</th>
+						<th>文章狀態</th>
+						<th>分類標籤</th>
+						<th>備註</th>
+						<th></th>
+					</tr>
+				</thead>
+				<tfoot>
+					<tr>
+						<th></th>
+						<th></th>
+						<th></th>
+						<th></th>
+						<th>文章狀態</th>
+						<th></th>
+						<th></th>
+						<th></th>
+					</tr>
+				</tfoot>
+			</table>
+		</div>
+		<div class="tab-pane fade" id="postCategoryPane" role="tabpanel" aria-labelledby="postcategory-tab">
+			<table id="pcTable" class="table table-striped display nowrap" width="100%">
+				<thead>
+					<tr>
+						<th></th>
+						<th>分類名稱</th>
+						<th>分類標籤</th>
+					</tr>
+				</thead>
+			</table>
+		</div>
+	</div>
+</div>
+</div>
+</div>
