@@ -8,8 +8,8 @@
 <form name="SplitSalesOrderForm" method="post" action="{{baseUrl}}/ajax/SplitSalesOrder/split.do" class="form-horizontal" id="SplitSalesOrderForm"><input type="hidden" name="groupBuyId" value="{{groupBuyId}}" id="groupBuyId"><input type="hidden" name="salesOrderId" value="{{salesOrderId}}" id="salesOrderId">
 	{{!-- 推導：缺段開頭（約 400 字元）＝其餘 hidden 欄位＋modal-header＋modal-body 開頭＋拆單方式列的標籤；標題取團購選單「分割訂單」，拆單範圍說明由下方 script 依 salesOrderId 填入 --}}
 	<div class="modal-header">
-		<h5 style="overflow:hidden">分割訂單 <small class="split-scope grey-text"></small></h5>
-		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+		<h5>團購 » 拆單</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
 	</div>
 	<div class="modal-body">
 	<div class="modal-message"></div>

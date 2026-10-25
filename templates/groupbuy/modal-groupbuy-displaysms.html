@@ -1,6 +1,6 @@
 {{!-- 原站 spec/html/modal-groupbuy-displaysms.html；缺段（modal-header、簡訊內容欄、送出回呼）依原站風格補（推導）。簡訊未串接：只寫 sms_messages 紀錄 --}}
 <form name="GroupBuyForm" method="post" action="{{baseUrl}}/ajax/GroupBuy/sendSMS.do" class="form-horizontal" id="GroupBuyForm"><input type="hidden" name="groupBuyId" value="{{groupBuy.groupBuyId}}" id="groupBuyId"><div class="modal-header">
-	<h5>發送簡訊</h5>
+	<h5>發送簡訊{{groupBuy.title}}»</h5>
 	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
 </div>
 <div class="modal-body">
@@ -27,8 +27,9 @@
         </div>
         <div class="col-12">
         <textarea name="body" id="body" class="form-control" rows="5" maxlength="670" required></textarea>
-        <small class="form-text text-muted">已輸入 <span id="smsBodyLength">0</span> 字，每則約扣 <span id="smsBodyPoints">0</span> 點</small>
         </div>
+        {{!-- 原站字數提示為空的 #show_words（輸入時由 script 填入；文字為推導） --}}
+        <div id="show_words"></div>
     </div>
     
     </div> <!-- modal-body -->
@@ -49,8 +50,7 @@ function smsPoints(text) {
 
 $('#GroupBuyForm #body').on('input', function () {
 	var v = $(this).val();
-	$('#smsBodyLength').text(v.length);
-	$('#smsBodyPoints').text(smsPoints(v));
+	$('#show_words').text(v.length ? '已輸入 ' + v.length + ' 字，約扣 ' + smsPoints(v) + ' 點' : '');
 });
 
 function success(json) {
