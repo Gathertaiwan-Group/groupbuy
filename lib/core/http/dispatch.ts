@@ -217,7 +217,8 @@ export async function dispatch(req: Request): Promise<Response> {
       }
     }
     // 網址帶的租戶前綴必須與登入者相同（資料一律以 session.tenantId 為準）
-    if (tenantPrefix && tenantPrefix !== ctx.session.tenantCode && tenantPrefix !== "demo") {
+    // （/demo 只在未登入時當 GBF.baseUrl；已登入者帶 /demo 一樣視為他租戶前綴，回 403）
+    if (tenantPrefix && tenantPrefix !== ctx.session.tenantCode) {
       return ctx.isAjax ? jsonError(403, "無權限") : renderNoPermission(ctx);
     }
     if (route.permission && !hasPermission(ctx.session, route.permission)) {

@@ -106,14 +106,21 @@ var createDistributionChannelGroupBuyTransactionEditor = function(distributionCh
 	return editor;
 }
 
-var createDistributionChannelGroupBuyTransactionTable = function(distributionChannelGroupBuyId, distributionChannelTransactionId, tableName, editor) {
+var createDistributionChannelGroupBuyTransactionTable = function(distributionChannelGroupBuyId, distributionChannelTransactionId, tableName, editor, panelMode) {
 	var buttons = [];
+	if (panelMode) {
+		{{!-- 銷售通路面板（原站）：待審查明細工具列＝編輯、重新整理、刪除 --}}
+		buttons.push({ extend: 'edit',   editor: editor });
+		buttons.push({ extend: 'refresh' });
+		buttons.push({ extend: 'remove', editor: editor, className:'btn-danger' });
+	} else {
 	if (distributionChannelGroupBuyId) buttons.push({ extend: 'create', editor: editor });
 	buttons.push({ extend: 'edit',   editor: editor });
 	buttons.push({ extend: 'remove', editor: editor, className:'btn-danger' });
 	buttons.push(dcgbtStatusButton('要求查核', 'REVIEWING'));
 	buttons.push(dcgbtStatusButton('駁回', 'DECLINED'));
 	buttons.push(dcgbtStatusButton('核可', 'REVIEWED'));
+	}
 
 	var table = $(tableName).DataTable( {
 		dom: 'lBrtip',
@@ -236,7 +243,7 @@ var createDistributionChannelTransactionEditor = function(distributionChannelId,
 var createDistributionChannelTransactionTable = function(distributionChannelId,
 		distributionChannelTransactionId,
 		tableName,
-		editor) {
+		editor, panelMode) {
 	var tableName = tableName || '#distributionChannelTransactionTable';
 	var table = $(tableName).DataTable( {
 		dom: 'lBrtip',
@@ -266,7 +273,12 @@ var createDistributionChannelTransactionTable = function(distributionChannelId,
 		keys: DataTableConfig.keysInlineTab,
 		"order": [[ 2, "asc" ]],
 		select: DataTableConfig.selectOptionsOS,
-		buttons: [
+		{{!-- 銷售通路面板（原站）：待審查月結工具列＝新增、編輯、刪除（狀態在編輯表單改） --}}
+		buttons: panelMode ? [
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit',   editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+		] : [
 			{ extend: 'create', editor: editor },
 			{ extend: 'edit',   editor: editor },
 			{ extend: 'remove', editor: editor, className:'btn-danger' },

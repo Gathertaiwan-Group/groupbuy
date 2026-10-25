@@ -146,7 +146,8 @@ async function finishAttempt(attemptId: number, success: boolean, reason: string
 export async function login(ctx: RequestContext): Promise<Response> {
   const username = ((await ctx.param("username")) ?? "").trim();
   const password = (await ctx.param("password")) ?? "";
-  const kmsi = (await ctx.param("kmsi")) === "1";
+  // 原站核取方塊送 true／on／1（依瀏覽器與表單序列化方式）；任一種都視為勾選「讓我保持登入(24小時)」
+  const kmsi = ["1", "true", "on"].includes(String((await ctx.param("kmsi")) ?? "").trim().toLowerCase());
   if (!username || !password) {
     return json({ code: 401, error: "請輸入帳號及密碼" }, { status: 401 });
   }

@@ -5,9 +5,9 @@
 	{{!-- 推導：原站此段被擷取過濾；面板的待審查明細（結算紀錄）與待審查月結（結算單據）表格 --}}
 	$(document).ready(function() {
 		var dcgbtEditor = createDistributionChannelGroupBuyTransactionEditor(null, null, '#distributionChannelGroupBuyTransactionTable');
-		createDistributionChannelGroupBuyTransactionTable(null, null, '#distributionChannelGroupBuyTransactionTable', dcgbtEditor);
+		createDistributionChannelGroupBuyTransactionTable(null, null, '#distributionChannelGroupBuyTransactionTable', dcgbtEditor, true);
 		var dctEditor = createDistributionChannelTransactionEditor(null, '#distributionChannelTransactionTable');
-		createDistributionChannelTransactionTable(null, null, '#distributionChannelTransactionTable', dctEditor);
+		createDistributionChannelTransactionTable(null, null, '#distributionChannelTransactionTable', dctEditor, true);
 	} ); // end ready
 </script>
 <!--#body--><div class="container-fluid ">

@@ -1034,8 +1034,8 @@ padding:0.5rem !important; margin:1px !important;
 				$.ajax({ url: GBF.baseUrl + '/ajax/GroupBuyTagGroupBuy/get', data: { groupBuyId: $this.groupBuyId }, dataType: 'json' })
 				.done(function (r) {
 					$this.boundTag = r.data || null;
-					$('.container-gbp-list').hide();
-					$('.container-gbp-list-hide-note').show();
+					$('.container-gbp-list').toggle(!$this.boundTag);
+					$('.container-gbp-list-hide-note').toggle(!!$this.boundTag);
 				})
 				.fail(function (x) {
 					$('.container-gbp-list').show();

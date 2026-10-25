@@ -19,7 +19,7 @@
 //   POST     /ajax/GroupBuyPreference/delete?groupBuyPreferenceId=        刪除單筆設定
 //   GET|POST /ajax/GroupBuyPreference/{activityPopupSettings|subscriptionSettings|…}?groupBuyId=  專用編輯器
 //   GET      /ajax/GroupBuyTag/get?groupBuyId=                            本團作為設定來源的標籤（無 → 400 {code:404,error:'物件不存在'}）
-//   GET      /ajax/GroupBuyTagGroupBuy/get?groupBuyId=                    本團綁定的標籤（無 → 400 {code:404,error:'物件不存在'}）
+//   GET      /ajax/GroupBuyTagGroupBuy/get?groupBuyId=                    本團綁定的標籤（無 → 200 {data:null}）
 //   GET      /backend/GroupBuyTag/wizard?groupBuyId=                      標籤精靈彈窗（HTML 片段）
 //   GET      /ajax/Lookup/country                                         國家 select2（「僅限國家」）
 import { getServiceClient } from "@/lib/supabase/server";
@@ -844,7 +844,8 @@ async function getGroupBuyTagGroupBuy(ctx: RequestContext): Promise<Response> {
     .limit(1);
   if (error) throw new Error(`[preference] 讀取標籤綁定失敗：${error.message}`);
   const row = (data ?? [])[0] as (Json & { group_buy_tags?: { tag?: string; group_buy_id?: number | null } }) | undefined;
-  if (!row) throw objectNotExist();
+  // 沒綁定是正常狀態：回 200 {data:null}（頁面依 data 是否為空切換顯示），不再回 400 讓每次進入進階設定頁都出現錯誤請求
+  if (!row) return json({ code: 200, data: null });
   const tag = row.group_buy_tags ?? {};
   return json({
     data: { ...rowToApi(groupBuyTagGroupBuy, row), tag: tag.tag ?? "", sourceGroupBuyId: tag.group_buy_id ?? null },

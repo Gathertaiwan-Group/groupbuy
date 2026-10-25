@@ -59,6 +59,8 @@ export interface SearchInput {
   start: number;
   /** -1＝全部 */
   length: number;
+  /** DataTables 全域搜尋（sSearch／search[value]）：訂單號碼、姓名、電話、Email 部分符合 */
+  search?: string;
 }
 
 export function searchInputFromDt(dt: DtRequest): SearchInput {
@@ -68,6 +70,7 @@ export function searchInputFromDt(dt: DtRequest): SearchInput {
     order: dt.order.map((o) => ({ data: o.data, dir: o.dir })),
     start: dt.start,
     length: dt.length,
+    search: dt.search,
   };
 }
 
@@ -82,7 +85,7 @@ export function searchInputFromLegacyJson(q: Record<string, unknown>): SearchInp
     const col = Number(q[`iSortCol_${k}`]);
     if (Number.isInteger(col) && columns[col]) order.push({ data: columns[col].data, dir: q[`sSortDir_${k}`] === "asc" ? "asc" : "desc" });
   }
-  return { extra: q, columns, order, start: Number(q.iDisplayStart ?? 0) || 0, length: Number(q.iDisplayLength ?? -1) };
+  return { extra: q, columns, order, start: Number(q.iDisplayStart ?? 0) || 0, length: Number(q.iDisplayLength ?? -1), search: String(q.sSearch ?? "") };
 }
 
 /** SearchInput → orders_search 的 p（jsonb） */
@@ -140,6 +143,25 @@ export async function buildSearchParams(session: AdminSession, input: SearchInpu
     .filter(Boolean)
     .slice(0, 100);
   if (uuids.length) p.uuids = uuids;
+
+  // 全域搜尋（sSearch）：先以 PostgREST 找出本租戶符合的訂單號碼，再交給 orders_search 的 uuids 條件（與其他篩選取交集）。
+  // 只保留安全字元（避免 or() 篩選語法注入）；最多取 1000 筆，沒有符合時給不存在的號碼讓結果為空。
+  const keyword = String(input.search ?? "").replace(/[^\p{L}\p{N}@._+\- ]/gu, "").trim().slice(0, 50);
+  if (keyword) {
+    const like = `*${keyword}*`;
+    let q = db()
+      .from("sales_orders")
+      .select("uuid")
+      .eq("tenant_id", session.tenantId)
+      .or(`uuid.ilike.${like},customer_firstname.ilike.${like},customer_telephone.ilike.${like},customer_email.ilike.${like}`)
+      .limit(1000);
+    if (p.group_buy_id) q = q.eq("group_buy_id", p.group_buy_id as number);
+    const { data, error } = await q;
+    if (error) throw new Error(`[orders] 全域搜尋失敗：${error.message}`);
+    let found = ((data ?? []) as { uuid: string }[]).map((r) => r.uuid);
+    if (Array.isArray(p.uuids)) found = found.filter((u) => (p.uuids as string[]).includes(u));
+    p.uuids = found.length ? found : ["__no_match__"];
+  }
 
   // 表尾欄位搜尋
   let identityFilter = false;

@@ -387,7 +387,9 @@ function actionHandler(action: string) {
           p_actor: session.account,
         });
         const label = await enumLabel(TS, String(res?.transferStatus ?? ""));
-        return actionOk(`已轉移庫存 ${res?.moved ?? 0} 件（${label}）`, { data: res });
+        // 全數轉移後單據為「調撥中／已完成」，待目的倉按「收貨」才結案為「已收到」（貨品在途）；訊息提示下一步
+        const next = String(res?.transferStatus ?? "") === "COMPLETED" ? "，單據狀態為「調撥中」，目的倉收到貨後請按「收貨」結案" : "";
+        return actionOk(`已轉移庫存 ${res?.moved ?? 0} 件（${label}）${next}`, { data: res });
       }
       case "received":
         // 條件式更新（同一敘述）：只有「調撥中＋已完成調撥」可以收貨
