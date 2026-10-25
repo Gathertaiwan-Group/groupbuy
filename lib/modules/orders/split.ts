@@ -4,10 +4,12 @@
 //   POST /ajax/SplitSalesOrder/split                                  實際拆單
 // 拆單模型（同示範資料 900044 → 900056/900057）：原訂單保留商品明細作為紀錄、階段改「已拆單」(SPLITED)；
 // 每個分組建立一張新訂單（複製訂購人/收件人/付款資料、複製該組商品），以 sales_order_relations(SPLIT) 關聯原訂單。
-// 金額：各組商品小計；折扣依小計比例分攤；運費「維持在原訂單」＝放在第一張拆單、「優先以品項運費分配」＝依小計比例；
-// 已付金額依結帳金額比例分配；勾「訂單金額保留於原訂單金額不拆開」時全部金額與已付留在第一張拆單、其餘為 0。
+// 金額（split-alloc.ts splitAmounts）：商品層級折扣已在明細 amount 內、隨商品走；訂單層級折扣依小計比例分攤；
+// 運費「維持在原訂單」＝放在第一張拆單、「優先以品項運費分配」＝依小計比例；稅與尾差依小計比例 → 子單結帳合計＝原單結帳；
+// 已付金額依結帳金額比例分配且每張 ≤ 自己的結帳金額（溢收不分配、記在原訂單歷程）；
+// 勾「訂單金額保留於原訂單金額不拆開」時全部金額與已付留在第一張拆單、其餘為 0。
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
-import { allocate, allocatePaid } from "./split-alloc";
+import { splitAmounts } from "./split-alloc";
 import { fragment, post, requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest } from "@/lib/core/http/errors";
 import { json } from "@/lib/core/http/responses";
@@ -196,21 +198,27 @@ const COPY_EXCLUDE = new Set([
   "store_payment_code",
 ]);
 
-async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOptions, meta: Map<number, Row>): Promise<number> {
+async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOptions, meta: Map<number, Row>, overpaidNotes: string[]): Promise<number> {
   const groups = groupItems(o.order_items ?? [], opt, meta);
   if (groups.length < 2) return 0;
   const client = db();
-  const subtotals = groups.map((g) => g.filter((i) => !i.bundle_child).reduce((s, i) => s + num(i.amount), 0));
-  const discount = allocate(Math.round(num(o.discount_amount)), subtotals);
-  const shipping =
-    opt.shippingFeeBy === "GBIS" ? allocate(Math.round(num(o.shipping_amount)), subtotals) : groups.map((_, i) => (i === 0 ? Math.round(num(o.shipping_amount)) : 0));
-  const fees = groups.map((_, i) => (i === 0 ? num(o.cod_fee) + num(o.extra_fee) : 0));
-  let grand = groups.map((_, i) => Math.max(0, subtotals[i] - discount[i] + shipping[i] + fees[i]));
-  let paid = allocatePaid(Math.round(num(o.total_paid)), grand);
-  if (opt.grandTotalInPrimaryOrder) {
-    grand = groups.map((_, i) => (i === 0 ? Math.round(num(o.grand_total)) : 0));
-    paid = groups.map((_, i) => (i === 0 ? Math.round(num(o.total_paid)) : 0));
-  }
+  const base = (g: Row[]) => g.filter((i) => !i.bundle_child && !i.gift);
+  const amt = splitAmounts(
+    groups.map((g) => ({
+      gross: base(g).reduce((s, i) => s + num(i.price) * num(i.total), 0),
+      net: base(g).reduce((s, i) => s + num(i.amount), 0),
+    })),
+    {
+      grandTotal: num(o.grand_total),
+      discountAmount: num(o.discount_amount),
+      shippingAmount: num(o.shipping_amount),
+      codFee: num(o.cod_fee),
+      extraFee: num(o.extra_fee),
+      totalPaid: num(o.total_paid),
+    },
+    { shippingFeeBy: opt.shippingFeeBy, grandTotalInPrimaryOrder: opt.grandTotalInPrimaryOrder },
+  );
+  const { grand, paid, discount, shipping } = amt;
   const childUuids: string[] = [];
   for (let gi = 0; gi < groups.length; gi++) {
     const copy: Row = {};
@@ -219,8 +227,8 @@ async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOpti
       grand_total: grand[gi],
       shipping_amount: shipping[gi],
       discount_amount: discount[gi],
-      cod_fee: gi === 0 ? o.cod_fee : 0,
-      extra_fee: gi === 0 ? o.extra_fee : 0,
+      cod_fee: amt.codFee[gi],
+      extra_fee: amt.extraFee[gi],
       total_paid: paid[gi],
       date_paid: paid[gi] > 0 ? o.date_paid : null,
       action: "NONE",
@@ -252,7 +260,14 @@ async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOpti
     if (opt.uniqueAddress) await addOrderHistory(session, child.id, "訂單地址不共用");
   }
   const byLabel: Record<string, string> = { BACKORDER: "現貨/預購", SHIPPING_TAG: "倉儲標籤", WEIGHT: "材積", TAX: "應稅/免稅" };
-  await adminUpdateOrders(session, [Number(o.id)], { state: "SPLITED" }, `拆單（${byLabel[opt.splitOrderBy]}）→ ${childUuids.join("、")}`);
+  const over = amt.overpaid ? `；原已付 $${Math.round(num(o.total_paid))} 超過子單結帳合計，溢收 $${amt.overpaid} 未分配至子單（保留於原訂單紀錄）` : "";
+  await adminUpdateOrders(
+    session,
+    [Number(o.id)],
+    { state: "SPLITED" },
+    `拆單（${byLabel[opt.splitOrderBy]}）→ ${childUuids.map((u, i) => `${u}（結帳 $${grand[i]}／已付 $${paid[i]}）`).join("、")}${over}`,
+  );
+  if (amt.overpaid) overpaidNotes.push(`${o.uuid} 溢收 $${amt.overpaid}`);
   return groups.length;
 }
 
@@ -275,8 +290,9 @@ async function split(ctx: RequestContext): Promise<Response> {
   const meta = await itemMeta(session, orders);
   let splitCount = 0;
   let created = 0;
+  const overpaidNotes: string[] = [];
   for (const o of orders) {
-    const n = await splitOne(session, o, opt, meta);
+    const n = await splitOne(session, o, opt, meta, overpaidNotes);
     if (n) {
       splitCount++;
       created += n;
@@ -286,7 +302,8 @@ async function split(ctx: RequestContext): Promise<Response> {
   const msg = splitCount
     ? `拆單完成：${splitCount} 筆訂單拆成 ${created} 筆訂單${skipped ? `（${skipped} 筆無需拆單）` : ""}`
     : `沒有需要拆單的訂單（${orders.length} 筆訂單商品都屬於同一組）`;
-  return json({ code: 200, error: msg, message: msg, data: { splitCount, created } });
+  const msgFull = overpaidNotes.length ? `${msg}；已付金額超過結帳金額，溢收未分配至子單（保留於原訂單紀錄）：${overpaidNotes.join("、")}` : msg;
+  return json({ code: 200, error: msgFull, message: msgFull, data: { splitCount, created } });
 }
 
 /** POST /ajax/SplitSalesOrder/previewSalesOrderToSplit → {recordsTotal, data:[{uuid, sortedOrderItems:[{shortName,total,backOrder}]}]} */
