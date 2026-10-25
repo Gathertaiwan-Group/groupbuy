@@ -471,7 +471,8 @@ export const schedulerRoutes: RouteDef[] = [
     groupBuy: "none",
     activeHref: "/backend/GroupBuy/list",
     async data(ctx) {
-      const { groupBuyId, title } = await resolveGroupBuyId(ctx.session, ctx.query.get("foreignId"));
+      // 原站也接受 ?groupBuyId=（gapfill 對照：/backend/Scheduler/list?groupBuyId=405167 原站可開）
+      const { groupBuyId, title } = await resolveGroupBuyId(ctx.session, ctx.query.get("foreignId") || ctx.query.get("groupBuyId"));
       await runDueSchedulersSafe(ctx.session.tenantId, { force: true });
       const entity = s(ctx.query.get("entity")) === "Item" ? "Item" : "GroupBuyItemSet";
       return { schedulerOpts: { ctx: "", gba: ctx.session.tenantCode, foreignId: String(groupBuyId), entity }, schedForeignId: groupBuyId, schedEntity: entity, schedGroupBuyTitle: title };

@@ -33,6 +33,7 @@ import { editorEntity, listEntity, type ListSpec, type WriteSpec } from "@/lib/c
 import { parseEditorRequest } from "@/lib/core/editor/protocol";
 import { enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { requestOrigin } from "@/lib/core/render/vars";
+import { renderViewBody } from "./homeview-section";
 
 const PAGE_CATEGORIES = ["DRAFT", "RELEASE", "CUSTOM"];
 const FOOTER_CATEGORIES = ["FOOTER_RELEASE", "FOOTER_DRAFT", "FOOTER_CUSTOM"];
@@ -514,14 +515,6 @@ function safeHref(v: unknown): string {
   return s;
 }
 
-/** 圖片路徑：完整網址原樣；其他視為上傳檔（/upload/images/…，同原站 field_upload 的顯示規則） */
-function imageSrc(v: unknown): string {
-  const s = String(v ?? "").trim();
-  if (!s) return "";
-  if (/^(https?:)?\/\//i.test(s) || s.startsWith("/")) return safeHref(s);
-  return `/upload/images/${s}`;
-}
-
 /** 「內容#連結」格式（快訊、搜尋關鍵字） */
 function linkEntries(text: unknown, separators: RegExp): { label: string; href: string }[] {
   return String(text ?? "")
@@ -542,30 +535,8 @@ function renderLinks(cls: string, entries: { label: string; href: string }[]): s
   return `<div class="${cls}">${inner}</div>`;
 }
 
-function renderItem(it: ItemRow): string {
-  const src = it.image ? imageSrc(it.image) : imageSrc(it.image_url);
-  const img = src ? `<img class="home-view-item-image" src="${esc(src)}" alt="${esc(it.title)}">` : "";
-  const title = it.title ? `<div class="home-view-item-title">${esc(it.title)}</div>` : "";
-  const href = safeHref(it.link);
-  const body = href ? `<a href="${esc(href)}">${img}${title}</a>` : `${img}${title}`;
-  return `<div class="home-view-item" data-category="${esc(it.category)}"${it.tag ? ` data-tag="${esc(it.tag)}"` : ""}>${body}</div>`;
-}
-
-function renderSection(s: SectionRow, items: ItemRow[]): string {
-  const title = s.title ? `<h2 class="home-view-section-title">${esc(s.title)}</h2>` : "";
-  const list = items.length ? `<div class="home-view-items">${items.map(renderItem).join("")}</div>` : "";
-  // 區塊 html 為後台管理者編輯的內容（同原站 CKEditor 內容），原樣輸出
-  return `<section class="home-view-section" data-section-id="${s.id}" data-category="${esc(s.category)}">${title}${s.html ?? ""}${list}</section>`;
-}
-
-function renderHomeView(view: ViewRow, sections: SectionRow[], items: ItemRow[]): string {
-  const bySection = new Map<number, ItemRow[]>();
-  for (const it of items) {
-    const arr = bySection.get(it.home_view_section_id);
-    if (arr) arr.push(it);
-    else bySection.set(it.home_view_section_id, [it]);
-  }
-  const body = sections.map((s) => renderSection(s, bySection.get(s.id) ?? [])).join("");
+/** 外框（快訊、搜尋關鍵字／footer）＋區塊 HTML（區塊由 homeview-section.ts renderViewBody 產生，與前台即時版標記相同） */
+function renderHomeView(view: ViewRow, body: string): string {
   if (FOOTER_CATEGORIES.includes(view.category)) {
     // 同原站 updateDummyEditor：<footer class="page-footer font-small pt-4">…</footer>，去掉所有換行與 tab
     return `<footer class="page-footer font-small pt-4">${body}</footer>`.replace(/(\n|\t)/gm, "");
@@ -612,7 +583,7 @@ async function rebuildCache(tenantId: number, view: ViewRow): Promise<string> {
     if (e2) throw new Error(`[homeview] 讀取區塊項目失敗：${e2.message}`);
     items = (data ?? []) as unknown as ItemRow[];
   }
-  const html = renderHomeView(view, sections, items);
+  const html = renderHomeView(view, await renderViewBody(tenantId, view, sections, items));
   const { error: e3 } = await client
     .from("home_views")
     .update({ html, date_cached: new Date().toISOString() })

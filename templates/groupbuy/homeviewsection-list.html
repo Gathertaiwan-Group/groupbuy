@@ -1,0 +1,257 @@
+<!--#head-->
+{{!-- 官網區塊 /backend/HomeViewSection/list?groupBuyId=&homeViewId=（GAP_SPEC §1.5）。
+      表格、按鈕、Editor 欄位（title/anchor/seq/fluid/bodyTextColor/bodyBGColor）依原站執行期擷取；頁面 script 被擋 →
+      推導：寫法照 homeview-list.html；「內容」欄的子元素清單與按鈕呼叫原站 dataTable.api.editor.min.js 的 EditorManager
+      （hvSectionItem.showCategory/edit/remove、lookbook.create、hvNav.edit）。 --}}
+{{> core/partials/dte-style.html}}
+<style>
+.hv-item-row { border-bottom: 1px dashed #e0e0e0; padding: 2px 0; white-space: normal; }
+.hv-item-row:last-child { border-bottom: none; }
+.hv-item-row .hv-item-title { min-width: 120px; }
+.hv-content-cell .btn { margin: 2px; }
+</style>
+<script type="text/javascript" src="/scripts/gbf_editor.js?v=1"></script>
+<script type="text/javascript" class="init">
+
+var GROUP_BUY_ID = {{json groupBuyId}};
+var HOME_VIEW_ID = {{json homeViewId}};
+var homeViewSectionTable;
+var editor;
+
+function hvsEsc(s) {
+	return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+		return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+	});
+}
+
+function hvsReload() {
+	homeViewSectionTable.ajax.reload(null, false);
+}
+
+function hvsAjaxError(xhr) {
+	var json = xhr && xhr.responseJSON;
+	toastr.warning(json && json.error ? json.error : '操作失敗');
+}
+
+$(document).ready(function() {
+
+	var tableName = '#homeViewSectionTable';
+	editor = new $.fn.dataTable.Editor( {
+		ajax: {
+			create: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeViewSection/save.do?groupBuyId={{groupBuyId}}&homeViewId={{homeViewId}}'
+			},
+			edit: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeViewSection/update.do?groupBuyId={{groupBuyId}}&homeViewId={{homeViewId}}&homeViewSectionId=_id_'
+			},
+			remove: {
+				type: 'POST',
+				url:  '{{baseUrl}}/ajax/HomeViewSection/delete.do?groupBuyId={{groupBuyId}}&homeViewId={{homeViewId}}&homeViewSectionId=_id_'
+			}
+		},
+		table: tableName,
+		idSrc: 'homeViewSectionId',
+		fields: [
+			DataTableConfig.field_input('名稱', 'title'),
+			DataTableConfig.field_input('錨點', 'anchor'),
+			DataTableConfig.field_input('排序', 'seq'),
+			DataTableConfig.field_checkbox_bool('流動滿版', 'fluid', 0),
+			{ type: 'colorPicker', label: '文字顏色', name: 'bodyTextColor', colorType: 'text', def: '' },
+			{ type: 'colorPicker', label: '背景顏色', name: 'bodyBGColor', colorType: 'bg', def: '' },
+		],
+		formOptions:{
+			main: {
+				submit: 'all',
+				submitOnReturn : false,
+			}
+		},
+		i18n:DataTableConfig.i18n,
+	} );
+
+	var table = $(tableName).DataTable( {
+		dom: 'lBrtip',
+		serverSide:true,
+		processing:true,
+		scrollX:true,
+		lengthMenu: [10, 25, 50, 100, 250],
+		ajax: {
+			url:'{{baseUrl}}/ajax/HomeViewSection/list.do?groupBuyId={{groupBuyId}}&homeViewId={{homeViewId}}',
+			type: "POST",
+		},
+		language:DataTableConfig.i18n,
+		columns:[
+			DataTableConfig.data_select_checkbox,
+			DataTableConfig.data_input('seq', true),
+			DataTableConfig.data_input('title', true),
+			DataTableConfig.data_input('anchor', true),
+			{
+				data: 'hidden',
+				className: 'inline-disabled',
+				render: function (data, type, row) {
+					if (type !== 'display') return data ? 1 : 0;
+					// 推導：「隱藏」欄點按切換（Editor 欄位沒有 hidden，原站以 EditorManager 編輯）
+					return '<a href="javascript:void(0)" data-action="toggle-hidden" title="點按切換">' + (data ? '<span class="badge badge-secondary">隱藏</span>' : '<span class="badge badge-success">顯示</span>') + '</a>';
+				}
+			},
+			{
+				data: null,
+				className: 'inline-disabled hv-content-cell',
+				orderable: false,
+				defaultContent: '',
+				render: function (data, type, row) {
+					if (type !== 'display') return '';
+					var html = '';
+					(row.homeViewItems || []).forEach(function (it) {
+						html += '<div class="d-flex flex-wrap align-items-center hv-item-row" data-item-id="' + it.homeViewItemId + '" data-category="' + hvsEsc(it.category) + '" data-tag="' + hvsEsc(it.tag) + '">'
+							+ '<span class="badge badge-info mr-1">' + hvsEsc(it.categoryLabel) + '</span>'
+							+ '<span class="hv-item-title mr-1">' + hvsEsc(it.title) + (it.tag ? ' <small class="text-muted">#' + hvsEsc(it.tag) + '</small>' : '') + '</span>'
+							+ (it.hidden ? '<span class="badge badge-secondary mr-1">隱藏</span>' : '')
+							+ '<a class="btn btn-sm btn-default px-2" data-action="item-edit">編輯</a>'
+							+ '<a class="btn btn-sm btn-danger px-2" data-action="item-delete">刪除</a>'
+							+ (it.isLookbook ? '<a class="btn btn-sm btn-info px-2" data-action="lookbook-create">新增Lookbook</a>' : '')
+							+ '</div>';
+					});
+					html += '<a class="btn btn-sm btn-primary px-2" data-action="item-add">新增子元素</a>';
+					return html;
+				}
+			},
+		],
+		keys: DataTableConfig.keysInlineTab,
+		"order": [[ 1, "asc" ]],
+		select: DataTableConfig.selectOptionsOS,
+		buttons: [
+			'selectNone',
+			{ extend: 'create', editor: editor },
+			{ extend: 'edit', editor: editor },
+			{ extend: 'remove', editor: editor, className:'btn-danger' },
+			DataTableConfig.actionButton({
+				extend: 'selected',
+				className:'btn-info btn-clone-dt',
+				text:'複製',
+				confirm:'確定要複製 {0} 個區塊嗎?',
+				url:'{{baseUrl}}/ajax/HomeViewSection/clone.do?groupBuyId={{groupBuyId}}&homeViewId={{homeViewId}}',
+			}),
+		],
+		drawCallback: function (settings) {
+			$(".dataTables_scrollBody").floatingScroll();
+		}
+	} );
+
+	homeViewSectionTable = table;
+
+	// 推導：colorPicker（dataTable.api.editor）以全域選擇器設定指示色塊，表單尚未掛到畫面時設值不會顯示 →
+	// 開啟後依列資料再設一次（編輯）或清空（新增）
+	editor.on('opened', function (e, mode, action) {
+		var d = (action === 'edit') ? table.row(editor.modifier()).data() : null;
+		if (action === 'edit' && !d) return;
+		['bodyTextColor', 'bodyBGColor'].forEach(function (name) {
+			editor.field(name).set(d ? (d[name] || '') : '');
+		});
+	});
+
+	injectOpenEditor(tableName, editor);
+	DataTableHelper.injectInline(table, editor, true);
+
+	$(tableName + ' tbody').on('click', 'a[data-action]', function (e) {
+		e.preventDefault();
+		e.stopPropagation();
+		var row = table.row($(this).closest('tr'));
+		var d = row.data();
+		if (!d) return;
+		var sectionId = d.homeViewSectionId;
+		var $item = $(this).closest('.hv-item-row');
+		var itemId = $item.data('itemId');
+		var category = $item.data('category');
+		switch ($(this).attr('data-action')) {
+		case 'item-add':
+			EditorManager.hvSectionItem.showCategory(GROUP_BUY_ID, sectionId, -1, function (item) {
+				hvsReload();
+				if (item && item.homeViewItemId) {
+					// 建立後接著開「子元素」詳細設定
+					setTimeout(function () {
+						EditorManager.hvSectionItem.edit(GROUP_BUY_ID, HOME_VIEW_ID, sectionId, item.homeViewItemId, item.category, hvsReload, hvsAjaxError);
+					}, 500);
+				}
+			}, hvsAjaxError);
+			return;
+		case 'item-edit':
+			EditorManager.hvSectionItem.edit(GROUP_BUY_ID, HOME_VIEW_ID, sectionId, itemId, category, hvsReload, hvsAjaxError);
+			return;
+		case 'item-delete':
+			EditorManager.hvSectionItem.remove(GROUP_BUY_ID, HOME_VIEW_ID, sectionId, itemId, hvsReload, hvsAjaxError);
+			return;
+		case 'lookbook-create':
+			EditorManager.lookbook.create(GROUP_BUY_ID, sectionId, String($item.data('tag') || ''), category, function () {
+				toastr.success('已新增Lookbook');
+				hvsReload();
+			}, hvsAjaxError);
+			return;
+		case 'toggle-hidden':
+			var data = {};
+			data['action'] = 'edit';
+			data['data[' + sectionId + '][hidden]'] = d.hidden ? 0 : 1;
+			$.ajax({
+				type: 'POST',
+				url: '{{baseUrl}}/ajax/HomeViewSection/update.do?groupBuyId={{groupBuyId}}&homeViewId={{homeViewId}}&homeViewSectionId=' + sectionId,
+				data: data,
+				dataType: 'json'
+			}).done(hvsReload).fail(hvsAjaxError);
+			return;
+		default: return;
+		}
+	});
+
+	$('#btn-hv-nav').click(function () {
+		EditorManager.hvNav.edit(GROUP_BUY_ID, HOME_VIEW_ID, function () {
+			toastr.success('已更新導覽列');
+		}, hvsAjaxError);
+	});
+
+	$('#btn-hv-refresh').click(function () {
+		var $btn = $(this);
+		btnStartLoading($btn);
+		$.ajax({
+			type: 'POST',
+			url: GBF.baseUrl + '/ajax/HomeViewCache/refresh.do',
+			data: { groupBuyId: GROUP_BUY_ID, homeViewId: HOME_VIEW_ID },
+			dataType: 'json',
+		})
+		.fail(function () { toastr.warning('更新網頁失敗'); })
+		.then(function () { toastr.success('更新網頁成功'); })
+		.always(function () { btnStopLoading($btn); });
+	});
+} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<nav aria-label="breadcrumb" class="mt-3">
+		<ol class="breadcrumb">
+			<li class="breadcrumb-item"><a href="/backend">首頁</a></li>
+			<li class="breadcrumb-item"><a href="/backend/HomeView/list?groupBuyId={{groupBuyId}}">{{homeViewTitle}}</a></li>
+			<li class="breadcrumb-item active" aria-current="page">官網區塊</li>
+		</ol>
+	</nav>
+	<div class="card mt-2">
+<div class="card-header">官網區塊</div>
+<div class="card-body">
+	{{!-- 推導：原站列表頁的頁首按鈕未擷取；「導覽列編輯」「更新暫存」沿用 HomeView 列表／EditorManager 既有功能 --}}
+	<div class="mb-2">
+		<button type="button" id="btn-hv-nav" class="btn btn-default btn-sm">導覽列編輯</button>
+		<button type="button" id="btn-hv-refresh" class="btn btn-warning btn-sm">更新暫存</button>
+	</div>
+	<table id="homeViewSectionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th width=40px>選擇</th>
+				<th width=60px>排序</th>
+				<th>名稱</th>
+				<th>錨點</th>
+				<th width=60px>隱藏</th>
+				<th>內容</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

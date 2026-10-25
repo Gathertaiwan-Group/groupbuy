@@ -130,6 +130,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 | `public/public/scripts/dataTable.config.min.js`（Editor upload 預設、CKEditor5 轉接器）、`dataTable.min.js`（CKEditor4 filebrowserImageUploadUrl） | `https://groupbuyforms.com/json/uploadImage` → `/json/uploadImage` | 原站上傳到外部主機 |
 | `public/public/scripts/gbs_api.min.js` | `"https://gbf.tw/"+t` → `(GBF.shortUrlBase || "https://gbf.tw/")+t` | 賣場網址彈窗顯示本系統網址 |
 | `public/public/js/ckeditor5/translations/en.min.js` | 空檔 | 原站此檔 404 |
+| `public/scripts/footerEditor.js`（gapfill 新鏡射） | 上傳網址 `https://groupbuyforms.com/json/uploadImage/vcf` → `/json/uploadImage/vcf`；上傳回應為字串時才 `$.parseJSON`；`(https:)//cdn.groupbuyforms.com/upload/images/` → `/upload/images/` | 舊版 Footer 編輯器上傳改存本系統 |
 
 ## 10. 部署與 CI
 

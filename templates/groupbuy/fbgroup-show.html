@@ -1,0 +1,91 @@
+<!--#head-->
+{{!-- 臉書社團 /backend/FbGroup/show?groupBuyId=（GAP_SPEC §2：元素 id 與文字依無障礙樹；inline script 被擋 → 推導）。
+      行為在原站 /scripts/fb.js（$.EPFB）。Facebook 登入（fb:login-button plugin）與 Graph API 皆未串接：
+      #fb_login_block 改為按鈕＋【未串接】說明，點擊後顯示「選擇臉書社團」（原站為 FB 登入狀態 connected 後顯示，推導）。 --}}
+{{> core/partials/dte-style.html}}
+<style>
+#section-group-detail textarea { min-height: 180px; }
+#fb_login_block { margin-bottom: 1rem; }
+</style>
+<script type="text/javascript" src="/scripts/fb.js?v=1"></script>
+<script type="text/javascript">
+// fb.js 使用全域 baseUrl（原站 JSP 輸出）
+var baseUrl = GBF.baseUrl;
+var epfb = new $.EPFB({{json groupBuyId}});
+var fbFeedTable;
+
+// 推導：臉書文章表格（fb.js setGroup() 第一次取得社團時呼叫）
+function initDataTable(fbGroupId) {
+	fbFeedTable = $('#fbFeedTable').DataTable({
+		dom: 'lrtip',
+		serverSide: true,
+		processing: true,
+		scrollX: true,
+		ajax: {
+			url: GBF.baseUrl + '/ajax/FbFeed/list.do?groupBuyId={{groupBuyId}}&fbGroupId=' + encodeURIComponent(fbGroupId),
+			type: 'POST'
+		},
+		language: DataTableConfig.i18n,
+		columns: [
+			{ data: 'title', defaultContent: '', render: $.fn.dataTable.render.text() },
+			{ data: 'datePostString', defaultContent: '' },
+			{ data: 'dateSyncedString', defaultContent: '' },
+			{ data: 'commentCount', defaultContent: 0 },
+		],
+		order: [[1, 'desc']],
+	});
+}
+
+$(document).ready(function() {
+	$('#btn-fb-login').click(function () {
+		toastr.warning('【未串接】Facebook 登入：本系統未串接 Facebook，可手動輸入社團資料以使用貼文模板。');
+		$('#section-select-group').show();
+	});
+	epfb.getGroup();
+});
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">臉書社團</div>
+<div class="card-body">
+	<div id="fb_login_block">
+		<button type="button" id="btn-fb-login" class="btn btn-primary ml-0"><i class="fab fa-facebook-f mr-1"></i>使用 Facebook 繼續</button>
+		<small class="text-muted ml-2">【未串接】Facebook 登入</small>
+	</div>
+	<div id="section-select-group">
+		<button type="button" class="btn btn-default ml-0" onclick="epfb.selectGroup()">選擇臉書社團</button>
+	</div>
+	<div id="section-group-detail" style="display:none;">
+		<h5 id="group-name" class="mt-3">尚未選定社團</h5>
+		<div class="form-group">
+			<label for="group-feedTemplate">貼文模板</label>
+			<textarea id="group-feedTemplate" class="form-control" rows="8"></textarea>
+		</div>
+		<button type="button" id="btn-resetFeedTemplate" class="btn btn-default ml-0" onclick="epfb.resetFeedTemplate()">重置貼文模板</button>
+		<button type="button" id="btn-updateFeedTemplate" class="btn btn-primary" onclick="epfb.updateFeedTemplate()">更新貼文模板</button>
+		<button type="button" id="btn-newFeed" class="btn btn-info" onclick="epfb.newFeed()">新增貼文</button>
+	</div>
+	<div id="section-feeds" style="display:none;" class="mt-4">
+		<h5>臉書文章</h5>
+		<p class="text-muted">1. 可透過「新增貼文」發布文章至臉書（僅限社團使用，無法貼文至粉專）<br>2. 或是透過「匯入臉書貼文」，選擇臉書文章加入後台</p>
+		<button type="button" class="btn btn-default ml-0" onclick="epfb.selectFeed()">匯入臉書貼文</button>
+		<table id="fbFeedTable" class="table table-striped display nowrap" width="100%">
+			<thead>
+				<tr>
+					<th>臉書商品</th>
+					<th>貼文日期</th>
+					<th>最後同步時間</th>
+					<th>留言數</th>
+				</tr>
+			</thead>
+		</table>
+	</div>
+	{{!-- 原站頁面另有 #feedForm（三個 fieldset：基本資料／聯絡資訊／地址資訊，id 沿用 warehouseForm1–3），畫面上不顯示；照原站保留結構 --}}
+	<form id="feedForm" style="display:none;" onsubmit="return false;">
+		<fieldset id="warehouseForm1"><legend>基本資料</legend></fieldset>
+		<fieldset id="warehouseForm2"><legend>聯絡資訊</legend></fieldset>
+		<fieldset id="warehouseForm3"><legend>地址資訊</legend></fieldset>
+	</form>
+</div>
+</div>
+</div>

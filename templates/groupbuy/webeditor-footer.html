@@ -1,0 +1,136 @@
+<!--#head-->
+{{!-- Footer Editor（V1）/backend/WebEditor/footer?groupBuyId=（團購卡片連結已註解；GAP_SPEC §1.7）。
+      表單欄位 id/name、預覽 id、外框（div#container.row.my-3 > #form-area-container.card ＋ #footer-result-container.col-sm-8）依原站擷取；
+      其餘標記被擋 → 推導。行為全部在原站 /scripts/footerEditor.js（讀 /ajax/WebEditor/list、表單送 /ajax/WebEditor/update）。
+      欄位標籤：原站畫面顯示為缺翻譯的 ???GroupBuySettings.footerView.*???，照原站輸出。 --}}
+<style>
+.web-footer-css-color { cursor: pointer; }
+#footer-edit .footer-copyright { margin-top: 1rem; }
+#footer-edit a { cursor: pointer; }
+.modal-body-picker .btn { width: 28px; height: 28px; padding: 0; }
+</style>
+<script type="text/javascript">
+// footerEditor.js 使用全域 baseUrl（原站 JSP 輸出）
+var baseUrl = GBF.baseUrl;
+</script>
+<!--#body--><div class="container-fluid ">
+{{#if updated}}<div class="alert alert-success mt-3" role="alert">更新成功</div>{{/if}}
+<div id="container" class="row my-3">
+	<div id="form-area-container" class="card col-sm-4">
+		<div class="card-body px-0">
+		<form name="FooterEditorForm" id="FooterEditorForm" class="form-horizontal" action="{{baseUrl}}/ajax/WebEditor/update.do" method="post">
+			<input type="hidden" name="groupBuyId" value="{{groupBuyId}}">
+			<div class="form-group">
+				<label for="webFooterInfo">???GroupBuySettings.footerView.info???</label>
+				<textarea class="form-control" id="webFooterInfo" name="footerInfo" rows="4" placeholder="ex.營業時段"></textarea>
+			</div>
+			<div class="form-group">
+				<label for="webFooterTextCssColor">???GroupBuySettings.footerView.textColor???</label>
+				<input type="text" class="form-control p-1 web-footer-css-color" id="webFooterTextCssColor" name="footerTextColor" readonly data-toggle="modal" data-target="#textColorPickerModal">
+			</div>
+			<div class="form-group">
+				<label for="webFooterBGCssColor">???GroupBuySettings.footerView.bgColor???</label>
+				<input type="text" class="form-control p-1 web-footer-css-color" id="webFooterBGCssColor" name="footerBGColor" readonly data-toggle="modal" data-target="#bgColorPickerModal">
+			</div>
+			<div class="form-group">
+				<label for="webFooterSysBGCssColor">???GroupBuySettings.footerView.sysBGColor???</label>
+				<input type="text" class="form-control p-1 web-footer-css-color" id="webFooterSysBGCssColor" name="footerSysBGColor" readonly data-toggle="modal" data-target="#sysBGColorPickerModal">
+			</div>
+			<label>???GroupBuySettings.footerView.menu???</label>
+			<div class="form-row mb-1" id="1"><input type="text" class="form-control col mr-1" id="webFooterItem1Title" name="webFooterItem1Title" placeholder="名稱"><input type="text" class="form-control col" id="webFooterItem1Link" name="webFooterItem1Link" placeholder="連結"></div>
+			<div class="form-row mb-1" id="2"><input type="text" class="form-control col mr-1" id="webFooterItem2Title" name="webFooterItem2Title" placeholder="名稱"><input type="text" class="form-control col" id="webFooterItem2Link" name="webFooterItem2Link" placeholder="連結"></div>
+			<div class="form-row mb-1" id="3"><input type="text" class="form-control col mr-1" id="webFooterItem3Title" name="webFooterItem3Title" placeholder="名稱"><input type="text" class="form-control col" id="webFooterItem3Link" name="webFooterItem3Link" placeholder="連結"></div>
+			<div class="form-row mb-1" id="4"><input type="text" class="form-control col mr-1" id="webFooterItem4Title" name="webFooterItem4Title" placeholder="名稱"><input type="text" class="form-control col" id="webFooterItem4Link" name="webFooterItem4Link" placeholder="連結"></div>
+			<div class="form-row mb-1" id="5"><input type="text" class="form-control col mr-1" id="webFooterItem5Title" name="webFooterItem5Title" placeholder="名稱"><input type="text" class="form-control col" id="webFooterItem5Link" name="webFooterItem5Link" placeholder="連結"></div>
+			<div class="form-row mb-3" id="6"><input type="text" class="form-control col mr-1" id="webFooterItem6Title" name="webFooterItem6Title" placeholder="名稱"><input type="text" class="form-control col" id="webFooterItem6Link" name="webFooterItem6Link" placeholder="連結"></div>
+			<div class="form-group">
+				<label for="facebookLinkInput">???GroupBuySettings.footerView.facebook???</label>
+				<input type="text" class="form-control" id="facebookLinkInput" name="facebookId" placeholder="https://www.facebook.com/">
+			</div>
+			<div class="form-group">
+				<label for="instagramLinkInput">???GroupBuySettings.footerView.instagram???</label>
+				<input type="text" class="form-control" id="instagramLinkInput" name="instagramId" placeholder="https://www.instagram.com/">
+			</div>
+			<div class="form-group">
+				<label for="lineLinkInput">???GroupBuySettings.footerView.line???</label>
+				<input type="text" class="form-control" id="lineLinkInput" name="lineId" placeholder="https://line.me/R/ti/p/">
+			</div>
+			<div class="form-group">
+				<label for="iconImageFile">???GroupBuySettings.footerView.logo???</label>
+				<input type="file" class="form-control-file" id="iconImageFile" accept="image/*">
+				<input type="text" class="form-control mt-1" id="iconImageURL" name="footerLogoURL" placeholder="https://">
+				<input type="hidden" name="footerLogo">
+				<button type="button" id="logoDelete" class="btn btn-sm btn-default ml-0">刪除圖片</button>
+			</div>
+			<div class="form-group">
+				<label for="copyrightStatement">???GroupBuySettings.footerView.copyright???</label>
+				<input type="text" class="form-control" id="copyrightStatement" name="copyright">
+			</div>
+			<input type="submit" id="submit" class="btn btn-primary ml-0" value="更新">
+		</form>
+		</div>
+	</div>
+	<div id="footer-result-container" class="col-sm-8">
+		<footer id="footer-edit" class="page-footer font-small pt-4 text-dark">
+			<div class="container text-center text-md-left">
+				<div class="row">
+					<div class="col-md-3 mx-auto mb-3">
+						<img id="icon-img" class="img-fluid" style="max-height:80px" src="/upload/images/unsort/trans.png" alt="">
+					</div>
+					<div class="col-md-5 mx-auto mb-3">
+						<div id="webFooterInfo"></div>
+					</div>
+					<div class="col-md-4 mx-auto mb-3">
+						<ul class="list-unstyled">
+							<li><a id="item1Title" href="#"></a></li>
+							<li><a id="item2Title" href="#"></a></li>
+							<li><a id="item3Title" href="#"></a></li>
+							<li><a id="item4Title" href="#"></a></li>
+							<li><a id="item5Title" href="#"></a></li>
+							<li><a id="item6Title" href="#"></a></li>
+						</ul>
+					</div>
+				</div>
+				<div class="text-center">
+					<a id="facebookLink" class="btn-social-flat mx-1 waves-effect waves-light" href="#" target="_blank" rel="noopener noreferrer"><i class="fab fa-facebook-square"></i></a>
+					<a id="instagramLink" class="btn-social-flat mx-1 waves-effect waves-light" href="#" target="_blank" rel="noopener noreferrer"><i class="fab fa-instagram"></i></a>
+					<a id="lineLink" class="btn-social-flat mx-1 waves-effect waves-light" href="#" target="_blank" rel="noopener noreferrer"><i class="fab fa-line"></i></a>
+				</div>
+			</div>
+			<div class="footer-copyright text-center py-3">
+				<span id="copyrightStatement"></span>
+			</div>
+		</footer>
+	</div>
+</div>
+</div>
+<!--#foot-->
+{{!-- 推導：顏色選擇彈窗（footerEditor.js 把按鈕產生到 #bgColorPickerBody / #sysBGColorPickerBody；文字顏色按鈕 .btn-text-color-picker 由頁面提供） --}}
+<div class="modal fade" id="textColorPickerModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">文字顏色</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body modal-body-picker" id="textColorPickerBody">
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 text-dark btn-text-color-picker" name="text-dark" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey darken-3 white-text btn-text-color-picker" name="white-text" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 black-text btn-text-color-picker" name="black-text" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 grey-text btn-text-color-picker" name="grey-text" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 blue-grey-text btn-text-color-picker" name="blue-grey-text" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 red-text btn-text-color-picker" name="red-text" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 blue-text btn-text-color-picker" name="blue-text" data-dismiss="modal">Aa</button>
+			<button class="btn btn-sm px-2 m-1 grey lighten-2 green-text btn-text-color-picker" name="green-text" data-dismiss="modal">Aa</button>
+		</div>
+	</div></div>
+</div>
+<div class="modal fade" id="bgColorPickerModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">背景顏色</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body modal-body-picker" id="bgColorPickerBody"></div>
+	</div></div>
+</div>
+<div class="modal fade" id="sysBGColorPickerModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">系統區塊背景顏色</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body modal-body-picker" id="sysBGColorPickerBody"></div>
+	</div></div>
+</div>
+<script type="text/javascript" src="/scripts/footerEditor.js?v=1"></script>
