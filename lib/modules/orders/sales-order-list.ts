@@ -23,7 +23,9 @@ import { loadOrdersApi } from "./order-api";
 import { buildSearchParams, countAllOrders, searchInputFromDt, searchOrders } from "./order-search";
 import { orderListOptions } from "./order-options";
 import { countB2sOrders } from "./b2s";
-import { afterOrderEdit, releaseOrderStock } from "./order-ops";
+import { afterOrderEdit, consumeOrderStock, releaseOrderStock } from "./order-ops";
+import { recalcOrderAmounts } from "./pricing";
+import type { AdminSession } from "@/lib/core/http/types";
 import { salesOrderActionRoutes } from "./sales-order-actions";
 import { salesOrderExportRoutes } from "./sales-order-export";
 import { salesOrderImportRoutes } from "./sales-order-import";
@@ -184,11 +186,15 @@ async function editorSalesOrder(ctx: RequestContext, expected: "create" | "edit"
   const client = db();
 
   if (req.action === "create") {
-    const groupBuyId = Number(req.extra.groupBuyId ?? 0) || null;
+    // 「複製」：Editor 相容層在 create 送出時附上來源列 id（duplicateFrom）→ 連同商品明細一起複製，金額依新明細重算
+    const dupFromId = Number(req.extra.duplicateFrom ?? 0) || null;
+    const dupSource = dupFromId ? await fetchOrder(session, dupFromId, "id,uuid,group_buy_id") : null;
+    const groupBuyId = Number(req.extra.groupBuyId ?? 0) || (dupSource ? Number(dupSource.group_buy_id) || null : null);
     if (!groupBuyId) throw badRequest("請先在「團購」選擇要新增訂單的團購");
     const { data: gb } = await client.from("group_buys").select("id").eq("tenant_id", session.tenantId).eq("id", groupBuyId).maybeSingle();
     if (!gb) throw badRequest("找不到此團購");
     const createdIds: number[] = [];
+    const notices: string[] = [];
     for (const row of req.rows) {
       const values = flattenDotted(row.values);
       const errs = await validateOrderValues(values, "create");
@@ -209,11 +215,14 @@ async function editorSalesOrder(ctx: RequestContext, expected: "create" | "edit"
       // 觸發器寫的「建立訂單」歷程補上操作者
       await client
         .from("sales_order_histories")
-        .update({ actor: "ADMIN", admin_user_id: session.adminUserId, note: "後台新增訂單" })
+        .update({ actor: "ADMIN", admin_user_id: session.adminUserId, note: dupSource ? `後台複製訂單（來源 ${dupSource.uuid}）` : "後台新增訂單" })
         .eq("tenant_id", session.tenantId)
         .eq("sales_order_id", id);
+      if (dupSource) notices.push(await copyOrderItemsForDuplicate(session, Number(dupSource.id), id));
     }
-    return editorResponse(await loadOrdersApi(session, createdIds));
+    const extra: Record<string, unknown> = {};
+    if (notices.length) extra.message = notices.join("\n");
+    return editorResponse(await loadOrdersApi(session, createdIds), extra);
   }
 
   const ids = editorIds(req, "salesOrderId");
@@ -263,6 +272,49 @@ async function editorSalesOrder(ctx: RequestContext, expected: "create" | "edit"
   if (notices.length) extra.message = notices.join("\n");
   if (notices.some((n) => n.includes("【未串接】"))) extra.notIntegrated = true;
   return editorResponse(rows, extra);
+}
+
+/** 複製訂單的商品明細（未取消/未退貨的商品；先母項再子項），扣庫存並依新明細重算優惠、運費、結帳金額 */
+async function copyOrderItemsForDuplicate(session: AdminSession, fromId: number, toId: number): Promise<string> {
+  const client = db();
+  const { data, error } = await client
+    .from("order_items")
+    .select("*")
+    .eq("tenant_id", session.tenantId)
+    .eq("sales_order_id", fromId)
+    .order("seq")
+    .order("id");
+  if (error) throw new Error(`[orders] 讀取來源訂單商品失敗：${error.message}`);
+  const skip = new Set(["CANCELLED", "RETURNED", "RETURNED_NOSALE", "REPLACED"]);
+  const src = ((data ?? []) as Row[]).filter((i) => !skip.has(String(i.state)));
+  const keep = new Set(src.map((i) => Number(i.id)));
+  const ordered = src
+    .filter((i) => !i.parent_order_item_id || keep.has(Number(i.parent_order_item_id)))
+    .sort((a, b) => Number(!!a.parent_order_item_id) - Number(!!b.parent_order_item_id) || Number(a.seq) - Number(b.seq));
+  const idMap = new Map<number, number>();
+  for (const it of ordered) {
+    const c: Row = { ...it };
+    for (const k of ["id", "created_at", "updated_at", "virtual_codes"]) delete c[k];
+    Object.assign(c, {
+      sales_order_id: toId,
+      state: "UNSHIPPING",
+      parent_order_item_id: it.parent_order_item_id ? idMap.get(Number(it.parent_order_item_id)) ?? null : null,
+    });
+    const { data: ins, error: e2 } = await client.from("order_items").insert(c).select("id").single();
+    if (e2) {
+      await client.from("sales_orders").delete().eq("tenant_id", session.tenantId).eq("id", toId);
+      throw new Error(`[orders] 複製訂單商品失敗：${e2.message}`);
+    }
+    idMap.set(Number(it.id), Number((ins as { id: number }).id));
+  }
+  if (!ordered.length) return "來源訂單沒有可複製的商品";
+  const short = await consumeOrderStock(session, [toId]);
+  if (short.length) {
+    await client.from("sales_orders").delete().eq("tenant_id", session.tenantId).eq("id", toId);
+    throw badRequest(`庫存不足，無法複製訂單：${short.join("、")}`);
+  }
+  const r = await recalcOrderAmounts(session, toId, { shipping: true, salesRules: true });
+  return `已複製 ${ordered.filter((i) => !i.bundle_child).length} 項商品；${r.message}`;
 }
 
 function isChecked(v: unknown): boolean {

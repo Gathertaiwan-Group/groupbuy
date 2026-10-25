@@ -541,7 +541,23 @@ export async function editorGbis(ctx: RequestContext): Promise<Response> {
   if (req.action === "create") {
     const created: number[] = [];
     for (const row of req.rows) created.push(await createGbis(session, gb, flattenDotted(row.values)));
-    return editorResponse(await gbisRowsApi(session, await loadGbisRaw(session, { ids: created })));
+    // 「複製」按鈕：Editor 相容層附上來源列 id（duplicateFrom）→ 新品項連同來源品項的商品一起複製（新商品可售＝原始庫存、不共用庫存）
+    const dupFrom = nOrNull(req.extra.duplicateFrom);
+    let copiedItems = 0;
+    if (dupFrom && created.length === 1) {
+      const [src] = await loadGbisRaw(session, { ids: [dupFrom] });
+      const [dst] = await loadGbisRaw(session, { ids: created });
+      if (src && dst && src.item_set_id !== dst.item_set_id) {
+        const items = await selectAll<Row>(
+          (from, to) => db().from("items").select("*").eq("tenant_id", session.tenantId).eq("item_set_id", src.item_set_id).order("seq").order("id").range(from, to),
+          "items",
+        );
+        for (const it of items) await insertItemCopy(session, it, dst.item_set_id, { resetSold: true, detach: true });
+        copiedItems = items.length;
+      }
+    }
+    const rowsApi = await gbisRowsApi(session, await loadGbisRaw(session, { ids: created }));
+    return editorResponse(rowsApi, dupFrom ? { message: `複製完成：品項 1、商品 ${copiedItems}` } : {});
   }
   const ids = editorIds(req, "groupBuyItemSetId");
   if (req.action === "remove") {

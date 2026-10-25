@@ -2113,6 +2113,10 @@
         arg1 = arg2;
         arg2 = arg3;
       }
+      // 「複製」按鈕（edit(列, false).val() → create().set(值)）：記下來源列 id，送出時附 duplicateFrom（後端可據此複製子資料）
+      //（只認「緊接在 edit(…, false) 之後」的 create：同一輪事件、500ms 內；其他時候的新增一律不帶）
+      this.s.duplicateFrom = this.s.dupCandidate && Date.now() - (this.s.dupCandidateAt || 0) < 500 ? this.s.dupCandidate : null;
+      this.s.dupCandidate = null;
       this.s.editFields = {};
       for (var i = 0; i < count; i++) this.s.editFields[i] = { fields: this.s.fields };
       var argOpts = this._crudArgs(arg1, arg2, arg3, arg4);
@@ -2139,7 +2143,11 @@
       var that = this;
       if (this._tidy(function () { that.edit(items, arg1, arg2, arg3, arg4); })) return this;
       var argOpts = this._crudArgs(arg1, arg2, arg3, arg4);
-      this._edit(items, this._dataSource('fields', items), 'main', argOpts.opts, function () {
+      var editFieldsForDup = this._dataSource('fields', items);
+      var dupKeys = Object.keys(editFieldsForDup || {});
+      this.s.dupCandidate = arg1 === false && dupKeys.length === 1 ? dupKeys[0] : null;
+      this.s.dupCandidateAt = Date.now();
+      this._edit(items, editFieldsForDup, 'main', argOpts.opts, function () {
         that._assembleMain();
         that._formOptions(argOpts.opts);
         argOpts.maybeOpen();
@@ -2908,6 +2916,8 @@
       var action = this.s.action;
       var submitParams = { data: {} };
       submitParams[this.s.actionName] = action;
+      if (action === 'create' && this.s.duplicateFrom) submitParams.duplicateFrom = this.s.duplicateFrom;
+      this.s.dupCandidate = null;
 
       if (action === 'create' || action === 'edit') {
         $.each(editFields, function (idSrc, edit) {

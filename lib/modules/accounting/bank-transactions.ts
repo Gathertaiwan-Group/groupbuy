@@ -244,9 +244,32 @@ async function importBankTransaction(ctx: RequestContext): Promise<Response> {
 
   const counts = new Map<string, number>();
   for (const r of results) counts.set(CODE_LABEL[r.code], (counts.get(CODE_LABEL[r.code]) ?? 0) + 1);
-  const summary = `匯入 ${lines.length} 筆：` + [...counts.entries()].map(([k, n]) => `${k} ${n}`).join("、") + (counts.get("符合") ? "。請勾選「符合，待確認入帳」的明細後按「確認入帳」。" : "");
-  const created = ((data ?? []) as BtRow[]).sort((a, b) => a.id - b.id).map(toApi);
-  return editorResponse(created, { message: summary });
+  // 原站工具列只有「新增」：匯入即對帳入帳。金額、帳號唯一符合的明細直接經 DB 函式入帳（重複入帳／同筆匯款／狀態防呆都在函式內），
+  // 訂單 status 只在尚未付款的狀態才推進為「付款成功通知」，已出貨等後段狀態不會被改回（migration 8000）。
+  const inserted = ((data ?? []) as BtRow[]).sort((a, b) => a.id - b.id);
+  const matchedIdx = new Set(results.map((r, i) => (r.code === "MATCHED" ? i : -1)).filter((i) => i >= 0));
+  const confirmed: string[] = [];
+  const failed: string[] = [];
+  for (const [i, row] of inserted.entries()) {
+    if (!matchedIdx.has(i)) continue;
+    const { data: rd, error: re } = await db.rpc("accounting_confirm_bank_transaction", {
+      p_tenant_id: session.tenantId,
+      p_bank_transaction_id: row.id,
+      p_admin_user_id: session.adminUserId,
+    });
+    const r = (rd ?? {}) as RpcResult;
+    if (re || !r.ok) failed.push(re ? (re.code === "23505" ? "此訂單已由其他匯款明細入帳（重複入帳防呆）" : re.message) : r.message);
+    else confirmed.push(r.message);
+  }
+  let rows = inserted;
+  if (confirmed.length || failed.length) {
+    const { data: again } = await db.from("bank_transactions").select(SELECT).eq("tenant_id", session.tenantId).in("id", inserted.map((r) => r.id));
+    rows = ((again ?? []) as BtRow[]).sort((a, b) => a.id - b.id);
+  }
+  const parts = [`匯入 ${lines.length} 筆：` + [...counts.entries()].map(([k, n]) => `${k} ${n}`).join("、")];
+  if (confirmed.length) parts.push(`已入帳 ${confirmed.length} 筆 ${notIntegrated("付款成功通知信（Email）").message}`);
+  for (const f of failed) parts.push(`未入帳：${f}`);
+  return editorResponse(rows.map(toApi), { message: parts.join("<br>") });
 }
 
 /* ───────────────────────── 上傳（Editor upload） ───────────────────────── */

@@ -7,6 +7,7 @@
 // 金額：各組商品小計；折扣依小計比例分攤；運費「維持在原訂單」＝放在第一張拆單、「優先以品項運費分配」＝依小計比例；
 // 已付金額依結帳金額比例分配；勾「訂單金額保留於原訂單金額不拆開」時全部金額與已付留在第一張拆單、其餘為 0。
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
+import { allocate, allocatePaid } from "./split-alloc";
 import { fragment, post, requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest } from "@/lib/core/http/errors";
 import { json } from "@/lib/core/http/responses";
@@ -182,17 +183,6 @@ function groupItems(items: Row[], opt: SplitOptions, meta: Map<number, Row>): Ro
   return [...groups.keys()].sort().map((k) => groups.get(k)!);
 }
 
-/** 依比例分配金額（四捨五入，最後一組補差） */
-function allocate(total: number, weights: number[]): number[] {
-  const sum = weights.reduce((s, w) => s + w, 0);
-  if (!total) return weights.map(() => 0);
-  if (sum <= 0) return weights.map((_, i) => (i === 0 ? total : 0));
-  const out = weights.map((w) => Math.round((total * w) / sum));
-  const diff = total - out.reduce((s, v) => s + v, 0);
-  out[out.length - 1] += diff;
-  return out;
-}
-
 const COPY_EXCLUDE = new Set([
   "id",
   "uuid",
@@ -216,7 +206,7 @@ async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOpti
     opt.shippingFeeBy === "GBIS" ? allocate(Math.round(num(o.shipping_amount)), subtotals) : groups.map((_, i) => (i === 0 ? Math.round(num(o.shipping_amount)) : 0));
   const fees = groups.map((_, i) => (i === 0 ? num(o.cod_fee) + num(o.extra_fee) : 0));
   let grand = groups.map((_, i) => Math.max(0, subtotals[i] - discount[i] + shipping[i] + fees[i]));
-  let paid = allocate(Math.round(num(o.total_paid)), grand);
+  let paid = allocatePaid(Math.round(num(o.total_paid)), grand);
   if (opt.grandTotalInPrimaryOrder) {
     grand = groups.map((_, i) => (i === 0 ? Math.round(num(o.grand_total)) : 0));
     paid = groups.map((_, i) => (i === 0 ? Math.round(num(o.total_paid)) : 0));

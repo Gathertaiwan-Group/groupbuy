@@ -80,30 +80,6 @@
 			select: DataTableConfig.selectOptionsOS,
 			buttons: [
 				{ extend: 'create', editor: editor },
-				{{!-- 推導：確認入帳／取消入帳（訂單付款狀態只經 DB 函式＋歷程觸發器變更）、刪除未入帳明細、範本下載 --}}
-				DataTableConfig.actionButton({
-					className:'',
-					text:'確認入帳',
-					idSrc:'bankTransactionId',
-					confirm:'確定要將選取的 {0} 筆明細入帳，並把對應訂單設為已付款嗎？（只會處理狀態為「符合，待確認入帳」的明細；付款成功通知信未串接，僅寫入紀錄）',
-					url:'{{baseUrl}}/ajax/GroupBuy/confirmBankTransactions.do?groupBuyId={{groupBuyId}}',
-					success:function(json) { displayAlertSuccess(json.error); }
-				}),
-				DataTableConfig.actionButton({
-					className:'',
-					text:'取消入帳',
-					idSrc:'bankTransactionId',
-					confirm:'確定要取消選取的 {0} 筆明細的入帳，並把訂單付款狀態還原為入帳前嗎？',
-					url:'{{baseUrl}}/ajax/GroupBuy/revertBankTransactions.do?groupBuyId={{groupBuyId}}',
-					success:function(json) { displayAlertSuccess(json.error); }
-				}),
-				{ extend: 'remove', editor: editor, className:'btn-danger' },
-				{
-					text: '下載範本',
-					action: function ( e, dt, node, config ) {
-						window.location = '{{baseUrl}}/ajax/GroupBuy/bankTransactionTemplate.do';
-					}
-				},
 			]
 		} );
 
