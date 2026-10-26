@@ -120,19 +120,23 @@ describe("整張訂單-金額滿多少 MINIMUM_PRICE_MEET", () => {
     assert.equal(r.grandTotalWithoutShipping, 1000);
     assert.equal(r.appliedRules[0].discount, 100);
   });
-  test("不限次數(-1)也只折一次：滿1000折100 在 2300 → 100", () => {
+  test("不限次數(-1)每滿折一次：滿1000折100 在 2300 → 200", () => {
     const r = run(big(), [rule({ category: "MINIMUM_PRICE_MEET", minimum: 1000, discount: 100, maxApplyTimes: -1 })]);
-    assert.equal(r.orderDiscount, 100);
-    assert.equal(r.appliedRules[0].times, 1);
+    assert.equal(r.orderDiscount, 200);
+    assert.equal(r.appliedRules[0].times, 2);
   });
-  test("滿300折50：600 → 50、300 → 50、299 → 0", () => {
-    const rs = () => [rule({ category: "MINIMUM_PRICE_MEET", minimum: 300, discount: 50 })];
-    const r600 = run([line("A", 300, 2)], rs());
-    assert.equal(r600.orderDiscount, 50);
-    assert.equal(r600.grandTotalWithoutShipping, 550);
-    assert.equal(r600.appliedRules[0].times, 1);
-    assert.equal(run([line("A", 300, 1)], rs()).orderDiscount, 50);
-    const r299 = run([line("A", 299, 1)], rs());
+  test("照原站「重複滿額次數」：600 元滿300折50 → 0(僅一次)=50、-1(不限)=100、N=1→50、N=3→100", () => {
+    const mk = (maxApplyTimes: number) => [rule({ category: "MINIMUM_PRICE_MEET", minimum: 300, discount: 50, maxApplyTimes })];
+    const six = () => [line("A", 300, 2)];
+    assert.equal(run(six(), mk(0)).orderDiscount, 50, "0＝僅一次");
+    const unl = run(six(), mk(-1));
+    assert.equal(unl.orderDiscount, 100, "-1＝不限");
+    assert.equal(unl.grandTotalWithoutShipping, 500);
+    assert.equal(unl.appliedRules[0].times, 2);
+    assert.equal(run(six(), mk(1)).orderDiscount, 50, "N=1");
+    assert.equal(run(six(), mk(3)).orderDiscount, 100, "N=3（只滿 2 次）");
+    assert.equal(run([line("A", 300, 1)], mk(-1)).orderDiscount, 50);
+    const r299 = run([line("A", 299, 1)], mk(-1));
     assert.equal(r299.orderDiscount, 0);
     assert.equal(r299.appliedRules.length, 0);
   });
@@ -142,10 +146,19 @@ describe("整張訂單-金額滿多少 MINIMUM_PRICE_MEET", () => {
     assert.equal(run([line("A", 300, 4)], mk(2)).orderDiscount, 100);
     assert.equal(run([line("A", 300, 4)], mk(1)).orderDiscount, 50);
     assert.equal(run([line("A", 300, 1)], mk(-1)).orderDiscount, 50);
+    assert.equal(run([line("A", 300, 4)], mk(0)).orderDiscount, 50, "規律重複但僅一次");
   });
-  test("商品-滿額折扣 ITEM_PRICE_MEET 同樣只折一次", () => {
-    const r = run([line("A", 300, 2, { salesRuleIds: [702] })], [rule({ salesRuleId: 702, category: "ITEM_PRICE_MEET", minimum: 300, discount: 50 })]);
-    assert.equal(r.itemDiscount, 50);
+  test("規律重複間隔不同於門檻：滿300折50、之後每滿500再折30，1200 元不限 → 50+30=80（不是每滿300）", () => {
+    const r = run([line("A", 300, 4)], [rule({ category: "MINIMUM_PRICE_MEET", minimum: 300, discount: 50, maxApplyTimes: -1, settings: { repeatMinimumString: "500#30" } })]);
+    assert.equal(r.orderDiscount, 80);
+    assert.equal(r.appliedRules[0].times, 2);
+  });
+  test("商品-滿額折扣 ITEM_PRICE_MEET 同樣依「最多享幾次優惠」：600 元滿300折50 → 不限 100、僅一次 50、N=3 100", () => {
+    const mk = (maxApplyTimes: number) => run([line("A", 300, 2, { salesRuleIds: [702] })], [rule({ salesRuleId: 702, category: "ITEM_PRICE_MEET", minimum: 300, discount: 50, maxApplyTimes })]);
+    assert.equal(mk(-1).itemDiscount, 100);
+    assert.equal(mk(0).itemDiscount, 50);
+    assert.equal(mk(1).itemDiscount, 50);
+    assert.equal(mk(3).itemDiscount, 100);
   });
   test("依折數 10＝九折", () => {
     const r = run(base(), [rule({ category: "MINIMUM_PRICE_MEET", minimum: 1000, dollarOrPercentage: "PERCENTAGE", discount: 10 })]);
@@ -154,7 +167,8 @@ describe("整張訂單-金額滿多少 MINIMUM_PRICE_MEET", () => {
   test("會員點數累積：只給點數不折金額", () => {
     const r = run(big(), [rule({ category: "MINIMUM_PRICE_MEET", minimum: 1000, dollarOrPercentage: "POINT", discount: 50, maxApplyTimes: -1 })]);
     assert.equal(r.orderDiscount, 0);
-    assert.equal(r.points, 50);
+    assert.equal(r.points, 100, "不限：2300 滿1000 兩次");
+    assert.equal(run(big(), [rule({ category: "MINIMUM_PRICE_MEET", minimum: 1000, dollarOrPercentage: "POINT", discount: 50, maxApplyTimes: 1 })]).points, 50);
   });
   test("規律重複 repeatMinimumString 1000起每再滿500再折30", () => {
     const r = run(big(), [rule({ category: "MINIMUM_PRICE_MEET", minimum: 1000, discount: 100, settings: { repeatMinimumString: "500#30" } })]);
@@ -244,9 +258,9 @@ describe("贈品類", () => {
     assert.equal(r.gifts[0].giftTag, "贈品");
     assert.equal(r.totalDiscount, 0);
   });
-  test("折扣與贈品次數分開計算：600 元同時套滿300折50(不限) 與 滿300送1(不限) → 折 50、送 2", () => {
+  test("折扣與贈品同單各依自己的重複滿額次數：600 元 滿300折50(僅一次) 與 滿300送1(不限) → 折 50、送 2", () => {
     const r = run([line("A", 300, 2)], [
-      rule({ salesRuleId: 901, category: "MINIMUM_PRICE_MEET", minimum: 300, discount: 50, maxApplyTimes: -1, tag: "折扣" }),
+      rule({ salesRuleId: 901, category: "MINIMUM_PRICE_MEET", minimum: 300, discount: 50, maxApplyTimes: 0, tag: "折扣" }),
       rule({ salesRuleId: 902, category: "GIFT_WITH_PURCHASE", minimum: 300, dollarOrPercentage: "PIECE", discount: 1, maxApplyTimes: -1, tag: "贈品" }),
     ]);
     assert.equal(r.orderDiscount, 50);

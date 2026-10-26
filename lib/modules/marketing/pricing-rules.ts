@@ -795,21 +795,21 @@ export function evaluatePricing(input: PricingInput): PricingResult {
 
   /**
    * 門檻次數（滿額/滿件「折扣」類：MINIMUM_PRICE_MEET、ITEM_PRICE_MEET、同品項 DOLLAR_PACK_DISCOUNT）。贈品用 giftTimes、優惠卷在下方各自計算，不共用此函式。
-   * 「滿 X 折 Y」每筆訂單只套用一次（user 確認）；maxApplyTimes=-1（不限）不會把它變成「每滿 X」。
-   * 只有設了「規律重複」repeatMinimumString（"R#D"：滿 minimum 後每再滿 R 再折 D）才重複：
-   * 次數＝1＋floor((value−minimum)/R)，再受 maxApplyTimes 上限（0/1＝僅一次）限制。
+   * 照原站精靈「重複滿額次數」（fieldInfo：重複滿額時，重複享有優惠次數；ITEM_PRICE_MEET／PACK_DISCOUNT 為「最多享幾次優惠」）
+   * 存成 maxApplyTimes：0/1＝僅一次、-1＝不限（每滿 minimum 折一次）、N（有上限）＝最多 N 次。
+   * 有「規律重複」repeatMinimumString（"R#D"：滿 minimum 後每再滿 R 再折 D）時依其間隔：次數＝1＋floor((value−minimum)/R)，同樣受上限限制。
    */
   const thresholdTimes = (r: PricingSalesRule, value: number): number => {
     const minimum = toNumber(r.minimum);
     if (value <= 0 || value < minimum) return 0;
-    const rep = parseRepeatMinimum(r.settings?.repeatMinimumString ?? null);
-    if (!rep) return 1;
     const maxApply = Math.trunc(toNumber(r.maxApplyTimes, -1));
     if (maxApply === 1 || maxApply === 0) return 1;
-    return capTimes(1 + Math.floor((value - minimum) / rep.minimum), maxApply);
+    const rep = parseRepeatMinimum(r.settings?.repeatMinimumString ?? null);
+    const times = rep ? 1 + Math.floor((value - minimum) / rep.minimum) : minimum > 0 ? Math.floor(value / minimum) : 1;
+    return capTimes(Math.max(1, times), maxApply);
   };
   /**
-   * 贈品次數（GIFT_* 類，與折扣類的 thresholdTimes 分開，互不牽動）。
+   * 贈品次數（GIFT_* 類；規則與 thresholdTimes 相同，但獨立保留，兩者各自可調）。
    * 原站精靈贈品欄位「重複滿額次數」（fieldInfo：重複滿額時，重複享有優惠次數）存成 maxApplyTimes：
    *   0＝僅一次、-1＝不限（每滿 minimum 送一次）、N（有上限）＝最多 N 次。
    * 贈品精靈沒有「規律重複」欄位；若後台編輯器另設了 repeatMinimumString（"R#…"），則滿 minimum 後每再滿 R 送一次。
@@ -830,7 +830,7 @@ export function evaluatePricing(input: PricingInput): PricingResult {
     for (const t of parseTieredMinimums(r.settings?.tieredMinimumsString ?? null)) if (value >= t.minimum) d = t.discount;
     return d;
   };
-  /** 一般門檻折扣（金額）：DOLLAR／DOLLAR_PACK_DISCOUNT 一次 Y（有規律重複時 Y＋(次數−1)×D），PERCENTAGE 依比例一次 */
+  /** 一般門檻折扣（金額）：DOLLAR／DOLLAR_PACK_DISCOUNT 次數×Y（有規律重複時 Y＋(次數−1)×D），PERCENTAGE 依比例一次 */
   const thresholdAmount = (r: PricingSalesRule, value: number, base: number): { amount: number; points: number; times: number } => {
     const times = thresholdTimes(r, value);
     if (times <= 0) return { amount: 0, points: 0, times: 0 };

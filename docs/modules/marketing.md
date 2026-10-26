@@ -87,17 +87,18 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - 相同標籤的優惠互斥，勾「可合併計算」者除外；帶「不合併計算標籤」或綁定「不參與活動」的商品不列入該優惠；贈品（itemType=GIFT）不列入門檻。
 - 優惠標籤：最後一個為贈品／優惠對象標籤，其餘為主商品標籤；未設主商品標籤且無綁定時所有商品皆為主商品（原站欄位說明）。
 - 「規律重複」`1000#100`：滿 minimum 後每再滿 1000 再折 100；「不規律級距」取已達到的最高級；maxDiscountAmount／minDiscountTotalPrice >0 才生效。
-- **「滿 X 折 Y」折扣類每筆訂單只折一次**（贈品與優惠卷不在此限，見下表；user 2026-10-26 確認；修正前 600 元套「滿300折50」會折 100）。maxApplyTimes=-1（不限，預設值）**不會**讓門檻類變成「每滿 X」；只有設了「規律重複」`repeatMinimumString` 才重複，次數＝1＋floor((金額−minimum)/R)，再受 maxApplyTimes 上限（0/1＝僅一次、N＝最多 N 次）限制。
+- **「滿 X 折 Y」折扣類照原站「重複滿額次數」計次**（2026-10-26 fix-disc；取代 7bc84c1「一律只折一次」）：maxApplyTimes 0/1＝僅一次、-1＝不限（每滿 minimum 折一次，600 元套「滿300折50」折 100）、N＝最多 N 次；設了「規律重複」`repeatMinimumString`（R#D）時依其間隔：次數＝1＋floor((金額−minimum)/R)，折 Y＋(次數−1)×D，同樣受上限。依折數（PERCENTAGE）一律一次。
+- 新建預設值：精靈 `MINIMUM_PRICE_MEET` 用選項組 def，第一項「僅一次」預設勾選（原站靜態表單亦 `checked` 僅一次）→ 存 1；`ITEM_PRICE_MEET`／`*_PACK_DISCOUNT` 等用選項組 unlimited（只有 不限／有上限），預設「不限」→ -1；後台表單（非精靈）maxApplyTimes 預設 -1（原站 runtime 預設值 "-1"、「-1代表不限制」）。
 
 #### 各類別是否重複套用
 
-程式上分三套次數計算、互不共用：折扣類 `thresholdTimes`、贈品類 `giftTimes`、優惠卷在「優惠卷」區段各類別各自計算（2026-10-26 fix-gift 拆開；先前贈品共用 thresholdTimes，被「折扣只折一次」一起改成只送一次）。
+程式上分三套次數計算：折扣類 `thresholdTimes`、贈品類 `giftTimes`（2026-10-26 fix-disc 起兩者規則相同，都照「重複滿額次數」，仍分開保留以便各自調整）、優惠卷在「優惠卷」區段各類別各自計算。
 
 | 類別 | 是否重複 | 依據來源 |
 |---|---|---|
-| MINIMUM_PRICE_MEET 整張訂單-金額滿多少 | **否，每筆訂單只折一次**；maxApplyTimes=-1 不會變成每滿。設 repeatMinimumString 才重複：1＋floor((金額−minimum)/R)，受 maxApplyTimes 上限 | **user 決定**（2026-10-26）。原站精靈此類有「重複滿額次數 僅一次/不限/有上限」，原站 -1 或為每滿重複，本站不照原站 |
-| ITEM_PRICE_MEET 商品-滿額折扣 | 同上 | user 決定 |
-| MINIMUM_PIECE_MEET／MINIMUM_PRICE_MEET_ITS／MINIMUM_PIECE_MEET_MAIN_PIECE（折扣方式＝固定金額 DOLLAR_PACK_DISCOUNT） | 同上 | user 決定 |
+| MINIMUM_PRICE_MEET 整張訂單-金額滿多少 | **依「重複滿額次數」maxApplyTimes**：0/1＝僅一次；-1＝不限，每滿 minimum 折一次＝floor(金額/minimum)×Y；N＝最多 N 次。有「規律重複」R#D 時次數＝1＋floor((金額−minimum)/R)、折 Y＋(次數−1)×D（受上限）。例：600 元滿300折50 → 0：50、-1：100、1：50、3：100。依折數一次 | **照原站**：`spec/html/modal-salesrule-wizard.html` 此類欄位 `repeatable`「重複滿額次數」（fieldInfo「重複滿額時，重複享有優惠次數」，選項組 def 僅一次／不限／有上限，預設僅一次）＋`irregular`「有重複滿額時」→ repeatMinimum「之後每滿」／repeatDiscount；SPEC 3 章精靈「重複次數：僅一次(0)／不限(-1)／有上限(1)」 |
+| ITEM_PRICE_MEET 商品-滿額折扣 | 同上（無規律重複欄位，後台表單另設 repeatMinimumString 時同上公式） | **照原站**：精靈欄位 `repeatable`「最多享幾次優惠」（選項組 unlimited：不限 -1 預設／有上限） |
+| MINIMUM_PIECE_MEET／MINIMUM_PRICE_MEET_ITS／MINIMUM_PIECE_MEET_MAIN_PIECE（折扣方式＝固定金額 DOLLAR_PACK_DISCOUNT） | 同上（每滿 minimum 元／件折一次 Y） | **照原站**：精靈 `MINIMUM_PRICE_MEET_ITS_PACK_DISCOUNT` 欄位 `repeatable`「最多享幾次優惠」（unlimited，預設不限）；MINIMUM_PIECE_MEET 的固定金額精靈未單獨擷取，比照此卡 |
 | 同上三類（每件折金額／折數／新售價） | 滿門檻後每件都折（受 maxApplyTimes 件數上限）；不是「每滿」 | 精靈欄位「最多幾件商品享優惠」 |
 | MINIMUM_PRICE_MEET_ITS（品項標籤＋商品標籤） | 滿門檻後帶商品標籤的每件折（受件數上限） | 精靈欄位「最多幾件商品享優惠」 |
 | **GIFT_WITH_PURCHASE／GIFT_MINIMUM_PRICE_MEET(_NO_PICK)(_TOTAL_PAID)／GIFT_MINIMUM_PIECE_MEET(_NO_PICK)／GIFT_LOTTERY（贈品）** | **依「重複滿額次數」maxApplyTimes**：0＝僅一次；-1＝不限，每滿 minimum（元或件）送一次＝floor(值/minimum)；N＝最多 N 次。每次送 discount 件。例：滿1000送1、2300 元 → -1 送 2、0 送 1、1 送 1。若另設 repeatMinimumString 則 1＋floor((值−minimum)/R) | **照原站**：`spec/html/modal-salesrule-wizard.html` 各贈品類別欄位含 `repeatable`（選項組 def：僅一次 0／不限 -1／有上限 1→填 maxApplyTimes），標籤「重複滿額次數」、fieldInfo「重複滿額時，重複享有優惠次數」；贈品類精靈沒有「規律重複」欄位（SPEC 3 章精靈說明「重複次數：僅一次(0)／不限(-1)／有上限(1)」；後台表單 maxApplyTimes「-1代表不限制」）。GIFT_LOTTERY 精靈未擷取，比照其他贈品 |
