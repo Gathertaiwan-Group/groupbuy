@@ -11,7 +11,7 @@ import { db } from "./common";
 /** 列表/明細用的 PostgREST select（含關聯） */
 export const ORDER_SELECT = [
   "*",
-  "group_buys(title,short_url)",
+  "group_buys(title,short_url,render)",
   "order_items(*)",
   "sales_order_coupons(*)",
   "point_transactions(reason,points)",
@@ -97,7 +97,7 @@ export function orderItemsApi(items: Row[] | null | undefined): Row[] {
 /** DB 列（ORDER_SELECT）→ 原站訂單 JSON */
 export function toOrderApi(row: Row, ctx: OrderApiContext = {}): Row {
   const api = rowToApi(entities.salesOrder, row);
-  const gb = (row.group_buys ?? null) as { title?: string; short_url?: string } | null;
+  const gb = (row.group_buys ?? null) as { title?: string; short_url?: string; render?: string } | null;
 
   // 推導鍵
   api.paymentDued = isPaymentDued(row);
@@ -106,6 +106,8 @@ export function toOrderApi(row: Row, ctx: OrderApiContext = {}): Row {
   api.customerFacebook = row.customer_id != null ? ctx.facebook?.get(Number(row.customer_id)) ?? null : null;
   api.groupbuyTitle = gb?.title ?? "";
   api.shortUrl = gb?.short_url ?? "";
+  // 本系統補充（fix3）：POS 團購的訂單（後台「刪除」時提示改用「POS 作廢」）
+  api.posOrder = gb?.render === "POS";
   api.shippingAddress = shippingAddressOf(row);
   const rels = (row.rel_as_child ?? []) as { relation: string; parent?: { uuid?: string } | null }[];
   const parentRel = rels.find((r) => r.relation === "PARENT" || r.relation === "SPLIT");

@@ -369,6 +369,43 @@
 		SalesOrderModule.init(salesOrderConf);
 	});
 	</script>
+	<script src="/modules/orders/pos-void.js?v={{assetVersion}}"></script>
+	<script type="text/javascript">
+{{!-- 本系統補充（fix3）：POS 作廢。POS 結帳的訂單明細為「已出貨（已取貨）」，一般「刪除」維持原規則（只釋放未出貨明細、不回補已取貨庫存），
+	因此：1) 工具列加「POS 作廢」（回補已取貨庫存、沖銷付款、改為已取消，見 lib/modules/orders/pos-void.ts）；
+	2) 選到 POS 訂單時在表格上方提示改用作廢；3) 刪除送出前若含 POS 訂單再確認一次。列資料的 posOrder 由 order-api.ts 提供。 --}}
+	jQuery(function ($) {
+		function selectedRows() {
+			return $.fn.dataTable.isDataTable('#mydt') ? $('#mydt').DataTable().rows({ selected: true }).data().toArray() : [];
+		}
+		function posRows() { return selectedRows().filter(function (r) { return r && r.posOrder; }); }
+		var tip = '所選訂單含 POS 結帳單：「刪除」不會回補已取貨的庫存，請改用「POS 作廢」（回補庫存、沖銷付款、改為已取消）。';
+		$('#mydt').on('init.dt', function () {
+			var dt = $('#mydt').DataTable();
+			dt.button().add(null, {
+				text: '<i class="fa-light fa-ban"></i> POS 作廢',
+				className: 'btn-pos-void',
+				action: function () {
+					GBPosVoid.run({
+						ids: selectedRows().map(function (r) { return r.salesOrderId; }),
+						previewUrl: GBF.baseUrl + '/ajax/SalesOrder/posVoidPreview.do',
+						voidUrl: GBF.baseUrl + '/ajax/SalesOrder/posVoid.do',
+						onDone: function () { dt.ajax.reload(null, false); }
+					});
+				}
+			});
+		});
+		$('#mydt').on('select.dt deselect.dt draw.dt', function () {
+			var n = posRows().length;
+			$('#posVoidTip').remove();
+			if (n) $('#fixedAlert').append($('<div id="posVoidTip" class="alert alert-warning py-2 mb-2"></div>').text(tip));
+		});
+		$.ajaxPrefilter(function (options, orig, xhr) {
+			if (!options.url || !/\/ajax\/SalesOrder\/delete(\.do)?(\?|$)/.test(options.url)) return;
+			if (posRows().length && !window.confirm(tip + '\n\n仍要刪除嗎？')) xhr.abort();
+		});
+	});
+	</script>
 <!--#body--><div class="container-fluid ">
 {{!-- 推導：主內容開頭（容器、卡片、標題、欄位顯示切換區）在原站擷取缺段內。
 	依 spec 可見的後段結構：#columnShowHidePanel 之後緊接一個 </div>，再接 card-footer（篩選表單）、card-body（#mydt）、</div><!-- card -->，

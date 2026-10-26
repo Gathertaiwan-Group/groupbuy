@@ -130,6 +130,16 @@
 					if (!r.length) { toastr.warning('請先選擇訂單'); return; }
 					r.forEach(function (row) { posOpenReceipt(row.salesOrderId); });
 				} },
+				{ text: '<i class="fa-light fa-ban"></i> POS 作廢', className: 'btn-pos-void', action: function (e, dt) {
+					// 本系統補充（fix3）：已結帳 POS 訂單作廢＝回補已取貨庫存、沖銷付款、訂單改為已取消（見 /modules/orders/pos-void.js）
+					var r = dt.rows({ selected: true }).data().toArray();
+					GBPosVoid.run({
+						ids: r.map(function (row) { return row.salesOrderId; }),
+						previewUrl: GBF.baseUrl + '/ajax/SalesOrder/posVoidPreview.do',
+						voidUrl: GBF.ctxPosAjax + '/SalesOrder/void.do',
+						onDone: function () { dt.rows().deselect(); dt.ajax.reload(null, false); if (typeof filterManager !== 'undefined') filterManager.queryItems(true); }
+					});
+				} },
 				{ text: '後台訂單管理', action: function () { window.open('/backend/SalesOrder/list?groupBuyId=' + groupBuyId, '_blank'); } }
 			],
 			ajax: {

@@ -40,6 +40,7 @@ export const posRoutes: RouteDef[] = [
   any(`${P}/SalesOrder/list`, api.draftList, A),
   post(`${P}/SalesOrder/checkout`, api.checkout, A),
   post(`${P}/SalesOrder/details`, api.orderDetails, A),
+  post(`${P}/SalesOrder/void`, api.voidOrder, A), // 本系統補充（fix3）：POS 作廢
   get(`${P}/SalesOrder/generateQRCode`, api.orderQrCode, A),
 
   // 購物車（原站 ReturnRefund）

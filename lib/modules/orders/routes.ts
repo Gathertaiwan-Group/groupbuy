@@ -7,6 +7,7 @@ import { returnRoutes } from "./returns";
 import { reservationRoutes } from "./reservations";
 import { helpdeskRoutes } from "./helpdesk";
 import { preorderToStockRoutes } from "./preorder-to-stock";
+import { posVoidRoutes } from "./pos-void";
 
 export const routes: RouteDef[] = [
   ...salesOrderListRoutes, // 所有訂單／單一團購訂單／分割訂單／自取訂單／批次操作／匯出匯入／列印
@@ -14,4 +15,5 @@ export const routes: RouteDef[] = [
   ...reservationRoutes, // 保留單
   ...helpdeskRoutes, // 客服對話
   ...preorderToStockRoutes, // 預購商品轉現貨
+  ...posVoidRoutes, // POS 作廢（回補已取貨庫存、沖銷付款）
 ];

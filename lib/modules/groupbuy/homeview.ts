@@ -593,6 +593,29 @@ async function rebuildCache(tenantId: number, view: ViewRow): Promise<string> {
   return html;
 }
 
+/**
+ * 發布（fix3，給 Footer V1/V2 編輯器共用）：與 HomeView 列表「更新暫存」相同——重建 home_views.html，前台即讀這份暫存。
+ * 回傳 live＝這筆 FOOTER 是否就是前台實際顯示的頁尾（同 storefront/web-site.ts loadWebSite 的選擇規則：
+ * 「網頁 首頁」設定的 footerId 指到的 FOOTER，否則本團購的「FOOTER 預設」）。
+ */
+export async function publishHomeView(tenantId: number, groupBuyId: number, homeViewId: number): Promise<{ live: boolean; html: string }> {
+  const view = await loadView(tenantId, groupBuyId, homeViewId);
+  const html = await rebuildCache(tenantId, view);
+  const views = await loadViews(tenantId, groupBuyId);
+  const home = views.find((v) => v.category === "RELEASE") ?? null;
+  const footerId = Number((home?.home_view_config ?? {}).footerId);
+  const shown = views.find((v) => v.id === footerId && v.category.startsWith("FOOTER")) ?? views.find((v) => v.category === "FOOTER_RELEASE") ?? null;
+  return { live: shown?.id === view.id, html };
+}
+
+/** 本團購的「FOOTER 預設」；沒有時建立一筆（Footer V1 發布用） */
+export async function ensureReleaseFooter(tenantId: number, groupBuyId: number, title: string): Promise<{ id: number; created: boolean }> {
+  const found = (await loadViews(tenantId, groupBuyId)).filter((v) => v.category === "FOOTER_RELEASE").sort((a, b) => b.id - a.id)[0];
+  if (found) return { id: found.id, created: false };
+  const view = await insertView(tenantId, groupBuyId, "FOOTER_RELEASE", title, "footer");
+  return { id: view.id, created: true };
+}
+
 /** ANY /ajax/HomeViewCache/refresh?groupBuyId=&homeViewId=（列展開「更新暫存」；團購列表「更新Footer暫存」第二步） */
 async function refreshHandler(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);

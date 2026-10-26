@@ -16,6 +16,12 @@
 //        推導：存在 group_buys.group_buy_settings.footerView（上傳欄位名 groupBuySettings.footerView.logo、標籤
 //        ???GroupBuySettings.footerView.*??? 皆指向團購設定）。不改 descr_footer（「Footer敘述」另有用途）。
 //   WebEditor「選單」欄位用的 /ajax/WebMenu/listMenu、listMenuNode 由子任務 A（web-content-menu.ts）提供。
+//
+// 發布（fix3；推導自原站 HomeView「更新暫存」：編輯內容 ≠ 前台，按「更新暫存」才把內容組成 home_views.html，前台只讀這份暫存）：
+//   POST /ajax/WebEditor/publishV2  groupBuyId, homeViewId   V2：重建該 FOOTER 的暫存（同 /ajax/HomeViewCache/refresh），回 live＝是否為前台頁尾
+//   POST /ajax/WebEditor/publishV1  groupBuyId               V1：只限官網型團購（render=HOME）。footerView 由伺服器產生 HTML（footer-v1.ts），
+//        寫進本團購「FOOTER 預設」的一個 HTML 區塊（settings.source=FOOTER_V1；沒有 FOOTER 預設時建立一筆），再重建暫存。
+//        「FOOTER 預設」已有 V2（WEB_EDITOR）區塊時拒絕（避免兩種編輯器覆蓋彼此），請改用 V2 發布。
 import { getServiceClient } from "@/lib/supabase/server";
 import type { Row } from "@/lib/db/mapping";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
@@ -23,6 +29,8 @@ import { get, page, post, requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest, notFound } from "@/lib/core/http/errors";
 import { actionOk, json, redirect } from "@/lib/core/http/responses";
 import { homeViewGroupBuyOf, homeViewOf } from "./homeview-section";
+import { ensureReleaseFooter, publishHomeView } from "./homeview";
+import { footerV1IsEmpty, renderFooterV1, type FooterV1 } from "./footer-v1";
 
 const db = () => getServiceClient();
 const FOOTER_CATEGORIES = ["FOOTER_RELEASE", "FOOTER_DRAFT", "FOOTER_CUSTOM"];
@@ -186,6 +194,53 @@ async function updateV1(ctx: RequestContext): Promise<Response> {
   return actionOk("更新成功", { data: { ...fv, groupBuyId: gbId } });
 }
 
+/* ─────────────────────────── 發布（fix3） ─────────────────────────── */
+
+function publishedMessage(live: boolean): string {
+  return live ? "發布成功，前台頁尾已更新" : "已更新暫存；此 FOOTER 目前不是前台使用的頁尾（請在官網頁面的「頁尾設定」選用，或設為 FOOTER 預設）";
+}
+
+/** POST /ajax/WebEditor/publishV2 */
+async function publishV2(ctx: RequestContext): Promise<Response> {
+  const { session, gb, view } = await footerViewOf(ctx);
+  const r = await publishHomeView(session.tenantId, gb.id, view.id);
+  return actionOk(publishedMessage(r.live), { data: { homeViewId: view.id, live: r.live } });
+}
+
+/** POST /ajax/WebEditor/publishV1 */
+async function publishV1(ctx: RequestContext): Promise<Response> {
+  const session = requireSession(ctx);
+  const gb = await homeViewGroupBuyOf(ctx);
+  if ((gb as { render?: string }).render !== "HOME") throw badRequest("此團購不是官網型團購，Footer 只用於官網頁尾");
+  const { settings } = await groupBuySettings(ctx);
+  const fv = (settings.footerView ?? {}) as FooterV1;
+  if (footerV1IsEmpty(fv)) throw badRequest("尚未儲存舊版 Footer 內容，請先按「更新」儲存");
+  const footer = await ensureReleaseFooter(session.tenantId, gb.id, "Footer");
+  const { data: secs, error } = await db()
+    .from("home_view_sections")
+    .select("id, category, settings")
+    .eq("tenant_id", session.tenantId)
+    .eq("home_view_id", footer.id);
+  if (error) throw new Error(`[web-editor] 讀取 Footer 區塊失敗：${error.message}`);
+  const rows = (secs ?? []) as { id: number; category: string; settings: Row | null }[];
+  if (rows.some((r) => String(r.category).toUpperCase() === "WEB_EDITOR")) {
+    throw badRequest("此團購的 FOOTER 預設已使用新版 Footer 編輯器，請在新版編輯器發布");
+  }
+  const html = renderFooterV1(fv);
+  const mine = rows.find((r) => String(r.category).toUpperCase() === "HTML" && (r.settings ?? {}).source === "FOOTER_V1");
+  if (mine) {
+    const { error: e2 } = await db().from("home_view_sections").update({ html }).eq("tenant_id", session.tenantId).eq("id", mine.id);
+    if (e2) throw new Error(`[web-editor] 發布 Footer 失敗：${e2.message}`);
+  } else {
+    const { error: e3 } = await db()
+      .from("home_view_sections")
+      .insert({ tenant_id: session.tenantId, home_view_id: footer.id, title: "舊版 Footer", category: "HTML", seq: 1, settings: { source: "FOOTER_V1" }, html });
+    if (e3) throw new Error(`[web-editor] 發布 Footer 失敗：${e3.message}`);
+  }
+  const r = await publishHomeView(session.tenantId, gb.id, footer.id);
+  return actionOk(publishedMessage(r.live), { data: { homeViewId: footer.id, created: footer.created, live: r.live } });
+}
+
 /* ─────────────────────────── 路由 ─────────────────────────── */
 
 export const webEditorRoutes: RouteDef[] = [
@@ -210,4 +265,6 @@ export const webEditorRoutes: RouteDef[] = [
   }),
   get("/ajax/WebEditor/list", listV1),
   post("/ajax/WebEditor/update", updateV1),
+  post("/ajax/WebEditor/publishV1", publishV1),
+  post("/ajax/WebEditor/publishV2", publishV2),
 ];

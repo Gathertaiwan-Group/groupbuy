@@ -54,6 +54,7 @@
 6. 簡訊密碼：原站驗證來源不明，本系統只檢查必填、不儲存；簡訊內容檢查原站提示的關鍵字（LINE、銀行）與 gbf.tw 網址限制；點數 70 字內 1 點、超過每 67 字 1 點。
 7. KOL：原站送外部 `kol.gbf.tw`，改送本站 `/ajax/Influencer/bind`（JSON），寫 influencers；hash 為本站 HMAC。
 8. 業績報表 `/rp/`：原站未擷取，依 `GBAPI.showReportUrl` 的網址格式做密碼保護的唯讀報表（摘要、商品銷售統計、訂單明細；「團購報表隱藏部分個資」時遮罩姓名電話）；`/rp/{uuid}x` 需臉書授權＝未串接說明頁。
+   **訂單口徑（fix3，`report-scope.ts`）**：卡片（訂單數量／銷售金額／已收付款）來自 `group_buy_statistics`，只計有效訂單（`is_valid_order_state`：排除草稿、已取消、已刪除、已合併、已拆單）。訂單表格預設採同一口徑 → 表格總筆數＝卡片訂單數量、「符合條件訂單結帳金額合計」＝卡片銷售金額；「階段」篩選選特定階段時只看該階段（可查已取消／已合併／已拆單），草稿與已刪除永不列出（下拉也不列）。頁面卡片與表格下方都有口徑說明。
 9. 匯出報表欄位：原站格式未擷取，依名稱推導。「匯出貨運清單」工具列彈窗導向出貨模組的 `/backend/ShippingRecord/export?groupBuyId=`。
 
 ## 5. 報表授權、上傳影片、進階設定、官網 HomeView
@@ -82,6 +83,9 @@
 - 推導：唯一類別（「網頁 首頁」「FOOTER 預設」每團各一，新存者生效、舊的改草稿）；複製加「(複製)」並複製區塊與項目；舊版複製按鈕只在官網型、尚無頁面、有舊版內容時出現。
 - 暫存 HTML（`div.home-view`、`footer.page-footer`）存 `home_views.html／date_cached`；團購列表「更新Footer暫存」＝`queryReleaseFooter` → `refresh.do`（伺服器端產生，取代原站 WebEditor＋`HomeViewCache/query/save`）。
 - 缺口：`/backend/HomeViewSection/list`、`/backend/WebEditor/footerV2`、前台讀取暫存待各自頁面／storefront。
+- **發布機制（推導，fix3）**：原站 HomeView 的「儲存」只寫編輯內容（頁面設定／內容區塊），前台只讀「暫存」`home_views.html`；按列展開或團購列表的「更新暫存」才把內容組成暫存 → 前台更新。Footer 編輯器沿用同一機制：
+  - V2（`/backend/WebEditor/footerV2`）：「儲存」＝`/ajax/HomeViewCache/save`（寫 WEB_EDITOR 區塊），儲存成功後詢問是否立即發布；「設定」面板「發布（更新暫存）」＝`POST /ajax/WebEditor/publishV2`（groupBuyId、homeViewId；重建暫存，回 `live`＝此 FOOTER 是否為前台實際頁尾：首頁設定的 `footerId`，否則「FOOTER 預設」）。
+  - V1（`/backend/WebEditor/footer`）：「更新」只存 `group_buy_settings.footerView`；新增「發布到前台」＝`POST /ajax/WebEditor/publishV1`（只限 render=HOME）：伺服器依 footerView 產生頁尾 HTML（`footer-v1.ts`，標記比照 V1 預覽、全部 escape、危險連結移除），寫進「FOOTER 預設」中 `settings.source=FOOTER_V1` 的 HTML 區塊（沒有 FOOTER 預設時建立），再重建暫存。「FOOTER 預設」已有 V2（WEB_EDITOR）區塊時拒絕，避免兩種編輯器互相覆蓋。
 
 ## 6. 已知缺口
 

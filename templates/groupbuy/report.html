@@ -101,6 +101,8 @@ main {padding-top:64px;padding-bottom:24px;}
 			<li class="list-group-item rp-highlight"><span class="rp-label">銷售金額 / 銷售金額（扣除運費）</span><span class="rp-value" id="statRevenue">{{stats.revenue}} / {{stats.revenueWithoutShipping}}</span></li>
 			<li class="list-group-item"><span class="rp-label">已收付款金額 / 已收付款金額(扣除運費)</span><span class="rp-value" id="statPaid">{{stats.paidTotal}} / {{stats.paidTotalWithoutShipping}}</span></li>
 		</ul>
+		{{!-- 本系統補充（fix3）：統計口徑說明（卡片與下方訂單表格一致，見 lib/modules/groupbuy/report-scope.ts） --}}
+		<div class="card-footer small text-muted py-2" id="statScopeNote">統計口徑：只計有效訂單（不含草稿、已取消、已刪除、已合併、已拆單）；下方訂單表格預設採相同口徑，「階段」篩選可查看已取消等訂單。</div>
 	</div>
 
 	<div class="card rp-card" id="row-chart">
@@ -155,6 +157,7 @@ main {padding-top:64px;padding-bottom:24px;}
 			</table>
 			</div>
 			<div class="rp-sum text-right mt-2">符合條件訂單結帳金額合計：<b id="b2sTotal">0</b></div>
+			<div class="small text-muted text-right" id="tableScopeNote">未選「階段」時只列有效訂單（與上方訂單數量相同）；選擇階段可查看已取消、已合併、已拆單的訂單。草稿與已刪除訂單不列出。</div>
 		</div>
 	</div>
 

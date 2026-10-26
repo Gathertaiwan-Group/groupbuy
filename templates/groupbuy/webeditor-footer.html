@@ -14,7 +14,7 @@
 var baseUrl = GBF.baseUrl;
 </script>
 <!--#body--><div class="container-fluid ">
-{{#if updated}}<div class="alert alert-success mt-3" role="alert">更新成功</div>{{/if}}
+{{#if updated}}<div class="alert alert-success mt-3" role="alert">更新成功。前台頁尾要按「發布到前台」才會更新。</div>{{/if}}
 <div id="container" class="row my-3">
 	<div id="form-area-container" class="card col-sm-4">
 		<div class="card-body px-0">
@@ -67,6 +67,9 @@ var baseUrl = GBF.baseUrl;
 				<input type="text" class="form-control" id="copyrightStatement" name="copyright">
 			</div>
 			<input type="submit" id="submit" class="btn btn-primary ml-0" value="更新">
+			{{!-- 本系統補充（fix3）：發布＝與 HomeView「更新暫存」同機制，把已儲存的 Footer 產生到官網「FOOTER 預設」的暫存（前台頁尾） --}}
+			<button type="button" id="publishFooterV1" class="btn btn-default ml-0">發布到前台</button>
+			<small class="form-text text-muted">「更新」只儲存設定；按「發布到前台」後官網頁尾才會更新（僅官網型團購）。</small>
 		</form>
 		</div>
 	</div>
@@ -134,3 +137,18 @@ var baseUrl = GBF.baseUrl;
 	</div></div>
 </div>
 <script type="text/javascript" src="/scripts/footerEditor.js?v=1"></script>
+<script type="text/javascript">
+jQuery(function ($) {
+	$('#publishFooterV1').on('click', function () {
+		var $btn = $(this);
+		btnStartLoading($btn);
+		$.post(GBF.baseUrl + '/ajax/WebEditor/publishV1.do', { groupBuyId: $('input[name=groupBuyId]').val() })
+			.done(function (json) {
+				var live = json && json.data && json.data.live;
+				(live ? toastr.success : toastr.info)((json && json.message) || '發布成功');
+			})
+			.fail(function (x) { toastr.warning((x.responseJSON && x.responseJSON.error) || '發布失敗'); })
+			.always(function () { btnStopLoading($btn); });
+	});
+});
+</script>

@@ -18,6 +18,7 @@ import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import { parseDtRequest } from "@/lib/core/datatables/request";
 import { dtQuery, sanitizeLike, type AnyQuery } from "@/lib/core/datatables/query";
 import { dtResponse } from "@/lib/core/datatables/response";
+import { reportStateOptions, reportStateScope } from "./report-scope";
 
 type GbRow = {
   id: number;
@@ -32,8 +33,7 @@ type GbRow = {
   group_buy_statistics: Record<string, unknown> | null;
 };
 
-/** 報表表格不列出的訂單：草稿（購物車）與已刪除 */
-const HIDDEN_STATES = ["DRAFT", "DELETED"];
+// 訂單口徑（卡片與表格一致）見 report-scope.ts：預設只列有效訂單；「階段」篩選可看已取消等，草稿／已刪除永不列出。
 
 const money = (v: unknown) => Math.round(Number(v) || 0).toLocaleString("en-US");
 
@@ -136,7 +136,7 @@ async function reportPage(ctx: RequestContext): Promise<Response> {
     report: true,
     rp: uuid + password,
     stats: statsOf(gb),
-    filterOptions: { status, state, paymentMethod },
+    filterOptions: { status, state: reportStateOptions(state), paymentMethod },
   });
 }
 
@@ -181,14 +181,15 @@ function filtersOf(extra: Record<string, string>) {
 }
 
 function applyFilters(q: AnyQuery, gb: GbRow, fl: ReturnType<typeof filtersOf> | null): AnyQuery {
-  q = q.eq("group_buy_id", gb.id).not("state", "in", `(${HIDDEN_STATES.join(",")})`);
+  const scope = reportStateScope(fl?.state);
+  q = q.eq("group_buy_id", gb.id).not("state", "in", `(${scope.exclude.join(",")})`);
+  if (scope.only) q = q.eq("state", scope.only);
   if (!fl) return q;
   if (fl.uuid) q = q.ilike("uuid", `%${fl.uuid}%`);
   if (fl.customerFirstname) q = q.ilike("customer_firstname", `%${fl.customerFirstname}%`);
   if (fl.fbNickname) q = q.ilike("billing_fb_nickname", `%${fl.fbNickname}%`);
   if (fl.customerEmail) q = q.ilike("customer_email", `%${fl.customerEmail}%`);
   if (fl.status) q = q.eq("status", fl.status);
-  if (fl.state) q = q.eq("state", fl.state);
   if (fl.paymentMethod && /^\d{1,4}$/.test(fl.paymentMethod)) q = q.eq("payment_method", Number(fl.paymentMethod));
   if (fl.month) q = q.gte("created_at", fl.month[0]).lt("created_at", fl.month[1]);
   return q;
@@ -225,7 +226,7 @@ async function salesOrderReport(ctx: RequestContext): Promise<Response> {
     defaultOrder: [{ column: "created_at", ascending: false }],
   });
 
-  // recordsTotal：未套篩選的筆數；b2sTotal（推導）：符合篩選的訂單結帳金額合計
+  // recordsTotal：未套篩選的筆數（有效訂單＝卡片訂單數量）；b2sTotal（推導）：符合篩選的訂單結帳金額合計
   const { count: total } = await applyFilters(
     db.from("sales_orders").select("id", { count: "exact", head: true }).eq("tenant_id", gb.tenant_id),
     gb,

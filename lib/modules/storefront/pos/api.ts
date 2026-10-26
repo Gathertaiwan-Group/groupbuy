@@ -10,6 +10,7 @@ import { imageUrl, gbSetting } from "../site";
 import { formatPrice } from "../catalog";
 import { validVatId } from "../order-place";
 import { pointsEnabled } from "../pricing";
+import { posVoidOrders, posVoidResponse } from "@/lib/modules/orders/pos-void";
 import {
   posScope,
   db,
@@ -769,6 +770,28 @@ export async function checkout(ctx: RequestContext): Promise<Response> {
   const msg = `結帳完成！訂單編號：${res.uuid}${paid ? "" : "（未付款）"}`;
   console.info(`[pos] checkout ${res.uuid} by ${session.account}: ${payLog || "未付款"}；${notIntegrated("POS 刷卡機／金流／發票機").message}`);
   return json({ code: 200, error: msg, message: msg, data: { salesOrderId: res.salesOrderId, uuid: res.uuid, change: cash?.change_amount ?? null } });
+}
+
+/* ───────────────────────── 作廢（fix3） ───────────────────────── */
+
+/**
+ * POST {P}/SalesOrder/void：POS「查詢訂單」分頁的「POS 作廢」（salesOrderId=1,2、reason）。
+ * 只接受本 POS 團購的訂單；原子操作見 lib/modules/orders/pos-void.ts（DB 函式 pos_void_order）。
+ */
+export async function voidOrder(ctx: RequestContext): Promise<Response> {
+  const scope = await posScope(ctx);
+  const raw = [...(await ctx.params_all("salesOrderId")), ...(await ctx.params_all("salesOrderId[]"))].join(",");
+  const ids = [...new Set(raw.split(",").map((x) => Number(x.trim())).filter((n) => Number.isSafeInteger(n) && n > 0))];
+  if (!ids.length) throw badRequest("請先選擇訂單");
+  if (ids.length > 100) throw badRequest("一次最多作廢 100 筆");
+  const own = await q(
+    db().from("sales_orders").select("id").eq("tenant_id", scope.session.tenantId).eq("group_buy_id", scope.gb.id).in("id", ids),
+    "讀取訂單",
+  );
+  const ownIds = new Set(own.map((r) => num(r.id)));
+  const result = await posVoidOrders(scope.session, ids.filter((id) => ownIds.has(id)), str(await ctx.param("reason")).trim());
+  for (const id of ids) if (!ownIds.has(id)) result.failed.push({ salesOrderId: id, error: "不是本 POS 團購的訂單" });
+  return posVoidResponse(result);
 }
 
 /* ───────────────────────── 發票（未串接） ───────────────────────── */

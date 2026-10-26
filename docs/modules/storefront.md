@@ -120,4 +120,5 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 發票：開發票回【未串接】；「列印收據」（本系統補充）與「印發票」都開 `Invoice/print.do` 的交易明細收據（註明非統一發票）。
 - 原站以 `$.get` 呼叫的寫入端點，本系統只收 POST；`pos-after.js` 覆寫 `orderService` 對應方法（不修改原站檔）。
 - 推導項目：POS 版面 CSS、登入頁、商品明細／優惠條件／快速折價（折扣標籤）／優惠券／手動註冊會員／會員消費紀錄片段、日結（收款依 `pos_payments`、支出類別取自原站按鈕）、新增調撥精靈（送出走 warehouse 既有端點）、銷售分析彈窗（原站為寫死示意數字，本系統顯示今日實際資料，未設入口）、會員 QR（原站載入 qrcode.js；本系統端點回 1×1 圖＋`?format=json` 網址，由 cdnjs qrcodejs 在瀏覽器產生）、獲得點數（未實作回饋點數，固定 0）。
-- 查詢訂單分頁：`/ajax/SalesOrder/list`（orders 模組）＋`groupBuyId`，按鈕只做全選／取消選取／列印收據／後台訂單管理（原站其餘批次按鈕請在後台訂單頁操作）。
+- 查詢訂單分頁：`/ajax/SalesOrder/list`（orders 模組）＋`groupBuyId`，按鈕只做全選／取消選取／列印收據／**POS 作廢**／後台訂單管理（原站其餘批次按鈕請在後台訂單頁操作）。
+- **POS 作廢（本系統補充，fix3）**：POS 結帳的明細為「已出貨（已取貨）」，後台一般「刪除」只釋放未出貨明細，刪 POS 單不會回補庫存。改用作廢：`POST /pos/ajax/{租戶}/{短網址}/SalesOrder/void`（只收本 POS 團購的訂單）或後台 `POST /ajax/SalesOrder/posVoid`（salesOrderId=1,2、reason），確認框摘要 `GET /ajax/SalesOrder/posVoidPreview`。DB 函式 `pos_void_order`（migration 6005）單一交易：鎖訂單 → 已取消／已刪除擋下（重複作廢）、草稿／合併／拆單／退換貨不可作廢 → 結帳扣過的明細（SHIPPED／UNSHIPPING／SHIPPING）依庫存擁有者回補可售現貨／預購、明細改 CANCELLED → 依付款方式淨額寫負數 `pos_payments`（`kind=VOID`，日結依 `pos_payments` 加總，作廢當日即反映）→ 訂單 `state=CANCELED`（既有代碼「已取消」）、`total_paid=0`、log 與歷程（ADMIN＋操作者＋「POS 作廢：回補庫存 N 件，沖銷付款 $X（原因）」）；點數由 0104 觸發器回補、統計由 8001 觸發器重算。優惠名額不回補（同後台取消訂單）。後台訂單列表選到 POS 單時顯示提示、刪除前再確認一次（刪除規則不變）。

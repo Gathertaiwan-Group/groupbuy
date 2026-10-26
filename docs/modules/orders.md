@@ -26,7 +26,8 @@ DOM 骨架自查：`node lib/modules/orders/tools/dom-compare.mjs --spec spec/ht
 |---|---|---|
 | `/ajax/SalesOrder/list` | GET/POST | DataTables serverSide；回應另含 `b2sTotal`；`options` 鍵同原站（shippingTag…status＋flatRateShippingId） |
 | `/ajax/SalesOrder/get` | GET | `{code, data: 訂單}`（salesOrderId 或 uuid） |
-| `/ajax/SalesOrder/save｜update｜delete` | POST | Editor；各端點只收自己的 action；刪除＝階段改「已刪除」並釋放庫存；樂觀鎖 `dateModified` |
+| `/ajax/SalesOrder/save｜update｜delete` | POST | Editor；各端點只收自己的 action；刪除＝階段改「已刪除」並釋放庫存（只釋放未出貨明細；POS 已取貨單請改用 POS 作廢，選到時頁面提示）；樂觀鎖 `dateModified` |
+| `/ajax/SalesOrder/posVoid`、`posVoidPreview` | POST／GET | POS 作廢（fix3，`pos-void.ts`＋DB `pos_void_order`）：回補已取貨庫存、沖銷付款、改為已取消、寫歷程；重複作廢擋下。列資料另帶 `posOrder`（POS 團購的訂單） |
 | `/ajax/GroupBuy/jsonOptions` | GET | 團購下拉 `[{value,label}]` |
 | `/backend/SalesOrder/displayCancelOrder` → `/ajax/SalesOrder/cancelOrder`、`undoCancelOrder` | GET → POST | 取消（釋放庫存、員工備註）／還原（重新扣庫存，不足則不還原） |
 | `/ajax/SalesOrder/markAsPaid`、`extendPaymentDue` | POST | 設為已付款（寄已付款信紀錄）／展延繳款日期（寄展延信紀錄） |

@@ -4,7 +4,8 @@
       inline `$(document).ready(function(){ initEditor(); });`。定義 initEditor 的那段 inline script 被擋 → 推導如下：
       - 編輯器設定（globalCfg/rows/cols）由伺服器輸出到 footerEditorCfg（data-config 指向它）
       - 「儲存」(cfg.submit)：$().getConfig() + $().getHtml() 送 /ajax/HomeViewCache/save
-      - 「設定」面板加按鈕「更新暫存」(cfg.panel)：/ajax/HomeViewCache/refresh（同 HomeView 列表「更新暫存」） --}}
+      - 「設定」面板加按鈕「發布（更新暫存）」(cfg.panel)：/ajax/WebEditor/publishV2（＝HomeView 列表「更新暫存」，另回報是否為前台頁尾）
+      - 儲存成功後詢問是否立即發布（fix3） --}}
 {{> core/partials/dte-style.html}}
 <script type="text/javascript" src="/scripts/gbf_editor.js?v=1"></script>
 <script src="/scripts/web.editor.cols.js?v=1"></script>
@@ -20,23 +21,33 @@ function initEditor() {
 	var groupBuyId = {{json groupBuyId}};
 	var homeViewId = {{json homeViewId}};
 
+	// 發布（fix3）：與 HomeView 列表「更新暫存」同一機制——儲存只寫編輯內容，發布才重建暫存（home_views.html），前台頁尾讀暫存。
+	function publish($btn) {
+		if ($btn) btnStartLoading($btn);
+		return $.ajax({
+			type: 'POST',
+			url: GBF.baseUrl + '/ajax/WebEditor/publishV2.do',
+			data: { groupBuyId: groupBuyId, homeViewId: homeViewId },
+			dataType: 'json'
+		})
+		.done(function (json) {
+			var live = json && json.data && json.data.live;
+			(live ? toastr.success : toastr.info)((json && json.message) || 'FOOTER 更新成功');
+		})
+		.fail(function (jqXHR) {
+			var json = jqXHR.responseJSON;
+			toastr.warning(json && json.error ? json.error : 'FOOTER 更新失敗');
+		})
+		.always(function () { if ($btn) btnStopLoading($btn); });
+	}
+	window.footerEditorPublish = publish;
+
 	footerEditorCfg.panel = [
 		{
 			type: 'button',
-			label: '更新暫存',
+			label: '發布（更新暫存）',
 			name: 'refreshCache',
-			func: function ($btn) {
-				btnStartLoading($btn);
-				$.ajax({
-					type: 'POST',
-					url: GBF.baseUrl + '/ajax/HomeViewCache/refresh.do',
-					data: { groupBuyId: groupBuyId, homeViewId: homeViewId },
-					dataType: 'json'
-				})
-				.done(function () { toastr.success('FOOTER 更新成功'); })
-				.fail(function () { toastr.warning('FOOTER 更新失敗'); })
-				.always(function () { btnStopLoading($btn); });
-			}
+			func: function ($btn) { publish($btn); }
 		}
 	];
 
@@ -60,6 +71,8 @@ function initEditor() {
 			if (json && json.data && json.data.homeViewCacheId)
 				footerEditorCfg.homeViewCacheId = json.data.homeViewCacheId;
 			toastr.success('儲存成功');
+			// 儲存後可直接發布（同 HomeView：未發布前前台仍顯示上次發布的頁尾）
+			if (window.confirm('已儲存。要立即發布到前台頁尾嗎？\n（選「取消」可稍後在「設定」面板按「發布（更新暫存）」）')) publish();
 		})
 		.fail(function (jqXHR) {
 			var json = jqXHR.responseJSON;
