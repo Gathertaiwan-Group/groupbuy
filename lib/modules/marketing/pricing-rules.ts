@@ -794,7 +794,7 @@ export function evaluatePricing(input: PricingInput): PricingResult {
   };
 
   /**
-   * 門檻次數（滿額/滿件類：MINIMUM_PRICE_MEET、ITEM_PRICE_MEET、同品項 DOLLAR_PACK_DISCOUNT、各類贈品）。
+   * 門檻次數（滿額/滿件「折扣」類：MINIMUM_PRICE_MEET、ITEM_PRICE_MEET、同品項 DOLLAR_PACK_DISCOUNT）。贈品用 giftTimes、優惠卷在下方各自計算，不共用此函式。
    * 「滿 X 折 Y」每筆訂單只套用一次（user 確認）；maxApplyTimes=-1（不限）不會把它變成「每滿 X」。
    * 只有設了「規律重複」repeatMinimumString（"R#D"：滿 minimum 後每再滿 R 再折 D）才重複：
    * 次數＝1＋floor((value−minimum)/R)，再受 maxApplyTimes 上限（0/1＝僅一次）限制。
@@ -807,6 +807,22 @@ export function evaluatePricing(input: PricingInput): PricingResult {
     const maxApply = Math.trunc(toNumber(r.maxApplyTimes, -1));
     if (maxApply === 1 || maxApply === 0) return 1;
     return capTimes(1 + Math.floor((value - minimum) / rep.minimum), maxApply);
+  };
+  /**
+   * 贈品次數（GIFT_* 類，與折扣類的 thresholdTimes 分開，互不牽動）。
+   * 原站精靈贈品欄位「重複滿額次數」（fieldInfo：重複滿額時，重複享有優惠次數）存成 maxApplyTimes：
+   *   0＝僅一次、-1＝不限（每滿 minimum 送一次）、N（有上限）＝最多 N 次。
+   * 贈品精靈沒有「規律重複」欄位；若後台編輯器另設了 repeatMinimumString（"R#…"），則滿 minimum 後每再滿 R 送一次。
+   * 以件數判斷的類別（滿件贈）value 為件數。
+   */
+  const giftTimes = (r: PricingSalesRule, value: number): number => {
+    const minimum = toNumber(r.minimum);
+    if (value <= 0 || value < minimum) return 0;
+    const maxApply = Math.trunc(toNumber(r.maxApplyTimes, -1));
+    if (maxApply === 0 || maxApply === 1) return 1;
+    const rep = parseRepeatMinimum(r.settings?.repeatMinimumString ?? null);
+    const times = rep ? 1 + Math.floor((value - minimum) / rep.minimum) : minimum > 0 ? Math.floor(value / minimum) : 1;
+    return capTimes(Math.max(1, times), maxApply);
   };
   /** 依級距決定折扣值（不規律）：取 value 已達到的最高級 */
   const tieredDiscount = (r: PricingSalesRule, value: number): number => {
@@ -943,7 +959,7 @@ export function evaluatePricing(input: PricingInput): PricingResult {
       if (mit === "BACKORDER") ls = ls.filter((l) => !!l.src.backOrder);
       const byPiece = cat.includes("PIECE") || cat === "GIFT_LOTTERY";
       const value = byPiece ? qtyOf(ls) : netSum(ls);
-      const times = thresholdTimes(r, value);
+      const times = giftTimes(r, value);
       if (times <= 0) continue;
       const qty = Math.max(1, Math.round(d || 1)) * times;
       const pick = !cat.includes("NO_PICK") && cat !== "GIFT_WITH_PURCHASE" && cat !== "GIFT_LOTTERY";
