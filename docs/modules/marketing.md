@@ -86,7 +86,29 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - [整張訂單] 的門檻以「已扣 [商品][同品項] 折扣後」的商品淨額判斷（例：示範訂單 900002 小計 1000，先套「商品1 買2件9折」折 100 後剩 900，不再滿足「全館滿千折百」；示範資料記的是後者——示範資料是人工捏造的，並非原站實測）。
 - 相同標籤的優惠互斥，勾「可合併計算」者除外；帶「不合併計算標籤」或綁定「不參與活動」的商品不列入該優惠；贈品（itemType=GIFT）不列入門檻。
 - 優惠標籤：最後一個為贈品／優惠對象標籤，其餘為主商品標籤；未設主商品標籤且無綁定時所有商品皆為主商品（原站欄位說明）。
-- 「規律重複」`1000#100`：滿 minimum 後每再滿 1000 再折 100；「不規律級距」取已達到的最高級；maxApplyTimes 限制總次數；maxDiscountAmount／minDiscountTotalPrice >0 才生效。
+- 「規律重複」`1000#100`：滿 minimum 後每再滿 1000 再折 100；「不規律級距」取已達到的最高級；maxDiscountAmount／minDiscountTotalPrice >0 才生效。
+- **「滿 X 折 Y」每筆訂單只折一次**（user 2026-10-26 確認；修正前 600 元套「滿300折50」會折 100）。maxApplyTimes=-1（不限，預設值）**不會**讓門檻類變成「每滿 X」；只有設了「規律重複」`repeatMinimumString` 才重複，次數＝1＋floor((金額−minimum)/R)，再受 maxApplyTimes 上限（0/1＝僅一次、N＝最多 N 次）限制。
+
+#### 各類別是否重複套用
+
+| 類別 | 是否重複 | 依據 |
+|---|---|---|
+| MINIMUM_PRICE_MEET 整張訂單-金額滿多少 | 否；設 repeatMinimumString 才重複（受 maxApplyTimes 上限） | 門檻類 |
+| ITEM_PRICE_MEET 商品-滿額折扣 | 同上 | 門檻類 |
+| MINIMUM_PIECE_MEET／MINIMUM_PRICE_MEET_ITS／MINIMUM_PIECE_MEET_MAIN_PIECE（折扣方式＝固定金額 DOLLAR_PACK_DISCOUNT） | 同上 | 門檻類 |
+| 同上三類（每件折金額／折數／新售價） | 滿門檻後每件都折（受 maxApplyTimes 件數上限）；不是「每滿」 | 單件折扣 |
+| MINIMUM_PRICE_MEET_ITS（品項標籤＋商品標籤） | 滿門檻後帶商品標籤的每件折（受 maxApplyTimes 件數上限） | 單件折扣 |
+| GIFT_WITH_PURCHASE／GIFT_MINIMUM_PRICE_MEET*／GIFT_MINIMUM_PIECE_MEET*／GIFT_LOTTERY（贈品） | 否；設 repeatMinimumString 才依倍數送（受 maxApplyTimes 上限） | 門檻類（同一個 thresholdTimes） |
+| TAG_MATCH 標籤符合 | 每件折（受上限）；設 tagMinimums 時按「組」數重複 | 單件／組合 |
+| X_PIECE_ORIGINAL_PRICE_Y_DISCOUNT | 超過 X 的每件都折 | 類別語意 |
+| ITEM_BUY_X_GOT_Y_FREE／ITEMSET_BUY_X_GOT_Y_FREE 買X送Y | 是，每買 X 送 Y（受 maxApplyTimes 上限） | 類別語意「買X件送Y件」 |
+| ITEMSET_BUNDLE_PRICE 組合價 | 是，每湊 N 件一組（受上限） | 類別語意 |
+| ADDITIONAL_PURCHASE* 加購價 | 可加購件數＝floor(門檻值/minimum)（受上限；-1 且 minimum=0 不限） | 加購件數，不是折扣 |
+| 限制類（CONSTRAINT、CHECKOUT_MINIMUM_PRICE、CREDIT_CARD、ITEMSET_LIMITED_ITEMS、ITEM_PACKAGE）、ITEM_EXCLUDED | 不適用 | 不折扣 |
+| 優惠卷 MINIMUM_PRICE_MEET／MINIMUM_PIECE_MEET | 否，一次 | SPEC 5 章另有「會累算」類別作對照 |
+| 優惠卷 DISCOUNT_FOR_EVERY_MINIMUM_PURCHASE「滿最小單位金額折多少金額(會累算)」 | 是，每滿 minimum 折一次 | SPEC 5 章明文「會累算」 |
+
+註：SPEC 中 repeatMinimumString 欄位說明有「預設同最小單位（規律）」字樣、精靈也有「重複次數：僅一次(0)／不限(-1)」，原站或許在 -1 時預設每滿重複；本站依 user 決定：未明確設定規律重複就只折一次。
 - X 件原價、超過每件折扣：依「商品折扣順序」（預設價格低至高）排前面的先折；組合價依單價比例分攤到各件。
 - 優惠卷：SALES_RULE 類解鎖對應優惠；不可合併計算的優惠卷遇到其他優惠折扣時不套用；會員限定／會員方案／跨團（applyToAllGroupBuy）／使用次數（折扣碼 max_uses 與優惠卷 availableQuota）皆檢查。
 - 隨機類（POINT_RANDOM、GIFT_LOTTERY）由呼叫端注入 `random`；`loadPricingInputForOrder` 固定 `random()=0` 讓重算結果穩定，並以下單時間判斷優惠期限。
