@@ -97,3 +97,27 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 本機：headless 完整下單（選數量→購物袋 AJAX→填收件／地址→付款→同意→送出→完成頁）；curl 竄改金額下單（伺服器重算）、庫存扣減與優惠條件名額遞增、訂單查詢（正確／錯誤電話、無授權不顯示個資）、查訂單號、會員註冊／驗證／登入／選單／修改資料／常用地址／會員中心／登出、客服送出；marketing 引擎接上後重新下單驗證（折扣、運費、竄改金額忽略）。
 - 正式網址（https://groupbuy-delta.vercel.app）：11 頁狀態碼與相似度同本機；headless 下單頁（數量→購物袋 AJAX→$700→$660 含運，無 JS 例外）；訂單查詢 303→明細、錯誤電話不顯示個資、查訂單號、購物袋 AJAX、getFormSettings、isLogin(401)、文章搜尋 JSON、跨租戶 404；說明中心首頁／文章／列表／公告／403 headless 無 JS 例外。
 - 測試資料（`[測試-storefront]`、`sf-*@example.com` 的訂單／會員／地址／寄信紀錄／客服對話、購物袋）測完已刪除，示範商品庫存與優惠條件已使用名額已還原。
+
+## POS 門市收銀（`/{shortUrl}/pos`）
+
+原站規格：`spec/POS_SPEC.md`（主 checkout，gitignored）。原站頁面 HTML、inline script、inline style 被擷取過濾擋下；原站自家 JS `/pos/Pos/js/pos-main.js` 以一般 HTTP 下載後**原封不動**放在 `public/pos/Pos/js/pos-main.js`，畫面與 inline 行為依無障礙樹、pos-main.js 選擇器與截圖推導。
+
+| 檔案 | 內容 |
+|---|---|
+| `lib/modules/storefront/pos/routes.ts` | 全部路由（原站網址：`/pos/ajax/{租戶}/{短網址}/…`、`/pos/{租戶}/{短網址}/…`、`/{租戶}/p/{短網址}/ajax/…`） |
+| `lib/modules/storefront/pos/core.ts` | 範圍檢查（登入者租戶＝網址租戶＝團購租戶）、草稿訂單載入／重算（`priceCart`→marketing 引擎）／序列化（原站 salesOrder 鍵）、付款方式 |
+| `lib/modules/storefront/pos/api.ts` | AJAX 端點（商品、草稿、購物車、優惠卷、點數、會員、結帳、發票未串接） |
+| `lib/modules/storefront/pos/pages.ts` | 主頁／POS 登入頁、openForm 片段、收據、日結 |
+| `templates/storefront/pos/*.html` | 主頁、登入、商品明細、優惠條件、快速折價、優惠券、會員紀錄、手動註冊、日結、調撥、收據 |
+| `public/modules/storefront/pos/` | `pos.css`（版面，依截圖推導）、`pos-page.js`（pos-main 之前：showItem 等原站 inline 函式）、`pos-after.js`（寫入改 POST、分頁、QR、找零、收據） |
+| `supabase/migrations/6003_storefront_pos.sql` | `pos_order_drafts`、`pos_payments`、`pos_daily_balances`、`pos_checkout(p)` 原子結帳 |
+| `supabase/migrations/6004_storefront_pos_demo.sql` | 示範團購 405171「給樂門市 POS（示範）」短網址 `pos01`（render=POS，品項沿用 405167） |
+
+- 登入：未登入開 `/{shortUrl}/pos` 顯示 POS 自己的登入頁（標題「管理員」），表單 POST `/{租戶}/ajax/pos/AdminUser/login.do`＝沿用後台登入（core `login`，同一個 session、同樣的失敗鎖定）。POS 頁為 `auth:'optional'`，因此在 `pages.ts` 自行補 CSRF cookie 與 `csrf.js`（同 dispatch）。
+- 草稿＝`sales_orders.state='DRAFT'`（原站「暫存訂單／取單」）；目前操作中的草稿記在 HttpOnly cookie `GBPOSSO`（原站 ReturnRefund 端點以伺服器端 session 記住訂單）。草稿不扣庫存；每次異動都由伺服器重算金額並寫回（明細折扣、總額、套用中的優惠條件與優惠卷）。
+- 結帳 `pos_checkout`：鎖草稿（並行只有一個成功）→ 依庫存擁有者扣可售現貨／預購（不足整筆回滾）→ 優惠名額 → 點數 → 更新訂單／明細 → 付款明細。前端送的金額只用來比對（不符回 400「訂單金額已變動」）。取貨＝訂單已完成、明細已出貨；未取貨＝處理中。
+- 付款：`getSupportPaymentMethods` 依團購付款方式（256＝自定義，名稱取團購設定 `customPaymentMethod`，示範為「現金」）。**刷卡機／金流／發票機一律【未串接】**，只記錄付款明細（`pos_payments`）。現金找零為本系統補充（原站付款金額上限＝待付款）：付款彈窗多一個「現金實收」欄，結帳時記錄實收與找零並顯示於收據。
+- 發票：開發票回【未串接】；「列印收據」（本系統補充）與「印發票」都開 `Invoice/print.do` 的交易明細收據（註明非統一發票）。
+- 原站以 `$.get` 呼叫的寫入端點，本系統只收 POST；`pos-after.js` 覆寫 `orderService` 對應方法（不修改原站檔）。
+- 推導項目：POS 版面 CSS、登入頁、商品明細／優惠條件／快速折價（折扣標籤）／優惠券／手動註冊會員／會員消費紀錄片段、日結（收款依 `pos_payments`、支出類別取自原站按鈕）、新增調撥精靈（送出走 warehouse 既有端點）、銷售分析彈窗（原站為寫死示意數字，本系統顯示今日實際資料，未設入口）、會員 QR（原站載入 qrcode.js；本系統端點回 1×1 圖＋`?format=json` 網址，由 cdnjs qrcodejs 在瀏覽器產生）、獲得點數（未實作回饋點數，固定 0）。
+- 查詢訂單分頁：`/ajax/SalesOrder/list`（orders 模組）＋`groupBuyId`，按鈕只做全選／取消選取／列印收據／後台訂單管理（原站其餘批次按鈕請在後台訂單頁操作）。

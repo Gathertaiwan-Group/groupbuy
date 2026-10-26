@@ -1,0 +1,8 @@
+{{!-- 快速折價（原站 {baseUrl}/pos/SalesOrder/discountTags.do 片段；原站內容被擷取過濾擋下，標籤依 pos-main.js applyDiscountTag 的 data-operator/data-factor 推導） --}}
+<div class="modal-header"><h5 class="modal-title">快速折價</h5></div>
+<div class="modal-body">
+	<p class="small text-muted mb-2">套用到購物車中已選取的商品（最大折扣 {{maxDiscount}}）</p>
+	<div class="d-flex flex-wrap">
+	{{#each tags}}<a href="javascript:void(0)" class="btn btn-outline-info btn-sm" data-operator="{{this.operator}}" data-factor="{{this.factor}}" onclick="applyDiscountTag()">{{this.label}}</a>{{/each}}
+	</div>
+</div>

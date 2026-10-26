@@ -1,0 +1,70 @@
+{{!-- 新增調撥（原站 {ctxPos}/WarehouseRequisition/create 片段：三步 1 選擇倉庫 / 2 選擇商品 / 3 確認明細；原站片段被擷取過濾擋下，流程推導）。
+     送出走 warehouse 模組既有端點：/ajax/wms/WarehouseRequisition/save（建立調撥單）→ /ajax/wms/WarehouseRequisitionItem/save（明細）。 --}}
+<div class="card" id="posReqCreate">
+	<div class="card-body">
+		<div class="d-flex align-items-center mb-3 pos-req-steps">
+			<span class="badge badge-pill badge-primary js-step-badge" data-s="1">1</span><span class="ml-1 mr-3">選擇倉庫</span><hr class="flex-fill">
+			<span class="badge badge-pill badge-secondary js-step-badge" data-s="2">2</span><span class="ml-1 mr-3">選擇商品</span><hr class="flex-fill">
+			<span class="badge badge-pill badge-secondary js-step-badge" data-s="3">3</span><span class="ml-1">確認明細</span>
+		</div>
+		{{#if warehouses.length}}
+		<div class="js-step" data-s="1">
+			<div class="row">
+				<div class="col-md-6"><label>發出倉</label><select class="browser-default custom-select js-from">{{#each warehouses}}<option value="{{this.id}}">{{this.title}}</option>{{/each}}</select></div>
+				<div class="col-md-6"><label>目標倉</label><select class="browser-default custom-select js-to">{{#each warehouses}}<option value="{{this.id}}" {{#if @last}}selected{{/if}}>{{this.title}}</option>{{/each}}</select></div>
+			</div>
+			<div class="text-right mt-3"><button type="button" class="btn btn-warning js-next" data-to="2">下一步</button></div>
+		</div>
+		<div class="js-step d-none" data-s="2">
+			<table class="table table-sm"><thead><tr><th>商品</th><th>商品代碼</th><th style="width:140px">數量</th></tr></thead>
+			<tbody>{{#each items}}<tr><td>{{this.title}}</td><td>{{this.uid}}</td><td><input type="number" min="0" class="form-control form-control-sm js-qty" data-item-id="{{this.itemId}}" data-title="{{this.title}}" value="0"></td></tr>{{/each}}</tbody></table>
+			<div class="d-flex justify-content-between"><button type="button" class="btn btn-light js-next" data-to="1">上一步</button><button type="button" class="btn btn-warning js-next" data-to="3">下一步</button></div>
+		</div>
+		<div class="js-step d-none" data-s="3">
+			<p class="js-summary"></p>
+			<div class="md-form"><input type="text" class="form-control js-note" id="posReqNote"><label for="posReqNote">備註</label></div>
+			<div class="text-danger small js-help"></div>
+			<div class="d-flex justify-content-between"><button type="button" class="btn btn-light js-next" data-to="2">上一步</button><button type="button" class="btn btn-warning js-submit">建立調撥單</button></div>
+		</div>
+		{{else}}
+		<p class="text-muted">尚未建立倉庫（請先到後台「倉儲管理」新增倉庫）。</p>
+		{{/if}}
+	</div>
+</div>
+<script>
+(function () {
+	var $r = $('#posReqCreate');
+	var esc = function (s) { return $('<span>').text(s == null ? '' : s).html(); };
+	function picked() { return $r.find('.js-qty').toArray().filter(function (i) { return +i.value > 0; }).map(function (i) { return { itemId: i.dataset.itemId, title: i.dataset.title, quantity: +i.value }; }); }
+	function go(s) {
+		if (s === 2 && $r.find('.js-from').val() === $r.find('.js-to').val()) { toastr.error('來源倉與目標倉不可相同'); return; }
+		if (s === 3) {
+			var p = picked();
+			if (!p.length) { toastr.error(GBFi18n.pos_warehouse_modal_select_default || '請選擇品項'); return; }
+			$r.find('.js-summary').html('發出倉：' + esc($r.find('.js-from option:selected').text()) + ' → 目標倉：' + esc($r.find('.js-to option:selected').text()) + '<br>' +
+				p.map(function (x) { return esc(x.title) + ' × ' + x.quantity; }).join('<br>'));
+		}
+		$r.find('.js-step').addClass('d-none').filter('[data-s=' + s + ']').removeClass('d-none');
+		$r.find('.js-step-badge').each(function () { $(this).toggleClass('badge-primary', +this.dataset.s <= s).toggleClass('badge-secondary', +this.dataset.s > s); });
+	}
+	$r.on('click', '.js-next', function () { go(+this.dataset.to); });
+	$r.on('click', '.js-submit', function () {
+		var $b = $(this).addClass('disabled');
+		var p = picked();
+		$.post(GBF.baseUrl + '/ajax/wms/WarehouseRequisition/save.do', { fromWarehouseId: $r.find('.js-from').val(), toWarehouseId: $r.find('.js-to').val(), type: 'REPLENISHMENT', note: $r.find('.js-note').val() })
+			.then(function (res) {
+				var reqId = res.data.warehouseRequisitionId;
+				var d = { action: 'create', warehouseRequisitionId: reqId };
+				p.forEach(function (x, i) { d['data[' + i + '][itemId]'] = x.itemId; d['data[' + i + '][quantity]'] = x.quantity; });
+				return $.post(GBF.baseUrl + '/ajax/wms/WarehouseRequisitionItem/save.do?warehouseRequisitionId=' + reqId, d).then(function () { return reqId; });
+			})
+			.done(function (reqId) {
+				toastr.success('已建立調撥單 ' + reqId);
+				$r.find('.js-qty').val(0); $r.find('.js-note').val(''); go(1);
+				var $list = $('#tab-requisitionList .js-lazy-tab'); $list.data('loaded', false);
+			})
+			.fail(function (x) { $r.find('.js-help').text((x.responseJSON && (x.responseJSON.error || (x.responseJSON.fieldErrors || []).map(function (f) { return f.status; }).join('；'))) || '建立失敗'); })
+			.always(function () { $b.removeClass('disabled'); });
+	});
+})();
+</script>

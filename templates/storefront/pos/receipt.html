@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>收據 {{order.uuid}}</title>
+{{!-- POS 收據／列印畫面（原站「印發票」{ctxPosAjax}/Invoice/print.do；電子發票未串接 → 列印交易明細收據，推導） --}}
+<style>
+body{font-family:"Courier New","Noto Sans TC",monospace;color:#000;background:#f5f5f5;margin:0}
+.receipt{width:280px;margin:16px auto;background:#fff;padding:12px 14px;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+h1{font-size:15px;text-align:center;margin:0 0 4px}
+.c{text-align:center}.r{text-align:right}
+hr{border:0;border-top:1px dashed #000;margin:6px 0}
+table{width:100%;border-collapse:collapse}td{vertical-align:top;padding:1px 0}
+.big{font-size:15px;font-weight:bold}
+.note{font-size:11px;color:#555}
+.actions{text-align:center;margin:12px}
+.actions button{font-size:14px;padding:6px 18px}
+@media print{body{background:#fff}.receipt{box-shadow:none;margin:0 auto}.actions{display:none}}
+</style>
+</head>
+<body>
+<div class="receipt">
+	<h1>{{tenantName}}</h1>
+	<div class="c">{{groupBuy.title}}</div>
+	<div class="c big">交易明細（收據）</div>
+	<hr>
+	<div>訂單編號：{{order.uuid}}</div>
+	<div>交易時間：{{order.dateString}}</div>
+	<div>收銀員：{{cashier}}</div>
+	{{#if order.customerFirstname}}<div>顧客：{{order.customerFirstname}} {{order.customerTelephone}}</div>{{/if}}
+	<hr>
+	<table>
+	{{#each items}}<tr><td colspan="2">{{this.title}}{{#if this.backOrder}}（預購）{{/if}}</td></tr>
+	<tr><td>&nbsp;{{this.price}} x {{this.total}}</td><td class="r">{{this.subtotal}}</td></tr>
+	{{#if this.discount}}<tr><td>&nbsp;折價</td><td class="r">-{{this.discount}}</td></tr>{{/if}}{{/each}}
+	</table>
+	<hr>
+	<table>
+		<tr><td>商品金額</td><td class="r">{{subtotal}}</td></tr>
+		{{#each rules}}<tr><td>{{this.title}}</td><td class="r">-{{this.discount}}</td></tr>{{/each}}
+		{{#each coupons}}<tr><td>優惠券 {{this.coupon}}</td><td class="r">-{{this.discount}}</td></tr>{{/each}}
+		{{#if order.pointsUsed}}<tr><td>點數折抵</td><td class="r">-{{order.pointsUsed}}</td></tr>{{/if}}
+		<tr class="big"><td>合計</td><td class="r">NT${{order.grandTotal}}</td></tr>
+	</table>
+	<hr>
+	<table>
+	{{#each payments}}<tr><td>{{this.tag}}</td><td class="r">{{this.amount}}</td></tr>
+	{{#if this.cashReceived}}<tr><td>&nbsp;實收</td><td class="r">{{this.cashReceived}}</td></tr><tr><td>&nbsp;找零</td><td class="r">{{this.change}}</td></tr>{{/if}}{{/each}}
+	{{#unless payments.length}}<tr><td>付款狀態</td><td class="r">未付款</td></tr>{{/unless}}
+	</table>
+	<hr>
+	<div>發票：{{receiptLabel}}{{#if order.vatId}}　統編 {{order.vatId}}{{/if}}{{#if order.carrierNum}}　載具 {{order.carrierNum}}{{/if}}</div>
+	<div class="note">【未串接】電子發票／發票機：本收據為交易明細，非統一發票。</div>
+	<hr>
+	<div class="c">謝謝光臨</div>
+</div>
+<div class="actions"><button type="button" onclick="window.print()">列印</button></div>
+<script>if (location.search.indexOf('autoprint=1') >= 0) window.print();</script>
+</body>
+</html>

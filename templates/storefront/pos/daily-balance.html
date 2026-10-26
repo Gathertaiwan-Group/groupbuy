@@ -1,0 +1,94 @@
+{{!-- 日結（原站 {ctxPos}/Pos/dailyBalance 片段＋{baseUrl}/ajax/DailyReconciliation/preview.do；原站片段 HTML 被擷取過濾擋下，依截圖推導） --}}
+<div class="card daily-balance" id="posDailyBalance">
+	<div class="card-header bg-white d-flex justify-content-between"><span>日結</span><span class="small text-muted">營業日 <span class="js-db-date">{{today}}</span> <span class="js-db-done badge badge-success d-none">已完成日結</span></span></div>
+	<div class="card-body">
+		<div class="row">
+			<div class="col-md-6">
+				<div class="db-head mb-3">收款</div>
+				<table class="table table-sm"><thead><tr><th>收款方式</th><th>帳面應收</th><th>實際收款</th><th>同應收</th></tr></thead><tbody class="js-db-receipts"><tr><td colspan="4" class="text-center">沒有符合的結果</td></tr></tbody></table>
+				<div class="db-total-box mt-3">
+					<div class="row">
+						<div class="col-4 text-primary">總應收: <span class="js-db-expected">0</span></div>
+						<div class="col-4 text-primary">總已收: <span class="js-db-actual">0</span></div>
+						<div class="col-4 text-danger">短收: <span class="js-db-short">0</span></div>
+						<div class="col-12 text-danger">總支出: <span class="js-db-expense">0</span></div>
+						<div class="col-12 text-info">總金額: <span class="js-db-net">0</span></div>
+					</div>
+					<div class="text-right"><button type="button" class="btn btn-outline-warning btn-sm js-db-apply">套用</button></div>
+				</div>
+			</div>
+			<div class="col-md-6">
+				<div class="db-head">支出
+					<div class="expense-btns mt-2">
+						<button type="button" class="btn btn-success js-db-add" data-cat="文具用品"><i class="fa-light fa-circle-plus"></i> 文具用品</button>
+						<button type="button" class="btn btn-elegant js-db-add" data-cat="雜費"><i class="fa-light fa-circle-plus"></i> 雜費</button>
+						<button type="button" class="btn btn-blue-grey js-db-add" data-cat="電信費"><i class="fa-light fa-circle-plus"></i> 電信費</button>
+						<button type="button" class="btn btn-warning js-db-add" data-cat="餐費"><i class="fa-light fa-circle-plus"></i> 餐費</button>
+						<button type="button" class="btn btn-info js-db-add" data-cat="其他"><i class="fa-light fa-circle-plus"></i> 其他</button>
+					</div>
+				</div>
+				<table class="table table-sm mt-2"><thead><tr><th>支出項目</th><th>支出金額</th><th>刪除</th></tr></thead><tbody class="js-db-expenses"><tr class="js-db-empty"><td colspan="3" class="text-center">沒有符合的結果</td></tr></tbody></table>
+				<button type="button" class="btn btn-finish-balance js-db-finish">完成日結 ( <span class="js-db-diff-label">無差額</span> <span class="js-db-diff">0</span> )</button>
+				<div class="small text-danger mt-1 js-db-help"></div>
+			</div>
+		</div>
+	</div>
+</div>
+<script>
+(function () {
+	var $root = $('#posDailyBalance');
+	var esc = function (s) { return $('<span>').text(s == null ? '' : s).html(); };
+	var state = { receipts: [], expenses: [] };
+	function totals() {
+		var exp = 0, act = 0, ex = 0;
+		state.receipts.forEach(function (r) { ex += +r.expected || 0; act += +r.actual || 0; });
+		state.expenses.forEach(function (e) { exp += +e.amount || 0; });
+		$root.find('.js-db-expected').text(ex);
+		$root.find('.js-db-actual').text(act);
+		$root.find('.js-db-short').text(Math.max(0, ex - act));
+		$root.find('.js-db-expense').text(exp);
+		$root.find('.js-db-net').text(act - exp);
+		var diff = act - ex;
+		$root.find('.js-db-diff').text(diff);
+		$root.find('.js-db-diff-label').text(diff === 0 ? '無差額' : (diff > 0 ? '溢收' : '短收'));
+	}
+	function render() {
+		var rb = state.receipts.map(function (r, i) {
+			return '<tr><td>' + esc(r.tag) + '</td><td>' + esc(r.expected) + '</td><td><input type="number" class="form-control form-control-sm js-db-actual-in" data-i="' + i + '" value="' + esc(r.actual) + '" style="width:110px"></td>' +
+				'<td><button type="button" class="btn btn-sm btn-light m-0 js-db-same" data-i="' + i + '">同應收</button></td></tr>';
+		}).join('');
+		$root.find('.js-db-receipts').html(rb || '<tr><td colspan="4" class="text-center">沒有符合的結果</td></tr>');
+		var eb = state.expenses.map(function (e, i) {
+			return '<tr><td>' + esc(e.category) + ' <input type="text" class="form-control form-control-sm d-inline-block js-db-title" data-i="' + i + '" value="' + esc(e.title) + '" style="width:120px" placeholder="說明"></td>' +
+				'<td><input type="number" class="form-control form-control-sm js-db-amount" data-i="' + i + '" value="' + esc(e.amount) + '" style="width:110px"></td>' +
+				'<td><button type="button" class="btn btn-sm btn-danger m-0 js-db-del" data-i="' + i + '"><i class="fa-light fa-trash"></i></button></td></tr>';
+		}).join('');
+		$root.find('.js-db-expenses').html(eb || '<tr><td colspan="3" class="text-center">沒有符合的結果</td></tr>');
+		totals();
+	}
+	function load() {
+		$.get(baseUrl + '/ajax/DailyReconciliation/preview.do', { groupBuyId: groupBuyId }).done(function (r) {
+			state.receipts = r.data.receipts || [];
+			state.expenses = r.data.expenses || [];
+			$root.find('.js-db-date').text(r.data.businessDate);
+			$root.find('.js-db-done').toggleClass('d-none', !r.data.completed);
+			render();
+		});
+	}
+	$root.on('change', '.js-db-actual-in', function () { state.receipts[this.dataset.i].actual = +this.value || 0; totals(); });
+	$root.on('click', '.js-db-same', function () { var r = state.receipts[this.dataset.i]; r.actual = r.expected; render(); });
+	$root.on('click', '.js-db-add', function () { state.expenses.push({ category: this.dataset.cat, title: '', amount: 0 }); render(); });
+	$root.on('change', '.js-db-title', function () { state.expenses[this.dataset.i].title = this.value; });
+	$root.on('change', '.js-db-amount', function () { state.expenses[this.dataset.i].amount = +this.value || 0; totals(); });
+	$root.on('click', '.js-db-del', function () { state.expenses.splice(+this.dataset.i, 1); render(); });
+	$root.on('click', '.js-db-apply', function () { save(false); });
+	$root.on('click', '.js-db-finish', function () { if (confirm('確認完成今日日結？')) save(true); });
+	function save(complete) {
+		$root.find('.js-db-help').text('');
+		$.post(baseUrl + '/ajax/DailyReconciliation/save.do', { groupBuyId: groupBuyId, complete: complete, receipts: JSON.stringify(state.receipts), expenses: JSON.stringify(state.expenses) })
+			.done(function (r) { toastr.success(r.error || '已儲存'); load(); })
+			.fail(function (x) { $root.find('.js-db-help').text((x.responseJSON && x.responseJSON.error) || '儲存失敗'); });
+	}
+	load();
+})();
+</script>

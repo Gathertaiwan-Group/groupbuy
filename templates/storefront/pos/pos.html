@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+{{!--
+  POS 前台（原站 /{shortUrl}/pos，<title>Pos）。
+  原站頁面 HTML／inline script／inline style 被擷取工具安全過濾擋下 → 結構依無障礙樹、原站 pos-main.js 的選擇器與截圖推導，
+  推導細節見 spec/POS_SPEC.md。原站自家 JS /pos/Pos/js/pos-main.js 原封不動沿用（public/pos/Pos/js/pos-main.js）。
+--}}
+{{> core/layout/head.html}}
+<title>Pos</title>
+<link rel="stylesheet" href="/modules/storefront/pos/pos.css?v={{assetVersion}}">
+<script>
+GBF.ctx = '';
+GBF.webCtx = {{json webCtx}};
+GBF.ctxPos = {{json ctxPos}};
+GBF.ctxPosAjax = {{json ctxPosAjax}};
+GBF.basePos = {{json ctxPos}};
+GBF.basePosAjax = {{json ctxPosAjax}};
+var baseUrl = {{json posBaseUrl}};
+var groupBuyId = {{json groupBuy.id}};
+var uuid = {{json cartUuid}};
+var paramSalesOrderUUID = {{json paramSalesOrderUUID}};
+var paramMode = {{json paramMode}};
+</script>
+</head>
+<body class="pos-body">
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-3">
+	<a href="#" data-activates="slide-out-pos" class="button-collapse-pos"><i class="fa-light fa-bars"></i></a>
+	<ul class="nav pos-tab-switch" role="tablist">
+		<li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#tab-pos" role="tab">新增訂單</a></li>
+		<li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-salesOrder" role="tab">查詢訂單</a></li>
+	</ul>
+	<a class="navbar-brand pos-title" href="javascript:void(0)">OShop - {{groupBuy.title}}</a>
+	<ul class="navbar-nav ml-auto">
+		<li class="nav-item dropdown nav-item-pos">
+			<button class="nav-link dropdown-toggle btn btn-link m-0" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">門市</button>
+			<div class="dropdown-menu dropdown-menu-right"></div>
+		</li>
+		<li class="nav-item dropdown nav-item-usermenu">
+			<button class="nav-link dropdown-toggle btn btn-link m-0" href="#" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">{{adminName}}</button>
+			<div class="dropdown-menu dropdown-menu-right">
+				<div class="nav-item-usermenu-context"></div>
+				<a class="dropdown-item" href="/backend/panel.do" onclick="return confirm('前往後台切換使用者？')">切換使用者</a>
+				<a class="dropdown-item" href="javascript:void(0)" onclick="adminUserSignout()">登出</a>
+			</div>
+		</li>
+	</ul>
+</nav>
+
+<main id="main">
+{{> core/layout/messagebox.html}}
+<div id="slide-out-pos" class="side-nav">
+	<ul class="list-unstyled">
+		<li>
+			<div class="nav nav-tabs" role="tablist">
+				<a class="nav-link active" data-toggle="tab" href="#tab-pos" role="tab">主畫面</a>
+				<a class="nav-link" data-toggle="tab" href="#tab-dailyBalance" role="tab">日結</a>
+				<a class="nav-link" data-toggle="tab" href="#tab-salesOrder" role="tab">訂單列表</a>
+				<a class="nav-link" data-toggle="tab" href="#tab-newRequisition" role="tab">新增調撥</a>
+				<a class="nav-link" data-toggle="tab" href="#tab-requisitionList" role="tab">調撥列表</a>
+			</div>
+		</li>
+	</ul>
+</div>
+
+<div class="tab-content">
+<!-- ═══════════════════ 主畫面 ═══════════════════ -->
+<div class="tab-pane fade show active" id="tab-pos" role="tabpanel">
+<div class="container-fluid pos-container">
+<div class="row">
+	<!-- 左：商品 -->
+	<div class="col-lg-8 px-2">
+		<div class="function-toolbar">
+			<button type="button" class="btn-icon js-expand-toggler" title="展開"><i class="fa-light fa-expand"></i></button>
+			<button type="button" class="btn-icon js-filter-search-toggler" title="搜尋"><i class="fa-light fa-magnifying-glass"></i></button>
+			<select id="pageSizeSelect" class="browser-default custom-select custom-select-sm">
+				<option value="20" selected>20</option><option value="50">50</option><option value="75">75</option><option value="100">100</option>
+			</select>
+			<div class="function-bar-wrapper filter-mode">
+				<div class="search-block">
+					<form id="searchForm" action="#" method="post" autocomplete="off">
+						<input type="text" class="form-control" id="search-item-title" name="t" placeholder="請輸入商品名稱進行搜尋" aria-label="Search" list="searchTitleHistory">
+						<datalist id="searchTitleHistory"></datalist>
+						<button type="submit" class="btn-icon"><i class="fa-light fa-magnifying-glass"></i></button>
+					</form>
+					<form id="searchUidForm" action="#" method="post" autocomplete="off">
+						<input type="text" class="form-control" id="search-item-uid" name="uid" placeholder="請掃描或輸入商品條碼進行搜尋" aria-label="Search" list="searchUidHistory">
+						<datalist id="searchUidHistory"></datalist>
+						<button type="submit" class="btn-icon"><i class="fa-light fa-barcode-read"></i></button>
+					</form>
+				</div>
+				<div class="filter-block">
+					<select id="filter-rules" class="browser-default custom-select custom-select-sm">
+						<option value="default" selected>全部</option>
+						<option value="sysTagHot">熱銷</option>
+						<option value="sysTagNew">新品</option>
+						<option value="sysTagRec">推薦</option>
+						<option value="sysTagSale">折數</option>
+					</select>
+					<div id="buttons_gbis_container"></div>
+					<div id="buttons_tag_container"></div>
+					<div id="buttons_item_container" class="d-none"></div>
+					<input type="hidden" id="tag" value="">
+				</div>
+			</div>
+		</div>
+
+		<div class="product-display">
+			<div class="product-display-header">
+				<div class="item-search-text"></div>
+				<a class="sort-link" data-toggle="modal" data-target="#itemSortModal"><i class="fa-light fa-arrow-down-wide-short"></i><span id="itemSortLabel">價格 (高 → 低)</span></a>
+				<input type="hidden" id="itemSort" value="PRICE_DESC">
+			</div>
+			<div class="tab-content d-flex flex-column flex-fill" style="min-height:0">
+				<div class="product-display-body tab-pane active" id="new-products" role="tabpanel">
+					<div class="product-display-scrollable-content"></div>
+				</div>
+				<div class="product-display-body tab-pane" id="new-sale-rules" role="tabpanel"></div>
+			</div>
+		</div>
+
+		<div class="pos-member-bar">
+			<button type="button" class="btn open-client-login-modal m-0" onclick="openLoginMemberModal()">請顧客註冊會員以享優惠 或以手機登錄會員</button>
+			<div class="customer-pane d-none">
+				<div class="customer-membership-card">
+					<p class="card-state"></p>
+					<p class="card-name"></p>
+					<div class="card-number"></div>
+				</div>
+				<div class="customer-info">
+					<h5 class="customer-name client-name"></h5>
+					<div class="customer-phone-number client-phone-number small"></div>
+					<div class="customer-email client-email small text-muted"></div>
+				</div>
+				<div class="d-flex flex-wrap justify-content-end">
+					<button type="button" class="btn btn-outline-info" onclick="openChangeMemberModal()">會員切換</button>
+					<button type="button" class="btn btn-outline-danger" data-toggle="modal" data-target="#logoutCustomer">會員登出</button>
+					<button type="button" class="btn btn-outline-warning btn-pending-order" onclick="getCustomerSalesOrders(event)">未完成訂單</button>
+					<button type="button" class="btn btn-outline-secondary btn-customer-records disabled d-none">消費記錄</button>
+				</div>
+			</div>
+			<div class="column-customer"></div>
+		</div>
+	</div>
+
+	<!-- 右：購物車 -->
+	<div class="col-lg-4 px-2">
+		<div class="pos-cart-toolbar">
+			<button type="button" class="btn btn-auto-discount" title="自動折扣／手動折扣">
+				<input type="checkbox" class="d-none" id="autoApplySalesRules" checked>
+				<label for="autoApplySalesRules" id="autoApplySalesRulesLabel">自動折扣</label>
+				<span class="toggle-knob"></span>
+			</button>
+			<button type="button" class="btn btn-warning d-none disabled" id="quickDiscountButtton" onclick="showQuickDiscountModal()">快速折價</button>
+			<button type="button" class="btn btn-pos-coupon" onclick="showCounponModal()">優惠券</button>
+			<button type="button" class="btn btn-pos-rules" onclick="showSalesRulesModal()">優惠規則</button>
+		</div>
+		<div class="item-display-window">
+			<div class="card-body bag-body"><table class="table"><tbody><tr><td class="bag-empty">購物車內尚無商品，無法結帳</td></tr></tbody></table></div>
+		</div>
+		<div class="pos-summary-row"><span>商品結帳金額</span><span id="totalPriceValue">NT$0</span></div>
+		<div class="pos-summary-row"><span id="totalDiscountLabel">尚未新增優惠</span><span id="totalDiscountValue">0</span></div>
+		<div class="pos-action-row d-flex" id="posManipulateSalesOrderBtnWrapper">
+			<button type="button" class="btn btn-cache js-cache-order-items disabled" data-toggle="modal" data-target="#cacheOrder">暫存</button>
+			<button type="button" class="btn btn-retrieve js-open-draft-orders">取單</button>
+			<button type="button" class="btn btn-checkout-start js-start-checkout disabled" onclick="checkoutV2Modal.showModal()">結帳<span class="checkout-sep">|</span><span class="checkout-total-label">0</span><span class="checkout-sep">|</span><span class="checkout-price-label">0</span></button>
+		</div>
+		<div class="pos-action-row d-none" id="editSalesOrderBtnWrapper">
+			<button type="button" class="btn btn-primary js-update-edit-sales-order">更新訂單</button>
+		</div>
+		<p class="bag-amount d-none">$0</p>
+		<input type="hidden" name="grand-total" value="0">
+		<input type="hidden" name="total-paid" value="0">
+	</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════ 查詢訂單／訂單列表 ═══════════════════ -->
+<div class="tab-pane fade" id="tab-salesOrder" role="tabpanel">
+<div class="container-fluid pos-container">
+	<div class="card">
+		<div class="card-header bg-white">訂單</div>
+		<div class="card-body px-2">
+			<table id="mydt" class="table table-striped display nowrap w-100">
+				<thead><tr>
+					<th></th><th>選擇</th><th>訂單編號</th><th>顧客姓名</th><th>顧客電話</th><th>顧客Email</th><th>階段</th><th>狀態</th><th>付款方式</th><th>結帳金額</th><th>已付金額</th><th>銀行帳號後五碼</th><th>虛擬帳戶</th><th>信用卡號</th><th>貨運標籤</th><th>配送方式</th><th>出貨貨運</th><th>查貨號碼</th><th>第三方資料</th><th>發送簡訊日期</th><th>修改日期</th>
+				</tr></thead>
+				<tfoot><tr>
+					<th></th><th>選擇</th><th>訂單編號</th><th>顧客姓名</th><th>顧客電話</th><th>顧客Email</th><th>階段</th><th>狀態</th><th>付款方式</th><th>結帳金額</th><th>已付金額</th><th>銀行帳號後五碼</th><th>虛擬帳戶</th><th>信用卡號</th><th>貨運標籤</th><th>配送方式</th><th>出貨貨運</th><th>查貨號碼</th><th>第三方資料</th><th>發送簡訊日期</th><th>修改日期</th>
+				</tr></tfoot>
+			</table>
+		</div>
+	</div>
+</div>
+</div>
+
+<div class="tab-pane fade" id="tab-dailyBalance" role="tabpanel"><div class="container-fluid pos-container js-lazy-tab" data-src="{{ctxPos}}/Pos/dailyBalance"></div></div>
+<div class="tab-pane fade" id="tab-newRequisition" role="tabpanel"><div class="container-fluid pos-container js-lazy-tab" data-src="{{ctxPos}}/WarehouseRequisition/create"></div></div>
+<div class="tab-pane fade" id="tab-requisitionList" role="tabpanel"><div class="container-fluid pos-container js-lazy-tab" data-src="{{ctxPos}}/WarehouseRequisition/list"></div></div>
+</div>
+
+<!-- ═══════════════════ 彈窗 ═══════════════════ -->
+
+<!-- 排序規則 -->
+<div class="modal fade" id="itemSortModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-sm" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">排序規則</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body p-0"><div class="list-group list-group-flush">
+			<a href="#" class="list-group-item list-group-item-action js-item-sort" data-sort="RELEVANCE">相關度</a>
+			<a href="#" class="list-group-item list-group-item-action js-item-sort" data-sort="NEWEST">最新上架</a>
+			<a href="#" class="list-group-item list-group-item-action js-item-sort active" data-sort="PRICE_DESC">價格 (高 → 低)</a>
+			<a href="#" class="list-group-item list-group-item-action js-item-sort" data-sort="PRICE_ASC">價格 (低 → 高)</a>
+		</div></div>
+		<div class="modal-footer"><button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">關閉</button></div>
+	</div></div>
+</div>
+
+<!-- 品項／標籤格狀選擇 -->
+<div class="modal fade" id="gbisSelectPanelModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">選擇品項</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body"></div>
+	</div></div>
+</div>
+<div class="modal fade" id="tagSelectPanelModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">選擇分類</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body"></div>
+	</div></div>
+</div>
+
+<!-- 登入會員 -->
+<div class="modal fade" id="loginMember" tabindex="-1" role="dialog" aria-labelledby="loginMemberModalTitle" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title" id="loginMemberModalTitle">登入會員</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body">
+			<div class="row">
+				<div class="col-md-6 qr-col text-center">
+					<h6>請顧客掃描已註冊/登入</h6>
+					<img id="customerRegisterQRCodeImg" class="my-3" alt="會員註冊 QR Code" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+					<div><button type="button" class="btn btn-warning btn-sm" onclick="showCustomerRegisterPage()">手動註冊會員</button></div>
+				</div>
+				<div class="col-md-6 text-center">
+					<h6>詢問顧客會員手機號碼</h6>
+					<form onsubmit="return false" autocomplete="off">
+						<input type="text" class="form-control" name="customer-telephone" placeholder="請輸入會員手機" inputmode="numeric">
+						<div class="phone-pad">
+							<button class="btn btn-phone-num" data-num="1">1</button><button class="btn btn-phone-num" data-num="2">2</button><button class="btn btn-phone-num" data-num="3">3</button>
+							<button class="btn btn-phone-num" data-num="4">4</button><button class="btn btn-phone-num" data-num="5">5</button><button class="btn btn-phone-num" data-num="6">6</button>
+							<button class="btn btn-phone-num" data-num="7">7</button><button class="btn btn-phone-num" data-num="8">8</button><button class="btn btn-phone-num" data-num="9">9</button>
+							<button class="btn btn-phone-num" data-num="*"><i class="fa-light fa-asterisk"></i></button><button class="btn btn-phone-num" data-num="0">0</button><button class="btn btn-phone-num" data-num="#"><i class="fa-light fa-hashtag"></i></button>
+							<button class="btn btn-phone-num" data-num="delete"><i class="fa-light fa-delete-left"></i></button>
+						</div>
+						<small id="customerHelp" class="form-text"></small>
+						<button type="button" class="btn btn-warning btn-sm js-customer-login">登入會員</button>
+					</form>
+				</div>
+			</div>
+		</div>
+		<div class="modal-footer d-none">
+			<div class="form-check">
+				<input type="checkbox" class="form-check-input" id="saveCustomerSalesOrderBeforeChange" checked>
+				<label class="form-check-label" for="saveCustomerSalesOrderBeforeChange">儲存訂單後再切換會員</label>
+			</div>
+		</div>
+	</div></div>
+</div>
+
+<!-- 登出會員 -->
+<div class="modal fade" id="logoutCustomer" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">登出會員</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body">
+			<p class="logoutCustomer__message">確認要登出目前使用中的會員？</p>
+			<div class="form-check d-none" id="saveCustomerSalesOrderBeforeLogoutBlock">
+				<input type="checkbox" class="form-check-input" id="saveCustomerSalesOrderBeforeLogout" checked>
+				<label class="form-check-label" for="saveCustomerSalesOrderBeforeLogout">儲存訂單後再登出</label>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-secondary" data-dismiss="modal">取消</button>
+			<button type="button" class="btn btn-danger js-customer-logout">確認登出</button>
+		</div>
+	</div></div>
+</div>
+
+<!-- 取回訂單 -->
+<div class="modal fade" id="cachedOrders" tabindex="-1" role="dialog" aria-labelledby="cachedOrdersModalLabel" aria-hidden="true">
+	<div class="modal-dialog modal-xl" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title" id="cachedOrdersModalLabel">取回訂單</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body">
+			<p class="help text-danger"></p>
+			<div class="draft-order-list"></div>
+		</div>
+	</div></div>
+</div>
+
+<!-- 暫存訂單 -->
+<div class="modal fade" id="cacheOrder" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">暫存訂單</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body">是否確認暫存此訂單？您稍候可繼續結帳 <button type="button" class="btn btn-link p-0 m-0 js-open-draft-orders" data-dismiss="modal">取單</button></div>
+		<div class="modal-footer"><button type="button" class="btn btn-success" onclick="confirmCachingOrder().then(function(){ toastr.success('訂單已暫存'); })">確認暫存</button></div>
+	</div></div>
+</div>
+
+<!-- 確認訂單明細（舊版，保留結構） -->
+<div class="modal fade" id="checkoutDetailsModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">確認訂單明細</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body">
+			<div class="mb-2">供貨狀態 <div class="btn-group btn-group-sm"><button class="btn btn-outline-primary active">現貨</button><button class="btn btn-outline-primary">預購</button></div></div>
+			<div class="mb-2">取貨方式 <div class="btn-group btn-group-sm"><button class="btn btn-outline-primary active">本店取</button><button class="btn btn-outline-primary">他店取</button></div></div>
+			<div class="card"><div class="card-body bag-body"><table class="table"><tbody><tr><td>購物車內尚無商品，無法結帳</td></tr></tbody></table></div></div>
+			<div class="pos-summary-row"><span>商品結帳金額</span><span class="bag-amount">NT$0</span></div>
+			<div class="pos-summary-row"><span>訂單結帳總額</span><span class="bag-amount">NT$0</span></div>
+		</div>
+		<div class="modal-footer"><button type="button" class="btn btn-primary" data-dismiss="modal">明細確認</button></div>
+	</div></div>
+</div>
+
+<!-- 結帳確認 -->
+<div class="modal fade" id="checkoutV2Modal" tabindex="-1" role="dialog" aria-hidden="true" data-backdrop="static">
+	<div class="modal-dialog modal-lg modal-dialog-scrollable" role="document"><div class="modal-content">
+		<div class="modal-header align-items-center">
+			<h5 class="modal-title mr-3">結帳確認</h5>
+			<div class="stepper-progress d-flex" data-target="#checkout-stepper">
+				<button type="button" class="btn btn-sm btn-link stepper-step" onclick="activeCheckoutStep1()">Step 1</button>
+				<button type="button" class="btn btn-sm btn-link stepper-step" onclick="activeCheckoutStep2()">結帳</button>
+			</div>
+			<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+		</div>
+		<div class="modal-body">
+			<div id="checkout-stepper-hide-block" class="alert alert-secondary py-1 d-none small"><span id="checkout-stepper-hide-message"></span></div>
+			<div id="checkout-stepper">
+				<!-- Step 1：點數 -->
+				<div data-step="1">
+					<div class="points-list">
+						<div class="d-flex justify-content-between border-bottom py-2"><span>目前所擁有點數</span><span class="points-current"></span></div>
+						<div class="d-flex justify-content-between border-bottom py-2">
+							<div class="form-check"><input type="checkbox" class="form-check-input" id="rewardPoints" checked><label class="form-check-label" for="rewardPoints">獲得點數</label></div>
+							<span><span class="possible-rewards-points"></span><span id="no-rewards-points" class="d-none">未獲得點數</span></span>
+						</div>
+						<div class="d-flex justify-content-between border-bottom py-2"><span>最多可折扣金額</span><span class="possible-discount"></span></div>
+					</div>
+					<div class="input-group my-3">
+						<input type="number" class="form-control" id="rpDiscount" placeholder="輸入折扣金額" min="0">
+						<input type="hidden" name="points" value="">
+						<div class="input-group-append"><button type="button" class="btn btn-info btn-sm m-0" onclick="handlePoints()">使用</button></div>
+					</div>
+					<div class="d-none"><span id="points-result" class="text-success"></span></div>
+					<div class="d-none"><span id="points-result-error" class="text-danger"></span></div>
+					<div class="text-right"><button type="button" class="btn btn-primary btn-sm" onclick="checkoutStep1Next()">下一步</button></div>
+				</div>
+				<!-- Step 2：結帳 -->
+				<div data-step="2">
+					<div class="section-title">取貨狀態</div>
+					<input type="hidden" name="state" value="SHIPPING">
+					<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="shippingStateRadio" id="stateShipping" value="SHIPPED"><label class="form-check-label" for="stateShipping">取貨</label></div>
+					<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="shippingStateRadio" id="stateUnshipping" value="UNSHIPPING"><label class="form-check-label" for="stateUnshipping">未取貨</label></div>
+					<div class="plz-checked-shipping-state text-danger small d-none">請先選擇取貨狀態</div>
+
+					<div class="section-title">付款方式</div>
+					<div class="payment-tag-list"></div>
+					<div class="plz-checked-pay-method text-danger small d-none">請先選擇付款方式</div>
+					<div id="paid-payment-type-list" class="mt-2"></div>
+					<div class="payment-list"></div>
+
+					<div class="pos-summary-row"><span>待付款總額</span><span class="grand-total-text">NT$0</span></div>
+					<input type="hidden" name="grand-total" value="0">
+					<div class="pos-summary-row"><span>已付款總額</span><span class="total-paid-text">NT$0</span></div>
+					<input type="hidden" name="total-paid" value="0">
+					<div class="pos-summary-row d-none" id="posChangeRow"><span>現金實收 <span id="posCashReceivedText">$0</span>，找零</span><span class="text-danger font-weight-bold" id="posChangeText">$0</span></div>
+					<div class="form-check mt-2"><input type="checkbox" class="form-check-input" id="paidCheckbox" checked><label class="form-check-label" for="paidCheckbox">已付款</label></div>
+					<div class="total-paid-invalidation text-danger small">已付款總額不正確，請檢查</div>
+
+					<div class="section-title">統一發票 <small class="text-muted">【電子發票未串接，只記錄】</small></div>
+					<div class="btn-group btn-group-toggle flex-wrap" data-toggle="buttons">
+						<label class="btn btn-outline-secondary btn-sm active"><input type="radio" name="receiptType" value="1" checked> 二聯式</label>
+						<label class="btn btn-outline-secondary btn-sm"><input type="radio" name="receiptType" value="3"> 手機載具</label>
+						<label class="btn btn-outline-secondary btn-sm"><input type="radio" name="receiptType" value="2"> 三聯式</label>
+						<label class="btn btn-outline-secondary btn-sm"><input type="radio" name="receiptType" value="-1"> 通路代開</label>
+						<label class="btn btn-outline-secondary btn-sm"><input type="radio" name="receiptType" value="-2"> 不開立</label>
+					</div>
+					<div id="receipeType-b2b-section" class="mt-2">
+						<div class="md-form"><input type="text" id="receiptTitle" name="receiptTitle" class="form-control"><label for="receiptTitle">公司抬頭(可不填)</label></div>
+						<div class="md-form"><input type="text" id="receiptVatId" name="receiptVatId" class="form-control" required pattern="\d{8}" maxlength="8"><label for="receiptVatId">統一編號</label></div>
+					</div>
+					<div id="receipeType-barcode-section" class="mt-2">
+						<div class="md-form"><input type="text" id="receiptCarrierNum" name="receiptCarrierNum" class="form-control" maxlength="8"><label for="receiptCarrierNum">手機條碼</label><small class="field-help form-text text-muted">手機條碼 第一碼務必為/，後面為7碼(大寫英文，符號，數字)</small></div>
+					</div>
+					<div id="receipeType-channel-section" class="mt-2">
+						<div class="md-form"><input type="text" id="invoiceNumber" name="invoiceNumber" class="form-control"><label for="invoiceNumber">發票條碼</label></div>
+					</div>
+
+					<div class="form-group mt-3"><label for="noteFormControlTextarea">訂單備註</label><textarea class="form-control" id="noteFormControlTextarea" name="note" rows="2"></textarea></div>
+					<div class="form-group"><label for="staffNoteFormControlTextarea">員工備註</label><textarea class="form-control" id="staffNoteFormControlTextarea" name="staffNote" rows="2"></textarea></div>
+					<div class="form-row">
+						<div class="col-md-4 mb-2"><input type="text" class="form-control" id="customerFirstname" placeholder="姓名"></div>
+						<div class="col-md-4 mb-2"><input type="tel" class="form-control" id="customerTelephone" placeholder="電話"></div>
+						<div class="col-md-4 mb-2"><input type="email" class="form-control" id="customerEmail" placeholder="電子郵件"></div>
+					</div>
+					<div class="card-body bag-body d-none"></div>
+				</div>
+			</div>
+		</div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">取消</button>
+			<button type="button" class="btn btn-warning js-checkout-confirm" onclick="checkoutV2Modal.checkout()">結帳</button>
+		</div>
+	</div></div>
+</div>
+
+<!-- 付款金額 -->
+<div class="modal fade" id="paymentInputModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-sm modal-dialog-centered" role="document"><div class="modal-content">
+		<form id="paymentPriceForm" autocomplete="off">
+			<div class="modal-header"><h5 class="modal-title" id="paymentTypeTitle">付款方式</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+			<div class="modal-body">
+				<input type="hidden" id="paymentType" name="paymentType">
+				<input type="hidden" id="paymentTypeName" name="paymentTypeName">
+				<div class="md-form"><input type="number" class="form-control" id="paymentPriceInput" name="paymentPrice" min="0" required><label for="paymentPriceInput" class="active">請輸入金額</label></div>
+				<div class="md-form d-none" id="cashReceivedGroup"><input type="number" class="form-control" id="cashReceivedInput" min="0"><label for="cashReceivedInput" class="active">現金實收（找零計算）</label><small class="form-text">找零：<span id="cashChangePreview" class="text-danger font-weight-bold">$0</span></small></div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancel</button>
+				<button type="submit" class="btn btn-primary btn-sm">確認</button>
+			</div>
+		</form>
+	</div></div>
+</div>
+
+<!-- 結帳結果 -->
+<div class="modal fade" id="checkoutV2ResultModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">結帳確認</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body"><div class="result"></div><div class="error-msg text-danger small"></div></div>
+		<div class="modal-footer">
+			<button type="button" class="btn btn-outline-secondary btn-sm" id="printReceiptButton">列印收據</button>
+			<button type="button" class="btn btn-info btn-sm" id="issueInvoiceButton">開發票</button>
+			<button type="button" class="btn btn-info btn-sm" id="printInvoiceButton">印發票</button>
+			<button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">確認</button>
+		</div>
+	</div></div>
+</div>
+
+<!-- 結果 -->
+<div class="modal fade" id="resultModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">結果</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body"></div>
+		<div class="modal-footer"><button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">確認</button></div>
+	</div></div>
+</div>
+
+<!-- 銷售分析（原站為寫死示意數字；本系統以今日實際資料顯示） -->
+<div class="modal fade" id="salesAnalysisModal" tabindex="-1" role="dialog" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document"><div class="modal-content">
+		<div class="modal-header"><h5 class="modal-title">銷售分析</h5><button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button></div>
+		<div class="modal-body">
+			<div class="row text-center">
+				<div class="col-3"><small>當日新增會員</small><h4>{{stats.newCustomers}}</h4></div>
+				<div class="col-3"><small>當日訂單數</small><h4>{{stats.orders}}</h4></div>
+				<div class="col-3"><small>當日客單價</small><h4>{{stats.avg}}</h4></div>
+				<div class="col-3"><small>當日總業績</small><h4>{{stats.total}}</h4></div>
+			</div>
+		</div>
+	</div></div>
+</div>
+
+<div id="posReceiptPrintArea"></div>
+</main>
+
+<footer class="page-footer py-0 text-center text-md-left grey lighten-2">
+	<div class="footer-copyright py-2 text-center"><div class="container-fluid">Powered By <a href="https://groupbuyforms.tw">團購表單</a> {{year}}.</div></div>
+</footer>
+
+{{> core/layout/foot-scripts.html}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/modules/storefront/pos/pos-page.js?v={{assetVersion}}"></script>
+<script src="/pos/Pos/js/pos-main.js?v=2"></script>
+<script src="/modules/storefront/pos/pos-after.js?v={{assetVersion}}"></script>
+
+<div id="myModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true">
+	<div class="modal-dialog">
+		<div class="modal-content" id="myModalContent"></div>
+		<button type="button" class="close" data-dismiss="modal" aria-label="Close" style="position: absolute; top: 16px; right: 16px; z-index: 1100; pointer-events: auto;"><span aria-hidden="true">&times;</span></button>
+	</div>
+</div>
+</body>
+</html>

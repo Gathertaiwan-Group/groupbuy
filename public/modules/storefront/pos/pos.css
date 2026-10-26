@@ -1,0 +1,189 @@
+/*
+ * POS 前台版面（原站 /{shortUrl}/pos 的 inline <style> 被擷取過濾擋下 → 依原站截圖推導重寫）。
+ * 結構與 class 名稱依 spec/POS_SPEC.md（無障礙樹＋原站 pos-main.js 選擇器）。
+ */
+html, body { height: 100%; }
+body.pos-body { background-color: #eee; font-size: .9rem; letter-spacing: .05em; }
+body.pos-body main#main { padding-top: 0; padding-bottom: 1rem; }
+
+/* ── 頂列 ─────────────────────────────────────────── */
+.pos-body nav.navbar { background-color: #e0e0e0 !important; box-shadow: 0 2px 5px rgba(0,0,0,.16); min-height: 54px; padding: .25rem 1rem; transition: margin-top .3s; }
+.pos-body nav.navbar.hide { display: none; }
+.pos-body .button-collapse-pos { color: #424242; font-size: 1.3rem; padding: .25rem .75rem .25rem .25rem; }
+.pos-body .pos-tab-switch { display: inline-flex; border-radius: .25rem; box-shadow: 0 2px 5px rgba(0,0,0,.2); overflow: hidden; margin-left: .75rem; }
+.pos-body .pos-tab-switch .nav-link { background: #fbe3b4; color: #212121; font-weight: 700; font-size: .8rem; padding: .7rem 1rem; border-radius: 0; }
+.pos-body .pos-tab-switch .nav-link.active { background: #f7c25b; color: #fff; }
+.pos-body .navbar-brand.pos-title { position: absolute; left: 50%; transform: translateX(-50%); font-size: 1.1rem; color: #212121; margin: 0; white-space: nowrap; max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
+.pos-body .navbar .navbar-nav .nav-link { font-size: .8rem; color: #212121; }
+.pos-body .navbar .dropdown-menu { font-size: .85rem; }
+
+/* 左側滑出選單（主畫面／日結／訂單列表／新增調撥／調撥列表） */
+#slide-out-pos.side-nav { width: 240px; background: #fff; padding-top: 1rem; }
+#slide-out-pos .nav-tabs { border: 0; flex-direction: column; }
+#slide-out-pos .nav-tabs .nav-link { color: #424242; border: 0; padding: .9rem 1.5rem; font-size: .95rem; height: auto; line-height: 1.4; }
+#slide-out-pos .nav-tabs .nav-link.active { background: #fbe3b4; color: #212121; }
+
+/* ── 主畫面 ───────────────────────────────────────── */
+.pos-container { padding: 0 .9rem; }
+.function-toolbar { display: flex; align-items: center; min-height: 46px; padding: .25rem 0; }
+.function-toolbar.hide { display: none !important; }
+.function-toolbar .btn-icon { background: none; border: 0; color: #616161; padding: .35rem .6rem; font-size: .95rem; }
+.function-toolbar .custom-select, .function-toolbar .form-control { height: 32px; font-size: .9rem; border: 1px solid #ced4da; border-radius: .2rem; background-color: #f5f5f5; }
+.function-bar-wrapper { display: flex; align-items: center; flex: 1; }
+.function-bar-wrapper .filter-block, .function-bar-wrapper .search-block { display: none; align-items: center; flex-wrap: wrap; }
+.function-bar-wrapper.filter-mode .filter-block { display: flex; }
+.function-bar-wrapper.search-mode .search-block { display: flex; }
+.function-bar-wrapper .search-block form { display: flex; margin-right: .5rem; }
+.function-bar-wrapper .search-block input { width: 260px; }
+.function-bar-wrapper .filter-block > * { margin-right: .6rem; }
+#pageSizeSelect { width: 58px; margin: 0 .6rem 0 .25rem; }
+#filter-rules { width: 42px; padding-left: .25rem; }
+#groupBuyItemSetId, #itemSelectionTag { min-width: 106px; max-width: 220px; }
+
+.product-display { background: #fff; border-radius: .25rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); height: calc(100vh - 186px); min-height: 420px; position: relative; display: flex; flex-direction: column; }
+.product-display.expand { height: calc(100vh - 80px); }
+.product-display-header { display: flex; justify-content: space-between; align-items: center; padding: .4rem 1.1rem .1rem; font-size: .8rem; color: #424242; }
+.product-display-header .search-result { margin: 0; }
+.product-display-header .sort-link { color: #424242; cursor: pointer; }
+.product-display-body { flex: 1; overflow-y: auto; padding: 0 .9rem; }
+.product-display-body.tab-pane:not(.active) { display: none; }
+.product-display-scrollable-content .row { margin: 0 -.25rem; }
+.item-col-5 { flex: 0 0 20%; max-width: 20%; margin-bottom: .6rem; display: block; }
+@media (max-width: 1199px) { .item-col-5 { flex: 0 0 25%; max-width: 25%; } }
+@media (max-width: 767px) { .item-col-5 { flex: 0 0 50%; max-width: 50%; } }
+.card-item { position: relative; box-shadow: none; border: 0; background: transparent; }
+.card-item.disabled { pointer-events: none; opacity: .7; }
+.card-item .card-body a { display: block; cursor: pointer; }
+.card-item .img-container { position: relative; border: 2px solid #9e9e9e; border-radius: .2rem; background: #fff; }
+.card-item .img-container.border-danger { border-color: #ff3547 !important; }
+.card-item .img-1by1 { width: 100%; aspect-ratio: 1 / 1; object-fit: contain; display: block; }
+.card-item .overlay.item-title { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(97,97,97,.88); color: #fff; text-align: center; font-size: 1rem; padding: .1rem .25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-item .item-footer { background: transparent; border: 0; }
+.card-item .text-price, .card-item .text-price-oos { font-size: .95rem; letter-spacing: .12em; padding-top: .3rem; color: #212121; }
+.card-item .text-price-oos { color: #9e9e9e; text-decoration: line-through; }
+.btn-quick-add-cart { position: absolute; z-index: 3; top: 2px; left: 2px; width: 40px; height: 22px; border: 0; border-radius: .15rem; background: #5cb85c; color: #fff; font-size: .7rem; line-height: 22px; padding: 0; box-shadow: none; }
+.btn-quick-add-cart:hover { background: #4cae4c; }
+.add-cart-processor { position: absolute; inset: 0; z-index: 2; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; }
+.badge-tag { margin-left: .3rem; font-weight: 400; }
+.badge-oos { background: #ff3547; color: #fff; }
+.badge-stock { background: #ffbb33; color: #fff; }
+.badge-stock-low { background: #ff8800; color: #fff; }
+.product-pagination-container { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 0 0 .25rem .25rem; }
+.product-pagination-container .pagination .page-link { cursor: pointer; color: #616161; border: 0; }
+.product-pagination-container .pagination .page-item.active .page-link { background: #4285f4; color: #fff; border-radius: .125rem; }
+.pagination-dot { padding: .5rem .3rem; color: #9e9e9e; }
+
+/* 會員列 */
+.pos-member-bar { margin-top: .9rem; }
+.open-client-login-modal { width: 100%; border: 2px solid #f7c25b; background: #fff8e1; color: #f0a020; padding: .7rem; font-size: .85rem; letter-spacing: .08em; }
+.customer-pane { background: #fff; border-radius: .25rem; padding: .5rem .75rem; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+.customer-membership-card { width: 190px; min-height: 84px; border-radius: .5rem; padding: .5rem .75rem; color: #fff; background: linear-gradient(135deg, #f7c25b, #ff8800); margin-right: 1rem; }
+.customer-membership-card .card-state { font-weight: 700; margin: 0; font-size: .85rem; }
+.customer-membership-card .card-name { font-size: .75rem; margin: 0; }
+.customer-membership-card .card-number { font-family: monospace; letter-spacing: .1em; }
+.customer-pane .customer-info { flex: 1; }
+.customer-pane .customer-name { font-size: 1rem; margin: 0; }
+.customer-pane .btn { font-size: .75rem; padding: .4rem .7rem; }
+.column-customer { display: none; }
+
+/* ── 右側購物車 ─────────────────────────────────── */
+.pos-cart-toolbar { display: flex; align-items: center; min-height: 46px; padding: .25rem 0; }
+.pos-cart-toolbar .btn { margin: 0 .4rem 0 0; padding: .55rem 1.1rem; font-size: .8rem; box-shadow: none; }
+.btn-auto-discount { background: #5cb85c; color: #fff; display: inline-flex; align-items: center; padding: 0 !important; overflow: hidden; }
+.btn-auto-discount label { margin: 0; cursor: pointer; padding: .55rem 1.1rem; }
+.btn-auto-discount .toggle-knob { width: 16px; align-self: stretch; background: #e0e0e0; border-left: 1px solid #ccc; }
+.btn-auto-discount.manual { background: #9e9e9e; }
+.btn-pos-coupon, .btn-pos-rules { background: #7cbce9; color: #fff; }
+.item-display-window { background: #fff; border-radius: .25rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); height: calc(100vh - 306px); min-height: 300px; overflow-y: auto; }
+.item-display-window .card-body.bag-body { padding: .9rem 1.1rem; }
+.item-display-window .table { margin: 0; }
+.bag-empty { color: #212121; font-size: 1rem; padding: .6rem .5rem; border-top: 1px solid #eee; }
+.order-item-list-cell { cursor: default; }
+.order-item-list-cell.selected { border-color: #4285f4 !important; box-shadow: 0 0 0 2px rgba(66,133,244,.35); }
+.order-item-list-cell .md-form.input-group { margin-bottom: 0; }
+.order-item-list-cell .md-form .form-control { height: 1.6rem; font-size: .85rem; }
+.order-item-list-cell .card-footer h5 { font-size: .9rem; margin: 0; }
+.sales-order-coupon { display: flex; justify-content: space-between; align-items: center; border: 1px solid #dee2e6; padding: .25rem .5rem; margin-bottom: .4rem; }
+.sales-order-coupon .btn { padding: .3rem .6rem; margin: 0; }
+.pos-summary-row { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: .25rem; box-shadow: 0 1px 3px rgba(0,0,0,.12); padding: .55rem .5rem; margin-top: .55rem; font-size: .85rem; letter-spacing: .08em; }
+.pos-action-row { display: flex; margin-top: .75rem; }
+.pos-action-row .btn { flex: 1; margin: 0 .35rem; padding: .55rem .5rem; font-size: .75rem; box-shadow: none; }
+.pos-action-row .btn:first-child { margin-left: 0; }
+.pos-action-row .btn:last-child { margin-right: 0; }
+.btn-cache { background: #5cb85c; color: #fff; }
+.btn-retrieve { background: #5cb85c; color: #fff; }
+.btn-checkout-start { background: #ffbb33; color: #fff; }
+.pos-action-row .btn.disabled { opacity: .35; }
+.btn-checkout-start .checkout-sep { opacity: .6; margin: 0 .45rem; }
+.btn.spinning { position: relative; }
+
+/* 取回訂單 */
+.draft-order-list { min-height: 50vh; max-height: 70vh; overflow-y: auto; }
+.draft-order-list .card { margin-bottom: .25rem; box-shadow: none; }
+.draft-order-list .order-uuid, .draft-order-list .order-customer-firstname { font-weight: 700; }
+.draft-order-list .order-create-date, .draft-order-list .order-customer-telephone { font-size: .8rem; }
+
+/* 會員登入 */
+#loginMember .phone-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem 0; justify-items: center; margin: 1rem 0; }
+#loginMember .btn-phone-num { width: 52px; height: 52px; border-radius: 50%; border: 1px solid #bdbdbd; background: #fafafa; font-size: 1.1rem; padding: 0; margin: 0; box-shadow: none; color: #212121; }
+#loginMember input[name=customer-telephone] { text-align: center; border: 2px solid #4285f4; border-radius: .2rem; }
+#loginMember .qr-col { border-right: 1px solid #e0e0e0; }
+#customerRegisterQRCodeImg { width: 240px; height: 240px; }
+#customerHelp { color: #ff3547; min-height: 1.2em; }
+
+/* 結帳 */
+#checkoutV2Modal .section-title { font-weight: 700; margin: .6rem 0 .3rem; }
+#checkoutV2Modal .payment-tag-list .btn { margin: .2rem .3rem .2rem 0; }
+#checkoutV2Modal .pane-card { cursor: pointer; box-shadow: none; }
+#checkoutV2Modal .pane-card p { margin: 0; }
+#checkoutV2Modal .total-paid-invalidation { display: none; }
+#checkoutV2Modal .total-paid-invalidation.d-block { display: block; }
+#checkoutV2Modal .stepper-step { color: #9e9e9e; }
+#checkoutV2Modal .stepper-step.active { color: #4285f4; font-weight: 700; }
+#checkoutV2Modal .stepper-step.done { color: #00c851; }
+#checkout-stepper [data-step] { display: none; }
+#checkout-stepper [data-step].active { display: block; }
+#receipeType-barcode-section, #receipeType-channel-section, #receipeType-b2b-section { display: none; }
+#checkoutV2ResultModal .success-msg { font-size: 1.05rem; color: #00c851; margin-bottom: .5rem; }
+
+/* 收據 */
+.pos-receipt { font-family: "Courier New", monospace; width: 280px; margin: 0 auto; font-size: 12px; color: #000; }
+.pos-receipt h6 { text-align: center; font-weight: 700; }
+.pos-receipt table { width: 100%; }
+.pos-receipt td.r { text-align: right; }
+.pos-receipt hr { border-top: 1px dashed #000; margin: .3rem 0; }
+
+/* 優惠券清單（pos-main.js couponListController 範本） */
+#coupon_container .coupon { display: flex; justify-content: space-between; border: 1px solid #dee2e6; border-radius: .35rem; padding: .6rem .8rem; margin-bottom: .5rem; }
+#coupon_container .coupon-code { font-weight: 700; }
+#coupon_container .coupon-expiry-date { font-size: .8rem; color: #757575; }
+#coupon_container .coupon-status-icon.active { color: #00c851; }
+#coupon_container .coupon-status-icon.inactive { color: #9e9e9e; }
+#coupon_container .coupon-action { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; }
+#coupon_container .coupon-use-button { border: 0; border-radius: .25rem; padding: .25rem .9rem; color: #fff; background: #4285f4; }
+#coupon_container .coupon-use-button.using { background: #ff3547; }
+#coupon_container .coupon-use-button.expired { background: #bdbdbd; }
+
+/* 選單格狀清單（makeListGroupFromSelect） */
+.list-group-grid { margin: 0 -.25rem; }
+.list-group-grid .list-group-grid__item { border-radius: .25rem !important; margin: .25rem; flex: 0 0 calc(25% - .5rem); max-width: calc(25% - .5rem); border: 1px solid #dee2e6 !important; }
+
+/* 日結 */
+.daily-balance .db-total-box { border: 1px solid #f7c25b; border-radius: .25rem; padding: 1rem; font-size: .8rem; }
+.daily-balance .btn-finish-balance { background: #f0923a; color: #fff; width: 100%; min-height: 80px; font-size: .8rem; }
+.daily-balance .expense-btns .btn { border-radius: 2rem; padding: .35rem .8rem; font-size: .7rem; margin: .2rem; }
+.daily-balance .db-head { background: #f5f5f5; padding: .6rem .8rem; }
+
+/* 列印收據時只印收據 */
+@media print {
+  body.pos-printing > *:not(#posReceiptPrintArea) { display: none !important; }
+  body.pos-printing #posReceiptPrintArea { display: block !important; }
+}
+#posReceiptPrintArea { display: none; }
+
+/* 微調（對照原站截圖） */
+.card-item .btn-floating.btn-quick-add-cart { width: 40px !important; height: 20px !important; border-radius: .15rem !important; line-height: 20px; box-shadow: none; }
+.card-item .btn-floating.btn-quick-add-cart i { font-size: .75rem; line-height: 20px; width: auto; height: auto; color: #fff; }
+#filter-rules { width: 56px; padding-right: 1.2rem; }
+.pos-body .navbar .btn-link { border: 0; box-shadow: none !important; text-transform: none; padding: .4rem .6rem; color: #212121; background: transparent; }
+#myModal .btn-addShoppingCart { background-color: #4285f4 !important; color: #fff; }

@@ -1,0 +1,37 @@
+{{!-- 調撥列表（原站 {ctxPos}/WarehouseRequisition/list 片段；資料 POST /{t}/ajax/wms/WarehouseRequisition/list.do，與後台調撥單共用 warehouse 模組端點） --}}
+<div class="card">
+	<div class="card-header bg-white">調撥單</div>
+	<div class="card-body px-2">
+		<table id="posRequisitionTable" class="table table-striped display nowrap w-100">
+			<thead><tr><th>單據日期</th><th>單據狀態</th><th>調撥狀態</th><th>調撥類型</th><th>來源倉</th><th>目標倉</th></tr></thead>
+			<tfoot><tr><th>單據日期</th><th>單據狀態</th><th>調撥狀態</th><th>調撥類型</th><th>來源倉</th><th>目標倉</th></tr></tfoot>
+		</table>
+	</div>
+</div>
+<script>
+(function () {
+	var labels = {};
+	var lab = function (k) { return function (v, t) { if (t !== 'display') return v; var m = labels[k]; return $('<span>').text(m && m[v] != null ? m[v] : (v || '')).html(); }; };
+	var wh = function (v, t) { return t === 'display' ? $('<span>').text(v && (v.title || v.name) || '').html() : ''; };
+	$('#posRequisitionTable').DataTable({
+		serverSide: true, processing: true, dom: 'lrtip', order: [[0, 'desc']], pageLength: 10, scrollX: true,
+		ajax: {
+			url: GBF.baseUrl + '/ajax/wms/WarehouseRequisition/list.do', type: 'POST',
+			dataSrc: function (json) {
+				var o = json.options || {};
+				Object.keys(o).forEach(function (k) { if (Array.isArray(o[k])) { labels[k] = {}; o[k].forEach(function (x) { labels[k][x.value] = x.label; }); } });
+				return json.data || [];
+			}
+		},
+		columns: [
+			{ data: 'dateRequiredString', defaultContent: '' },
+			{ data: 'requisitionStatus', defaultContent: '', render: lab('requisitionStatus') },
+			{ data: 'transferStatus', defaultContent: '', render: lab('transferStatus') },
+			{ data: 'type', defaultContent: '', render: lab('type') },
+			{ data: 'fromWarehouse', defaultContent: '', orderable: false, render: wh },
+			{ data: 'toWarehouse', defaultContent: '', orderable: false, render: wh }
+		],
+		language: window.DataTableConfig ? DataTableConfig.i18n : undefined
+	});
+})();
+</script>

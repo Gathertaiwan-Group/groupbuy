@@ -1,0 +1,27 @@
+{{!-- 手動註冊會員（原站 {ctxPosAjax}/Customer/showLoginModal.do 片段被擷取過濾擋下；欄位推導：姓名、手機、Email） --}}
+<div class="modal-header"><h5 class="modal-title">新增會員</h5></div>
+<div class="modal-body">
+<form id="posCustomerRegisterForm" autocomplete="off" onsubmit="return false">
+	<div class="md-form"><input type="text" class="form-control" id="posRegFirstname" name="firstname" maxlength="50" required><label for="posRegFirstname">姓名</label></div>
+	<div class="md-form"><input type="tel" class="form-control" id="posRegTelephone" name="telephone" maxlength="20" required><label for="posRegTelephone">手機</label></div>
+	<div class="md-form"><input type="email" class="form-control" id="posRegEmail" name="email" maxlength="120"><label for="posRegEmail">Email</label></div>
+	<div class="text-danger small js-reg-help"></div>
+</form>
+</div>
+<div class="modal-footer">
+	<button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">取消</button>
+	<button type="button" class="btn btn-warning btn-sm" id="posRegSubmit">註冊並登入會員</button>
+</div>
+<script>
+$('#posRegSubmit').on('click', function () {
+	var $f = $('#posCustomerRegisterForm');
+	var $b = $(this).addClass('disabled');
+	$.post(GBF.ctxPosAjax + '/Customer/register.do', $f.serialize()).done(function (r) {
+		toastr.success(r.error || '會員註冊成功');
+		$('#myModal').modal('hide');
+		customerManager.getCustomer(r.data.telephone, true);
+	}).fail(function (x) {
+		$f.find('.js-reg-help').text((x.responseJSON && x.responseJSON.error) || '註冊失敗');
+	}).always(function () { $b.removeClass('disabled'); });
+});
+</script>

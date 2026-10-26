@@ -1,0 +1,11 @@
+{{!-- 優惠條件（原站 {ctxPos}/SalesRule/rules.do 片段：標題「優惠條件」，無資料「無銷售規則」） --}}
+<div class="modal-header"><h5 class="modal-title">優惠條件</h5></div>
+<div class="modal-body">
+{{#if rules.length}}
+	<ul class="list-group">
+	{{#each rules}}<li class="list-group-item"><div class="font-weight-bold">{{this.title}}</div><small class="text-muted">{{this.descr}}</small></li>{{/each}}
+	</ul>
+{{else}}
+	<div class="card"><div class="card-body py-3">無銷售規則</div></div>
+{{/if}}
+</div>

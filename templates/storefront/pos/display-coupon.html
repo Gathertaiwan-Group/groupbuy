@@ -1,0 +1,10 @@
+{{!-- 優惠券（原站 {ctxPos}/SalesOrder/displayCoupon.do 片段；清單由 pos-main.js couponListController 以 commonCoupons.do 填入 #coupon_container .list-group） --}}
+<div class="modal-header"><h5 class="modal-title">優惠券</h5></div>
+<div class="modal-body" id="coupon_container">
+	<form class="input-group mb-3" onsubmit="redeemCouponByCode($('#posCouponCodeInput').val().trim(), $(this).find('button')); return false;">
+		<input type="text" class="form-control" id="posCouponCodeInput" placeholder="刷讀/輸入優惠券代碼" autocomplete="off">
+		<div class="input-group-append"><button class="btn btn-info btn-sm m-0" type="submit">使用</button></div>
+	</form>
+	<div class="coupon-help text-danger small mb-2"></div>
+	<div class="list-group"></div>
+</div>

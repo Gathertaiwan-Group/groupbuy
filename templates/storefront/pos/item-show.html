@@ -1,0 +1,48 @@
+{{!-- 商品明細（原站 {ctxPosAjax}/Item/show.do 片段；原站片段 HTML 被擷取過濾擋下，依截圖＋無障礙樹推導） --}}
+<div class="modal-body pt-4">
+<form onsubmit="return false" autocomplete="off">
+<input type="hidden" name="popOrderItems[0].itemId" value="{{item.itemId}}">
+<input type="hidden" name="popOrderItems[0].groupBuyItemSetId" value="{{item.groupBuyItemSetId}}">
+<div class="row">
+	<div class="col-md-6">
+		<div id="carousel-{{item.itemId}}-pos" class="carousel slide border" data-ride="carousel">
+			<div class="carousel-inner" role="listbox">
+				{{#each images}}<div class="carousel-item {{#if @first}}active{{/if}}"><img class="d-block w-100" src="{{this}}" alt="{{../item.title}}"></div>{{/each}}
+			</div>
+			{{#if multiImages}}
+			<a class="carousel-control-prev" href="#carousel-{{item.itemId}}-pos" role="button" data-slide="prev"><span class="carousel-control-prev-icon" aria-hidden="true"></span><span class="sr-only">prev</span></a>
+			<a class="carousel-control-next" href="#carousel-{{item.itemId}}-pos" role="button" data-slide="next"><span class="carousel-control-next-icon" aria-hidden="true"></span><span class="sr-only">next</span></a>
+			{{/if}}
+		</div>
+		<div class="d-flex mt-2">{{#each images}}<img src="{{this}}" class="border mr-2" style="width:76px;height:52px;object-fit:contain" data-target="#carousel-{{../item.itemId}}-pos" data-slide-to="{{@index}}">{{/each}}</div>
+		<div class="md-form mt-3 mb-0">
+			<small class="text-muted">選擇</small>
+			<select class="browser-default custom-select" name="popOrderItems[0].total">
+				{{#each qtyOptions}}<option value="{{this}}">{{this}}</option>{{/each}}
+			</select>
+		</div>
+	</div>
+	<div class="col-md-6 d-flex flex-column">
+		<small class="text-muted">商品代碼 {{item.uid}}</small>
+		<h5 class="font-weight-bold mb-1"><span>{{item.title}}</span></h5>
+		{{#if item.retailPrice}}<del class="text-muted">{{retailPriceText}}</del>{{/if}}
+		<div class="row mt-2 text-center">
+			<div class="col-6"><h6 class="bg-warning text-white py-1 mb-0">可售現貨數量</h6><div class="border py-1">{{item.stockAvailable}}</div></div>
+			<div class="col-6"><h6 class="bg-warning text-white py-1 mb-0">可售預購數量</h6><div class="border py-1">{{item.stockBackOrderAvailable}}</div></div>
+		</div>
+		<div class="row mt-3">
+			<div class="col-6"><label class="small mb-0">單價</label><input type="text" class="form-control" value="{{priceText}}" readonly aria-label="單價"></div>
+			<div class="col-6"><label class="small mb-0">折價</label><input type="text" class="form-control" name="popOrderItems[0].discount" value="0" aria-label="折價"></div>
+		</div>
+		<div class="mt-3">
+			<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="popOrderItems[0].status" id="popStatusStock" value="UNSHIPPING" {{#unless backOrderOnly}}checked{{/unless}} {{#unless hasStock}}disabled{{/unless}}><label class="form-check-label" for="popStatusStock">現貨</label></div>
+			<div class="form-check form-check-inline"><input class="form-check-input" type="radio" name="popOrderItems[0].status" id="popStatusBack" value="BACKORDER" {{#if backOrderOnly}}checked{{/if}} {{#unless hasBackOrder}}disabled{{/unless}}><label class="form-check-label" for="popStatusBack">預購</label></div>
+		</div>
+		<div class="mt-auto pt-4">
+			{{#if soldOut}}<button type="button" class="btn btn-block btn-light disabled m-0">已售完</button>
+			{{else}}<button type="button" class="btn btn-block btn-primary btn-addShoppingCart m-0" onclick="posAddItemFromModal(this)"><i class="fa-light fa-cart-shopping"></i> 加入購物車</button>{{/if}}
+		</div>
+	</div>
+</div>
+</form>
+</div>

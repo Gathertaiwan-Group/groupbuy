@@ -1,0 +1,15 @@
+{{!-- 會員消費記錄／未完成訂單（原站 {ctxPos}/SalesOrder/salesOrderList.do 片段，推導） --}}
+<div class="modal-header"><h5 class="modal-title">{{title}}：{{customerFirstname}} {{customerTelephone}}</h5></div>
+<div class="modal-body">
+{{#if orders.length}}
+<table class="table table-sm table-striped">
+	<thead><tr><th>訂單編號</th><th>訂單日期</th><th>階段</th><th class="text-right">結帳金額</th><th></th></tr></thead>
+	<tbody>
+	{{#each orders}}<tr><td>{{this.uuid}}</td><td>{{this.dateCreatedString}}</td><td>{{this.stateLabel}}</td><td class="text-right">${{this.grandTotal}}</td>
+		<td>{{#if this.isDraft}}<button type="button" class="btn btn-warning btn-sm m-0 px-2 py-1" data-sales-order-id="{{this.salesOrderId}}" onclick="getSalesOrder(event); $('#myModal').modal('hide');">取單</button>{{else}}<button type="button" class="btn btn-outline-secondary btn-sm m-0 px-2 py-1" onclick="posOpenReceipt({{this.salesOrderId}})">收據</button>{{/if}}</td></tr>{{/each}}
+	</tbody>
+</table>
+{{else}}
+<p>無訂單</p>
+{{/if}}
+</div>

@@ -11,5 +11,6 @@ import { formPageRoutes } from "./pages-form";
 import { cartRoutes } from "./cart-api";
 import { orderPlaceRoutes } from "./order-place";
 import { helpRoutes } from "./help";
+import { posRoutes } from "./pos/routes";
 
-export const routes: RouteDef[] = [...staticPageRoutes, ...onlineHelpRoutes, ...customerRoutes, ...customerExtraRoutes, ...orderDetailRoutes, ...orderQueryRoutes, ...cartRoutes, ...orderPlaceRoutes, ...formPageRoutes, ...helpRoutes];
+export const routes: RouteDef[] = [...staticPageRoutes, ...onlineHelpRoutes, ...customerRoutes, ...customerExtraRoutes, ...orderDetailRoutes, ...orderQueryRoutes, ...cartRoutes, ...orderPlaceRoutes, ...formPageRoutes, ...helpRoutes, ...posRoutes];
