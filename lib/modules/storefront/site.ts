@@ -4,6 +4,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import type { RequestContext } from "@/lib/core/http/types";
 import { commonVars } from "@/lib/core/render/vars";
 import { notFound } from "@/lib/core/http/errors";
+import { resolveGroupBuyPreferences } from "@/lib/modules/groupbuy/preference";
 import { PLATFORM_THEME, TENANT_THEME, resolveTheme, type ThemePalette } from "./theme";
 import type { CustomerSession } from "./customer-session";
 import { customerMenuHtml } from "./customer-menu";
@@ -151,6 +152,12 @@ export async function groupBuyPreferences(
   const out: Record<string, { value: string | null; settings: Record<string, unknown> }> = {};
   for (const r of (data ?? []) as { name: string; pref_value: string | null; group_buy_preference_settings: Record<string, unknown> }[]) {
     out[r.name] = { value: r.pref_value, settings: r.group_buy_preference_settings ?? {} };
+  }
+  // 本團未設定的鍵：依進階設定頁同一口徑往上找（綁定標籤 → 系統設定 /backend/SystemPreference/panel 的同名鍵）
+  const inherited = await resolveGroupBuyPreferences(tenantId, groupBuyId);
+  for (const [name, r] of Object.entries(inherited)) {
+    if (name in out || r.source === "GROUP_BUY") continue;
+    out[name] = { value: r.prefValue, settings: (r.settings ?? {}) as Record<string, unknown> };
   }
   return out;
 }

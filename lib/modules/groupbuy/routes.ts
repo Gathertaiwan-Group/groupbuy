@@ -10,6 +10,7 @@ import { sysTagRoutes } from "./sys-tag";
 import { reportRoutes } from "./report";
 import { exportRoutes } from "./exports";
 import { preferenceRoutes } from "./preference";
+import { systemPreferenceRoutes } from "./system-preference";
 import { homeViewRoutes } from "./homeview";
 import { facebookAuthRoutes } from "./facebook-auth";
 import { uploadVideoRoutes } from "./upload-video";
@@ -29,6 +30,7 @@ export const routes: RouteDef[] = [
   // 【參考實作】團購標籤（foundation 完成，見 groupbuy-tag.ts）
   ...groupBuyTagRoutes,
   ...preferenceRoutes,
+  ...systemPreferenceRoutes,
   ...homeViewRoutes,
   ...facebookAuthRoutes,
   ...uploadVideoRoutes,

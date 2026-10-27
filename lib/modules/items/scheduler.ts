@@ -2,7 +2,7 @@
 // 原站頁面＋自家 /backend/Scheduler/scheduler.js（4 步驟精靈）；端點 /ajax/Scheduler/{list,summary,save,testSc,delete}。
 // 資料表 groupbuy.schedulers：entity＝排程對象（GroupBuyItemSet／Item）、foreign_id＝團購 id、
 //   params＝{ entityId, title, field, value, syncParentChild, actionKey }、action＝ONLINE／OFFLINE／PRICE。
-// 執行方式（不用 cron）：runDueSchedulers() 在排程頁／團購品項頁／品項與商品列表／前台讀取品項前「惰性執行」本租戶到期排程；
+// 執行方式：每日 Vercel Cron（/api/cron/run → runAllDueSchedulers，跨租戶）＋ runDueSchedulers() 在排程頁／團購品項頁／品項與商品列表／前台讀取品項前「惰性執行」本租戶到期排程；
 //   以條件式更新（status='PENDING' → 'DONE'）搶占每一筆，同一筆排程不會被重複執行。
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { badRequest, notFound } from "@/lib/core/http/errors";
@@ -276,6 +276,29 @@ export async function runDueSchedulers(tenantId: number, opts: { force?: boolean
     if (res.ran) ran++;
   }
   return ran;
+}
+
+/**
+ * 排程端點（/api/cron/run，core/cron.ts）：跨租戶執行所有到期的 PENDING 排程（依預定時間先後，一次最多 limit 筆）。
+ * 與惰性執行共用 claimAndRun 的條件式搶占 → 兩邊同時跑也不會重複執行；重跑只會處理仍是 PENDING 的列（冪等）。
+ */
+export async function runAllDueSchedulers(limit = 200): Promise<{ checked: number; ran: number; failed: number; results: { id: number; ok: boolean; result: string }[] }> {
+  const { data, error } = await db()
+    .from("schedulers")
+    .select("id, tenant_id")
+    .eq("status", "PENDING")
+    .lte("date_scheduled", new Date().toISOString())
+    .order("date_scheduled", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(`[scheduler] 讀取到期排程失敗：${error.message}`);
+  const rows = (data ?? []) as Row[];
+  const results: { id: number; ok: boolean; result: string }[] = [];
+  for (const r of rows) {
+    const res = await claimAndRun(Number(r.tenant_id), Number(r.id), false);
+    if (res.ran) results.push({ id: Number(r.id), ok: res.ok, result: res.result });
+  }
+  return { checked: rows.length, ran: results.length, failed: results.filter((x) => !x.ok).length, results };
 }
 
 /** 不讓排程錯誤影響呼叫端頁面（前台、列表）：記 log 後吞掉 */

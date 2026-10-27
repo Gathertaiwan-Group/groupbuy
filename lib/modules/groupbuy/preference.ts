@@ -50,8 +50,8 @@ export interface PreferenceDef {
 }
 
 /** 虛擬 id 起點（原站：10000000 ≤ id < 20000000 表示「來自系統設定」，即本團未設定） */
-const VIRTUAL_BASE = 10000000;
-const VIRTUAL_MAX = 20000000;
+export const VIRTUAL_BASE = 10000000;
+export const VIRTUAL_MAX = 20000000;
 
 // 原站 405167 列表實際回傳（本帳號可見）的 62 個鍵，依原站順序。[序號, 鍵, 型態, 欄位名稱]
 const CATALOG_ROWS: [number, string, FieldType, string][] = [
@@ -142,7 +142,7 @@ const HIDDEN_DEFS: PreferenceDef[] = HIDDEN_ROWS.map(([name, fieldType, displayN
   level: 1,
   seq: null,
 }));
-const DEF_BY_NAME = new Map<string, PreferenceDef>([...PREFERENCE_CATALOG, ...HIDDEN_DEFS].map((d) => [d.name, d]));
+export const DEF_BY_NAME = new Map<string, PreferenceDef>([...PREFERENCE_CATALOG, ...HIDDEN_DEFS].map((d) => [d.name, d]));
 const DEF_BY_SEQ = new Map<number, PreferenceDef>(PREFERENCE_CATALOG.map((d) => [d.seq as number, d]));
 const CATALOG_NAMES = new Set(PREFERENCE_CATALOG.map((d) => d.name));
 /** 頁面點列 switch 有專用編輯器的隱藏鍵（本團已設定時才列出） */
@@ -163,7 +163,7 @@ const LIST_OPTION_ENUMS: [string, string][] = [
   ["THEME_OUTSTOCK_STYLE_OPTION", "GroupBuyPreference.THEME_OUTSTOCK_STYLE_OPTION"],
 ];
 
-async function listOptions(): Promise<EditorOptions> {
+export async function listOptions(): Promise<EditorOptions> {
   const out: EditorOptions = {};
   for (const [key, enumKey] of LIST_OPTION_ENUMS) {
     out[key] = (await enumOptions(enumKey)).map((o) => ({ label: o.label, value: String(o.value) }));
@@ -245,7 +245,7 @@ async function loadSystemPrefs(tenantId: number, names: string[]): Promise<Map<s
   return new Map(((data ?? []) as SystemPref[]).map((r) => [r.name, r]));
 }
 
-function settingsOf(row: { group_buy_preference_settings?: Json | null; settings?: Json | null } | null | undefined): Json {
+export function settingsOf(row: { group_buy_preference_settings?: Json | null; settings?: Json | null } | null | undefined): Json {
   const s = row ? (row.group_buy_preference_settings ?? row.settings) : null;
   return s && typeof s === "object" && !Array.isArray(s) ? (JSON.parse(JSON.stringify(s)) as Json) : {};
 }
@@ -259,7 +259,7 @@ function defFor(name: string, stored?: PrefRow | null): PreferenceDef {
 }
 
 /** 列表／Editor 回應中的 prefValue（json 型態沒有 pref_value 時以設定內容 JSON 表示，前端顯示「<<更多內容>>」） */
-function displayValue(def: PreferenceDef, prefValue: string | null | undefined, settings: Json): string | undefined {
+export function displayValue(def: PreferenceDef, prefValue: string | null | undefined, settings: Json): string | undefined {
   if (def.fieldType === "json") {
     if (prefValue) return prefValue;
     if (Object.keys(settings).length) return JSON.stringify(settings);
@@ -353,7 +353,7 @@ async function selectCodes(def: PreferenceDef): Promise<string[] | null> {
 }
 
 /** 一般欄位（行內/彈窗）送出的值；undefined＝這次沒送內容 */
-async function plainValue(def: PreferenceDef, values: Json): Promise<string | undefined> {
+export async function plainValue(def: PreferenceDef, values: Json): Promise<string | undefined> {
   const pick = def.fieldType === "ckeditor" && "prefValueCkEditor" in values ? values.prefValueCkEditor : values.prefValue;
   if (pick === undefined) return undefined;
   let v: string;
@@ -481,9 +481,9 @@ async function deletePreference(ctx: RequestContext): Promise<Response> {
 
 // ───────────────────────── 專用編輯器 ─────────────────────────
 
-type Kind = "text" | "html" | "upload" | "int" | "number" | "bool01" | "datetime" | { enum: string[] } | { array: string[] | null };
+export type Kind = "text" | "html" | "upload" | "int" | "number" | "bool01" | "datetime" | { enum: string[] } | { array: string[] | null };
 
-interface SettingsSpec {
+export interface SettingsSpec {
   pref: string;
   fields: Record<string, Kind>;
   /** 未設定時 GET 回 groupBuyPreferenceId:10000000（原站實測：subscription/invoiceSettingsEcpay/funBIZ/bank） */
@@ -719,8 +719,32 @@ function setDotted(obj: Json, path: string, value: unknown) {
   cur[keys[keys.length - 1]] = value;
 }
 
+/**
+ * 專用編輯器送出的欄位 → 合併進 base 設定（系統設定頁共用，見 system-preference.ts）。
+ * 回傳 { next, touched }；欄位錯誤丟 FieldErrors。
+ */
+export function mergeSettingsValues(spec: SettingsSpec, base: Json, values: Json): { next: Json; touched: boolean } {
+  const next: Json = JSON.parse(JSON.stringify(base ?? {}));
+  const errors: FieldError[] = [];
+  let touched = false;
+  for (const [field, kind] of Object.entries(spec.fields)) {
+    const manyCount = values[`${field}-many-count`];
+    if (!(field in values) && manyCount === undefined) continue;
+    setDotted(next, field, normalizeField(field, kind, field in values ? values[field] : [], errors));
+    touched = true;
+  }
+  spec.validate?.(next, errors);
+  if (errors.length) throw new FieldErrors(errors);
+  return { next, touched };
+}
+
+/** 進階設定的專用編輯器規格（系統設定頁沿用同名編輯器：bankSettings、themeSettings…） */
+export function groupSettingsSpec(name: string): SettingsSpec | undefined {
+  return SETTINGS[name];
+}
+
 /** 回傳給前端的 data 不可有 null（原站頁面 JS 會對 object 值做 Object.keys，null 會丟例外；原站 JSON 亦不輸出 null） */
-function stripNulls(v: unknown): unknown {
+export function stripNulls(v: unknown): unknown {
   if (Array.isArray(v)) return v.filter((x) => x !== null && x !== undefined).map(stripNulls);
   if (v && typeof v === "object") {
     const out: Json = {};

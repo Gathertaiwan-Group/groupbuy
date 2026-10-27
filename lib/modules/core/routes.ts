@@ -1,6 +1,6 @@
 // core 模組路由：登入/登出、後台首頁、頂列共用彈窗、服務條款、系統設定（無權限）、select2 共用查詢。
 import type { RouteDef } from "@/lib/core/http/types";
-import { any, fragment, get, page, post } from "@/lib/core/http/route-helpers";
+import { any, fragment, get, page, post, route } from "@/lib/core/http/route-helpers";
 import { json, redirect } from "@/lib/core/http/responses";
 import * as authApi from "./auth-api";
 import * as system from "./system";
@@ -8,8 +8,12 @@ import { lookupGroupBuy } from "./lookup";
 import { uploadedImage } from "./uploads";
 import { uploadImage } from "./upload-api";
 import { getServiceClient } from "@/lib/supabase/server";
+import { cronRun } from "./cron";
 
 export const routes: RouteDef[] = [
+  // ── 排程端點（Vercel Cron 每日；CRON_SECRET 驗證，見 cron.ts）──
+  route(["GET", "POST"], "/api/cron/run", cronRun, { auth: "public" }),
+
   // ── 入口 ────────────────────────────────────────────────
   get("/", () => redirect("/backend/panel.do"), { auth: "public" }),
   get("/backend", () => redirect("/backend/panel.do")),

@@ -1,11 +1,131 @@
+<!--#head-->
+{{!-- 推導頁（原站本帳號「無權限」，頁面未擷取；spec/SPEC.md「系統設定 systempreference-panel」）。
+      版面比照「進階設定」(templates/groupbuy/groupbuypreference-list.html)；端點與專用編輯器取自原站自家 JS
+      public/public/scripts/dataTable.api.min.js（systemPreferenceSettings、accountSettings、bankFormat、EmailSettings、themeSettings）。
+      後端：lib/modules/groupbuy/system-preference.ts --}}
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+var SP_VIRTUAL_BASE = 10000000, SP_VIRTUAL_MAX = 20000000;
+function spIsVirtualId(id) { id = Number(id); return id >= SP_VIRTUAL_BASE && id < SP_VIRTUAL_MAX; }
+function spEscape(s) { return $.fn.dataTable.render.text().display(s == null ? '' : String(s)); }
+
+	$(document).ready(function() {
+		var tableName = '#spTable';
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				edit: { type: 'POST', url: GBF.baseUrl + '/ajax/SystemPreference/update.do?systemPreferenceId=_id_' }
+			},
+			table: tableName,
+			idSrc: 'systemPreferenceId',
+			fields: [
+				DataTableConfig.field_input('內容', 'prefValue'),
+				DataTableConfig.field_ckeditor5('內容', 'prefValueCkEditor'),
+			],
+			i18n:DataTableConfig.i18n,
+		} );
+		window.spEditorMain = editor;
+
+		var table = $(tableName).DataTable( {
+			dom: 'Bfrtip',
+			ajax: { url: GBF.baseUrl + '/ajax/SystemPreference/list.do', type: 'GET' },
+			language:DataTableConfig.i18n,
+			pageLength: 25,
+			order: [],
+			columns:[
+				{ data: 'displayName' },
+				{ data: 'name', className: 'text-muted small' },
+				{ data: 'prefValue',
+					defaultContent: '',
+					render: function ( data, type, row ) {
+						if (type !== 'display') return data == null ? '' : data;
+						var more = (data == null || data === '') ? '' : '&lt;&lt;更多內容&gt;&gt;';
+						if (row.fieldType == 'json') data = spIsVirtualId(row.systemPreferenceId) ? '<span class="text-muted">(未設定)</span>' : '&lt;&lt;更多內容&gt;&gt;';
+						else if (row.fieldType.startsWith('ckeditor')) data = more;
+						else if (row.fieldType == 'select') data = spEscape(renderOption(table, data, row.name));
+						else if (row.fieldType == 'checkbox') data = spEscape(renderOption(table, row.prefValues, row.name));
+						else data = spEscape(data);
+						return DataTableConfig.editIcon(data, type, row, false);
+				} },
+			],
+			buttons: []
+		} );
+
+		$(tableName).on('click', 'tbody td', function () {
+			var tr = $(this).closest('tr');
+			var row = table.row( tr );
+			var data = row.data();
+			if (!data) return;
+			if ($(this).find('div.DTE_Field').length) return;
+			var id = data.systemPreferenceId;
+			if (data.fieldType == 'json') {
+				{{!-- 原站 systemPreferenceSettings(table, id, name)：依鍵開專用編輯器（GET 載入、create 送出） --}}
+				systemPreferenceSettings(table, id, data.name).onComplete(function () { table.ajax.reload( null, false ); }).show();
+				return;
+			}
+			var type = 'text', options;
+			var jsonOptions = (table.ajax.json() || {}).options || {};
+			switch (data.fieldType) {
+			case 'textarea': type = 'textarea'; break;
+			case 'select': type = 'select'; options = [{label:'未設定', value:''}].concat(jsonOptions[data.name] || []); break;
+			case 'checkbox': type = 'checkbox'; options = jsonOptions[data.name] || jsonOptions['boolean[]'] || []; break;
+			case 'upload': type = 'upload'; break;
+			}
+			editor.clear('prefValue');
+			if (type == 'upload') {
+				var uf = DataTableConfig.field_upload(data.displayName, 'prefValue');
+				uf.className = 'full block';
+				editor.add(uf);
+			} else {
+				editor.add( { label: data.displayName, name: 'prefValue', type: type, options: options,
+					separator: type == 'checkbox' ? ',' : undefined, attr: {rows: 10}, className: 'full block' } );
+			}
+			var buttons = [ { label: '確定', className: 'btn-primary', fn: function () { this.submit(); } } ];
+			if (!spIsVirtualId(id)) {
+				buttons.push({ label: '清除設定', className: 'btn-danger', fn: function () {
+					var ed = this;
+					$.post(GBF.baseUrl + '/ajax/SystemPreference/delete.do?systemPreferenceId=' + encodeURIComponent(id))
+						.done(function () { ed.close(); table.ajax.reload( null, false ); })
+						.fail(function (x) { displayAlertWarning((x.responseJSON && x.responseJSON.error) || '刪除失敗'); });
+				} });
+			}
+			editor.title(data.displayName);
+			if (data.fieldType.startsWith('ckeditor')) {
+				editor.hide('prefValue').show('prefValueCkEditor').edit( row, {buttons: buttons} );
+				editor.set('prefValueCkEditor', data.prefValue || '');
+			} else {
+				editor.show('prefValue').hide('prefValueCkEditor').edit( row, {buttons: buttons} );
+			}
+		});
+
+		DataTableHelper.initEditorOnCallback(table, editor);
+		editor.on( 'submitComplete', function () { table.ajax.reload( null, false ); } );
+
+		{{!-- 頁面按鈕：原站自家 JS 的專用編輯器物件 --}}
+		$('button[data-sp]').on('click', function () {
+			switch ($(this).data('sp')) {
+			case 'account': accountSettings.show(); break;
+			case 'email': new EmailSettings().show(); break;
+			case 'bankFormat': bankFormat.show(); break;
+			case 'theme': themeSettings.show(); break;
+			}
+		});
+	});
+</script>
 <!--#body--><div class="container-fluid ">
 	<div class="card mt-4">
 <div class="card-header">系統設定</div>
 <div class="card-body">
-	<!-- 原站本帳號無權限，畫面未擷取（推導頁）：系統層設定（商家帳戶、系統信、金流/物流串接、電子發票串接、管理員、安全性/登入限制、登入日誌…） -->
-	<ul class="list-unstyled mb-0">
-		<li><a href="/backend/SystemPreference/csvEditor">csv 編輯器</a></li>
-	</ul>
+	<div class="mb-3">
+		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="account"><i class="fa-light fa-file-invoice-dollar"></i> GBA帳務設定</button>
+		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="email"><i class="fa-light fa-envelope"></i> 收/寄信設定</button>
+		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="bankFormat"><i class="fa-light fa-building-columns"></i> 自定義銀行對帳檔案格式</button>
+		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="theme"><i class="fa-light fa-palette"></i> 主題顏色</button>
+		<a class="btn btn-sm btn-outline-secondary" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i> csv編輯器</a>
+	</div>
+	<p class="small text-muted mb-2">此處為整個帳號的預設值；團購「進階設定」未設定的項目會使用這裡的值（顯示「來自系統設定」）。金流／物流／電子發票服務商串接設定【未串接】，不在此設定。</p>
+	<table id="spTable" class="table table-hover table-sm" style="width:100%">
+		<thead><tr><th>設定</th><th>設定鍵</th><th>內容</th></tr></thead>
+	</table>
 </div>
 </div>
 </div>
