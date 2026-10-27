@@ -5,6 +5,9 @@
 //   schedulers    跨租戶執行到期的上下架／變價排程（items/scheduler.ts runAllDueSchedulers；條件式搶占，不會重複執行）
 //   posts         排程發布（status=FUTURE）的文章發佈時間已到 → 改為已發布（PUBLISH、is_published=true）
 //   autoCancel    團購勾「自動取消逾期訂單」（autoCancelExpired）時，逾期未付款訂單 → 取消（補回庫存、歷程記 [系統]）
+//                 fix18：每張訂單經 DB cron_auto_cancel_order（migration 8101）單一交易：鎖訂單後重新檢查仍未付款／仍逾期／
+//                 仍為新訂單或處理中／團購仍勾自動取消，才補回庫存並取消；否則略過（不會誤取消剛付款的單）
+//   防重入：整個執行以 cron_locks 租約包住（後到者回 skipped）；通知以 (tenant_id, dedupe_key) 唯一鍵去重
 //   notifications 系統設定「通知設定」：
 //                 未付款提醒（UNPAID_NOTIFICATION_SETTINGS）→ 未付款的新訂單／處理中訂單，下單後每 hours 小時一封、最多 retry 封，
 //                   只寫入 email_messages（template＝UNPAID_REMINDER、status＝NOT_SENT_UNINTEGRATED），🔴不寄出任何信
@@ -13,16 +16,19 @@
 //   housekeeping  清除過期的後台／會員 session、90 天前的登入紀錄、1 天前的前台限流計數、過期的登入認證碼
 // 原站沒有可擷取的排程器畫面；工作範圍依 repo 內既有排程程式碼與 spec（SPEC.md §「訂單成立」autoCancelExpired 推論）。
 // Hobby 方案 Cron 每天最多一次（vercel.json crons，保留當備援）；高頻由 GitHub Actions .github/workflows/cron.yml 每 10 分鐘呼叫。
+import { randomUUID } from "node:crypto";
 import { getServiceClient } from "@/lib/supabase/server";
-import type { AdminSession, RequestContext } from "@/lib/core/http/types";
+import type { RequestContext } from "@/lib/core/http/types";
 import { json } from "@/lib/core/http/responses";
 import { runAllDueSchedulers } from "@/lib/modules/items/scheduler";
-import { releaseOrderStockUndoable } from "@/lib/modules/orders/order-ops";
 import { cronAuthorized, isAutoCancelable, parseJobs, type CronJob } from "./cron-logic";
 import { readSystemSettingAllTenants, SYS_KEYS } from "./system-settings";
 import { isLowStock, lowStockNotificationOf, unpaidNotificationOf, unpaidRemindersDue } from "./system-settings-logic";
 
 const db = () => getServiceClient();
+/** 排程防重入租約（migration 8101 cron_locks）；TTL 大於函式上限 60 秒（app/[[...path]]/route.ts maxDuration） */
+const CRON_LOCK = "cron-run";
+const CRON_LOCK_TTL = 120;
 const AUTO_CANCEL_BATCH = 200;
 type Row = Record<string, unknown>;
 
@@ -38,53 +44,32 @@ async function jobPosts(): Promise<Row> {
   return { published: (data ?? []).map((r) => Number((r as Row).id)) };
 }
 
-/** 只用 tenantId 的系統身分（orders 的庫存工具只讀 session.tenantId） */
-function systemSession(tenantId: number): AdminSession {
-  return { tenantId, adminUserId: 0, sessionId: "cron", account: "[系統]", displayName: null, role: null, permissions: {}, tenantCode: "", tenantName: null, expiresAt: new Date(), persistent: false };
-}
-
 async function jobAutoCancel(): Promise<Row> {
   const gbs = await db().from("group_buys").select("id, tenant_id").eq("auto_cancel_expired", true);
   if (gbs.error) throw new Error(`讀取團購失敗：${gbs.error.message}`);
   const gbIds = (gbs.data ?? []).map((g) => Number((g as Row).id));
-  if (!gbIds.length) return { groupBuys: 0, canceled: [], skipped: [] };
-  const now = Date.now();
+  if (!gbIds.length) return { groupBuys: 0, canceled: 0, skipped: 0 };
   const { data, error } = await db()
     .from("sales_orders")
-    .select("id, tenant_id, group_buy_id, state, total_paid, date_payment_due")
+    .select("id, tenant_id, state, total_paid, date_payment_due")
     .in("group_buy_id", gbIds)
     .in("state", ["NEW", "PROCESSING"])
     .or("total_paid.is.null,total_paid.eq.0")
-    .lt("date_payment_due", new Date(now).toISOString())
+    .lt("date_payment_due", new Date().toISOString())
     .order("date_payment_due", { ascending: true })
     .limit(AUTO_CANCEL_BATCH);
   if (error) throw new Error(`讀取逾期訂單失敗：${error.message}`);
-  const canceled: number[] = [];
-  const skipped: { id: number; reason: string }[] = [];
+  let canceled = 0;
+  let skipped = 0;
   for (const o of (data ?? []) as Row[]) {
-    const id = Number(o.id);
-    const tenantId = Number(o.tenant_id);
-    // 執行前再讀一次（顧客可能剛付款）
-    const cur = await db().from("sales_orders").select("state, total_paid, date_payment_due").eq("tenant_id", tenantId).eq("id", id).maybeSingle();
-    if (cur.error || !cur.data || !isAutoCancelable(cur.data as never, Date.now())) {
-      skipped.push({ id, reason: cur.error ? cur.error.message : "狀態已變更" });
+    if (!isAutoCancelable(o as never, Date.now())) {
+      skipped++;
       continue;
     }
-    const stock = await releaseOrderStockUndoable(systemSession(tenantId), [id]);
-    const { error: upErr } = await db().rpc("orders_admin_update", {
-      p_tenant_id: tenantId,
-      p_ids: [id],
-      p_patch: { state: "CANCELED", date_canceled: new Date().toISOString() },
-      p_admin_user_id: null,
-      p_note: "逾期未付款，系統自動取消（團購設定：自動取消逾期訂單）",
-      p_actor: "SYSTEM",
-    });
-    if (upErr) {
-      await stock.undo();
-      skipped.push({ id, reason: upErr.message });
-      continue;
-    }
-    canceled.push(id);
+    // fix18：鎖訂單→重新檢查（仍未付款、仍逾期、仍可取消、團購仍勾自動取消）→補回庫存→取消，全在 DB 單一交易（migration 8101）
+    const { data: r, error: rErr } = await db().rpc("cron_auto_cancel_order", { p_tenant_id: Number(o.tenant_id), p_id: Number(o.id) });
+    if (rErr || !(r as Row | null)?.canceled) skipped++;
+    else canceled++;
   }
   return { groupBuys: gbIds.length, canceled, skipped };
 }
@@ -139,13 +124,18 @@ async function unpaidReminders(): Promise<Row> {
         subject: `未付款提醒 ${String(o.uuid ?? "")}（第 ${have + 1} 次）`,
         body: `訂單編號：${String(o.uuid ?? "")}\n訂單金額：${String(o.grand_total ?? "")}\n此訂單尚未付款，請儘速完成付款。`,
         status: "NOT_SENT_UNINTEGRATED",
+        // fix18：(tenant_id, dedupe_key) 唯一 → 兩個排程同時跑也只會有一封「第 N 次」
+        dedupe_key: `UNPAID_REMINDER:${Number(o.id)}:${have + 1}`,
       });
     }
     for (let i = 0; i < rows.length; i += 200) {
-      const { error: iErr } = await db().from("email_messages").insert(rows.slice(i, i + 200));
+      const { data: ins, error: iErr } = await db()
+        .from("email_messages")
+        .upsert(rows.slice(i, i + 200), { onConflict: "tenant_id,dedupe_key", ignoreDuplicates: true })
+        .select("sales_order_id");
       if (iErr) throw new Error(`寫入未付款提醒失敗：${iErr.message}`);
+      (out.queued as number[]).push(...((ins ?? []) as Row[]).map((r) => Number(r.sales_order_id)));
     }
-    (out.queued as number[]).push(...rows.map((r) => Number(r.sales_order_id)));
   }
   return out;
 }
@@ -180,6 +170,7 @@ async function lowStockNotices(): Promise<Row> {
     const seen = new Set(((recent ?? []) as Row[]).map((r) => String(r.url)));
     const fresh = low.filter((i) => !seen.has(urlOf(i.id)));
     if (!fresh.length) continue;
+    const bucket = Math.floor(Date.now() / 86400_000);
     const notes = fresh.map((i) => ({
       tenant_id: tenantId,
       admin_user_id: null,
@@ -187,21 +178,29 @@ async function lowStockNotices(): Promise<Row> {
       title: `低庫存通知：${String(i.title ?? "")}（可售 ${Number(i.stock_available)}，低於 ${cfg.stock}）`,
       descr: "系統設定 → 通知設定-低庫存通知",
       url: urlOf(i.id),
+      // fix18：(tenant_id, dedupe_key) 唯一 → 同商品同一 24 小時時段只寫一次（並行排程不重複）
+      dedupe_key: `LOW_STOCK:${Number(i.id)}:${bucket}`,
     }));
-    const { error: nErr } = await db().from("system_notifications").insert(notes);
+    const { data: insNotes, error: nErr } = await db()
+      .from("system_notifications")
+      .upsert(notes, { onConflict: "tenant_id,dedupe_key", ignoreDuplicates: true })
+      .select("url");
     if (nErr) throw new Error(`寫入站內通知失敗：${nErr.message}`);
+    const insertedUrls = new Set(((insNotes ?? []) as Row[]).map((r) => String(r.url)));
+    const written = notes.filter((n) => insertedUrls.has(n.url));
+    if (!written.length) continue;
     if (cfg.email) {
       const { error: eErr } = await db().from("email_messages").insert({
         tenant_id: tenantId,
         template: "LOW_STOCK",
         to_email: cfg.email,
-        subject: `低庫存通知（${fresh.length} 項商品）`,
-        body: notes.map((n) => n.title).join("\n"),
+        subject: `低庫存通知（${written.length} 項商品）`,
+        body: written.map((n) => n.title).join("\n"),
         status: "NOT_SENT_UNINTEGRATED",
       });
       if (eErr) throw new Error(`寫入低庫存待寄紀錄失敗：${eErr.message}`);
     }
-    (out.notified as number[]).push(...fresh.map((i) => Number(i.id)));
+    (out.notified as number[]).push(...fresh.filter((i) => insertedUrls.has(urlOf(i.id))).map((i) => Number(i.id)));
   }
   return out;
 }
@@ -242,15 +241,26 @@ export async function cronRun(ctx: RequestContext): Promise<Response> {
   const parsed = parseJobs(ctx.query.get("jobs"));
   if ("error" in parsed) return json({ code: 400, error: parsed.error }, { status: 400 });
   const started = Date.now();
+  // fix18：防重入租約（GitHub Actions 與 Vercel Cron／手動觸發同時跑時，後到者直接略過）；逾時自動失效
+  const holder = `${started}-${randomUUID()}`;
+  const { data: got, error: lockErr } = await db().rpc("cron_lock_acquire", { p_name: CRON_LOCK, p_holder: holder, p_ttl_seconds: CRON_LOCK_TTL });
+  if (lockErr) return json({ code: 500, error: `取得排程鎖失敗：${lockErr.message}` }, { status: 500, headers: { "Cache-Control": "no-store" } });
+  if (got !== true) {
+    return json({ code: 200, skipped: "另一個排程執行中", startedAt: new Date(started).toISOString(), jobs: {} }, { status: 200, headers: { "Cache-Control": "no-store" } });
+  }
   const results: Row = {};
   let failed = false;
-  for (const job of parsed.jobs) {
-    try {
-      results[job] = await JOBS[job]();
-    } catch (e) {
-      failed = true;
-      results[job] = { error: e instanceof Error ? e.message : String(e) };
+  try {
+    for (const job of parsed.jobs) {
+      try {
+        results[job] = await JOBS[job]();
+      } catch (e) {
+        failed = true;
+        results[job] = { error: e instanceof Error ? e.message : String(e) };
+      }
     }
+  } finally {
+    await db().rpc("cron_lock_release", { p_name: CRON_LOCK, p_holder: holder });
   }
   console.log("[cron]", JSON.stringify(results).slice(0, 2000));
   return json(

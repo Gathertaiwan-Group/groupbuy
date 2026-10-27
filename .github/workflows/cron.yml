@@ -33,8 +33,14 @@ jobs:
           if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET 未設定"; exit 1; fi
           url="$CRON_URL"
           if [ -n "$JOBS" ]; then url="$url?jobs=$(printf '%s' "$JOBS" | tr -cd 'A-Za-z,')"; fi
-          code=$(curl -sS -o body.json -w '%{http_code}' --max-time 120 -X POST -H "Authorization: Bearer $CRON_SECRET" "$url" || echo 000)
+          body="$RUNNER_TEMP/cron-body.json"
+          code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 120 -X POST -H "Authorization: Bearer $CRON_SECRET" "$url" 2>/dev/null || echo 000)
           echo "HTTP $code"
-          head -c 2000 body.json || true
-          echo
+          # repo 公開、log 公開：只印各工作的筆數摘要（陣列→筆數、數字照印、文字／物件一律遮蔽），不印回應內容（成功失敗皆同）
+          jq -r '
+            def v: if type == "array" then length elif type == "number" or type == "boolean" then . elif type == "object" then "{" + ([to_entries[] | "\(.key)=\(.value | v)"] | join(" ")) + "}" else "…" end;
+            if .skipped then "skipped" else (.jobs // {} | to_entries[] |
+              "\(.key): " + (if (.value | type) == "object" then ([.value | to_entries[] | "\(.key)=\(.value | v)"] | join(" ")) else "…" end)) end
+          ' "$body" 2>/dev/null || echo "（回應非 JSON，內容不顯示）"
+          rm -f "$body"
           [ "$code" = "200" ] || { echo "::error::cron 回應 HTTP $code"; exit 1; }

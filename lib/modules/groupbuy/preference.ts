@@ -23,6 +23,7 @@
 //   GET      /backend/GroupBuyTag/wizard?groupBuyId=                      標籤精靈彈窗（HTML 片段）
 //   GET      /ajax/Lookup/country                                         國家 select2（「僅限國家」）
 import { getServiceClient } from "@/lib/supabase/server";
+import { prefHasValue } from "./preference-merge";
 import { groupBuyTag, groupBuyTagGroupBuy } from "@/lib/db/entities";
 import { rowToApi } from "@/lib/db/mapping";
 
@@ -1017,8 +1018,7 @@ export async function resolveGroupBuyPreferences(
   const take = (rows: { name: string; pref_value: string | null; settings: Json }[], source: ResolvedPreference["source"]) => {
     for (const r of rows) {
       if ((names && !names.includes(r.name)) || out[r.name]) continue;
-      const has = (r.pref_value !== null && r.pref_value !== "") || Object.keys(r.settings).length > 0;
-      if (has) out[r.name] = { name: r.name, prefValue: r.pref_value, settings: r.settings, source };
+      if (prefHasValue(r.pref_value, r.settings)) out[r.name] = { name: r.name, prefValue: r.pref_value, settings: r.settings, source };
     }
   };
   const fromRows = (rows: PrefRow[]) => rows.map((r) => ({ name: r.name, pref_value: r.pref_value, settings: settingsOf(r) }));
