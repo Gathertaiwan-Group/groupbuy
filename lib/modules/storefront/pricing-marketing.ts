@@ -1,7 +1,8 @@
 // 優惠計算正式版：包裝 marketing 模組的 pricing-loader（讀 DB）＋ pricing-rules（純函式引擎）成 storefront 的 PricingRulesProvider。
 // 只讀 import marketing，不改 marketing 的檔。金額一律在伺服器端重算（購物袋顯示與建立訂單都經 priceCart）。
 import { getServiceClient } from "@/lib/supabase/server";
-import { evaluatePricing, resolveGifts, type PricingCoupon, type PricingCustomer } from "@/lib/modules/marketing/pricing-rules";
+import { evaluatePricing, resolveGifts, ruleAvailability, validateCoupon, type PricingCoupon, type PricingCustomer } from "@/lib/modules/marketing/pricing-rules";
+import { couponRejectionOf } from "@/lib/modules/marketing/usage-release";
 import { findCouponByCode, loadCartLines, loadGiftCandidates, loadSalesRulesForGroupBuy } from "@/lib/modules/marketing/pricing-loader";
 import type { AppliedCoupon, AppliedSalesRule, PricingRulesProvider } from "./pricing";
 
@@ -45,6 +46,21 @@ export const marketingPricingRules: PricingRulesProvider = {
       coupon = await findCouponByCode(db, tenantId, groupBuy.id, code);
       if (!coupon) couponNotes.push(`優惠碼「${code}」不存在或已失效`);
     }
+    // fix10：已失效的優惠碼（刪除／停用／不適用此團購／用滿／綁定活動停用或結束）結帳時要擋下，不可默默以原價成立訂單
+    const linked = coupon && coupon.category === "SALES_RULE" && coupon.salesRuleId ? rules.find((x) => x.salesRuleId === coupon!.salesRuleId) : undefined;
+    const couponRejection = code
+      ? couponRejectionOf({
+          code,
+          found: !!coupon,
+          validity: coupon ? validateCoupon(coupon, { groupBuyId: groupBuy.id, customer }) : null,
+          linkedRule:
+            coupon && coupon.category === "SALES_RULE" && coupon.salesRuleId
+              ? linked
+                ? ruleAvailability(linked, { customer, postcode: postcode || null })
+                : null
+              : undefined,
+        })
+      : null;
 
     const r = evaluatePricing({
       lines: cartLines,
@@ -88,6 +104,7 @@ export const marketingPricingRules: PricingRulesProvider = {
       coupons,
       lineDiscounts,
       couponNotes,
+      couponRejection,
       freeShipping: r.freeShipping,
       blockers: r.checkoutAllowed ? [] : r.messages.length ? r.messages : ["未符合本團購的購買條件，暫時無法結帳"],
       giftNotes,

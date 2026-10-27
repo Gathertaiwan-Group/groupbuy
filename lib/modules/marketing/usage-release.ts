@@ -320,3 +320,50 @@ export function generateMaxUsesNotice(maxUses: number, availableQuota: number | 
   const mu = maxUses < 0 ? "無限制" : `${maxUses} 次`;
   return `注意：每組折扣碼可使用次數（${mu}）大於此優惠卷「相同折扣碼可被重複使用結帳次數」（${q} 次），兩者取較小者，實際每組折扣碼最多可使用 ${q} 次`;
 }
+
+/* ───────────── 前台結帳：購物袋的優惠碼已失效（fix10） ───────────── */
+
+/** 購物袋已輸入、但結帳時不能用的優惠碼：QUOTA＝已達使用上限；INVALID＝不存在／已刪除／已停用／不適用此團購／綁定活動已結束等 */
+export interface CouponRejection {
+  code: string;
+  kind: "QUOTA" | "INVALID";
+  reason: string;
+}
+
+/** 會讓「綁定優惠條件」型優惠碼失效的活動狀態（ruleAvailability 的 reason）；其他（會員身份、郵遞區號）屬使用條件，不在此列 */
+const LINKED_RULE_DEAD = new Set(["停用中", "尚未開始", "已結束"]);
+
+/**
+ * 判斷購物袋輸入的優惠碼在結帳時是否已失效（與「用滿」同等處理：擋下不成立訂單）。
+ * - found=false：折扣碼或所屬優惠卷不存在（已刪除）
+ * - validity：validateCoupon 的結果（停用、不適用此團購、已達上限、限會員…）
+ * - linkedRule：SALES_RULE 型優惠碼綁定的優惠條件；null＝找不到（已停用或已刪除——停用的條件不會載入），undefined＝不是此類
+ * 未達門檻等「使用條件」不在此判斷（維持購物袋提示），回傳 null。
+ */
+export function couponRejectionOf(input: {
+  code: string;
+  found: boolean;
+  validity?: { valid: boolean; reason: string } | null;
+  linkedRule?: { available: boolean; reason: string } | null;
+}): CouponRejection | null {
+  const code = String(input.code ?? "").trim();
+  if (!code) return null;
+  if (!input.found) return { code, kind: "INVALID", reason: "不存在或已被刪除" };
+  const v = input.validity;
+  if (v && !v.valid) {
+    return /上限/.test(v.reason) ? { code, kind: "QUOTA", reason: v.reason } : { code, kind: "INVALID", reason: v.reason.replace(/^此折扣碼/, "") };
+  }
+  if (input.linkedRule === null) return { code, kind: "INVALID", reason: "綁定的優惠活動已停用或已刪除" };
+  if (input.linkedRule && !input.linkedRule.available) {
+    if (input.linkedRule.reason === "可供優惠數量已用完") return { code, kind: "QUOTA", reason: "綁定的優惠活動名額已滿" };
+    if (LINKED_RULE_DEAD.has(input.linkedRule.reason)) return { code, kind: "INVALID", reason: `綁定的優惠活動${input.linkedRule.reason}` };
+  }
+  return null;
+}
+
+/** 結帳擋下訊息（不成立訂單）；沒有失效的優惠碼回 null */
+export function checkoutCouponError(rej: CouponRejection | null | undefined): string | null {
+  if (!rej) return null;
+  if (rej.kind === "QUOTA") return "優惠碼已達使用上限，請移除後再結帳";
+  return `優惠碼「${rej.code}」已失效（${rej.reason}），請移除後再結帳`;
+}

@@ -13,7 +13,7 @@ import { marketingPricingRules } from "./pricing-marketing";
 import { PM_CODE_BY_BIT } from "./payment-codes";
 import { applyPoints } from "./points";
 import type { SfGroupBuy } from "./site";
-import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
+import { couponCodeHasQuota, type CouponRejection } from "@/lib/modules/marketing/usage-release";
 
 // ───────────────────────── 型別 ─────────────────────────
 
@@ -140,6 +140,8 @@ export interface PricingResult {
   totalPieces: number;
   /** 優惠卷未成立的原因（例如未達門檻） */
   couponNotes: string[];
+  /** 購物袋輸入的優惠碼已失效（停用／刪除／不適用此團購／用滿…）：結帳時擋下（fix10） */
+  couponRejection: CouponRejection | null;
   errors: string[];
 }
 
@@ -173,6 +175,8 @@ export interface PricingRulesProvider {
     coupons: AppliedCoupon[];
     lineDiscounts: Map<string, number>;
     couponNotes: string[];
+    /** 購物袋輸入的優惠碼已失效（結帳時擋下） */
+    couponRejection?: CouponRejection | null;
     /** 優惠條件／優惠卷達成免運 */
     freeShipping?: boolean;
     /** 限制類優惠（例如未達最低購買條件）不允許結帳時的原因 */
@@ -361,6 +365,7 @@ export const fallbackPricingRules: PricingRulesProvider = {
     const salesRules: AppliedSalesRule[] = [];
     const coupons: AppliedCoupon[] = [];
     const couponNotes: string[] = [];
+    let couponRejection: CouponRejection | null = null;
     const paid = lines.filter((l) => !l.gift && l.qty > 0);
     if (paid.length === 0) return { salesRules, coupons, lineDiscounts, couponNotes };
 
@@ -454,9 +459,17 @@ export const fallbackPricingRules: PricingRulesProvider = {
         .maybeSingle();
       const row = cc as Record<string, unknown> | null;
       const gc = (row?.group_buy_coupons ?? null) as Record<string, unknown> | null;
-      if (!row || !gc || !row.is_active || !gc.is_active) continue;
+      if (!row || !gc) {
+        couponRejection ??= { code, kind: "INVALID", reason: "不存在或已被刪除" };
+        continue;
+      }
+      if (!row.is_active || !gc.is_active) {
+        couponRejection ??= { code, kind: "INVALID", reason: "已停用" };
+        continue;
+      }
       if (!couponCodeHasQuota({ usedCount: num(row.used_count), maxUses: num(row.max_uses, -1), availableQuota: num(gc.available_quota, -1) })) {
         couponNotes.push(`${code}：已達使用上限`);
+        couponRejection ??= { code, kind: "QUOTA", reason: "已達使用上限" };
         continue;
       }
       const amount = paid.reduce((s, l) => s + lineAmount(l), 0);
@@ -489,7 +502,7 @@ export const fallbackPricingRules: PricingRulesProvider = {
         discount: d,
       });
     }
-    return { salesRules, coupons, lineDiscounts, couponNotes };
+    return { salesRules, coupons, lineDiscounts, couponNotes, couponRejection };
   },
 };
 
@@ -567,6 +580,7 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     pointsMax: pts.max,
     totalPieces,
     couponNotes: [...applied.couponNotes, ...(applied.giftNotes ?? [])],
+    couponRejection: applied.couponRejection ?? null,
     errors: [...(applied.blockers ?? []), ...(shipping.errors ?? [])],
   };
 }

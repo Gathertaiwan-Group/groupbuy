@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 type R = typeof import("./usage-release");
 const R: R = await import(new URL("./usage-release.ts", import.meta.url).href);
 const { USAGE_OFF_STATES, usageTransition, usageLedgerFromPayload, releaseUsage, reclaimUsage, couponTotals, backfillLedger, BACKFILL_SKIP_STATES, mergeLedgers, MERGED_CHILD_STATE, couponCodeHasQuota } = R;
-const { holdsUsage, usageSyncAction, USAGE_NOT_HELD_STATES, reclaimBlockedBy, reclaimQuotaMessage, checkoutCouponQuotaError, generateMaxUsesNotice } = R;
+const { holdsUsage, usageSyncAction, USAGE_NOT_HELD_STATES, reclaimBlockedBy, reclaimQuotaMessage, checkoutCouponQuotaError, generateMaxUsesNotice, couponRejectionOf, checkoutCouponError } = R;
 
 const counters = (cc: [number, number][], gbc: [number, number][], sr: [number, number][]) => ({
   COUPON_CODE: new Map(cc),
@@ -485,5 +485,94 @@ describe("migration 8004 與規則一致", () => {
     const body = src.slice(src.indexOf("async function couponRedeem"), src.indexOf("/* ─────────────────────────── 超商取貨資訊"));
     assert.ok(body.indexOf("adjustOrderCouponUsage(session.tenantId, id, Number(cc.id), 1)") < body.indexOf('from("sales_order_coupons").insert'));
     assert.match(body, /adjustOrderCouponUsage\(session\.tenantId, id, Number\(cc\.id\), -1\)/);
+  });
+});
+
+describe("fix10 ④前台：購物袋的優惠碼已失效 → 比照用滿擋下", () => {
+  test("刪除（找不到）→ 已失效", () => {
+    const r = couponRejectionOf({ code: "X1", found: false });
+    assert.deepEqual(r, { code: "X1", kind: "INVALID", reason: "不存在或已被刪除" });
+    assert.equal(checkoutCouponError(r), "優惠碼「X1」已失效（不存在或已被刪除），請移除後再結帳");
+  });
+  test("折扣碼或優惠卷停用、不適用此團購、限會員 → 已失效（擋下）", () => {
+    for (const reason of ["此折扣碼已停用", "此折扣碼不適用於此團購", "此折扣碼限會員使用，請先登入"]) {
+      const r = couponRejectionOf({ code: "X2", found: true, validity: { valid: false, reason } });
+      assert.equal(r?.kind, "INVALID", reason);
+      assert.match(checkoutCouponError(r) ?? "", /^優惠碼「X2」已失效（.+），請移除後再結帳$/);
+    }
+  });
+  test("用滿 → 與 fix8 相同訊息", () => {
+    const r = couponRejectionOf({ code: "X3", found: true, validity: { valid: false, reason: "此折扣碼已達使用次數上限" } });
+    assert.equal(r?.kind, "QUOTA");
+    assert.equal(checkoutCouponError(r), "優惠碼已達使用上限，請移除後再結帳");
+  });
+  test("綁定優惠條件的碼：活動停用／刪除（未載入）、已結束、尚未開始 → 已失效；名額滿 → 用滿", () => {
+    assert.equal(couponRejectionOf({ code: "S", found: true, validity: { valid: true, reason: "" }, linkedRule: null })?.kind, "INVALID");
+    assert.match(couponRejectionOf({ code: "S", found: true, validity: { valid: true, reason: "" }, linkedRule: { available: false, reason: "已結束" } })?.reason ?? "", /已結束/);
+    assert.equal(couponRejectionOf({ code: "S", found: true, validity: { valid: true, reason: "" }, linkedRule: { available: false, reason: "尚未開始" } })?.kind, "INVALID");
+    assert.equal(couponRejectionOf({ code: "S", found: true, validity: { valid: true, reason: "" }, linkedRule: { available: false, reason: "可供優惠數量已用完" } })?.kind, "QUOTA");
+  });
+  test("有效的碼、使用條件不符（會員身份、郵遞區號、未達門檻）、沒輸入碼 → 不擋（維持購物袋提示）", () => {
+    assert.equal(couponRejectionOf({ code: "OK", found: true, validity: { valid: true, reason: "" } }), null);
+    assert.equal(couponRejectionOf({ code: "OK", found: true, validity: { valid: true, reason: "" }, linkedRule: { available: false, reason: "不符合限定郵遞區號" } }), null);
+    assert.equal(couponRejectionOf({ code: "OK", found: true, validity: { valid: true, reason: "" }, linkedRule: { available: true, reason: "" } }), null);
+    assert.equal(couponRejectionOf({ code: "", found: false }), null);
+    assert.equal(checkoutCouponError(null), null);
+  });
+  test("前台計價（正式版與備援版）都回報 couponRejection，confirmOrder 在呼叫 sf_place_order 之前擋下", () => {
+    const pm = readFileSync(new URL("../storefront/pricing-marketing.ts", import.meta.url), "utf8");
+    assert.match(pm, /couponRejectionOf\(\{/);
+    assert.match(pm, /validateCoupon\(coupon, \{ groupBuyId: groupBuy\.id, customer \}\)/);
+    const pr = readFileSync(new URL("../storefront/pricing.ts", import.meta.url), "utf8");
+    assert.match(pr, /couponRejection: applied\.couponRejection \?\? null/);
+    assert.match(pr, /kind: "INVALID", reason: "已停用"/);
+    const src = readFileSync(new URL("../storefront/order-place.ts", import.meta.url), "utf8");
+    const i = src.indexOf("checkoutCouponError(built.pricing.couponRejection)");
+    assert.ok(i > 0 && i < src.indexOf('rpc("sf_place_order"'));
+  });
+});
+
+describe("migration 8005（fix10）", () => {
+  const sql = readFileSync(new URL("../../../supabase/migrations/8005_marketing_usage_lock_order_adjust_cleanup.sql", import.meta.url), "utf8");
+  const fn = (name: string) => {
+    const a = sql.indexOf(`function groupbuy.${name}(`);
+    const b = sql.indexOf("$$;", a);
+    return sql.slice(a, b);
+  };
+  test("③a 加鎖順序：折扣碼 → 團購優惠卷 → 優惠條件，各依 id 排序", () => {
+    const b = fn("marketing_lock_usage_refs");
+    const a1 = b.indexOf("from groupbuy.coupon_codes cc");
+    const a2 = b.indexOf("from groupbuy.group_buy_coupons g");
+    const a3 = b.indexOf("from groupbuy.sales_rules s");
+    assert.ok(a1 > 0 && a1 < a2 && a2 < a3);
+    assert.equal((b.match(/order by (cc|g|s)\.id\s+for update/g) ?? []).length, 3);
+  });
+  test("③a 觸發器：先一次鎖好整個關聯群組，再逐張同步", () => {
+    const b = fn("trg_sales_orders_marketing_usage");
+    assert.ok(b.indexOf("marketing_lock_usage_refs(new.tenant_id, v_ids)") > 0);
+    assert.ok(b.indexOf("marketing_lock_usage_refs") < b.indexOf("marketing_sync_order_usage"));
+  });
+  test("③a 結帳包裝函式：payload 名額陣列先排序再交給 core", () => {
+    for (const f of ["sf_place_order", "pos_checkout"]) {
+      const b = fn(f);
+      assert.match(b, /v_p jsonb := groupbuy\.marketing_sort_usage_payload\(p\)/);
+      assert.match(b, /_core\(v_p\)/);
+    }
+    assert.match(fn("marketing_sort_usage_payload"), /'couponCodeIds', 'groupBuyCouponIds', 'salesRuleIds'/);
+  });
+  test("② 移除優惠卷：沒有同優惠卷的其他折扣碼列 → 刪團購優惠卷帳本列", () => {
+    const b = fn("marketing_order_coupon_adjust");
+    const del = b.indexOf("kind = 'GROUP_BUY_COUPON' and ref_id = c.group_buy_coupon_id");
+    assert.ok(del > b.indexOf("delete from groupbuy.sales_order_marketing_usages where id = u.id"));
+  });
+  test("③c 找不到帳本列：不扣 used_count（8002 舊邏輯的 else 分支已移除）", () => {
+    const b = fn("marketing_order_coupon_adjust");
+    const minus = b.slice(b.indexOf("  else\n    select id, qty, released_at into u"));
+    assert.equal((minus.match(/used_count = greatest\(used_count - 1, 0\)/g) ?? []).length, 1);
+    assert.ok(minus.indexOf("used_count - 1") > minus.indexOf("if found then") && minus.indexOf("used_count - 1") > minus.indexOf("if u.released_at is null then"));
+  });
+  test("③b 套用時對稱同步：p_reclaim=true（該占的補占），上限超過只略過該單", () => {
+    assert.match(sql, /perform groupbuy\.marketing_sync_order_usage\(r\.tenant_id, r\.sales_order_id, true\)/);
+    assert.match(sql, /sqlerrm like 'MKT_RECLAIM_QUOTA%'/);
   });
 });

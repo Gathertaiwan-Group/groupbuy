@@ -6,6 +6,7 @@ import type { Row } from "@/lib/db/mapping";
 import { taipeiDateTime } from "@/lib/core/time";
 import { addOrderHistory, adjustItemStock, adminUpdateOrders, db, fetchOrder, fetchOrders, recordEmail, recordSms } from "./common";
 import { recalcOrderAmounts } from "./pricing";
+import { stockChangesOf } from "./stock-rules";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
 const money = (v: unknown) => Math.round(num(v));
@@ -40,8 +41,8 @@ const reverse = (changes: StockChange[]): StockChange[] => changes.map((c) => ({
 export async function releaseOrderStockUndoable(session: AdminSession, orderIds: number[]): Promise<{ undo: () => Promise<void> }> {
   const orders = await fetchOrders(session, orderIds, "id,state");
   const target = orders.filter((o) => !RELEASED_STATES.has(String(o.state))).map((o) => Number(o.id));
-  const items = (await orderItemsOf(session, target)).filter((i) => i.item_id && (i.state === "UNSHIPPING" || i.state === "SHIPPING"));
-  const changes: StockChange[] = items.map((i) => ({ itemId: i.item_id, qty: num(i.total), backOrder: !!i.back_order }));
+  // 補回與扣回（consumeOrderStockUndoable）用同一組明細狀態（stock-rules.ts，fix10）
+  const changes: StockChange[] = stockChangesOf(await orderItemsOf(session, target), 1);
   await adjustItemStock(session, changes);
   return { undo: () => adjustItemStock(session, reverse(changes)) };
 }
@@ -54,15 +55,9 @@ export async function consumeOrderStock(session: AdminSession, orderIds: number[
 /** 同 consumeOrderStock，另回傳 undo（後續步驟失敗時把扣掉的庫存補回；不足時沒有扣，undo 為空操作） */
 export async function consumeOrderStockUndoable(session: AdminSession, orderIds: number[]): Promise<{ short: string[]; undo: () => Promise<void> }> {
   const noop = { short: [] as string[], undo: async () => {} };
-  const items = (await orderItemsOf(session, orderIds)).filter((i) => i.item_id && i.state === "UNSHIPPING");
-  if (!items.length) return noop;
-  const need = new Map<string, { itemId: number; qty: number; backOrder: boolean }>();
-  for (const i of items) {
-    const k = `${i.item_id}:${i.back_order ? 1 : 0}`;
-    const cur = need.get(k) ?? { itemId: Number(i.item_id), qty: 0, backOrder: !!i.back_order };
-    cur.qty += num(i.total);
-    need.set(k, cur);
-  }
+  // 與補回（releaseOrderStockUndoable）同一組明細狀態：未出貨＋準備出貨中（stock-rules.ts，fix10）
+  const need = new Map(stockChangesOf(await orderItemsOf(session, orderIds), 1).map((c) => [`${c.itemId}:${c.backOrder ? 1 : 0}`, c]));
+  if (!need.size) return noop;
   const itemIds = [...new Set([...need.values()].map((n) => n.itemId))];
   const { data } = await db()
     .from("items")

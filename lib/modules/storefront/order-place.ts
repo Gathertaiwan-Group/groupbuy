@@ -17,7 +17,7 @@ import { saveCheckout, type AddressDraft } from "./cart-store";
 import { ipOf, isEmail, isPhone, rateLimit } from "./guard";
 import { grantOrderView } from "./order-grant";
 import { appendBlacklistLog, findBlacklistMatch } from "@/lib/modules/marketing/blacklist";
-import { checkoutCouponQuotaError } from "@/lib/modules/marketing/usage-release";
+import { checkoutCouponError, checkoutCouponQuotaError } from "@/lib/modules/marketing/usage-release";
 import { storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
 import { deliveryFlatpickrOptions } from "./cart-api";
 import { taipeiDate } from "@/lib/core/time";
@@ -339,9 +339,10 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   const built = await buildCartData(cc, { consumeFlash: false });
   if (built.lines.length === 0) return fail(cc, "購物車內尚無商品，無法結帳");
   if (built.errors.length) return fail(cc, built.errors[0]);
-  // 購物袋套用的優惠碼在結帳前已被別人用滿：重算會把它丟掉（只留 couponNotes），不可默默以原價成立訂單（fix8）
-  const couponQuotaErr = checkoutCouponQuotaError(built.pricing.couponNotes);
-  if (couponQuotaErr) return fail(cc, couponQuotaErr);
+  // 購物袋套用的優惠碼在結帳前已被用滿（fix8）或已失效——刪除、停用、不適用此團購、綁定活動停用／結束（fix10）：
+  // 重算會把它丟掉，不可默默以原價成立訂單 → 擋下並請客人移除
+  const couponErr = checkoutCouponError(built.pricing.couponRejection) ?? checkoutCouponQuotaError(built.pricing.couponNotes);
+  if (couponErr) return fail(cc, couponErr);
   const rule = built.rule;
   if (!rule) return fail(cc, "目前無可用配送方式，請確認商品配送限制");
   if (gbfrsId && rule.groupBuyFlatRateShippingId !== gbfrsId) return fail(cc, "所選的配送方式無法使用，請重新選擇");
@@ -492,7 +493,8 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
       const it = lines.find((l) => l.item.stockOwnerId === Number(m[1]));
       return fail(cc, `「${it ? it.item.shortNameDisplay || it.title : "商品"}」庫存不足，請重新確認購買數量`);
     }
-    if (/SF_COUPON_USED_UP|SF_GROUP_BUY_COUPON_USED_UP/.test(msg)) return fail(cc, "優惠碼已達使用上限，請移除後再結帳");
+    // DB 在折扣碼／優惠卷停用或用滿時都回這兩個代碼（結帳前檢查與送出之間被改掉的競態）
+    if (/SF_COUPON_USED_UP|SF_GROUP_BUY_COUPON_USED_UP/.test(msg)) return fail(cc, "優惠碼已失效或已達使用上限，請移除後再結帳");
     if (/SF_SALES_RULE_QUOTA/.test(msg)) return fail(cc, "優惠活動名額已滿，請重新整理後再結帳");
     if (/SF_POINTS_NOT_ENOUGH/.test(msg)) {
       await saveCheckout(cc.cart!, { points: 0 });
