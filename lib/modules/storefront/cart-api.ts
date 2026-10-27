@@ -10,6 +10,7 @@ import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext
 import { saveCheckout, setCartItem, type AddressDraft, type CvsMapInfo } from "./cart-store";
 import { clean, ipOf, rateLimit } from "./guard";
 import { checkPointsRequest } from "./points";
+import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 import { pointsEnabled } from "./pricing";
 import { enumOptions } from "@/lib/core/enums";
 import { storefrontDeliveryFlatpickrOptions, storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
@@ -122,8 +123,8 @@ async function redeemCoupon(ctx: RequestContext): Promise<Response> {
   const gc = (row?.group_buy_coupons ?? null) as Record<string, unknown> | null;
   if (!row || !gc || !row.is_active || !gc.is_active) return json({ error: "優惠碼不存在或已失效" });
   if (!gc.apply_to_all_group_buy && Number(gc.group_buy_id) !== sc.gb.id) return json({ error: "此優惠碼不適用於本團購" });
-  if (Number(row.max_uses) >= 0 && Number(row.used_count) >= Number(row.max_uses)) return json({ error: "此優惠碼已達使用上限" });
-  if (Number(gc.available_quota) >= 0 && Number(gc.coupon_used_total) >= Number(gc.available_quota)) return json({ error: "此優惠碼已達使用上限" });
+  // 上限＝每張折扣碼的使用次數 ≤ 團購優惠卷 available_quota（原站「相同折扣碼可被重複使用結帳次數」）與折扣碼 max_uses（-1 不限）
+  if (!couponCodeHasQuota({ usedCount: Number(row.used_count), maxUses: Number(row.max_uses), availableQuota: Number(gc.available_quota) })) return json({ error: "此優惠碼已達使用上限" });
   const cc = await loadCartContext(ctx, sc, { create: true });
   const settings = (gc.coupon_settings ?? {}) as Record<string, unknown>;
   if ((settings.customerOnly === true || row.customer_id) && !cc.customer) return json({ error: "此優惠碼限會員使用，請先登入" });

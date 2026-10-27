@@ -35,6 +35,7 @@ import {
   releaseOrderStock,
 } from "./order-ops";
 import { recalcOrderAmounts } from "./pricing";
+import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
 const nowIso = () => new Date().toISOString();
@@ -185,6 +186,9 @@ async function joinOrders(ctx: RequestContext): Promise<Response> {
     }
     await client.from("sales_order_coupons").update({ sales_order_id: pid }).eq("tenant_id", session.tenantId).in("sales_order_id", otherIds);
     await client.from("sales_order_sales_rules").update({ sales_order_id: pid }).eq("tenant_id", session.tenantId).in("sales_order_id", otherIds);
+    // 名額帳本隨優惠明細搬到母單（8003）：之後取消母單才會連子單用掉的名額一起退；子單改「已合併」不會觸發退回
+    const { error: mergeErr } = await client.rpc("marketing_merge_order_usage", { p_tenant_id: session.tenantId, p_parent_id: pid, p_child_ids: otherIds });
+    if (mergeErr) throw new Error(`[orders] 合併訂單搬移優惠名額帳本失敗：${mergeErr.message}`);
     const sum = (k: string) => g.reduce((s, r) => s + num(r[k]), 0);
     await adminUpdateOrders(
       session,
@@ -579,7 +583,7 @@ async function couponRedeem(ctx: RequestContext): Promise<Response> {
   if (cc.is_active === false || gbc.is_active === false) throw badRequest("優惠碼已停用");
   if (!gbc.apply_to_all_group_buy && gbc.group_buy_id && Number(gbc.group_buy_id) !== Number(o.group_buy_id)) throw badRequest("此優惠碼不適用於本團購");
   if (cc.customer_id && Number(cc.customer_id) !== Number(o.customer_id)) throw badRequest("此優惠碼僅限指定會員使用");
-  if (num(cc.max_uses) > 0 && num(cc.used_count) >= num(cc.max_uses)) throw badRequest("優惠碼已達使用上限");
+  if (!couponCodeHasQuota({ usedCount: num(cc.used_count), maxUses: num(cc.max_uses), availableQuota: num(gbc.available_quota) })) throw badRequest("優惠碼已達使用上限");
   const { data: dup } = await client.from("sales_order_coupons").select("id").eq("tenant_id", session.tenantId).eq("sales_order_id", id).eq("coupon_code_id", cc.id).limit(1);
   if ((dup ?? []).length) throw badRequest("此訂單已使用過此優惠碼");
   const { data: its } = await client.from("order_items").select("amount").eq("tenant_id", session.tenantId).eq("sales_order_id", id);

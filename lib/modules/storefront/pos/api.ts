@@ -10,6 +10,7 @@ import { imageUrl, gbSetting } from "../site";
 import { formatPrice } from "../catalog";
 import { validVatId } from "../order-place";
 import { pointsEnabled } from "../pricing";
+import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 import { posVoidOrders, posVoidResponse } from "@/lib/modules/orders/pos-void";
 import {
   posScope,
@@ -499,7 +500,7 @@ export async function commonCoupons(ctx: RequestContext): Promise<Response> {
   const gbcs = await q(
     db()
       .from("group_buy_coupons")
-      .select("id, title, category, dollar_or_percentage, discount, available_quota, coupon_used_total, is_active, group_buy_id, apply_to_all_group_buy")
+      .select("id, title, category, dollar_or_percentage, discount, available_quota, is_active, group_buy_id, apply_to_all_group_buy")
       .eq("tenant_id", scope.session.tenantId)
       .eq("is_active", true)
       .or(`group_buy_id.eq.${scope.gb.id},apply_to_all_group_buy.eq.true`),
@@ -515,7 +516,8 @@ export async function commonCoupons(ctx: RequestContext): Promise<Response> {
     .filter((c) => num(c.max_uses) < 0 || num(c.used_count) < num(c.max_uses))
     .map((c) => {
       const g = byId.get(num(c.group_buy_coupon_id))!;
-      const usedUp = num(g.available_quota) >= 0 && num(g.coupon_used_total) >= num(g.available_quota);
+      // 每張折扣碼的使用次數 ≤ available_quota（原站「相同折扣碼可被重複使用結帳次數」，-1 不限）
+      const usedUp = !couponCodeHasQuota({ usedCount: num(c.used_count), availableQuota: num(g.available_quota) });
       return {
         code: str(c.code),
         title: str(g.title),

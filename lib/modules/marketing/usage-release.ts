@@ -177,3 +177,45 @@ export function backfillLedger(o: BackfillOrder): UsageLedgerRow[] {
   for (const r of o.rules) if (atCheckout(r.createdAt)) add("SALES_RULE", r.salesRuleId);
   return [...out.values()];
 }
+
+/* ───────────── 合併訂單搬帳本（migration 8003 marketing_merge_order_usage） ───────────── */
+
+/** 合併訂單後的子單階段：不在 USAGE_OFF_STATES，改成這個階段不會觸發退回（名額隨帳本搬到母單） */
+export const MERGED_CHILD_STATE = "COMBINED";
+
+/**
+ * 子單「未退回」的帳本列搬到母單（同 kind＋refId 數量相加）；已退回的列留在子單。只搬帳本、不動任何計數。
+ * 母單已是取消／刪除時拒絕（DB：MKT_MERGE_PARENT_OFF）。不改動輸入。
+ */
+export function mergeLedgers(
+  parent: UsageLedgerRow[],
+  children: UsageLedgerRow[][],
+  parentState?: string | null,
+): { parent: UsageLedgerRow[]; children: UsageLedgerRow[][] } {
+  const moving = children.flat().filter((r) => !r.released);
+  if (moving.length && isOff(parentState)) throw new Error("MKT_MERGE_PARENT_OFF");
+  const out = parent.map((r) => ({ ...r }));
+  for (const m of moving) {
+    const hit = out.find((r) => r.kind === m.kind && r.refId === m.refId);
+    if (hit) hit.qty += m.qty;
+    else out.push({ ...m, released: false });
+  }
+  return { parent: out, children: children.map((rows) => rows.filter((r) => r.released).map((r) => ({ ...r }))) };
+}
+
+/* ───────────── 結帳上限（migration 8003 marketing_check_coupon_quota） ───────────── */
+
+/**
+ * 折扣碼還能不能再用一次。原站優惠卷管理頁 availableQuota＝「相同折扣碼可被重複使用結帳次數(-1代表無限制)」
+ * （spec/html/groupbuy-coupon.html），是「每張折扣碼」的次數，不是整張優惠卷的總張數；
+ * 折扣碼自己的 max_uses（產生時的「每組折扣碼可使用次數」）同時適用，兩者取嚴；負數＝不限。
+ */
+export function couponCodeHasQuota(c: { usedCount: number | null | undefined; maxUses?: number | null; availableQuota?: number | null }): boolean {
+  const used = Number(c.usedCount ?? 0) || 0;
+  for (const lim of [c.availableQuota, c.maxUses]) {
+    if (lim === null || lim === undefined || (lim as unknown) === "") continue;
+    const n = Number(lim);
+    if (Number.isFinite(n) && n >= 0 && used >= n) return false;
+  }
+  return true;
+}

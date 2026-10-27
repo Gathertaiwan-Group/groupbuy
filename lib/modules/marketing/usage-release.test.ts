@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 
 type R = typeof import("./usage-release");
 const R: R = await import(new URL("./usage-release.ts", import.meta.url).href);
-const { USAGE_OFF_STATES, usageTransition, usageLedgerFromPayload, releaseUsage, reclaimUsage, couponTotals, backfillLedger, BACKFILL_SKIP_STATES } = R;
+const { USAGE_OFF_STATES, usageTransition, usageLedgerFromPayload, releaseUsage, reclaimUsage, couponTotals, backfillLedger, BACKFILL_SKIP_STATES, mergeLedgers, MERGED_CHILD_STATE, couponCodeHasQuota } = R;
 
 const counters = (cc: [number, number][], gbc: [number, number][], sr: [number, number][]) => ({
   COUPON_CODE: new Map(cc),
@@ -222,5 +222,117 @@ describe("migration 8002 與規則一致", () => {
     assert.doesNotMatch(body, /update groupbuy\.(coupon_codes|group_buy_coupons|sales_rules)/);
     assert.match(body, /c\.created_at = o\.created_at/);
     assert.match(body, /h\.state_from = 'DRAFT'/);
+  });
+});
+
+describe("合併訂單：帳本隨優惠明細搬到母單（8003）", () => {
+  const A = usageLedgerFromPayload({ couponCodeIds: [11], groupBuyCouponIds: [21], salesRuleIds: [31] });
+  const B = usageLedgerFromPayload({ couponCodeIds: [12], groupBuyCouponIds: [21], salesRuleIds: [31] });
+  const parents = new Map([[11, 21], [12, 21]]);
+  test("子單改「已合併」不觸發退回（名額不會提早退）", () => {
+    assert.equal(usageTransition("PROCESSING", MERGED_CHILD_STATE), null);
+    assert.ok(!(USAGE_OFF_STATES as readonly string[]).includes(MERGED_CHILD_STATE));
+  });
+  test("搬帳本：同 kind＋id 數量相加、子單清空、不動計數", () => {
+    const m = mergeLedgers(A, [B], "PROCESSING");
+    const key = (r: { kind: string; refId: number; qty: number }) => `${r.kind}:${r.refId}:${r.qty}`;
+    assert.deepEqual(m.parent.map(key).sort(), ["COUPON_CODE:11:1", "COUPON_CODE:12:1", "GROUP_BUY_COUPON:21:2", "SALES_RULE:31:2"]);
+    assert.deepEqual(m.children, [[]]);
+    assert.equal(A.length, 3, "不改動輸入");
+  });
+  test("取消母單退回兩張單用掉的全部名額；再取消不重複退；子單之後被取消也沒有可退的", () => {
+    const m = mergeLedgers(A, [B], "PROCESSING");
+    const c0 = counters([[11, 1], [12, 1]], [[21, 2]], [[31, 2]]);
+    const r1 = releaseUsage(m.parent, c0, parents);
+    assert.equal(r1.counters.COUPON_CODE.get(11), 0);
+    assert.equal(r1.counters.COUPON_CODE.get(12), 0);
+    assert.equal(r1.counters.GROUP_BUY_COUPON.get(21), 0);
+    assert.equal(r1.counters.SALES_RULE.get(31), 0);
+    const r2 = releaseUsage(r1.ledger, r1.counters, parents);
+    assert.equal(r2.released.length, 0);
+    const child = releaseUsage(m.children[0], r1.counters, parents);
+    assert.equal(child.released.length, 0);
+  });
+  test("合併後還原母單會連子單名額一起重新占用", () => {
+    const m = mergeLedgers(A, [B], "PROCESSING");
+    const r1 = releaseUsage(m.parent, counters([[11, 1], [12, 1]], [[21, 2]], [[31, 2]]), parents);
+    const r2 = reclaimUsage(r1.ledger, r1.counters, parents);
+    assert.equal(r2.counters.COUPON_CODE.get(11), 1);
+    assert.equal(r2.counters.COUPON_CODE.get(12), 1);
+    assert.equal(r2.counters.SALES_RULE.get(31), 2);
+  });
+  test("已退回的子單列留在子單；母單已取消時拒絕搬", () => {
+    const rel = B.map((r) => ({ ...r, released: true }));
+    const m = mergeLedgers(A, [rel], "PROCESSING");
+    assert.equal(m.parent.length, 3);
+    assert.equal(m.children[0].length, 3);
+    assert.throws(() => mergeLedgers(A, [B], "CANCELED"), /MKT_MERGE_PARENT_OFF/);
+    assert.doesNotThrow(() => mergeLedgers(A, [rel], "CANCELED"));
+  });
+});
+
+describe("結帳上限＝每張折扣碼可重複使用次數（原站 availableQuota，8003）", () => {
+  test("超過 available_quota 被擋", () => {
+    assert.equal(couponCodeHasQuota({ usedCount: 0, availableQuota: 1 }), true);
+    assert.equal(couponCodeHasQuota({ usedCount: 1, availableQuota: 1 }), false);
+    assert.equal(couponCodeHasQuota({ usedCount: 2, availableQuota: 2 }), false);
+  });
+  test("-1 不限", () => {
+    assert.equal(couponCodeHasQuota({ usedCount: 999, availableQuota: -1 }), true);
+    assert.equal(couponCodeHasQuota({ usedCount: 999, availableQuota: -1, maxUses: -1 }), true);
+    assert.equal(couponCodeHasQuota({ usedCount: 5 }), true);
+  });
+  test("折扣碼 max_uses 同時適用，兩者取嚴", () => {
+    assert.equal(couponCodeHasQuota({ usedCount: 1, availableQuota: 5, maxUses: 1 }), false);
+    assert.equal(couponCodeHasQuota({ usedCount: 1, availableQuota: 1, maxUses: 5 }), false);
+    assert.equal(couponCodeHasQuota({ usedCount: 1, availableQuota: 2, maxUses: -1 }), true);
+  });
+  test("與同一優惠卷其他折扣碼用了幾張無關（舊口徑 coupon_used_total ≥ available_quota 會誤擋）", () => {
+    // 優惠卷 available_quota=1、已有 3 張碼各用過 1 次：沒用過的第 4 張碼仍可用
+    assert.equal(couponCodeHasQuota({ usedCount: 0, availableQuota: 1, maxUses: 1 }), true);
+  });
+});
+
+describe("migration 8003 與規則一致", () => {
+  const sql = readFileSync(new URL("../../../supabase/migrations/8003_marketing_usage_merge_coupon_quota.sql", import.meta.url), "utf8");
+  const fn = (name: string) => {
+    const i = sql.indexOf(`function groupbuy.${name}(`);
+    assert.ok(i >= 0, name);
+    return sql.slice(i, sql.indexOf("\n$$;", i));
+  };
+  test("core 不再拿 coupon_used_total 比 available_quota，改呼叫逐張折扣碼檢查", () => {
+    for (const core of ["sf_place_order_core", "pos_checkout_core"]) {
+      const body = fn(core);
+      assert.doesNotMatch(body, /coupon_used_total\s*<\s*available_quota/, core);
+      assert.doesNotMatch(body, /update groupbuy\.group_buy_coupons/, core);
+      assert.match(body, /perform groupbuy\.marketing_check_coupon_quota\(v_tenant, p\)/, core);
+      assert.match(body, /max_uses < 0 or used_count < max_uses/, core);
+    }
+    assert.doesNotMatch(sql, /create or replace function groupbuy\.(sf_place_order|pos_checkout)\(/, "不覆蓋外層包裝");
+  });
+  test("檢查函式：available_quota < 0 不限；逐張折扣碼 used_count > available_quota 擋下", () => {
+    const body = fn("marketing_check_coupon_quota");
+    assert.match(body, /g\.available_quota >= 0/);
+    assert.match(body, /c\.used_count > g\.available_quota/);
+    assert.match(body, /SF_COUPON_USED_UP/);
+  });
+  test("合併搬帳本：只搬未退回的列、數量相加、不動計數；母單已取消拒絕", () => {
+    const body = fn("marketing_merge_order_usage");
+    assert.match(body, /released_at is null/);
+    assert.match(body, /do update set qty = groupbuy\.sales_order_marketing_usages\.qty \+ excluded\.qty/);
+    assert.doesNotMatch(body, /update groupbuy\.(coupon_codes|group_buy_coupons|sales_rules)/);
+    assert.match(body, /MKT_MERGE_PARENT_OFF/);
+    assert.match(sql, /after insert on groupbuy\.sales_order_relations/);
+    assert.match(sql, /new\.relation = 'COMBINE'/);
+  });
+});
+
+describe("joinOrders 呼叫順序（8003）", () => {
+  const src = readFileSync(new URL("../orders/sales-order-actions.ts", import.meta.url), "utf8");
+  test("搬優惠明細之後、子單改「已合併」之前搬帳本", () => {
+    const iRules = src.indexOf('from("sales_order_sales_rules").update({ sales_order_id: pid })');
+    const iMerge = src.indexOf('rpc("marketing_merge_order_usage"');
+    const iCombined = src.indexOf('{ state: "COMBINED" }');
+    assert.ok(iRules > 0 && iMerge > iRules && iCombined > iMerge);
   });
 });

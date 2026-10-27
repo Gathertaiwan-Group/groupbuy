@@ -13,6 +13,7 @@ import { marketingPricingRules } from "./pricing-marketing";
 import { PM_CODE_BY_BIT } from "./payment-codes";
 import { applyPoints } from "./points";
 import type { SfGroupBuy } from "./site";
+import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 
 // ───────────────────────── 型別 ─────────────────────────
 
@@ -454,6 +455,10 @@ export const fallbackPricingRules: PricingRulesProvider = {
       const row = cc as Record<string, unknown> | null;
       const gc = (row?.group_buy_coupons ?? null) as Record<string, unknown> | null;
       if (!row || !gc || !row.is_active || !gc.is_active) continue;
+      if (!couponCodeHasQuota({ usedCount: num(row.used_count), maxUses: num(row.max_uses, -1), availableQuota: num(gc.available_quota, -1) })) {
+        couponNotes.push(`${code}：已達使用上限`);
+        continue;
+      }
       const amount = paid.reduce((s, l) => s + lineAmount(l), 0);
       const pieces = paid.reduce((s, l) => s + l.qty, 0);
       const kind = String(gc.dollar_or_percentage ?? "DOLLAR");
