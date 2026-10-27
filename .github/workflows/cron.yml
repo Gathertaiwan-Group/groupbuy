@@ -12,6 +12,10 @@ on:
         description: "只跑指定工作（逗號分隔，留空＝全部）"
         required: false
         default: ""
+      asOf:
+        description: "模擬現在時間（ISO，如 2026-10-29T00:00:00Z；只在金流測試模式生效，正式模式伺服器忽略）"
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -27,12 +31,16 @@ jobs:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       CRON_URL: https://groupbuy-delta.vercel.app/api/cron/run
       JOBS: ${{ github.event.inputs.jobs }}
+      AS_OF: ${{ github.event.inputs.asOf }}
     steps:
       - name: Call /api/cron/run
         run: |
           if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET 未設定"; exit 1; fi
           url="$CRON_URL"
-          if [ -n "$JOBS" ]; then url="$url?jobs=$(printf '%s' "$JOBS" | tr -cd 'A-Za-z,')"; fi
+          q=""
+          if [ -n "$JOBS" ]; then q="jobs=$(printf '%s' "$JOBS" | tr -cd 'A-Za-z,')"; fi
+          if [ -n "$AS_OF" ]; then q="${q:+$q&}asOf=$(printf '%s' "$AS_OF" | tr -cd '0-9TZ:.-')"; fi
+          if [ -n "$q" ]; then url="$url?$q"; fi
           body="$RUNNER_TEMP/cron-body.json"
           code=$(curl -sS -o "$body" -w '%{http_code}' --max-time 120 -X POST -H "Authorization: Bearer $CRON_SECRET" "$url" 2>/dev/null || echo 000)
           echo "HTTP $code"
