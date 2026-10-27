@@ -23,7 +23,8 @@ import { loadOrdersApi } from "./order-api";
 import { buildSearchParams, countAllOrders, searchInputFromDt, searchOrders } from "./order-search";
 import { orderListOptions } from "./order-options";
 import { countB2sOrders } from "./b2s";
-import { afterOrderEdit, consumeOrderStock, releaseOrderStock } from "./order-ops";
+import { afterOrderEdit, consumeOrderStock, consumeOrderStockUndoable, releaseOrderStock, releaseOrderStockUndoable } from "./order-ops";
+import { editorStateChange } from "./state-edit";
 import { recalcOrderAmounts } from "./pricing";
 import type { AdminSession } from "@/lib/core/http/types";
 import { salesOrderActionRoutes } from "./sales-order-actions";
@@ -255,7 +256,32 @@ async function editorSalesOrder(ctx: RequestContext, expected: "create" | "edit"
     const patch = toDbPatch(values, existing);
     const requestedAction = String(patch.action ?? "NONE");
     delete patch.action;
-    if (Object.keys(patch).length) await adminUpdateOrders(session, [id], patch, "後台編輯訂單");
+    // 改階段（fix8，state-edit.ts）：系統階段（已合併／已拆單／草稿）不能直接改成或改離；
+    // 已取消／已刪除 ↔ 有效階段時庫存跟著扣／補（同取消訂單、還原已取消訂單），名額由 DB 觸發器處理（還原超過上限會擋下）
+    let undoStock: (() => Promise<void>) | null = null;
+    const stateChanging = "state" in patch && String(patch.state) !== String(existing.state);
+    if (stateChanging) {
+      const chg = editorStateChange(String(existing.state ?? ""), String(patch.state));
+      if (chg.error !== undefined) throw new FieldErrors([{ name: "state", status: chg.error }]);
+      if (chg.stock === "consume") {
+        const r = await consumeOrderStockUndoable(session, [id]);
+        if (r.short.length) throw new FieldErrors([{ name: "state", status: `庫存不足，無法改回有效階段：${r.short.join("、")}` }]);
+        undoStock = r.undo;
+        if (!("date_canceled" in patch)) patch.date_canceled = null;
+      } else if (chg.stock === "release") {
+        undoStock = (await releaseOrderStockUndoable(session, [id])).undo;
+        if (patch.state === "CANCELED" && !("date_canceled" in patch)) patch.date_canceled = new Date().toISOString();
+      }
+    }
+    if (Object.keys(patch).length) {
+      try {
+        await adminUpdateOrders(session, [id], patch, "後台編輯訂單");
+      } catch (e) {
+        if (undoStock) await undoStock();
+        if (stateChanging && e instanceof HttpError && e.status === 400) throw new FieldErrors([{ name: "state", status: e.message }]);
+        throw e;
+      }
+    }
     notices.push(
       ...(await afterOrderEdit(session, id, {
         action: requestedAction,

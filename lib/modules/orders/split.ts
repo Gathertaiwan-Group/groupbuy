@@ -8,6 +8,8 @@
 // 運費「維持在原訂單」＝放在第一張拆單、「優先以品項運費分配」＝依小計比例；稅與尾差依小計比例 → 子單結帳合計＝原單結帳；
 // 已付金額依結帳金額比例分配且每張 ≤ 自己的結帳金額（溢收不分配、記在原訂單歷程）；
 // 勾「訂單金額保留於原訂單金額不拆開」時全部金額與已付留在第一張拆單、其餘為 0。
+// 優惠名額帳本（sales_order_marketing_usages）與優惠明細一樣留在原單：原單改「已拆單」不退；名額歸屬由 DB 依 SPLIT 關聯判斷
+// （migration 8004 marketing_order_holds_usage）——子單全部取消／刪除才退、刪除原單但子單有效不退、子單還原再占用。
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { splitAmounts } from "./split-alloc";
 import { fragment, post, requireSession } from "@/lib/core/http/route-helpers";

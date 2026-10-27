@@ -65,11 +65,21 @@ function cloneCounters(c: UsageCounters): UsageCounters {
   return { COUPON_CODE: new Map(c.COUPON_CODE), GROUP_BUY_COUPON: new Map(c.GROUP_BUY_COUPON), SALES_RULE: new Map(c.SALES_RULE) };
 }
 
-/** 團購優惠卷統計（與 DB marketing_sync_coupon_totals、優惠卷管理頁同口徑）：已使用＝used_count > 0 的折扣碼數 */
-export function couponTotals(usedCounts: number[]): { total: number; used: number; available: number } {
+/**
+ * 團購優惠卷統計（與 DB marketing_sync_coupon_totals（8004）、優惠卷管理頁同口徑）：
+ *   總數＝折扣碼數；已使用＝used_count > 0 的折扣碼數；剩餘＝「仍可再使用的折扣碼數」
+ *   （used_count 未達團購優惠卷 available_quota（每張折扣碼可被重複使用次數，-1 不限）且未達該碼 max_uses（-1 不限））。
+ *   每碼限用 1 次時剩餘＝總數－已使用；不限次數時每張碼都還能用 → 剩餘＝總數。
+ * availableQuota 未給＝不限；maxUses[i] 對應 usedCounts[i]（未給＝不限）。
+ */
+export function couponTotals(
+  usedCounts: number[],
+  opts: { availableQuota?: number | null; maxUses?: (number | null | undefined)[] } = {},
+): { total: number; used: number; available: number } {
   const total = usedCounts.length;
   const used = usedCounts.filter((n) => Number(n) > 0).length;
-  return { total, used, available: total - used };
+  const available = usedCounts.filter((n, i) => couponCodeHasQuota({ usedCount: n, maxUses: opts.maxUses?.[i] ?? -1, availableQuota: opts.availableQuota ?? -1 })).length;
+  return { total, used, available };
 }
 
 /** 折扣碼 id → 所屬團購優惠卷 id（重算團購優惠卷統計用） */
@@ -218,4 +228,95 @@ export function couponCodeHasQuota(c: { usedCount: number | null | undefined; ma
     if (Number.isFinite(n) && n >= 0 && used >= n) return false;
   }
   return true;
+}
+
+/* ───────────── 名額歸屬（migration 8004 marketing_order_holds_usage） ───────────── */
+
+/** 訂單圖：階段＋拆單（SPLIT：原單 → 子單）＋合併（COMBINE：子單 → 母單）關聯 */
+export interface UsageOrderGraph {
+  states: Map<number, string>;
+  /** 原單 id → 拆出的子單 id */
+  splitChildren: Map<number, number[]>;
+  /** 已合併子單 id → 合併到的母單 id */
+  combinedInto: Map<number, number>;
+}
+
+/** 不占名額的階段（沒有拆單子單時）：已取消／已刪除／草稿；已拆單但沒有子單也不占 */
+export const USAGE_NOT_HELD_STATES = ["CANCELED", "DELETED", "DRAFT", "SPLITED"] as const;
+
+/**
+ * 掛在這張訂單上的名額帳本「目前是否仍被占用」（與 DB marketing_order_holds_usage 相同）：
+ *   有拆單子單 → 任一子單占用就算（原單自己的階段不論，刪除原單但子單有效不退）；
+ *   已取消／已刪除／草稿／已拆單（無子單）→ 不占；已合併 → 看合併到的母單，沒有母單關聯 → 不占；其他 → 占用。
+ */
+export function holdsUsage(g: UsageOrderGraph, orderId: number, depth = 0): boolean {
+  if (depth > 16) return true;
+  const state = g.states.get(orderId);
+  if (state === undefined) return false;
+  const kids = (g.splitChildren.get(orderId) ?? []).filter((k) => k !== orderId);
+  if (kids.length) return kids.some((k) => holdsUsage(g, k, depth + 1));
+  if ((USAGE_NOT_HELD_STATES as readonly string[]).includes(state)) return false;
+  if (state === "COMBINED") {
+    const p = g.combinedInto.get(orderId);
+    return p !== undefined && p !== orderId && holdsUsage(g, p, depth + 1);
+  }
+  return true;
+}
+
+/** 帳本同步動作（DB marketing_sync_order_usage）：應占用但已退回 → reclaim；不應占用但未退回 → release */
+export function usageSyncAction(held: boolean, ledger: UsageLedgerRow[]): "release" | "reclaim" | null {
+  if (!ledger.length) return null;
+  if (held) return ledger.some((r) => r.released) ? "reclaim" : null;
+  return ledger.some((r) => !r.released) ? "release" : null;
+}
+
+/** 還原（重新占用）前的上限檢查：每列用後次數不得超過上限（負數＝不限）；回傳第一個超過的列 */
+export function reclaimBlockedBy(
+  ledger: UsageLedgerRow[],
+  limits: Map<string, { used: number; limits: (number | null | undefined)[] }>,
+): UsageLedgerRow | null {
+  for (const r of ledger) {
+    if (!r.released || r.kind === "GROUP_BUY_COUPON") continue;
+    const l = limits.get(`${r.kind}:${r.refId}`);
+    if (!l) continue;
+    for (const lim of l.limits) {
+      if (lim === null || lim === undefined) continue;
+      if (lim >= 0 && l.used + r.qty > lim) return r;
+    }
+  }
+  return null;
+}
+
+/** DB 錯誤 MKT_RECLAIM_QUOTA:<kind>:<id>:<名稱>（還原時名額已被其他訂單用滿）→ 給後台的訊息；不是這個錯誤回 null */
+export function reclaimQuotaMessage(dbMessage: string | null | undefined): string | null {
+  const m = /MKT_RECLAIM_QUOTA:(COUPON_CODE|SALES_RULE):(\d+):?([^\n"]*)/.exec(String(dbMessage ?? ""));
+  if (!m) return null;
+  const name = m[3].trim();
+  return m[1] === "COUPON_CODE"
+    ? `優惠碼「${name || m[2]}」已達使用上限（名額已被其他訂單使用），無法還原此訂單`
+    : `優惠活動「${name || m[2]}」名額已滿（已被其他訂單使用），無法還原此訂單`;
+}
+
+/* ───────────── 前台結帳：套用後被用滿的優惠碼（fix8） ───────────── */
+
+/**
+ * 購物袋已輸入優惠碼，但結帳重算時因「已達使用（次數）上限」被丟棄 → 回傳要給客人的錯誤（不成立訂單）。
+ * 其他原因（未達門檻等）維持原行為（只在購物袋顯示提示）。
+ */
+export function checkoutCouponQuotaError(couponNotes: (string | null | undefined)[]): string | null {
+  return couponNotes.some((n) => /已達使用(次數)?上限/.test(String(n ?? ""))) ? "優惠碼已達使用上限，請移除後再結帳" : null;
+}
+
+/* ───────────── 產生折扣碼：每組可使用次數與優惠卷上限（fix8） ───────────── */
+
+/**
+ * 產生折扣碼時「每組折扣碼可使用次數」(maxUses) 與團購優惠卷「相同折扣碼可被重複使用結帳次數」(availableQuota) 都會檢查，
+ * 實際以較小者為準（負數＝不限）。maxUses 比 availableQuota 寬鬆時回傳提示，否則 null。
+ */
+export function generateMaxUsesNotice(maxUses: number, availableQuota: number | null | undefined): string | null {
+  const q = availableQuota === null || availableQuota === undefined || !Number.isFinite(Number(availableQuota)) ? -1 : Number(availableQuota);
+  if (q < 0) return null;
+  if (maxUses >= 0 && maxUses <= q) return null;
+  const mu = maxUses < 0 ? "無限制" : `${maxUses} 次`;
+  return `注意：每組折扣碼可使用次數（${mu}）大於此優惠卷「相同折扣碼可被重複使用結帳次數」（${q} 次），兩者取較小者，實際每組折扣碼最多可使用 ${q} 次`;
 }

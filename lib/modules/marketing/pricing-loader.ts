@@ -255,7 +255,7 @@ export async function recordCouponUse(db: Db, tenantId: number, couponCodeId: nu
 
 /**
  * 依 coupon_codes 重算 group_buy_coupons.coupon_used_total / coupon_available_total。
- * 公式只存在 DB（migration 8002 marketing_sync_coupon_totals：已使用＝used_count > 0 的折扣碼數）；
+ * 公式只存在 DB（marketing_sync_coupon_totals：已使用＝used_count > 0 的折扣碼數（8002）；剩餘＝仍可再使用的折扣碼數（8004））；
  * 下單／POS 結帳／作廢／取消／還原／後台使用與移除優惠卷都在各自交易內呼叫同一支函式。
  */
 export async function syncCouponTotals(db: Db, tenantId: number, groupBuyCouponId: number): Promise<{ total: number; used: number; available: number }> {

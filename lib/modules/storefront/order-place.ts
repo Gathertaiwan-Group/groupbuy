@@ -17,6 +17,7 @@ import { saveCheckout, type AddressDraft } from "./cart-store";
 import { ipOf, isEmail, isPhone, rateLimit } from "./guard";
 import { grantOrderView } from "./order-grant";
 import { appendBlacklistLog, findBlacklistMatch } from "@/lib/modules/marketing/blacklist";
+import { checkoutCouponQuotaError } from "@/lib/modules/marketing/usage-release";
 import { storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
 import { deliveryFlatpickrOptions } from "./cart-api";
 import { taipeiDate } from "@/lib/core/time";
@@ -338,6 +339,9 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   const built = await buildCartData(cc, { consumeFlash: false });
   if (built.lines.length === 0) return fail(cc, "購物車內尚無商品，無法結帳");
   if (built.errors.length) return fail(cc, built.errors[0]);
+  // 購物袋套用的優惠碼在結帳前已被別人用滿：重算會把它丟掉（只留 couponNotes），不可默默以原價成立訂單（fix8）
+  const couponQuotaErr = checkoutCouponQuotaError(built.pricing.couponNotes);
+  if (couponQuotaErr) return fail(cc, couponQuotaErr);
   const rule = built.rule;
   if (!rule) return fail(cc, "目前無可用配送方式，請確認商品配送限制");
   if (gbfrsId && rule.groupBuyFlatRateShippingId !== gbfrsId) return fail(cc, "所選的配送方式無法使用，請重新選擇");

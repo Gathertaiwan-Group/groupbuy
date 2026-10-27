@@ -30,19 +30,32 @@ const RELEASED_STATES = new Set(["CANCELED", "DELETED", "COMBINED", "SPLITED"]);
 
 /** 釋出訂單占用的庫存（取消、刪除）：未出貨的商品數量補回現貨/預購可售數量 */
 export async function releaseOrderStock(session: AdminSession, orderIds: number[]): Promise<void> {
+  await releaseOrderStockUndoable(session, orderIds);
+}
+
+type StockChange = { itemId: number | null; qty: number; backOrder: boolean };
+const reverse = (changes: StockChange[]): StockChange[] => changes.map((c) => ({ ...c, qty: -c.qty }));
+
+/** 同 releaseOrderStock，另回傳 undo（後續步驟失敗時把補回的庫存再扣回） */
+export async function releaseOrderStockUndoable(session: AdminSession, orderIds: number[]): Promise<{ undo: () => Promise<void> }> {
   const orders = await fetchOrders(session, orderIds, "id,state");
   const target = orders.filter((o) => !RELEASED_STATES.has(String(o.state))).map((o) => Number(o.id));
   const items = (await orderItemsOf(session, target)).filter((i) => i.item_id && (i.state === "UNSHIPPING" || i.state === "SHIPPING"));
-  await adjustItemStock(
-    session,
-    items.map((i) => ({ itemId: i.item_id, qty: num(i.total), backOrder: !!i.back_order })),
-  );
+  const changes: StockChange[] = items.map((i) => ({ itemId: i.item_id, qty: num(i.total), backOrder: !!i.back_order }));
+  await adjustItemStock(session, changes);
+  return { undo: () => adjustItemStock(session, reverse(changes)) };
 }
 
 /** 重新占用庫存（還原已取消訂單）；庫存不足時回傳不足的商品名稱（不扣） */
 export async function consumeOrderStock(session: AdminSession, orderIds: number[]): Promise<string[]> {
+  return (await consumeOrderStockUndoable(session, orderIds)).short;
+}
+
+/** 同 consumeOrderStock，另回傳 undo（後續步驟失敗時把扣掉的庫存補回；不足時沒有扣，undo 為空操作） */
+export async function consumeOrderStockUndoable(session: AdminSession, orderIds: number[]): Promise<{ short: string[]; undo: () => Promise<void> }> {
+  const noop = { short: [] as string[], undo: async () => {} };
   const items = (await orderItemsOf(session, orderIds)).filter((i) => i.item_id && i.state === "UNSHIPPING");
-  if (!items.length) return [];
+  if (!items.length) return noop;
   const need = new Map<string, { itemId: number; qty: number; backOrder: boolean }>();
   for (const i of items) {
     const k = `${i.item_id}:${i.back_order ? 1 : 0}`;
@@ -71,9 +84,10 @@ export async function consumeOrderStock(session: AdminSession, orderIds: number[
     const avail = n.backOrder ? num(src.stock_back_order_available) : num(src.stock_available);
     if (avail < n.qty) short.push(`${r.title}（需要 ${n.qty}，${n.backOrder ? "預購" : "現貨"}剩 ${avail}）`);
   }
-  if (short.length) return short;
-  await adjustItemStock(session, [...need.values()].map((n) => ({ itemId: n.itemId, qty: -n.qty, backOrder: n.backOrder })));
-  return [];
+  if (short.length) return { short, undo: noop.undo };
+  const changes: StockChange[] = [...need.values()].map((n) => ({ itemId: n.itemId, qty: -n.qty, backOrder: n.backOrder }));
+  await adjustItemStock(session, changes);
+  return { short: [], undo: () => adjustItemStock(session, reverse(changes)) };
 }
 
 /* ─────────────────────────── 貨運標籤 ─────────────────────────── */

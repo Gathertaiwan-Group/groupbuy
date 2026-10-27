@@ -131,3 +131,13 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - **合併訂單帳本＋結帳上限口徑（fix6，migration 8003）**：
   - 合併訂單（`/ajax/SalesOrder/join`）搬優惠明細後呼叫 `marketing_merge_order_usage(tenant, 母單, 子單[])`：子單未退回的帳本列搬到母單（同 kind＋ref_id 數量相加），只搬帳本、不動使用次數 → 合併當下名額不變；取消母單一次退回全部（含子單用的），`released_at` 防重複退。子單改「已合併」(COMBINED) 不是退回階段，不會提早退；帳本已搬走，子單之後被改取消也沒有可退的。`sales_order_relations` 新增 COMBINE 關聯時觸發器再搬一次（冪等保險）。母單已取消／刪除時拒絕（`MKT_MERGE_PARENT_OFF`）。拆單不搬優惠明細（原單保留明細改「已拆單」），帳本也留在原單。
   - 結帳上限：`group_buy_coupons.available_quota` 依原站優惠卷管理頁＝「相同折扣碼可被重複使用結帳次數(-1代表無限制)」（`spec/html/groupbuy-coupon.html` 欄位說明），是**每張折扣碼**的次數。`sf_place_order_core`／`pos_checkout_core` 改呼叫 `marketing_check_coupon_quota`：優惠卷需啟用、available_quota ≥ 0 時本單每張折扣碼用後次數 ≤ available_quota；折扣碼 `max_uses` 照舊另檢查（兩者取嚴）。原站沒有獨立的優惠卷總張數上限（總數＝產生的折扣碼數），不另檢查。前台套用（`redeemCoupon`）、POS 優惠卷清單、後台「使用優惠卷」、`priceCart` 共用 `couponCodeHasQuota`（marketing/usage-release.ts）。`coupon_used_total` 只由 8002 重算函式維護，core 不再直接 +1。
+- **名額歸屬改依訂單關聯＋上限原子檢查＋合併單一交易（fix8，migration 8004）**：
+  - `marketing_order_holds_usage(tenant, 訂單)`：帳本所在訂單的名額是否仍被占用——有拆單子單（SPLIT）→ 任一子單占用即占用（原單階段不論，刪原單但子單有效不退）；已取消／已刪除／草稿／已拆單（無子單）→ 不占；已合併 → 看 COMBINE 母單，沒有母單關聯（例：後台把已刪除改成已合併）→ 不占；其他 → 占。`sales_orders.state` 觸發器改為：找出經 SPLIT／COMBINE 相連的訂單，凡有帳本的依此判斷同步（應占但已退 → 重新占用；不應占但未退 → 退回），冪等。規則鏡像：`holdsUsage`／`usageSyncAction`（usage-release.ts）。
+  - 拆單：帳本與優惠明細都留在原單（不搬），子單全部取消／刪除才退、任一子單還原再占用。
+  - 重新占用檢查上限（`marketing_reclaim_order_usage`）：折扣碼 `max_uses`／優惠卷 `available_quota`／優惠條件 `available_quota` 已被其他訂單用滿 → `MKT_RECLAIM_QUOTA:<kind>:<id>:<名稱>` 整筆回滾；`adminUpdateOrders` 轉 400（「…已達使用上限…無法還原此訂單」），還原已取消訂單／編輯訂單會把先扣的庫存補回。
+  - 後台編輯訂單改階段（`orders/state-edit.ts`）：已合併／已拆單／草稿為系統階段，不能直接改成或改離；已取消／已刪除 ↔ 有效階段時庫存跟著扣／補（同取消、還原），名額由觸發器處理。
+  - 後台「使用優惠卷」`marketing_order_coupon_adjust(+1)` 鎖住折扣碼後原子檢查上限（`MKT_COUPON_USED_UP` → 400「優惠碼已達使用上限」），先占名額再寫明細。
+  - 前台結帳：購物袋已套用的優惠碼在結帳前被用滿 → 重算會丟掉該碼，`confirmOrder` 以 `checkoutCouponQuotaError` 擋下「優惠碼已達使用上限，請移除後再結帳」，不以原價成立訂單。
+  - 團購優惠卷統計：剩餘優惠卷數量＝仍可再使用的折扣碼數（未達 `available_quota` 與 `max_uses`，-1 不限）。每碼限 1 次時＝總數－已使用（同前）；不限次數 → 剩餘＝總數。套用時不全面重算（示範資料統計值照原站畫面填入，不覆蓋），有使用／退回／產生折扣碼時才依新公式重算；優惠卷頁明細表由 JS `couponTotals` 依折扣碼即時計算。依據：原站優惠卷頁明細表「總數／已使用優惠卷數量／剩餘優惠卷數量」與欄位說明「輸入 -1 → 大家都可以一直用」。
+  - 合併訂單改呼叫 `orders_join_orders(tenant, admin, [{parentId, childIds}])`：鎖定 → 驗證處理中且非寄信中 → 搬商品（接續序號）→ 相同商品合併 → 搬優惠明細與帳本 → 母單金額 → COMBINE 關聯 → 子單改已合併，單一交易（分組規則 `orders/join-plan.ts`）。
+  - 產生折扣碼：「每組折扣碼可使用次數」大於優惠卷「相同折扣碼可被重複使用結帳次數」時，彈窗即時提示、產生後訊息附註「兩者取較小者」（`generateMaxUsesNotice`）。

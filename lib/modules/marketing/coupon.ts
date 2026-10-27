@@ -22,13 +22,18 @@ import { COUPON_CATEGORY_OPTIONS, COUPON_DOP_OPTIONS, idsParam, labelOf, loadGro
 import { COUPON_CATEGORIES } from "./pricing-rules";
 import { normalizeCouponSettings } from "./coupon-template";
 import { syncCouponTotals } from "./pricing-loader";
+import { couponTotals, generateMaxUsesNotice } from "./usage-release";
 import { editorOnly } from "./sales-rule";
 
-const SELECT = "*, coupon_codes(used_count)";
+const SELECT = "*, coupon_codes(used_count, max_uses)";
 
 function couponRow(api: Row, row: Row): Row {
-  const codes = Array.isArray(row.coupon_codes) ? (row.coupon_codes as { used_count: number }[]) : [];
-  const used = codes.filter((c) => Number(c.used_count ?? 0) > 0).length;
+  const codes = Array.isArray(row.coupon_codes) ? (row.coupon_codes as { used_count: number; max_uses: number | null }[]) : [];
+  // 總數／已使用／剩餘（＝仍可再使用的折扣碼數；-1 不限次數時每張碼都算剩餘）與 DB marketing_sync_coupon_totals（8004）同口徑
+  const totals = couponTotals(
+    codes.map((c) => Number(c.used_count ?? 0)),
+    { availableQuota: row.available_quota == null ? -1 : Number(row.available_quota), maxUses: codes.map((c) => (c.max_uses == null ? -1 : Number(c.max_uses))) },
+  );
   const settings = normalizeCouponSettings(row.coupon_settings);
   return {
     ...api,
@@ -36,9 +41,9 @@ function couponRow(api: Row, row: Row): Row {
     couponTemplateId: row.coupon_template_id == null ? "" : Number(row.coupon_template_id),
     useTemplate: row.use_template ? "1" : "0",
     couponSettings: settings,
-    couponTotal: codes.length,
-    couponUsedTotal: used,
-    couponAvailableTotal: codes.length - used,
+    couponTotal: totals.total,
+    couponUsedTotal: totals.used,
+    couponAvailableTotal: totals.available,
     status: row.is_active === false ? "DISABLED" : "ACTIVE",
     categoryString: labelOf(COUPON_CATEGORY_OPTIONS, row.category),
     dollarOrPercentageString: labelOf(COUPON_DOP_OPTIONS, row.dollar_or_percentage),
@@ -246,7 +251,11 @@ async function generateCoupon(ctx: RequestContext): Promise<Response> {
     if (error) throw badRequest(`產生失敗：${error.message}`);
   }
   const totals = await syncCouponTotals(db, session.tenantId, Number(coupon.id));
-  return actionOk(`已產生 ${rows.length} 組折扣碼（優惠卷總數量 ${totals.total}）`, { data: { generated: rows.length, ...totals } });
+  // 每組可使用次數比優惠卷「相同折扣碼可被重複使用結帳次數」寬鬆時提示：兩者都會檢查，實際以較小者為準（fix8）
+  const notice = generateMaxUsesNotice(maxUses, coupon.available_quota == null ? -1 : Number(coupon.available_quota));
+  return actionOk(`已產生 ${rows.length} 組折扣碼（優惠卷總數量 ${totals.total}）${notice ? `。${notice}` : ""}`, {
+    data: { generated: rows.length, ...totals, ...(notice ? { notice } : {}) },
+  });
 }
 
 /* ───────────── 查看優惠卷（折扣碼列表） ───────────── */
@@ -327,6 +336,7 @@ export const couponRoutes: RouteDef[] = [
           title: String(c.title ?? ""),
           categoryString: labelOf(COUPON_CATEGORY_OPTIONS, c.category),
           availableQuota: Number(c.available_quota ?? -1),
+          availableQuotaLabel: Number(c.available_quota ?? -1) < 0 ? "無限制（-1）" : `${Number(c.available_quota)} 次`,
         };
       },
     }),

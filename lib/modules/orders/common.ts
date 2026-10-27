@@ -3,7 +3,8 @@
 // 對外服務（Email / 簡訊 / 金流 / 物流 / 電子發票）一律不串接：只寫紀錄並回傳【未串接】提示。
 import { getServiceClient } from "@/lib/supabase/server";
 import type { AdminSession, RequestContext } from "@/lib/core/http/types";
-import { notFound, notIntegrated } from "@/lib/core/http/errors";
+import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
+import { reclaimQuotaMessage } from "@/lib/modules/marketing/usage-release";
 import type { Row } from "@/lib/db/mapping";
 
 export type Db = ReturnType<typeof getServiceClient>;
@@ -111,7 +112,12 @@ export async function adminUpdateOrders(session: AdminSession, ids: number[], pa
     p_note: note ?? null,
     p_actor: "ADMIN",
   });
-  if (error) throw new Error(`[orders] 更新訂單失敗：${error.message}`);
+  if (error) {
+    // 還原（重新占用名額）時折扣碼／優惠活動已被其他訂單用滿：DB 觸發器擋下整筆（8004），回 400 給操作者
+    const quota = reclaimQuotaMessage(error.message);
+    if (quota) throw badRequest(quota);
+    throw new Error(`[orders] 更新訂單失敗：${error.message}`);
+  }
   return ((data ?? []) as unknown[]).map((x) => Number(typeof x === "object" && x !== null ? Object.values(x)[0] : x));
 }
 

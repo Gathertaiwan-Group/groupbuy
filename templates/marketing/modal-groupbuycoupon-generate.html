@@ -56,8 +56,10 @@
 	<div class="form-group row">
 		<label class="col-4" for="maxUses">每組折扣碼可使用次數</label>
 		<div class="col-8">
-			<input type="number" name="maxUses" id="maxUses" class="form-control" value="{{availableQuota}}" min="-1">
+			<input type="number" name="maxUses" id="maxUses" class="form-control" value="{{availableQuota}}" min="-1" data-quota="{{availableQuota}}">
 			<div class="help-block small">-1代表無限制</div>
+			<div class="help-block small">此優惠卷「相同折扣碼可被重複使用結帳次數」為 {{availableQuotaLabel}}；結帳時兩者都會檢查，每組折扣碼實際可使用次數以較小者為準。</div>
+			<div class="help-block small text-danger" id="maxUsesNotice" style="display:none"></div>
 		</div>
 	</div>
 </div> <!-- modal-body -->
@@ -71,6 +73,12 @@
 </div>
 </form><script>
 $(document).ready(function() {
+	// 每組可使用次數比優惠卷上限寬鬆時提示（伺服器端產生後的訊息同樣會提示）
+	$('#CouponForm #maxUses').on('input change', function() {
+		var q = parseInt($(this).data('quota'), 10), v = parseInt($(this).val(), 10), $n = $('#maxUsesNotice');
+		if (isNaN(q) || q < 0 || isNaN(v) || (v >= 0 && v <= q)) { $n.hide().text(''); return; }
+		$n.text('每組可使用次數（' + (v < 0 ? '無限制' : v + ' 次') + '）大於優惠卷上限（' + q + ' 次），實際每組最多只能使用 ' + q + ' 次').show();
+	}).trigger('change');
 	$('#CouponForm input[name=mode]').on('change', function() {
 		var v = $('#CouponForm input[name=mode]:checked').val();
 		$('#CouponForm .mode-auto').toggle(v == 'AUTO');

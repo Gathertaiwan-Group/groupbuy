@@ -5,7 +5,7 @@
 //   Editor（寄信、更新超取小白單、設為準備出貨中）→ {data:[…]}（另帶 message/notIntegrated）
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { fragment, get, post, requireSession } from "@/lib/core/http/route-helpers";
-import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
+import { HttpError, badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
 import { actionOk, json, jsonError } from "@/lib/core/http/responses";
 import { editorResponse, parseEditorRequest } from "@/lib/core/editor/protocol";
 import type { Row } from "@/lib/db/mapping";
@@ -27,7 +27,7 @@ import {
 import { loadOrdersApi } from "./order-api";
 import { buildSearchParams, searchOrders, type SearchInput } from "./order-search";
 import {
-  consumeOrderStock,
+  consumeOrderStockUndoable,
   emailTemplateContent,
   EMAIL_TEMPLATES,
   nextPaymentDue,
@@ -36,6 +36,7 @@ import {
 } from "./order-ops";
 import { recalcOrderAmounts } from "./pricing";
 import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
+import { joinPlan } from "./join-plan";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
 const nowIso = () => new Date().toISOString();
@@ -76,15 +77,25 @@ async function undoCancelOrder(ctx: RequestContext): Promise<Response> {
   const problems: string[] = [];
   for (const r of rows) {
     const id = Number(r.id);
-    const short = await consumeOrderStock(session, [id]);
-    if (short.length) {
-      problems.push(`${id}：庫存不足 ${short.join("、")}`);
+    const stock = await consumeOrderStockUndoable(session, [id]);
+    if (stock.short.length) {
+      problems.push(`${id}：庫存不足 ${stock.short.join("、")}`);
       continue;
     }
     // 客人要求取消的訂單還原時狀態改回付款前/後的一般狀態，其餘維持原狀態
     const patch: Row = { state: "PROCESSING", date_canceled: null };
     if (r.status === "INQUIRED_CANCEL" || r.status === "RESERVATION_CANCELED") patch.status = num(r.total_paid) > 0 ? "PAID_EMAIL_SENT" : "ORDER_EMAIL_SENT";
-    await adminUpdateOrders(session, [id], patch, "還原已取消訂單");
+    try {
+      // 名額由 DB 觸發器重新占用；折扣碼／優惠活動已被其他訂單用滿 → 整筆擋下（8004，adminUpdateOrders 轉成 400）
+      await adminUpdateOrders(session, [id], patch, "還原已取消訂單");
+    } catch (e) {
+      await stock.undo();
+      if (e instanceof HttpError && e.status === 400) {
+        problems.push(`${id}：${e.message}`);
+        continue;
+      }
+      throw e;
+    }
     await recalcOrderAmounts(session, id, { shipping: true, salesRules: false });
     restored.push(id);
   }
@@ -141,75 +152,24 @@ async function extendPaymentDue(ctx: RequestContext): Promise<Response> {
 async function joinOrders(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ids = await selectedIds(ctx);
-  const rows = await fetchOrders(session, ids);
-  const sending = new Set(["SEND_ORDER_EMAIL", "SEND_PAID_EMAIL", "SEND_SHIPPING_EMAIL", "SEND_EINVOICE"]);
-  const groups = new Map<string, Row[]>();
-  for (const r of rows) {
-    if (r.state !== "PROCESSING" || sending.has(String(r.status))) continue;
-    const key = [r.status, String(r.customer_telephone ?? "").trim(), String(r.customer_email ?? "").trim().toLowerCase()].join("|");
-    const g = groups.get(key) ?? [];
-    g.push(r);
-    groups.set(key, g);
-  }
-  const client = db();
-  let merged = 0;
-  const primaries: number[] = [];
-  for (const g of groups.values()) {
-    if (g.length < 2) continue;
-    g.sort((a, b) => new Date(String(a.created_at)).getTime() - new Date(String(b.created_at)).getTime() || Number(a.id) - Number(b.id));
-    const [primary, ...others] = g;
-    const pid = Number(primary.id);
-    const otherIds = others.map((o) => Number(o.id));
-    const { data: maxSeq } = await client.from("order_items").select("seq").eq("tenant_id", session.tenantId).eq("sales_order_id", pid).order("seq", { ascending: false }).limit(1);
-    let seq = num((maxSeq?.[0] as { seq?: number } | undefined)?.seq);
-    const { data: moving } = await client.from("order_items").select("id,seq").eq("tenant_id", session.tenantId).in("sales_order_id", otherIds).order("seq");
-    for (const it of (moving ?? []) as { id: number }[]) {
-      seq += 1;
-      await client.from("order_items").update({ sales_order_id: pid, seq }).eq("tenant_id", session.tenantId).eq("id", it.id);
+  const rows = await fetchOrders(session, ids, "id,uuid,state,status,customer_telephone,customer_email,created_at");
+  // 分組決定母單（最早建立）後，搬商品／合併同品項／搬優惠明細與名額帳本／母單金額／關聯／子單改已合併
+  // 全部在 DB 函式 orders_join_orders 的單一交易內完成（8004）；任何一步失敗整筆回滾，不會半搬
+  const plan = joinPlan(rows);
+  if (plan.length) {
+    const { error } = await db().rpc("orders_join_orders", {
+      p_tenant_id: session.tenantId,
+      p_admin_user_id: session.adminUserId,
+      p_groups: plan.map((p) => ({ parentId: p.parentId, childIds: p.childIds })),
+    });
+    if (error) {
+      if (/ORD_JOIN_STATE/.test(error.message)) throw badRequest("訂單階段或狀態已變更（需為「處理中」且非寄信中），請重新整理後再合併");
+      if (/MKT_MERGE_PARENT_OFF/.test(error.message)) throw badRequest("主訂單已取消或刪除，無法合併");
+      throw new Error(`[orders] 合併訂單失敗：${error.message}`);
     }
-    // 相同商品（同商品、預購、單價、贈品、規格）合併為一列
-    const { data: allItems } = await client.from("order_items").select("*").eq("tenant_id", session.tenantId).eq("sales_order_id", pid).order("seq");
-    const keep = new Map<string, Row>();
-    for (const it of (allItems ?? []) as Row[]) {
-      if (it.bundle_root || it.bundle_child || !it.item_id) continue;
-      const k = [it.item_id, it.back_order, num(it.price), it.gift, it.specifications_label ?? "", it.attribute_note ?? ""].join("|");
-      const first = keep.get(k);
-      if (!first) {
-        keep.set(k, it);
-        continue;
-      }
-      first.total = num(first.total) + num(it.total);
-      first.discount = num(first.discount) + num(it.discount);
-      first.amount = num(first.amount) + num(it.amount);
-      await client.from("order_items").update({ total: first.total, discount: first.discount, amount: first.amount }).eq("tenant_id", session.tenantId).eq("id", first.id);
-      await client.from("order_items").delete().eq("tenant_id", session.tenantId).eq("id", it.id);
-    }
-    await client.from("sales_order_coupons").update({ sales_order_id: pid }).eq("tenant_id", session.tenantId).in("sales_order_id", otherIds);
-    await client.from("sales_order_sales_rules").update({ sales_order_id: pid }).eq("tenant_id", session.tenantId).in("sales_order_id", otherIds);
-    // 名額帳本隨優惠明細搬到母單（8003）：之後取消母單才會連子單用掉的名額一起退；子單改「已合併」不會觸發退回
-    const { error: mergeErr } = await client.rpc("marketing_merge_order_usage", { p_tenant_id: session.tenantId, p_parent_id: pid, p_child_ids: otherIds });
-    if (mergeErr) throw new Error(`[orders] 合併訂單搬移優惠名額帳本失敗：${mergeErr.message}`);
-    const sum = (k: string) => g.reduce((s, r) => s + num(r[k]), 0);
-    await adminUpdateOrders(
-      session,
-      [pid],
-      {
-        grand_total: sum("grand_total") - others.reduce((s, r) => s + num(r.shipping_amount) + num(r.cod_fee), 0),
-        total_paid: sum("total_paid"),
-        discount_amount: sum("discount_amount"),
-        extra_fee: sum("extra_fee"),
-        note: g.map((r) => r.note).filter((x) => x && String(x).trim()).join("\n") || null,
-        staff_note: g.map((r) => r.staff_note).filter((x) => x && String(x).trim()).join("\n") || null,
-      },
-      `合併訂單：${others.map((o) => o.uuid).join("、")}`,
-    );
-    await adminUpdateOrders(session, otherIds, { state: "COMBINED" }, `已合併至訂單 ${primary.uuid}`);
-    await client.from("sales_order_relations").insert(
-      otherIds.map((id) => ({ tenant_id: session.tenantId, parent_sales_order_id: pid, sales_order_id: id, relation: "COMBINE", is_done: true })),
-    );
-    merged += others.length;
-    primaries.push(pid);
   }
+  const merged = plan.reduce((n, p) => n + p.childIds.length, 0);
+  const primaries = plan.map((p) => p.parentId);
   if (!merged) throw badRequest("沒有可合併的訂單（需為「處理中」且狀態、電話、Email 相同的兩筆以上訂單）");
   return actionOk(`已合併 ${merged} 筆訂單至 ${primaries.length} 筆主訂單`, { data: primaries });
 }
@@ -544,7 +504,12 @@ async function couponList(ctx: RequestContext): Promise<Response> {
 /** 後台使用／移除優惠卷的名額調整（migration 8002 marketing_order_coupon_adjust：used_count＋帳本＋優惠卷統計，單一交易） */
 async function adjustOrderCouponUsage(tenantId: number, salesOrderId: number, couponCodeId: number, delta: 1 | -1): Promise<void> {
   const { error } = await db().rpc("marketing_order_coupon_adjust", { p_tenant_id: tenantId, p_sales_order_id: salesOrderId, p_coupon_code_id: couponCodeId, p_delta: delta });
-  if (error) throw new Error(`[orders] 調整優惠卷使用次數失敗：${error.message}`);
+  if (error) {
+    // 8004：+1 時在 DB 鎖住折扣碼後原子檢查上限（JS 的 couponCodeHasQuota 只是預檢，並行時以 DB 為準）
+    if (/MKT_COUPON_USED_UP/.test(error.message)) throw badRequest("優惠碼已達使用上限");
+    if (/MKT_ORDER_OFF/.test(error.message)) throw badRequest("此訂單階段無法使用優惠卷");
+    throw new Error(`[orders] 調整優惠卷使用次數失敗：${error.message}`);
+  }
 }
 
 /** POST /ajax/SalesOrderCoupon/delete（groupBuyFlatRateShippingId＝訂單優惠卷 id） */
@@ -591,7 +556,9 @@ async function couponRedeem(ctx: RequestContext): Promise<Response> {
   if (num(gbc.minimum) > 0 && subtotal < num(gbc.minimum)) throw badRequest(`訂單金額未達優惠卷使用門檻 $${num(gbc.minimum)}`);
   const pct = String(gbc.dollar_or_percentage ?? "").toUpperCase().includes("PERCENT");
   const discount = Math.round(pct ? (subtotal * num(gbc.discount)) / 100 : num(gbc.discount));
-  await client.from("sales_order_coupons").insert({
+  // 先占名額（DB 原子檢查上限，用滿 → 400 不寫明細），再寫訂單優惠明細；明細寫入失敗時把名額退回
+  await adjustOrderCouponUsage(session.tenantId, id, Number(cc.id), 1);
+  const { error: insErr } = await client.from("sales_order_coupons").insert({
     tenant_id: session.tenantId,
     sales_order_id: id,
     group_buy_coupon_id: gbc.id,
@@ -599,7 +566,10 @@ async function couponRedeem(ctx: RequestContext): Promise<Response> {
     coupon: code,
     discount,
   });
-  await adjustOrderCouponUsage(session.tenantId, id, Number(cc.id), 1);
+  if (insErr) {
+    await adjustOrderCouponUsage(session.tenantId, id, Number(cc.id), -1);
+    throw new Error(`[orders] 寫入訂單優惠卷失敗：${insErr.message}`);
+  }
   await addOrderHistory(session, id, `使用優惠卷 ${code}（折抵 $${discount}）`);
   await recalcOrderAmounts(session, id, { shipping: false, salesRules: false, discountDelta: discount });
   return actionOk(`已套用優惠碼 ${code}`);
