@@ -12,6 +12,7 @@ import { readGatewayConfig, type GatewayConfig } from "@/lib/integrations/config
 import { EcpayPayment, type PaymentProvider } from "@/lib/integrations/payment";
 import { EcpayLogistics, type LogisticsProvider } from "@/lib/integrations/logistics";
 import { EcpayEinvoice, type EinvoiceProvider } from "@/lib/integrations/einvoice";
+import { LinePayPayment, readLinePayConfig } from "@/lib/integrations/linepay";
 import { groupBuyPreferences, type SfGroupBuy } from "@/lib/modules/storefront/site";
 
 export const SANDBOX_LABEL = "測試模式";
@@ -32,6 +33,12 @@ export function envSuffix(): string {
 export function ecpayPayment(): EcpayPayment | null {
   const c = gatewayConfig();
   return c.payment ? new EcpayPayment(c.payment, c.sandbox) : null;
+}
+
+/** LINE Pay（需 LINEPAY_CHANNEL_ID／LINEPAY_CHANNEL_SECRET；沙盒＝LINE Pay Sandbox） */
+export function linePay(): LinePayPayment | null {
+  const c = readLinePayConfig(process.env);
+  return c ? new LinePayPayment(c, gatewayConfig().sandbox) : null;
 }
 
 export function ecpayLogistics(): EcpayLogistics | null {

@@ -261,3 +261,148 @@ describe("電子發票 adapter", () => {
     assert.equal(sent.CustomerPhone, "");
   });
 });
+
+const lp: typeof import("../../integrations/linepay") = await import(new URL("../../integrations/linepay.ts", import.meta.url).href);
+const { createHmac } = await import("node:crypto");
+
+describe("fix21 續：金流擴充", () => {
+  const creds = { merchantId: AIO.merchant, hashKey: AIO.key, hashIV: AIO.iv };
+  const base = {
+    merchantTradeNo: "GB1T1",
+    amount: 300,
+    paymentMethod: 4,
+    itemNames: ["x"],
+    tradeDesc: "t",
+    returnUrl: "https://example.com/n",
+    orderResultUrl: "https://example.com/r",
+    clientBackUrl: "https://example.com/b",
+    paymentInfoUrl: "https://example.com/i",
+  };
+  const p = new pay.EcpayPayment(creds, true);
+  test("銀聯：UnionPay=1、不帶 OrderResultURL", () => {
+    const f = p.checkoutForm({ ...base, paymentMethod: 16384 }).fields;
+    assert.equal(f.ChoosePayment, "Credit");
+    assert.equal(f.UnionPay, "1");
+    assert.equal(f.OrderResultURL, undefined);
+    assert.equal(core.verifyCheckMacValue(f, AIO.key, AIO.iv, "sha256"), true);
+  });
+  test("台灣 Pay：TWQR", () => assert.equal(p.checkoutForm({ ...base, paymentMethod: 8192 }).fields.ChoosePayment, "TWQR"));
+  test("定期定額：參數與檢查", () => {
+    const f = p.checkoutForm({ ...base, paymentMethod: 128, period: { type: "M", frequency: 1, execTimes: 3 }, periodReturnUrl: "https://example.com/p" }).fields;
+    assert.equal(f.PeriodAmount, "300");
+    assert.equal(f.PeriodType, "M");
+    assert.equal(f.ExecTimes, "3");
+    assert.equal(f.PeriodReturnURL, "https://example.com/p");
+    assert.equal(pay.validPeriod({ type: "M", frequency: 13, execTimes: 3 }), false);
+    assert.equal(pay.validPeriod({ type: "Y", frequency: 1, execTimes: 1 }), false);
+    assert.throws(() => p.checkoutForm({ ...base, paymentMethod: 128, period: { type: "D", frequency: 0, execTimes: 3 } }));
+  });
+  test("定期定額通知：驗章與次數", () => {
+    const form: Record<string, string> = { MerchantID: AIO.merchant, MerchantTradeNo: "GB1T1", RtnCode: "1", RtnMsg: "ok", Amount: "300", TotalSuccessTimes: "2", ProcessDate: "2026/11/28 10:00:00" };
+    form.CheckMacValue = core.checkMacValue(form, AIO.key, AIO.iv, "sha256");
+    const n = p.parsePeriodNotify(form)!;
+    assert.equal(n.times, 2);
+    assert.equal(n.amount, 300);
+    assert.equal(p.parsePeriodNotify({ ...form, Amount: "1" }), null);
+  });
+  test("退款順序：N 失敗 → E＋N；已關帳 → R；全部失敗回 false", async () => {
+    const mk = (ok: Record<string, boolean>) => {
+      const calls: string[] = [];
+      const f = (async (_u: string, init: RequestInit) => {
+        const a = new URLSearchParams(String(init.body)).get("Action")!;
+        calls.push(a);
+        return new Response(`RtnCode=${ok[a + calls.filter((c) => c === a).length] ?? ok[a] ? 1 : 10000002}&RtnMsg=x`);
+      }) as unknown as typeof fetch;
+      return { p: new pay.EcpayPayment(creds, true, f), calls };
+    };
+    let t = mk({ N1: false, E: true, N2: true });
+    assert.equal((await t.p.refund({ merchantTradeNo: "GB1", tradeNo: "T", amount: 300 })).ok, true);
+    assert.deepEqual(t.calls, ["N", "E", "N"]);
+    t = mk({ N: false, E: false, R: true });
+    const r = await t.p.refund({ merchantTradeNo: "GB1", tradeNo: "T", amount: 300 });
+    assert.equal(r.ok, true);
+    assert.deepEqual(t.calls, ["N", "E", "R"]);
+    t = mk({});
+    assert.equal((await t.p.refund({ merchantTradeNo: "GB1", tradeNo: "T", amount: 300 })).ok, false);
+  });
+});
+
+describe("fix21 續：宅配", () => {
+  const p = new lg.EcpayLogistics({ merchantId: LOG.merchant, hashKey: LOG.key, hashIV: LOG.iv }, "C2C", true);
+  const input = {
+    merchantTradeNo: "GBS1T2",
+    subType: "TCAT" as const,
+    temperature: "0003" as const,
+    goodsAmount: 500,
+    goodsName: "冷凍商品",
+    senderName: "測試寄件",
+    senderCellPhone: "0912345678",
+    senderZipCode: "115",
+    senderAddress: "台北市南港區三重路19號",
+    receiverName: "王小明",
+    receiverCellPhone: "0911222333",
+    receiverZipCode: "100",
+    receiverAddress: "台北市中正區重慶南路一段122號",
+    distance: "00" as const,
+    specification: "0004" as const,
+    serverReplyUrl: "https://example.com/l",
+  };
+  test("黑貓冷凍：HOME、溫層、冷凍不可 150cm、簽章可驗", () => {
+    const f = p.homeShipmentParams(input);
+    assert.equal(f.LogisticsType, "HOME");
+    assert.equal(f.Temperature, "0003");
+    assert.equal(f.Specification, "0003");
+    assert.equal(f.Distance, "00");
+    assert.equal(core.verifyCheckMacValue(f, LOG.key, LOG.iv, "md5"), true);
+  });
+  test("郵局只收常溫且帶重量；宅配通已停用", () => {
+    assert.throws(() => p.homeShipmentParams({ ...input, subType: "POST" }));
+    const f = p.homeShipmentParams({ ...input, subType: "POST", temperature: "0001", goodsWeight: 2 });
+    assert.equal(f.GoodsWeight, "2");
+    assert.equal(f.Distance, undefined);
+    assert.throws(() => p.homeShipmentParams({ ...input, subType: "ECAN" as never }));
+  });
+  test("距離", () => {
+    assert.equal(lg.homeDistance("台北市", "臺北市", false), "00");
+    assert.equal(lg.homeDistance("台北市", "高雄市", false), "01");
+    assert.equal(lg.homeDistance("台北市", "澎湖縣", true), "02");
+  });
+  test("宅配建立回應帶託運單號", () => {
+    const r: Record<string, string> = { MerchantID: LOG.merchant, MerchantTradeNo: "GBS1T2", RtnCode: "300", RtnMsg: "ok", AllPayLogisticsID: "3715089", LogisticsSubType: "TCAT", BookingNote: "100832390764" };
+    r.CheckMacValue = core.checkMacValue(r, LOG.key, LOG.iv, "md5");
+    assert.equal(p.parseCreateResponse(`1|${new URLSearchParams(r).toString()}`, "TCAT").bookingNote, "100832390764");
+  });
+});
+
+describe("fix21 續：LINE Pay（mock）", () => {
+  const creds = { channelId: "1234567890", channelSecret: "abcdefghijklmnopqrstuvwxyz012345" };
+  test("設定：缺值停用", () => {
+    assert.equal(lp.readLinePayConfig({}), null);
+    assert.deepEqual(lp.readLinePayConfig({ LINEPAY_CHANNEL_ID: creds.channelId, LINEPAY_CHANNEL_SECRET: creds.channelSecret }), creds);
+  });
+  test("Request：簽章標頭、Sandbox 網址、19 位 transactionId 不失真", async () => {
+    let seen: { url: string; headers: Record<string, string>; body: string } | null = null;
+    const f = (async (url: string, init: RequestInit) => {
+      seen = { url, headers: init.headers as Record<string, string>, body: String(init.body) };
+      return new Response('{"returnCode":"0000","returnMessage":"Success.","info":{"transactionId":2026102800000000001,"paymentUrl":{"web":"https://sandbox-web-pay.line.me/x"}}}');
+    }) as unknown as typeof fetch;
+    const c = new lp.LinePayPayment(creds, true, f, () => "nonce-1");
+    const r = await c.request({ orderId: "GB1T1", amount: 300, productName: "訂單", confirmUrl: "https://example.com/c", cancelUrl: "https://example.com/x" });
+    assert.equal(r.ok, true);
+    assert.equal(r.transactionId, "2026102800000000001");
+    assert.equal(r.paymentUrl, "https://sandbox-web-pay.line.me/x");
+    assert.equal(seen!.url, "https://sandbox-api-pay.line.me/v3/payments/request");
+    const want = createHmac("sha256", creds.channelSecret).update(creds.channelSecret + "/v3/payments/request" + seen!.body + "nonce-1").digest("base64");
+    assert.equal(seen!.headers["X-LINE-Authorization"], want);
+    assert.equal(seen!.headers["X-LINE-ChannelId"], creds.channelId);
+    assert.equal(JSON.parse(seen!.body).amount, 300);
+  });
+  test("Confirm 失敗碼、transactionId 格式檢查", async () => {
+    const f = (async () => new Response('{"returnCode":"1172","returnMessage":"Existing same orderId."}')) as unknown as typeof fetch;
+    const c = new lp.LinePayPayment(creds, true, f);
+    const r = await c.confirm("2026102800000000001", 300);
+    assert.equal(r.ok, false);
+    assert.equal(r.returnCode, "1172");
+    assert.equal((await c.confirm("../x", 1)).ok, false);
+  });
+});

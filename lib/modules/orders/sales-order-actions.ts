@@ -39,8 +39,9 @@ import { recalcOrderAmounts } from "./pricing";
 import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 import { joinPlan } from "./join-plan";
 import { voidInvoicesForOrders } from "@/lib/modules/accounting/invoices";
-import { cancelCvsShipment, createCvsShipment } from "@/lib/modules/shipping/ecpay-logistics";
+import { cancelCvsShipment, createCvsShipment, createShipmentForOrder } from "@/lib/modules/shipping/ecpay-logistics";
 import { logisticsProvider } from "@/lib/modules/accounting/gateway";
+import { refundOrderPayment } from "@/lib/modules/accounting/payment-gateway";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
 const nowIso = () => new Date().toISOString();
@@ -68,6 +69,18 @@ async function cancelOrder(ctx: RequestContext): Promise<Response> {
     if (staffNote) patch.staff_note = [r.staff_note, staffNote].filter((x) => x && String(x).trim()).join("\n");
     await adminUpdateOrders(session, [Number(r.id)], patch, `取消訂單${staffNote ? `：${staffNote}` : ""}`);
   }
+  // 勾「同時退刷」：已線上付款的訂單全額退款（冪等；失敗只提示，訂單仍取消）
+  let refundMsg = "";
+  if (["true", "1", "on"].includes(String((await strParam(ctx, "refundOnline")) ?? ""))) {
+    for (const r of target) {
+      try {
+        const res = await refundOrderPayment(session, Number(r.id), staffNote || "訂單取消");
+        if (!res.skipped) refundMsg += `<br>${res.message}`;
+      } catch (e) {
+        refundMsg += `<br>退款失敗：${(e as Error).message}`;
+      }
+    }
+  }
   // 取消時作廢已開立的電子發票（預約中的取消預約）；失敗只提示，不影響取消
   let invoiceMsg = "";
   try {
@@ -76,7 +89,7 @@ async function cancelOrder(ctx: RequestContext): Promise<Response> {
   } catch (e) {
     invoiceMsg = `<br>電子發票作廢失敗：${(e as Error).message}`;
   }
-  const msg = `成功取消 ${target.length} 筆訂單${invoiceMsg}`;
+  const msg = `成功取消 ${target.length} 筆訂單${refundMsg}${invoiceMsg}`;
   return json({ code: 200, error: msg, message: msg, data: target.map((r) => Number(r.id)) });
 }
 
@@ -244,7 +257,7 @@ async function markAsCvsDateDued(ctx: RequestContext): Promise<Response> {
   return actionOk(`已將 ${target.length} 筆訂單設為未取貨`);
 }
 
-/** POST /ajax/SalesOrder/acquireCvsShippingNumber（綠界取得托運單號）：逐筆建立綠界超商托運單（物流未設定時回【未串接】） */
+/** POST /ajax/SalesOrder/acquireCvsShippingNumber（綠界取得托運單號）：逐筆依配送方式建立綠界超商／宅配托運單（物流未設定時回【未串接】） */
 async function acquireCvsShippingNumber(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ids = await selectedIds(ctx);
@@ -258,7 +271,7 @@ async function acquireCvsShippingNumber(ctx: RequestContext): Promise<Response> 
   const lines: string[] = [];
   let ok = 0;
   for (const id of rows) {
-    const r = await createCvsShipment(ctx, session, id);
+    const r = await createShipmentForOrder(ctx, session, id);
     if (r.ok) ok++;
     lines.push(r.message);
   }

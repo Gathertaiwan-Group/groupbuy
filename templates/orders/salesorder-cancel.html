@@ -17,6 +17,11 @@
 		<textarea name="staffNote" id="staffNote" rows="3" maxlength="1000" class="form-control" placeholder="可填寫取消原因（選填）"></textarea>
 		<div class="field-info">員工備註只出現於管理後台，消費者不會看到員工備註</div>
 	</div>
+	{{!-- fix21：已線上付款（綠界信用卡／LINE Pay）的訂單可同時全額退款（綠界 DoAction 取消授權或退刷；結果寫入金流交易紀錄，重送不會重複退款） --}}
+	<div class="form-check mb-3">
+		<input type="checkbox" class="form-check-input" name="refundOnline" id="refundOnline" value="true">
+		<label class="form-check-label" for="refundOnline">同時退刷／退款線上付款（綠界信用卡、LINE Pay；全額）</label>
+	</div>
 	<p class="small grey-text mb-0">取消後會釋放訂單商品占用的庫存；已取消／已合併／已拆單的訂單會略過。需要時可由工具列「取消/還原 &raquo; 還原已取消訂單」還原。</p>
 </div> <!-- modal-body -->
 	<div class="progress">

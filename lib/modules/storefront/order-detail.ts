@@ -14,8 +14,9 @@ import { formatPrice } from "./catalog";
 import { hasOrderViewGrant } from "./order-grant";
 import { clean, ipOf, rateLimit } from "./guard";
 import { PM_LABEL } from "./cart-data";
-import { paymentProviderFor } from "@/lib/modules/accounting/gateway";
-import { startPayment } from "@/lib/modules/accounting/payment-gateway";
+import { linePay, paymentProviderFor } from "@/lib/modules/accounting/gateway";
+import { startLinePay, startPayment } from "@/lib/modules/accounting/payment-gateway";
+import { validPeriod } from "@/lib/integrations/payment";
 
 const ONLINE_PAYMENTS = new Set([4, 128, 1024, 4096, 8192, 16384]);
 
@@ -124,7 +125,8 @@ export async function renderOrderDetail(
   // 線上付款（綠界）：信用卡、ATM 虛擬帳號、超商代碼
   const provider = !blocked && !paid && open ? await paymentProviderFor(tenant.id, gb) : null;
   const gt = n(o.grand_total);
-  const canPayOnline = !!provider && provider.supports(pm) && gt > 0 && Number.isInteger(gt);
+  const lp = pm === 1024 && !blocked && !paid && open ? linePay() : null;
+  const canPayOnline = ((!!provider && provider.supports(pm)) || !!lp) && gt > 0 && Number.isInteger(gt);
   const vAccount = String(o.virtual_bank_account ?? "");
   const storeCode = String(o.store_payment_code ?? "");
   let payOnline: { label: string; sandbox: boolean; auto: boolean } | null = null;
@@ -132,7 +134,7 @@ export async function renderOrderDetail(
     const hasCode = (pm === 2 && !!vAccount) || (pm === 32 && !!storeCode);
     payOnline = {
       label: pm === 2 ? (vAccount ? "重新取得 ATM 虛擬帳號" : "取得 ATM 虛擬帳號") : pm === 32 ? (storeCode ? "重新取得超商繳費代碼" : "取得超商繳費代碼") : "前往付款",
-      sandbox: provider!.sandbox,
+      sandbox: (provider ?? lp)!.sandbox,
       auto: ctx.query.get("placed") === "1" && !hasCode,
     };
   }
@@ -301,6 +303,13 @@ async function updateBankAccount(ctx: RequestContext): Promise<Response> {
   return renderOrderDetail(ctx, tenant, gb, order.id, customer, "已收到您的匯款資訊，賣家對帳後會更新付款狀態。");
 }
 
+/** 定期定額設定：團購設定 periodType（D/M/Y）、periodFrequency、periodExecTimes；未設定＝每月 1 次、共 12 期 */
+function periodOf(gb: SfGroupBuy): { type: "D" | "M" | "Y"; frequency: number; execTimes: number } {
+  const t = String(gbSetting(gb, "periodType", "M")).toUpperCase();
+  const p = { type: (["D", "M", "Y"].includes(t) ? t : "M") as "D" | "M" | "Y", frequency: Number(gbSetting(gb, "periodFrequency", 1)) || 1, execTimes: Number(gbSetting(gb, "periodExecTimes", 12)) || 12 };
+  return validPeriod(p) ? p : { type: "M", frequency: 1, execTimes: 12 };
+}
+
 /** 前往線上付款（綠界）：只有查詢授權或會員本人、訂單處理中且未付款、付款方式支援時 */
 async function payOnline(ctx: RequestContext): Promise<Response> {
   const { tenant, gb, order } = await authorizedOrder(ctx);
@@ -314,9 +323,12 @@ async function payOnline(ctx: RequestContext): Promise<Response> {
   const o = data as (OrderFull & { tenant_id: number; group_buy_id: number | null }) | null;
   if (!o) throw badRequest("找不到訂單");
   if (!["NEW", "PROCESSING"].includes(o.state) || o.blacklist_note || isPaid(o)) throw badRequest("此訂單目前無法線上付款");
+  const pm = n(o.payment_method);
+  const opts = { tenantCode: tenant.code, shortUrl: gb.short_url ?? "", gbTitle: gb.title };
+  if (pm === 1024 && linePay()) return startLinePay(ctx, o, opts);
   const provider = await paymentProviderFor(tenant.id, gb);
-  if (!provider || !provider.supports(n(o.payment_method))) throw badRequest("此訂單的付款方式不支援線上付款");
-  return startPayment(ctx, provider, o, { tenantCode: tenant.code, shortUrl: gb.short_url ?? "", gbTitle: gb.title });
+  if (!provider || !provider.supports(pm)) throw badRequest("此訂單的付款方式不支援線上付款");
+  return startPayment(ctx, provider, o, { ...opts, period: pm === 128 ? periodOf(gb) : undefined });
 }
 
 async function inquireCancel(ctx: RequestContext): Promise<Response> {

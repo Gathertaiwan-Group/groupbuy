@@ -38,10 +38,42 @@ export interface ShipmentInput {
   tradeDate?: Date;
 }
 
+/** 宅配（黑貓 TCAT／中華郵政 POST；宅配通已由綠界終止） */
+export type HomeSubType = "TCAT" | "POST";
+/** 溫層：0001 常溫、0002 冷藏、0003 冷凍（只有黑貓支援冷藏／冷凍） */
+export type Temperature = "0001" | "0002" | "0003";
+
+export interface HomeShipmentInput {
+  merchantTradeNo: string;
+  subType: HomeSubType;
+  temperature: Temperature;
+  goodsAmount: number;
+  goodsName: string;
+  /** 郵局必填（公斤） */
+  goodsWeight?: number;
+  senderName: string;
+  senderCellPhone: string;
+  senderZipCode: string;
+  senderAddress: string;
+  receiverName: string;
+  receiverCellPhone: string;
+  receiverZipCode: string;
+  receiverAddress: string;
+  /** 00 同縣市、01 外縣市、02 離島 */
+  distance: "00" | "01" | "02";
+  /** 0001 60cm … 0004 150cm（冷藏冷凍不可 0004） */
+  specification?: "0001" | "0002" | "0003" | "0004";
+  serverReplyUrl: string;
+  remark?: string;
+  tradeDate?: Date;
+}
+
 export interface ShipmentResult {
   ok: boolean;
   message: string;
   logisticsId: string | null;
+  /** 宅配託運單號（BookingNote） */
+  bookingNote?: string | null;
   /** 寄貨編號（CVSPaymentNo） */
   shipmentNo: string | null;
   /** 7-11 交貨便驗證碼 */
@@ -71,9 +103,17 @@ export interface LogisticsProvider {
   mapForm(input: { cvsType: string; collection: boolean; serverReplyUrl: string; merchantTradeNo: string; extraData: string; mobile: boolean }): { action: string; fields: Record<string, string> };
   parseMapReply(form: Record<string, string>): MapStore | null;
   createCvsShipment(input: ShipmentInput): Promise<ShipmentResult>;
+  createHomeShipment(input: HomeShipmentInput): Promise<ShipmentResult>;
   parseNotify(form: Record<string, string>): LogisticsNotify | null;
   cancelShipment(input: { cvsType: string; logisticsId: string; shipmentNo: string; validationNo: string }): Promise<{ ok: boolean; message: string }>;
   printForm(input: { cvsType: string; logisticsId: string; shipmentNo: string; validationNo: string }): { action: string; fields: Record<string, string> } | null;
+}
+
+/** 宅配距離：寄件／收件縣市相同＝00、不同＝01、離島＝02 */
+export function homeDistance(senderCity: string, receiverCity: string, island: boolean): "00" | "01" | "02" {
+  if (island) return "02";
+  const norm = (c: string) => String(c ?? "").replace(/^台/, "臺").slice(0, 3);
+  return norm(senderCity) && norm(senderCity) === norm(receiverCity) ? "00" : "01";
 }
 
 const SUBTYPES: Record<"C2C" | "B2C", Partial<Record<CvsType, string>>> = {
@@ -238,10 +278,66 @@ export class EcpayLogistics implements LogisticsProvider {
       logisticsId: r.AllPayLogisticsID || null,
       shipmentNo: r.CVSPaymentNo || null,
       validationNo: r.CVSValidationNo || null,
+      bookingNote: r.BookingNote || null,
       subType: String(r.LogisticsSubType ?? sub),
       rtnCode: String(r.RtnCode ?? ""),
       raw: r,
     };
+  }
+
+  homeShipmentParams(input: HomeShipmentInput): Record<string, string> {
+    if (!["TCAT", "POST"].includes(input.subType)) throw new Error("宅配僅支援黑貓（TCAT）、中華郵政（POST）");
+    if (input.subType === "POST" && input.temperature !== "0001") throw new Error("中華郵政只支援常溫");
+    const amount = Math.round(input.goodsAmount);
+    if (!(amount >= 1 && amount <= 20000)) throw new Error("宅配商品金額需在 1～20,000 元之間");
+    const spec = input.temperature !== "0001" && input.specification === "0004" ? "0003" : input.specification ?? "0001";
+    const p: Record<string, string> = {
+      MerchantID: this.creds.merchantId,
+      MerchantTradeNo: input.merchantTradeNo.slice(0, 20),
+      MerchantTradeDate: taipeiTimestamp(input.tradeDate ?? new Date()),
+      LogisticsType: "HOME",
+      LogisticsSubType: input.subType,
+      GoodsAmount: String(amount),
+      GoodsName: truncateBytes(stripSpecial(input.goodsName, 50), 50) || "團購商品",
+      SenderName: input.senderName,
+      SenderCellPhone: input.senderCellPhone,
+      SenderZipCode: input.senderZipCode,
+      SenderAddress: stripSpecial(input.senderAddress, 60),
+      ReceiverName: input.receiverName,
+      ReceiverCellPhone: input.receiverCellPhone,
+      ReceiverZipCode: input.receiverZipCode,
+      ReceiverAddress: stripSpecial(input.receiverAddress, 60),
+      Temperature: input.temperature,
+      Specification: spec,
+      ScheduledPickupTime: "4",
+      ScheduledDeliveryTime: "4",
+      ServerReplyURL: input.serverReplyUrl,
+    };
+    if (input.subType === "TCAT") p.Distance = input.distance;
+    if (input.subType === "POST") p.GoodsWeight = String(Math.max(0.1, Math.min(20, Number(input.goodsWeight ?? 1))));
+    if (input.remark) p.Remark = stripSpecial(input.remark, 200);
+    p.CheckMacValue = this.sign(p);
+    return p;
+  }
+
+  async createHomeShipment(input: HomeShipmentInput): Promise<ShipmentResult> {
+    return this.postCreate(this.homeShipmentParams(input));
+  }
+
+  private async postCreate(p: Record<string, string>): Promise<ShipmentResult> {
+    let text: string;
+    try {
+      const r = await this.fetcher(`${this.host()}/Express/Create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(p).toString(),
+        signal: AbortSignal.timeout(20000),
+      });
+      text = await r.text();
+    } catch (e) {
+      return { ok: false, message: `連線綠界物流失敗：${(e as Error).message}`, logisticsId: null, shipmentNo: null, validationNo: null, subType: p.LogisticsSubType, rtnCode: "", raw: {} };
+    }
+    return this.parseCreateResponse(text, p.LogisticsSubType);
   }
 
   async createCvsShipment(input: ShipmentInput): Promise<ShipmentResult> {
@@ -303,7 +399,7 @@ export class EcpayLogistics implements LogisticsProvider {
 
   /** 列印託運單（C2C 繳款單／小白單）：瀏覽器表單 POST 到綠界 */
   printForm(input: { cvsType: string; logisticsId: string; shipmentNo: string; validationNo: string }) {
-    const sub = this.subTypeOf(input.cvsType);
+    const sub = ["TCAT", "POST"].includes(input.cvsType) ? input.cvsType : this.subTypeOf(input.cvsType);
     let path: string | null = null;
     const p: Record<string, string> = { MerchantID: this.creds.merchantId, AllPayLogisticsID: input.logisticsId };
     if (sub === "UNIMARTC2C") {

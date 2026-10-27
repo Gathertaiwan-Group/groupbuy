@@ -3,7 +3,7 @@
 // 列表呼叫 orders 模組的 POST /ajax/SalesOrder/list；本模組負責頁面與「檢核」。
 //
 // POST /ajax/SalesOrderTransaction/verify   參數 salesOrderId（一次一筆）
-// 金流後台未串接：改以本系統 groupbuy.sales_order_transactions（成功收款、成功退款）對照訂單已付金額，
+// 綠界交易另向綠界 QueryTradeInfo 比對（fix21）；其他：以本系統 groupbuy.sales_order_transactions（成功收款、成功退款）對照訂單已付金額，
 // 並把檢核結果寫回該訂單的交易紀錄（verified、date_verified、verify_result）。
 //
 // 回應（本系統自訂格式；計算見 transaction-verify.ts）：
@@ -19,6 +19,8 @@ import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
 import { json } from "@/lib/core/http/responses";
 import { enumLabel } from "@/lib/core/enums";
 import { verifyResultText, verifySummary, type VerifyTx } from "./transaction-verify";
+import { ecpayPayment } from "./gateway";
+import type { PaymentProvider } from "@/lib/integrations/payment";
 
 async function verify(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
@@ -35,7 +37,7 @@ async function verify(ctx: RequestContext): Promise<Response> {
   if (!order) throw notFound("找不到訂單");
   const { data: txs, error } = await db
     .from("sales_order_transactions")
-    .select("category, status, amount, merchant_trade_no, trade_no, credit_card_number, date_transaction")
+    .select("category, status, amount, merchant_trade_no, trade_no, credit_card_number, date_transaction, provider")
     .eq("tenant_id", session.tenantId)
     .eq("sales_order_id", id)
     .order("date_transaction", { ascending: true });
@@ -44,16 +46,49 @@ async function verify(ctx: RequestContext): Promise<Response> {
   const labels = new Map<string, string>();
   for (const s of new Set(rows.map((r) => r.status))) labels.set(s, await enumLabel("SalesOrderTransaction.status", s));
   const summary = verifySummary(rows, Number(order.total_paid), (c) => labels.get(c) ?? c);
+  // fix21：綠界的付款交易向綠界查詢（QueryTradeInfo）比對狀態與金額
+  const provider = ecpayPayment();
+  const gw = await gatewayCheck(provider, rows as (VerifyTx & { provider: string })[]);
   if (rows.length) {
+    const text = [verifyResultText(summary), ...gw.lines].join("；").slice(0, 1000);
     const { error: uerr } = await db
       .from("sales_order_transactions")
-      .update({ verified: true, date_verified: new Date().toISOString(), verify_result: verifyResultText(summary) })
+      .update({ verified: true, date_verified: new Date().toISOString(), verify_result: text })
       .eq("tenant_id", session.tenantId)
       .eq("sales_order_id", id);
     if (uerr) throw new Error(`[accounting] ${uerr.message}`);
   }
-  const ni = notIntegrated("金流後台查詢（金流對帳檢核）");
-  return json({ code: 200, data: [{ salesOrderId: order.id, uuid: order.uuid, ...summary }], ...ni });
+  const ni = gw.checked ? {} : notIntegrated("金流後台查詢（金流對帳檢核）");
+  return json({ code: 200, data: [{ salesOrderId: order.id, uuid: order.uuid, ...summary, gatewayLines: gw.lines, gatewayMismatch: gw.mismatch }], ...ni });
+}
+
+/** 綠界交易逐筆查詢：本系統「成功」須綠界已付款且金額相同；本系統「處理中／失敗」而綠界已付款＝漏入帳 */
+export async function gatewayCheck(
+  provider: PaymentProvider | null,
+  rows: (VerifyTx & { provider: string })[],
+): Promise<{ checked: boolean; mismatch: boolean; lines: string[] }> {
+  const targets = rows.filter((r) => r.provider === "ECPAY" && r.category === "PAYMENT" && r.merchant_trade_no);
+  if (!provider || !targets.length) return { checked: false, mismatch: false, lines: [] };
+  const lines: string[] = [];
+  let mismatch = false;
+  for (const t of targets.slice(-5)) {
+    const q = await provider.queryTrade(String(t.merchant_trade_no));
+    const local = t.status;
+    let ok: boolean;
+    if (q.status === "UNKNOWN") {
+      ok = false;
+      lines.push(`綠界 ${t.merchant_trade_no}：查詢失敗（${q.message}）`);
+    } else if (q.status === "PAID") {
+      ok = local === "SUCCESS" && Number(q.amount) === Number(t.amount);
+      lines.push(`綠界 ${t.merchant_trade_no}：已付款 ${q.amount}${ok ? "（相符）" : local === "SUCCESS" ? `（金額不符，本系統 ${t.amount}）` : "（本系統未入帳）"}`);
+    } else {
+      ok = local !== "SUCCESS";
+      lines.push(`綠界 ${t.merchant_trade_no}：未付款${ok ? "" : "（本系統卻記為成功）"}`);
+    }
+    if (!ok) mismatch = true;
+  }
+  if (provider.sandbox) lines.push("（綠界測試環境）");
+  return { checked: true, mismatch, lines };
 }
 
 export const salesOrderTransactionRoutes: RouteDef[] = [

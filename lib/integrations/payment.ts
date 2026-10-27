@@ -6,7 +6,7 @@ import { checkMacValue, parseFormString, parseTaipeiTime, stripSpecial, taipeiTi
 import { ecpayHosts, type EcpayCreds } from "./config.ts";
 
 /** 本系統付款方式位元（SalesOrder.paymentMethod） */
-export const PM = { BANK: 1, VIRTUAL_BANK: 2, CREDIT: 4, CVS_CODE: 32, CVS_PICKUP: 64 } as const;
+export const PM = { BANK: 1, VIRTUAL_BANK: 2, CREDIT: 4, CVS_CODE: 32, CVS_PICKUP: 64, PERIOD: 128, LINEPAY: 1024, EASYCARD: 4096, TAIWANPAY: 8192, UNIONPAY: 16384 } as const;
 
 export interface CheckoutInput {
   merchantTradeNo: string;
@@ -28,6 +28,39 @@ export interface CheckoutInput {
   cvsExpireMinutes?: number;
   tradeDate?: Date;
   customField1?: string;
+  /** 信用卡定期定額：每期金額＝TotalAmount；type D/M/Y、frequency（D 1–365、M 1–12、Y 1）、execTimes（>1） */
+  period?: { type: "D" | "M" | "Y"; frequency: number; execTimes: number };
+  /** 定期定額第二期起的授權結果通知 */
+  periodReturnUrl?: string;
+}
+
+/** 定期定額第二期起的授權結果 */
+export interface PeriodNotify {
+  merchantTradeNo: string;
+  success: boolean;
+  rtnCode: string;
+  message: string;
+  amount: number;
+  /** 第幾次授權成功（TotalSuccessTimes） */
+  times: number;
+  authCode: string | null;
+  processDate: string | null;
+  gwsr: string | null;
+  raw: Record<string, string>;
+}
+
+/** 請退款（DoAction）一個步驟的結果 */
+export interface DoActionResult {
+  action: "C" | "R" | "E" | "N";
+  ok: boolean;
+  rtnCode: string;
+  message: string;
+}
+
+export interface RefundResult {
+  ok: boolean;
+  message: string;
+  steps: DoActionResult[];
 }
 
 export interface CheckoutForm {
@@ -81,6 +114,8 @@ export interface PaymentProvider {
   parseNotify(form: Record<string, string>): PaymentNotify | null;
   parsePaymentInfo(form: Record<string, string>): PaymentInfoNotify | null;
   queryTrade(merchantTradeNo: string): Promise<TradeQuery>;
+  /** 全額退款（取消授權／退刷）；不支援的服務商回 ok:false */
+  refund(input: { merchantTradeNo: string; tradeNo: string; amount: number }): Promise<RefundResult>;
   /** 回應綠界通知的固定字串 */
   readonly ackOk: string;
 }
@@ -90,7 +125,22 @@ export const ECPAY_CHOOSE_PAYMENT: Record<number, string> = {
   [PM.CREDIT]: "Credit",
   [PM.VIRTUAL_BANK]: "ATM",
   [PM.CVS_CODE]: "CVS",
+  // 信用卡定期定額（Credit＋Period* 參數）、銀聯卡（Credit＋UnionPay=1）、台灣 Pay（TWQR，需向綠界申請開通）
+  [PM.PERIOD]: "Credit",
+  [PM.UNIONPAY]: "Credit",
+  [PM.TAIWANPAY]: "TWQR",
 };
+
+/** 依綠界文件：定期定額參數檢查 */
+export function validPeriod(p: { type: string; frequency: number; execTimes: number }): boolean {
+  const f = Math.trunc(p.frequency);
+  const n = Math.trunc(p.execTimes);
+  if (!(n > 1)) return false;
+  if (p.type === "D") return f >= 1 && f <= 365 && n <= 999;
+  if (p.type === "M") return f >= 1 && f <= 12 && n <= 99;
+  if (p.type === "Y") return f === 1 && n <= 9;
+  return false;
+}
 
 /** 商店訂單編號：英數 ≤20，同一筆訂單每次付款嘗試都不同（綠界不允許重複） */
 export function newMerchantTradeNo(orderId: number, now = Date.now()): string {
@@ -141,10 +191,21 @@ export class EcpayPayment implements PaymentProvider {
       ReturnURL: input.returnUrl,
       ChoosePayment: choose,
       EncryptType: "1",
-      OrderResultURL: input.orderResultUrl,
       ClientBackURL: input.clientBackUrl,
       NeedExtraPaidInfo: "Y",
     };
+    // 銀聯卡不支援 OrderResultURL（付款後以 ClientBackURL 返回）
+    if (input.paymentMethod !== PM.UNIONPAY) f.OrderResultURL = input.orderResultUrl;
+    if (input.paymentMethod === PM.UNIONPAY) f.UnionPay = "1";
+    if (input.paymentMethod === PM.PERIOD) {
+      const p = input.period ?? { type: "M", frequency: 1, execTimes: 12 };
+      if (!validPeriod(p)) throw new Error("定期定額設定錯誤（週期／次數）");
+      f.PeriodAmount = String(amount);
+      f.PeriodType = p.type;
+      f.Frequency = String(Math.trunc(p.frequency));
+      f.ExecTimes = String(Math.trunc(p.execTimes));
+      if (input.periodReturnUrl) f.PeriodReturnURL = input.periodReturnUrl;
+    }
     if (choose === "ATM" || choose === "CVS") f.PaymentInfoURL = input.paymentInfoUrl;
     if (choose === "ATM") f.ExpireDate = String(Math.min(60, Math.max(1, Math.round(input.atmExpireDays ?? 3))));
     if (choose === "CVS") f.StoreExpireDate = String(Math.min(43200, Math.max(1, Math.round(input.cvsExpireMinutes ?? 10080))));
@@ -196,6 +257,68 @@ export class EcpayPayment implements PaymentProvider {
       expireAt: parseTaipeiTime(form.ExpireDate),
       raw: form,
     };
+  }
+
+  /** 定期定額第二期起的授權通知（PeriodReturnURL）；驗章失敗回 null */
+  parsePeriodNotify(form: Record<string, string>): PeriodNotify | null {
+    if (!this.verified(form)) return null;
+    return {
+      merchantTradeNo: String(form.MerchantTradeNo ?? ""),
+      success: String(form.RtnCode) === "1",
+      rtnCode: String(form.RtnCode ?? ""),
+      message: String(form.RtnMsg ?? ""),
+      amount: Number(form.Amount ?? form.PeriodAmount ?? NaN),
+      times: Number(form.TotalSuccessTimes ?? 0) || 0,
+      authCode: form.AuthCode || null,
+      processDate: parseTaipeiTime(form.ProcessDate),
+      gwsr: form.Gwsr || null,
+      raw: form,
+    };
+  }
+
+  /** 信用卡請退款（CreditDetail/DoAction）：C 關帳、R 退刷、E 取消關帳、N 放棄授權 */
+  async doAction(input: { merchantTradeNo: string; tradeNo: string; action: "C" | "R" | "E" | "N"; amount: number }): Promise<DoActionResult> {
+    const p: Record<string, string> = {
+      MerchantID: this.creds.merchantId,
+      MerchantTradeNo: input.merchantTradeNo,
+      TradeNo: input.tradeNo,
+      Action: input.action,
+      TotalAmount: String(Math.round(input.amount)),
+    };
+    p.CheckMacValue = this.sign(p);
+    let text = "";
+    try {
+      const r = await this.fetcher(`${ecpayHosts(this.sandbox).payment}/CreditDetail/DoAction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(p).toString(),
+        signal: AbortSignal.timeout(20000),
+      });
+      text = await r.text();
+    } catch (e) {
+      return { action: input.action, ok: false, rtnCode: "", message: `連線失敗：${(e as Error).message}` };
+    }
+    const q = parseFormString(text.trim());
+    return { action: input.action, ok: String(q.RtnCode) === "1", rtnCode: String(q.RtnCode ?? ""), message: String(q.RtnMsg ?? text.slice(0, 200)) };
+  }
+
+  /**
+   * 全額退款：綠界不提供測試／正式通用的授權狀態查詢，依文件的處理順序嘗試——
+   * N 放棄（已授權／操作取消）→ E 取消關帳＋N 放棄（要關帳）→ R 退刷（已關帳）。任何一步成功即停止。
+   */
+  async refund(input: { merchantTradeNo: string; tradeNo: string; amount: number }): Promise<RefundResult> {
+    const steps: DoActionResult[] = [];
+    const run = async (a: "R" | "E" | "N") => {
+      const r = await this.doAction({ ...input, action: a });
+      steps.push(r);
+      return r;
+    };
+    if ((await run("N")).ok) return { ok: true, message: "已取消授權（放棄）", steps };
+    if ((await run("E")).ok) {
+      if ((await run("N")).ok) return { ok: true, message: "已取消關帳並放棄授權", steps };
+    }
+    if ((await run("R")).ok) return { ok: true, message: "已退刷", steps };
+    return { ok: false, message: steps.map((s) => `${s.action}:${s.message}`).join("；"), steps };
   }
 
   /** 向綠界查詢訂單（付款結果的伺服器端回查，用來確認金額與狀態） */

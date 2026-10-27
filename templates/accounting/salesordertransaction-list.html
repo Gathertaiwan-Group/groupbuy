@@ -31,6 +31,9 @@
 				if (r.difference != 0) lines.push('<span class="text-danger">與已付 ' + esc(r.orderPaid) + ' 相差 ' + esc(r.difference) + '</span>');
 				if (r.merchantOrderId) lines.push('金流單號 ' + esc(r.merchantOrderId));
 				if (r.cardNumber) lines.push('卡號 ' + esc(r.cardNumber));
+				{{!-- fix21：綠界 QueryTradeInfo 比對結果 --}}
+				$.each(r.gatewayLines || [], function(i, l) { lines.push((r.gatewayMismatch ? '<span class="text-danger">' : '<span class="text-success">') + esc(l) + '</span>'); });
+				if (r.gatewayMismatch) badge = '<span class="badge badge-danger">綠界不符</span>';
 				return badge + '<div class="small">' + lines.join('<br>') + '</div>';
 			},
 			fill: function(dt) {
