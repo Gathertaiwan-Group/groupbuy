@@ -14,7 +14,7 @@
 //                 低庫存通知（LOW_STOCK_NOTIFICATION_SETTINGS）→ 上架中一般商品可售庫存低於門檻 → 後台站內通知（system_notifications，
 //                   category＝LOW_STOCK；同商品 24 小時內只通知一次）；有填通知 email 另寫一筆待寄紀錄（由 delivery 工作寄出）
 //   delivery      fix20：Email／簡訊待寄紀錄批次寄出（core/delivery.ts runDelivery：QUEUED→SENDING→SENT／FAILED／BLOCKED，
-//                 重試上限 3、同一筆不重寄；未設定服務商＝不寄、紀錄維持未串接；回應只含筆數）
+//                 最多嘗試 3 次〔含第一次〕、同一筆不重寄；未設定服務商＝不寄、紀錄維持未串接；回應只含筆數）
 //   housekeeping  清除過期的後台／會員 session、90 天前的登入紀錄、1 天前的前台限流計數、過期的登入認證碼
 // 原站沒有可擷取的排程器畫面；工作範圍依 repo 內既有排程程式碼與 spec（SPEC.md §「訂單成立」autoCancelExpired 推論）。
 // Hobby 方案 Cron 每天最多一次（vercel.json crons，保留當備援）；高頻由 GitHub Actions .github/workflows/cron.yml 每 10 分鐘呼叫。

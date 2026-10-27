@@ -5,6 +5,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import type { AdminSession, RequestContext } from "@/lib/core/http/types";
 import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
 import { reclaimQuotaMessage } from "@/lib/modules/marketing/usage-release";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import type { Row } from "@/lib/db/mapping";
 
 export type Db = ReturnType<typeof getServiceClient>;
@@ -162,10 +163,14 @@ export async function adjustItemStock(
 
 /* ─────────────────────────── 對外服務（未串接）─────────────────────────── */
 
-/** 寫入寄信紀錄（email_messages，status=NOT_SENT_UNINTEGRATED），回傳【未串接】提示 */
+/**
+ * 寫入寄信紀錄（email_messages，status=NOT_SENT_UNINTEGRATED；可寄時由排程 delivery 寄出，core/delivery.ts）。
+ * 回傳提示：Email 未串接 →【未串接】文字；可寄 → 空字串。
+ * contentFinal：內容已定稿（後台寄信編輯器送出、或已依系統信範本產生）→ 寄送時不再套範本。
+ */
 export async function recordEmail(
   session: AdminSession,
-  input: { salesOrderId?: number | null; groupBuyId?: number | null; template?: string | null; toEmail?: string | null; subject?: string | null; body?: string | null },
+  input: { salesOrderId?: number | null; groupBuyId?: number | null; template?: string | null; toEmail?: string | null; subject?: string | null; body?: string | null; contentFinal?: boolean },
 ): Promise<string> {
   const { error } = await db().from("email_messages").insert({
     tenant_id: session.tenantId,
@@ -175,13 +180,14 @@ export async function recordEmail(
     to_email: input.toEmail ?? null,
     subject: input.subject ?? null,
     body: input.body ?? null,
+    content_final: !!input.contentFinal,
     status: "NOT_SENT_UNINTEGRATED",
   });
   if (error) throw new Error(`[orders] 寫入寄信紀錄失敗：${error.message}`);
-  return notIntegrated("Email 寄送").message;
+  return (await deliveryNotice(session.tenantId, "EMAIL", "Email 寄送")).message;
 }
 
-/** 寫入簡訊紀錄（sms_messages，status=NOT_SENT_UNINTEGRATED），回傳【未串接】提示 */
+/** 寫入簡訊紀錄（sms_messages，status=NOT_SENT_UNINTEGRATED；可寄時由排程寄出），回傳提示（未串接 →【未串接】；可寄 → 空字串） */
 export async function recordSms(
   session: AdminSession,
   input: { salesOrderId?: number | null; groupBuyId?: number | null; telephone: string; content: string },
@@ -198,7 +204,7 @@ export async function recordSms(
     status: "NOT_SENT_UNINTEGRATED",
   });
   if (error) throw new Error(`[orders] 寫入簡訊紀錄失敗：${error.message}`);
-  return notIntegrated("簡訊發送").message;
+  return (await deliveryNotice(session.tenantId, "SMS", "簡訊發送")).message;
 }
 
 /* ─────────────────────────── 狀態常數 ─────────────────────────── */

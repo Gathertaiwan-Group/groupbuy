@@ -365,7 +365,7 @@ async function replyConversation(ctx: RequestContext): Promise<Response> {
     .eq("tenant_id", session.tenantId)
     .eq("id", conv.id);
   if (e2) throw new Error(`[helpdesk] 更新客服對話失敗：${e2.message}`);
-  // 通知顧客（Email 未串接：只寫 email_messages 紀錄）
+  // 通知顧客（寫 email_messages；Email 可寄時由排程寄出，未串接時只記錄並提示）
   const notice = conv.email
     ? await recordEmail(session, {
         salesOrderId: conv.sales_order_id,
@@ -377,7 +377,7 @@ async function replyConversation(ctx: RequestContext): Promise<Response> {
       })
     : "顧客未留 Email，未寄送回覆通知。";
   return actionOk(`已送出回覆。${notice}`, {
-    notIntegrated: !!conv.email,
+    notIntegrated: !!conv.email && notice.includes("【未串接】"),
     conversationMessageId: Number((msg as { id: number }).id),
     status: "REPLIED",
   });

@@ -117,7 +117,7 @@ async function undoCancelOrder(ctx: RequestContext): Promise<Response> {
 
 /* ─────────────────────────── 付款 ─────────────────────────── */
 
-/** POST /ajax/SalesOrder/markAsPaid：「處理中」訂單設為已付款並寄「已付款通知信」（未串接） */
+/** POST /ajax/SalesOrder/markAsPaid：「處理中」訂單設為已付款並寄「已付款通知信」（排入寄送；Email 未串接時只記錄） */
 async function markAsPaid(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ids = await selectedIds(ctx);
@@ -129,11 +129,11 @@ async function markAsPaid(ctx: RequestContext): Promise<Response> {
     const id = Number(r.id);
     const paid = num(r.total_paid) > 0 ? num(r.total_paid) : num(r.grand_total);
     const c = await emailTemplateContent(session, id, "PAYMENT_RECEIVED");
-    mailMsg = await recordEmail(session, { salesOrderId: id, groupBuyId: (r.group_buy_id as number) ?? null, template: "PAYMENT_RECEIVED", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body });
+    mailMsg = await recordEmail(session, { salesOrderId: id, groupBuyId: (r.group_buy_id as number) ?? null, template: "PAYMENT_RECEIVED", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body, contentFinal: true });
     await adminUpdateOrders(session, [id], { total_paid: paid, date_paid: nowIso(), status: "PAID_EMAIL_SENT" }, `設為已付款，寄送已付款通知信${mailMsg}`);
   }
   const skipped = rows.length - target.length;
-  return actionOk(`已設為已付款 ${target.length} 筆${skipped ? `（略過非處理中 ${skipped} 筆）` : ""}；${mailMsg}`, { notIntegrated: true });
+  return actionOk(`已設為已付款 ${target.length} 筆${skipped ? `（略過非處理中 ${skipped} 筆）` : ""}；${mailMsg || "已排入已付款通知信"}`, mailMsg ? { notIntegrated: true } : {});
 }
 
 /** POST /ajax/SalesOrder/extendPaymentDue：展延繳款期限並寄展延通知信（未串接） */
@@ -149,10 +149,10 @@ async function extendPaymentDue(ctx: RequestContext): Promise<Response> {
     const due = await nextPaymentDue(session, (r.group_buy_id as number) ?? null);
     await adminUpdateOrders(session, [id], { date_payment_due: due.toISOString() }, `展延繳款日期至 ${taipeiDateTime(due)}`);
     const c = await emailTemplateContent(session, id, "PAYMENT_EXTENSION");
-    mailMsg = await recordEmail(session, { salesOrderId: id, groupBuyId: (r.group_buy_id as number) ?? null, template: "PAYMENT_EXTENSION", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body });
+    mailMsg = await recordEmail(session, { salesOrderId: id, groupBuyId: (r.group_buy_id as number) ?? null, template: "PAYMENT_EXTENSION", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body, contentFinal: true });
     await addOrderHistory(session, id, `寄送繳款期限展延通知信${mailMsg}`);
   }
-  return actionOk(`已展延 ${target.length} 筆訂單的繳款期限；${mailMsg}`, { notIntegrated: true });
+  return actionOk(`已展延 ${target.length} 筆訂單的繳款期限；${mailMsg || "已排入展延通知信"}`, mailMsg ? { notIntegrated: true } : {});
 }
 
 /* ─────────────────────────── 合併訂單 ─────────────────────────── */
@@ -317,9 +317,9 @@ async function sendEmail(ctx: RequestContext): Promise<Response> {
   if (!String(v.body ?? "").trim()) errors.push({ name: "body", status: "欄位必填不得為空" });
   if (errors.length) return json({ fieldErrors: errors, data: [] });
   const template = String(v.template ?? "") || "CUSTOM";
-  const msg = await recordEmail(session, { salesOrderId: id, groupBuyId: (o.group_buy_id as number) ?? null, template, toEmail: email, subject: String(v.subject), body: String(v.body) });
+  const msg = await recordEmail(session, { salesOrderId: id, groupBuyId: (o.group_buy_id as number) ?? null, template, toEmail: email, subject: String(v.subject), body: String(v.body), contentFinal: true });
   await addOrderHistory(session, id, `寄信「${String(v.subject)}」至 ${email}${msg}`);
-  return editorResponse([{ salesOrderId: id }], { notIntegrated: true, message: msg });
+  return editorResponse([{ salesOrderId: id }], msg ? { notIntegrated: true, message: msg } : { message: "已排入寄信" });
 }
 
 /* ─────────────────────────── 設為已出貨 ─────────────────────────── */
@@ -378,7 +378,7 @@ async function markAsShipped(ctx: RequestContext): Promise<Response> {
     let note = `設為已出貨（${dateStr.slice(0, 10)}）${srn ? ` 查貨號碼 ${srn}` : ""}`;
     if (e.send) {
       const c = await emailTemplateContent(session, e.id, "SHIPMENT_NOTICE");
-      mailMsg = await recordEmail(session, { salesOrderId: e.id, groupBuyId: (r.group_buy_id as number) ?? null, template: "SHIPMENT_NOTICE", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body });
+      mailMsg = await recordEmail(session, { salesOrderId: e.id, groupBuyId: (r.group_buy_id as number) ?? null, template: "SHIPMENT_NOTICE", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body, contentFinal: true });
       note += `，寄送出貨信${mailMsg}`;
     }
     await adminUpdateOrders(session, [e.id], patch, note);

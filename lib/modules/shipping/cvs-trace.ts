@@ -18,7 +18,9 @@
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, page, post, requireSession } from "@/lib/core/http/route-helpers";
 import { actionOk, json } from "@/lib/core/http/responses";
-import { badRequest, FieldErrors, notFound, notIntegrated } from "@/lib/core/http/errors";
+import { badRequest, FieldErrors, notFound } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
+import { getAccountSettings } from "@/lib/modules/core/system-settings";
 import { listEntity, type ListSpec } from "@/lib/core/entity/crud";
 import { enumOptionsFor } from "@/lib/core/enums";
 import { salesOrderCvsTraceList } from "@/lib/db/entities/salesOrderCvsTraceList";
@@ -296,12 +298,11 @@ async function sendSMS(ctx: RequestContext): Promise<Response> {
     content: body,
     points,
     status: "NOT_SENT_UNINTEGRATED",
-    error_message: "簡訊服務未串接，僅建立紀錄",
   }));
   const { error: insErr } = await db().from("sms_messages").insert(rows);
   if (insErr) throw new Error(`[shipping] 寫入簡訊紀錄失敗：${insErr.message}`);
   const missing = keys.length - orders.length;
-  const ni = notIntegrated("發送簡訊");
+  const ni = await deliveryNotice(session.tenantId, "SMS", "發送簡訊");
   const msg = `${ni.message}已建立 ${rows.length} 則簡訊紀錄（每則 ${points} 點）${missing > 0 ? `；${missing} 筆訂單編號找不到` : ""}。最近通知日期不變更。`;
   return actionOk(msg, { ...ni, data: [] });
 }
@@ -347,11 +348,13 @@ async function getCvsReturnStats(ctx: RequestContext): Promise<Response> {
   return json({ code: 200, data: { thisMonthRate, lastMonthRate } });
 }
 
-/** sms.js getBalance：簡訊點數屬外部簡訊服務（未串接） */
+/** sms.js getBalance：簡訊餘額＝帳務設定 creditSms（與月結單頁同一個值；寄出成功才扣點，core/delivery.ts）。簡訊未串接 → 【未串接】 */
 async function smsBalance(ctx: RequestContext): Promise<Response> {
-  requireSession(ctx);
-  const ni = notIntegrated("簡訊點數查詢");
-  return json({ code: 200, data: "—（未串接）", ...ni });
+  const session = requireSession(ctx);
+  const ni = await deliveryNotice(session.tenantId, "SMS", "簡訊點數查詢");
+  if (ni.notIntegrated) return json({ code: 200, data: "—（未串接）", ...ni });
+  const acc = await getAccountSettings(session.tenantId);
+  return json({ code: 200, data: acc.creditSms === null ? "不限（未設定餘額）" : acc.creditSms });
 }
 
 /* ─────────────────────────── 路由 ─────────────────────────── */

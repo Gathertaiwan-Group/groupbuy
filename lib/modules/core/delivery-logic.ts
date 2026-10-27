@@ -125,9 +125,10 @@ export function maskRecipient(to: string): string {
   return "***";
 }
 
-/** 寄出前去掉系統在「未串接」時期附在內文的【未串接】提示行 */
+/** 寄出前去掉系統在「未串接」時期附在內文的【未串接】提示行與「（…未串接…）」括號說明 */
 export function cleanBody(body: string | null | undefined): string {
   return String(body ?? "")
+    .replace(/[（(][^（）()\n]*未串接[^（）()\n]*[）)]/g, "") // 例：（匯款對帳入帳；Email 未串接，僅記錄）
     .split(/\r?\n/)
     .filter((l) => !l.includes("【未串接】"))
     .join("\n")
@@ -136,6 +137,7 @@ export function cleanBody(body: string | null | undefined): string {
 export const looksHtml = (s: string) => /<\s*(p|br|div|table|a|span|strong|b|h\d)\b[^>]*>/i.test(s);
 
 /* ── 重試 ── */
+/** 每筆最多嘗試 3 次（含第一次；即最多重試 2 次） */
 export const MAX_ATTEMPTS = 3;
 const BACKOFF_MS = [2 * 60_000, 10 * 60_000, 30 * 60_000];
 

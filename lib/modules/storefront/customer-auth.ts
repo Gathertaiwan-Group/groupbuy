@@ -4,7 +4,8 @@
 import { createHash, randomInt } from "node:crypto";
 import { getServiceClient } from "@/lib/supabase/server";
 import { DUMMY_HASH, hashPassword, verifyPassword } from "@/lib/core/auth/password";
-import { HttpError, badRequest, notIntegrated } from "@/lib/core/http/errors";
+import { HttpError, badRequest } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { json } from "@/lib/core/http/responses";
 import { escapeHtml } from "@/lib/core/render/template";
 import type { RequestContext } from "@/lib/core/http/types";
@@ -88,7 +89,7 @@ function testCodeSuffix(code: string): string {
   return exposeTestCode() ? `（測試用驗證碼：${code}）` : "";
 }
 
-/** 產生並「寄出」6 碼驗證碼：未串接 Email，只寫 email_messages（後台寄信紀錄）；回應是否附碼見 exposeTestCode() */
+/** 產生 6 碼驗證碼並寫 email_messages（Email 可寄時由排程寄出；未串接時只記錄）；回應是否附碼見 exposeTestCode() */
 async function issueActivationCode(tenant: SfTenant, groupBuyId: number | null, c: { id: number; uuid: string; email: string | null }) {
   const code = newCode();
   const token = `${codeHash(c.uuid, code)}|${Date.now() + CODE_TTL_MS}`;
@@ -103,7 +104,7 @@ async function issueActivationCode(tenant: SfTenant, groupBuyId: number | null, 
     body: `您的帳號驗證碼：${code}（30 分鐘內有效）`,
     status: "NOT_SENT_UNINTEGRATED",
   });
-  const ni = notIntegrated("會員帳號認證信");
+  const ni = await deliveryNotice(tenant.id, "EMAIL", "會員帳號認證信");
   return { code, ni };
 }
 
@@ -136,7 +137,7 @@ export async function login(ctx: RequestContext): Promise<Response> {
     let extra = "若未收到，請按「寄送帳號認證信」重新寄送。";
     if (!(exp > Date.now())) {
       const { code, ni } = await issueActivationCode(tenant, groupBuy?.id ?? null, c);
-      extra = `<br>${ni.message}${testCodeSuffix(code)}`;
+      extra = ni.message || testCodeSuffix(code) ? `<br>${ni.message}${testCodeSuffix(code)}` : "";
     }
     const msg = `帳號尚未完成驗證，${sms ? "驗證碼已發送簡訊" : "認證信已寄送至 " + escapeHtml(c.email ?? "")}，請輸入6碼驗證碼。${extra}`;
     return json({ code: sms ? 484 : 483, error: msg, message: msg, data: c.uuid });
@@ -201,8 +202,8 @@ export async function signup(ctx: RequestContext): Promise<Response> {
     row = data as typeof row;
   }
   const { code, ni } = await issueActivationCode(tenant, groupBuy?.id ?? null, row);
-  const msg = `認證信已寄送至 ${escapeHtml(email)}，請輸入信中的6碼驗證碼完成註冊。<br>${ni.message}${testCodeSuffix(code)}`;
-  return json({ code: 200, error: msg, message: msg, data: row.uuid, notIntegrated: true });
+  const msg = `認證信已寄送至 ${escapeHtml(email)}，請輸入信中的6碼驗證碼完成註冊。${ni.message ? `<br>${ni.message}` : ""}${testCodeSuffix(code)}`;
+  return json({ code: 200, error: msg, message: msg, data: row.uuid, notIntegrated: !!ni.notIntegrated });
 }
 
 export async function activate(ctx: RequestContext): Promise<Response> {
@@ -255,7 +256,7 @@ export async function sendActivateEmail(ctx: RequestContext): Promise<Response> 
   if (c.is_activated) return json({ code: 200, error: "帳號已完成驗證，請直接登入", message: "帳號已完成驗證，請直接登入" });
   const { code, ni } = await issueActivationCode(tenant, groupBuy?.id ?? null, c);
   const msg = `已重新寄送帳號認證信至 ${escapeHtml(c.email ?? "")}。${ni.message}${testCodeSuffix(code)}`;
-  return json({ code: 200, error: msg, message: msg, notIntegrated: true });
+  return json({ code: 200, error: msg, message: msg, notIntegrated: !!ni.notIntegrated });
 }
 
 export async function forgotPassword(ctx: RequestContext): Promise<Response> {
@@ -284,9 +285,9 @@ export async function forgotPassword(ctx: RequestContext): Promise<Response> {
       status: "NOT_SENT_UNINTEGRATED",
     });
   }
-  const ni = notIntegrated("重設密碼信");
-  const msg = `若此帳號存在，重設密碼信已寄出，請至信箱收信。<br>${ni.message}`;
-  return json({ code: 200, error: msg, message: msg, notIntegrated: true });
+  const ni = await deliveryNotice(tenant.id, "EMAIL", "重設密碼信");
+  const msg = `若此帳號存在，重設密碼信已寄出，請至信箱收信。${ni.message ? `<br>${ni.message}` : ""}`;
+  return json({ code: 200, error: msg, message: msg, notIntegrated: !!ni.notIntegrated });
 }
 
 /** 只接受站內相對路徑 */

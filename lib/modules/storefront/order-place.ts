@@ -9,7 +9,7 @@
 import { post } from "@/lib/core/http/route-helpers";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { redirect } from "@/lib/core/http/responses";
-import { notIntegrated } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { getServiceClient } from "@/lib/supabase/server";
 import { scopeFromTenantPath, gbSetting, type SfGroupBuy, type SfTenant } from "./site";
 import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext, type CartLine } from "./cart-data";
@@ -510,7 +510,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   // 6) 訂單成立通知信（未串接 Email：只寫紀錄）
   const to = String(order.customer_email ?? "");
   if (to) {
-    const ni = notIntegrated("訂單成立通知信");
+    const ni = await deliveryNotice(tenant.id, "EMAIL", "訂單成立通知信");
     await getServiceClient().from("email_messages").insert({
       tenant_id: tenant.id,
       group_buy_id: gb.id,
@@ -518,7 +518,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
       template: "ORDER_CREATED",
       to_email: to,
       subject: `【${gb.title}】訂單成立通知 ${result.uuid}`,
-      body: `訂單編號：${result.uuid}\n訂單金額：${p.grandTotal}\n${ni.message}`,
+      body: `訂單編號：${result.uuid}\n訂單金額：${p.grandTotal}${ni.message ? `\n${ni.message}` : ""}`,
       status: "NOT_SENT_UNINTEGRATED",
     });
   }

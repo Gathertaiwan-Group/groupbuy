@@ -5,7 +5,7 @@
 //     1) 逾時的 SENDING（租約過期）→ FAILED（結果不明，為避免重複寄送不自動重寄）
 //     2) 有可用服務商的租戶：最近的 NOT_SENT_UNINTEGRATED → QUEUED（時間窗見 PROMOTE_*；歷史紀錄不會被補寄）
 //     3) 取件：QUEUED → SENDING（條件式更新，同一筆只有一個執行者取得）→ 寄送 → SENT／FAILED／BLOCKED，
-//        或「確定未送出」的錯誤回 QUEUED 延後重試（上限 3 次）
+//        或「確定未送出」的錯誤回 QUEUED 延後重試（最多嘗試 3 次，含第一次）
 //   時效性訊息（登入認證碼、寄送測試信）由呼叫端寫入 QUEUED 後立即 deliverNow()；失敗則留給排程重試。
 // 安全預設：沒有任何服務商設定 → 什麼都不寄（紀錄維持 NOT_SENT_UNINTEGRATED）；
 //   MESSAGE_DELIVERY_MODE 未設定＝whitelist：只寄給 MESSAGE_TEST_WHITELIST，其他收件者一律 BLOCKED（攔下記錄）。
@@ -13,6 +13,9 @@
 //   （金鑰由 SESSION_SECRET 以 HKDF 導出；SESSION_SECRET 更換後需重新輸入密碼）。
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes, randomUUID } from "node:crypto";
 import { getServiceClient } from "@/lib/supabase/server";
+import { notIntegrated } from "@/lib/core/http/errors";
+import { resolveGroupBuyPreferences } from "@/lib/modules/groupbuy/preference";
+import { applyTemplate, orderVars, smsPoints, templatePrefNames } from "./message-template-logic";
 import { readSystemSettingAllTenants, readSystemSettings } from "./system-settings";
 import type { MessageDelivery } from "./system-settings-logic";
 import {
@@ -99,12 +102,12 @@ function tenantMailOf(s: Row | null | undefined): TenantMail {
   };
 }
 
-const tenantCache = new Map<number, { id: number; code: string | null }>();
-async function tenantOf(id: number): Promise<{ id: number; code: string | null }> {
+const tenantCache = new Map<number, { id: number; code: string | null; name: string | null }>();
+async function tenantOf(id: number): Promise<{ id: number; code: string | null; name: string | null }> {
   const hit = tenantCache.get(id);
   if (hit) return hit;
-  const { data } = await db().from("tenants").select("id, code").eq("id", id).maybeSingle<{ id: number; code: string | null }>();
-  const t = { id, code: data?.code ?? null };
+  const { data } = await db().from("tenants").select("id, code, name").eq("id", id).maybeSingle<{ id: number; code: string | null; name: string | null }>();
+  const t = { id, code: data?.code ?? null, name: data?.name ?? null };
   tenantCache.set(id, t);
   return t;
 }
@@ -278,7 +281,7 @@ export async function sendSms(p: EnvSmsProvider, msg: { id: number; to: string; 
 /* ───────────── 佇列 ───────────── */
 
 const TBL: Record<Channel, { table: string; to: string; cols: string }> = {
-  EMAIL: { table: "email_messages", to: "to_email", cols: "id, tenant_id, template, to_email, subject, body, attempts" },
+  EMAIL: { table: "email_messages", to: "to_email", cols: "id, tenant_id, group_buy_id, sales_order_id, template, to_email, subject, body, content_final, attempts" },
   SMS: { table: "sms_messages", to: "telephone", cols: "id, tenant_id, telephone, content, attempts" },
 };
 
@@ -350,6 +353,110 @@ async function finish(ch: Channel, id: number, holder: string, patch: Row): Prom
   if (error) console.error(`[delivery] 寫回寄送結果失敗（${ch} #${id}）`, error.message);
 }
 
+/* ───────────── 系統信範本 ───────────── */
+
+/** 網站網址（信中訂單連結用）：SITE_URL → Vercel 正式網域 → 空白（不產生連結） */
+const siteBaseUrl = () =>
+  (process.env.SITE_URL ?? "").trim() || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
+
+/** 讀範本設定值（有團購 → 本團 → 綁定標籤 → 系統設定；沒有團購 → 系統設定） */
+async function templateValues(tenantId: number, groupBuyId: number | null, names: [string, string]): Promise<{ subject: string | null; body: string | null }> {
+  if (groupBuyId) {
+    const r = await resolveGroupBuyPreferences(tenantId, groupBuyId, names);
+    return { subject: r[names[0]]?.prefValue ?? null, body: r[names[1]]?.prefValue ?? null };
+  }
+  const { data, error } = await db().from("system_preferences").select("name, pref_value").eq("tenant_id", tenantId).in("name", names);
+  if (error) throw new Error(`讀取系統信範本失敗：${error.message}`);
+  const m = new Map(((data ?? []) as { name: string; pref_value: string | null }[]).map((r) => [r.name, r.pref_value]));
+  return { subject: m.get(names[0]) ?? null, body: m.get(names[1]) ?? null };
+}
+
+/** 訂單通知信：系統設定／進階設定有填「系統信-…主旨／內容」→ 依範本渲染；沒填 → 原內容 */
+export async function renderOrderEmail(
+  tenantId: number,
+  salesOrderId: number,
+  template: string,
+  current: { subject: string; body: string },
+): Promise<{ subject: string; body: string; applied: boolean }> {
+  const names = templatePrefNames(template);
+  if (!names || !salesOrderId) return { ...current, applied: false };
+  const { data: o, error } = await db()
+    .from("sales_orders")
+    .select("uuid, group_buy_id, customer_firstname, grand_total, total_paid, date_payment_due, shipping_receipt_number, cvs_store_name, group_buys(title, short_url)")
+    .eq("tenant_id", tenantId)
+    .eq("id", salesOrderId)
+    .maybeSingle<Row>();
+  if (error) throw new Error(`讀取訂單失敗：${error.message}`);
+  if (!o) return { ...current, applied: false };
+  const tpl = await templateValues(tenantId, o.group_buy_id ? Number(o.group_buy_id) : null, names);
+  const t = await tenantOf(tenantId);
+  return applyTemplate(tpl, current, orderVars(o, { tenantCode: t.code ?? "", tenantName: t.name ?? "", baseUrl: siteBaseUrl() }));
+}
+
+async function renderWithTemplate(row: Row, current: { subject: string; body: string }): Promise<{ subject: string; body: string }> {
+  if (!row.sales_order_id || !templatePrefNames(String(row.template ?? ""))) return current;
+  try {
+    const r = await renderOrderEmail(Number(row.tenant_id), Number(row.sales_order_id), String(row.template), current);
+    return { subject: r.subject, body: r.body };
+  } catch (e) {
+    console.error(`[delivery] 套用系統信範本失敗（#${row.id}），改用原內容`, errText(e));
+    return current;
+  }
+}
+
+/* ───────────── 餘額扣點（帳務設定 creditEmail／creditSms；migration 0109）───────────── */
+
+/** 不計點：寄給管理員的系統訊息 */
+const CREDIT_EXEMPT = new Set(["SYSTEM_TEST", "ADMIN_WTOKEN"]);
+
+/** 寄送前預扣；餘額不足 → blocked 訊息（並在後台鈴鐺通知，同一天同管道一次）。未設定餘額＝不計點 */
+async function reserveCredit(ch: Channel, tenantId: number, id: number, points: number): Promise<{ reserved: boolean; blocked?: string }> {
+  if (points <= 0) return { reserved: false };
+  const { data, error } = await db().rpc("delivery_credit_reserve", { p_tenant_id: tenantId, p_channel: ch, p_message_id: id, p_points: points });
+  if (error) throw new Error(`扣點失敗：${error.message}`); // 寄出前的例外 → 呼叫端退回 QUEUED
+  const r = (data ?? {}) as Row;
+  if (r.result === "RESERVED") return { reserved: true };
+  if (r.result === "ALREADY") return { reserved: r.status === "RESERVED" };
+  if (r.result === "INSUFFICIENT") {
+    const label = ch === "EMAIL" ? "Email" : "簡訊";
+    const day = Math.floor(Date.now() / 86400_000);
+    const { error: nErr } = await db()
+      .from("system_notifications")
+      .upsert(
+        {
+          tenant_id: tenantId,
+          admin_user_id: null,
+          category: "CREDIT",
+          title: `${label}餘額不足，訊息未寄出（餘額 ${Number(r.balance)}，需 ${points} 點）`,
+          descr: "請至「系統設定 → GBA帳務設定」儲值後，重新寄送被攔下的訊息",
+          url: "/backend/BillingTransaction/list",
+          dedupe_key: `CREDIT:${ch}:${day}`,
+        },
+        { onConflict: "tenant_id,dedupe_key", ignoreDuplicates: true },
+      );
+    if (nErr) console.error("[delivery] 寫入餘額不足通知失敗", nErr.message);
+    return { reserved: false, blocked: `${label}餘額不足（餘額 ${Number(r.balance)}，需 ${points} 點），未寄出` };
+  }
+  return { reserved: false }; // UNMETERED
+}
+
+/** 寄出成功 → 確定扣點；失敗 → 退回點數（冪等：只處理預扣中的帳本列） */
+async function settleCredit(ch: Channel, id: number, success: boolean): Promise<void> {
+  const { error } = await db().rpc("delivery_credit_settle", { p_channel: ch, p_message_id: id, p_success: success });
+  if (error) console.error(`[delivery] 結算扣點失敗（${ch} #${id}）`, error.message);
+}
+
+/** 後台／前台回應用：該管道實際可寄 → 不顯示；未串接 → 【未串接】提示 */
+export async function deliveryNotice(tenantId: number, ch: Channel, feature: string): Promise<{ notIntegrated?: true; message: string }> {
+  let ok = false;
+  try {
+    ok = ch === "EMAIL" ? !!(await emailTransportFor(tenantId)) : !!(await smsProviderFor(tenantId));
+  } catch {
+    ok = false;
+  }
+  return ok ? { message: "" } : notIntegrated(feature);
+}
+
 export type FinalStatus = "SENT" | "FAILED" | "BLOCKED" | "QUEUED";
 interface RunCtx {
   cfg: DeliveryConfig;
@@ -377,15 +484,24 @@ async function processRow(ch: Channel, row: Row, rc: RunCtx): Promise<{ status: 
     if (!t) return done("FAILED", { error_message: "寄信服務未設定（未串接）" });
     if (!EMAIL_RE.test(normalizeEmail(to))) return done("FAILED", { error_message: "收件 Email 空白或格式錯誤" });
     if (!recipientAllowed(rc.cfg, "EMAIL", to)) return done("BLOCKED", { error_message: "測試收件白名單模式：收件者不在白名單，未寄出" });
-    const subject = String(row.subject ?? "").replace(/[\r\n]+/g, " ").trim() || "(無主旨)";
-    outcome = await sendEmail(t, { id, to, subject, body: cleanBody(row.body as string) });
+    let subject = String(row.subject ?? "").replace(/[\r\n]+/g, " ").trim();
+    let body = cleanBody(row.body as string);
+    if (!row.content_final) ({ subject, body } = await renderWithTemplate(row, { subject, body }));
+    const credit = await reserveCredit(ch, tenantId, id, CREDIT_EXEMPT.has(String(row.template ?? "")) ? 0 : 1);
+    if (credit.blocked) return done("BLOCKED", { error_message: credit.blocked });
+    outcome = await sendEmail(t, { id, to, subject: subject || "(無主旨)", body });
+    if (credit.reserved) await settleCredit(ch, id, outcome.ok);
   } else {
     if (!rc.smsP.has(tenantId)) rc.smsP.set(tenantId, await smsProviderFor(tenantId, rc.cfg));
     const p = rc.smsP.get(tenantId) ?? null;
     if (!p) return done("FAILED", { error_message: "簡訊服務未設定（未串接）" });
     if (!normalizePhone(to)) return done("FAILED", { error_message: "手機號碼空白或格式錯誤" });
     if (!recipientAllowed(rc.cfg, "SMS", to)) return done("BLOCKED", { error_message: "測試收件白名單模式：收件者不在白名單，未寄出" });
-    outcome = await sendSms(p, { id, to, content: cleanBody(row.content as string) });
+    const content = cleanBody(row.content as string);
+    const credit = await reserveCredit(ch, tenantId, id, smsPoints(content));
+    if (credit.blocked) return done("BLOCKED", { error_message: credit.blocked });
+    outcome = await sendSms(p, { id, to, content });
+    if (credit.reserved) await settleCredit(ch, id, outcome.ok);
   }
   if (outcome.ok) return done("SENT", { sent_at: new Date().toISOString(), provider: outcome.provider, provider_message_id: outcome.messageId, error_message: null, next_attempt_at: null });
   const next = afterFailure(attempts, outcome.retryable && !rc.noRetry, Date.now());

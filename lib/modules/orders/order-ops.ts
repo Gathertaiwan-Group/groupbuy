@@ -4,6 +4,7 @@ import type { AdminSession } from "@/lib/core/http/types";
 import { notIntegrated } from "@/lib/core/http/errors";
 import type { Row } from "@/lib/db/mapping";
 import { taipeiDateTime } from "@/lib/core/time";
+import { renderOrderEmail } from "@/lib/modules/core/delivery";
 import { addOrderHistory, adjustItemStock, adminUpdateOrders, db, fetchOrder, fetchOrders, recordEmail, recordSms } from "./common";
 import { recalcOrderAmounts } from "./pricing";
 import { stockChangesOf } from "./stock-rules";
@@ -167,7 +168,10 @@ export async function emailTemplateContent(session: AdminSession, salesOrderId: 
     CVS_DELIVERY_ARRIVED: { subject: `【${title}】超商取貨已配達 ${uuid}`, body: `${greet}<p>您的商品已送達超商門市${o.cvs_store_name ? `「${escHtml(o.cvs_store_name)}」` : ""}，請於 7 天內取貨。</p>${info}${sign}` },
     PROMO_CODE_SENT: { subject: `【${title}】優惠碼通知`, body: `${greet}<p>感謝您的支持，送上專屬優惠碼：<strong></strong></p>${sign}` },
   };
-  return map[template] ?? map.CUSTOM;
+  // 系統設定／進階設定有填「系統信-…主旨／內容」→ 依範本渲染（core/delivery.ts renderOrderEmail；沒填 → 上面推導的內容）
+  const base = map[template] ?? map.CUSTOM;
+  const r = await renderOrderEmail(session.tenantId, salesOrderId, map[template] ? template : "CUSTOM", base);
+  return { subject: r.subject, body: r.body };
 }
 
 function escHtml(v: unknown): string {
@@ -214,6 +218,7 @@ export async function performOrderAction(session: AdminSession, salesOrderId: nu
       toEmail: String(o.customer_email ?? ""),
       subject: c.subject,
       body: c.body,
+      contentFinal: true,
     });
   } else if (ACTION_SMS[action]) {
     msg = await recordSms(session, {
@@ -227,9 +232,11 @@ export async function performOrderAction(session: AdminSession, salesOrderId: nu
   }
   const patch: Row = { action };
   if (ACTION_SMS[action]) patch.date_last_sms = new Date().toISOString();
-  await adminUpdateOrders(session, [salesOrderId], patch, msg);
+  // msg：Email／簡訊未串接時為【未串接】提示；可寄時為空字串 → 改記「已排入寄送」
+  const note = msg || (ACTION_SMS[action] ? "已排入簡訊寄送" : "已排入寄信");
+  await adminUpdateOrders(session, [salesOrderId], patch, note);
   await adminUpdateOrders(session, [salesOrderId], { action: "NONE" });
-  return `${ACTION_LABEL[action] ?? action}：${msg}`;
+  return `${ACTION_LABEL[action] ?? action}：${note}`;
 }
 
 /* ─────────────────────────── 編輯訂單的副作用 ─────────────────────────── */

@@ -16,7 +16,8 @@ import { bankTransaction } from "@/lib/db/entities";
 import { rowToApi, type Row } from "@/lib/db/mapping";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { any, get, page, post, requireSession } from "@/lib/core/http/route-helpers";
-import { FieldErrors, badRequest, notIntegrated } from "@/lib/core/http/errors";
+import { FieldErrors, badRequest } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { actionOk, download, json } from "@/lib/core/http/responses";
 import { parseDtRequest } from "@/lib/core/datatables/request";
 import { dtResponse } from "@/lib/core/datatables/response";
@@ -270,7 +271,7 @@ async function importBankTransaction(ctx: RequestContext): Promise<Response> {
     rows = ((again ?? []) as BtRow[]).sort((a, b) => a.id - b.id);
   }
   const parts = [`匯入 ${lines.length} 筆：` + [...counts.entries()].map(([k, n]) => `${k} ${n}`).join("、")];
-  if (confirmed.length) parts.push(`已入帳 ${confirmed.length} 筆 ${notIntegrated("付款成功通知信（Email）").message}`);
+  if (confirmed.length) parts.push(`已入帳 ${confirmed.length} 筆 ${(await deliveryNotice(session.tenantId, "EMAIL", "付款成功通知信（Email）")).message}`.trim());
   for (const f of failed) parts.push(`未入帳：${f}`);
   return editorResponse(rows.map(toApi), { message: parts.join("<br>") });
 }
@@ -346,7 +347,17 @@ async function runRpc(fn: string, ctx: RequestContext, verb: string): Promise<Re
   const bad = results.filter((r) => !r.ok);
   const lines = [`${verb} ${ok.length} 筆` + (bad.length ? `，未處理 ${bad.length} 筆` : "")];
   for (const r of bad) lines.push(`#${r.bankTransactionId}：${r.message}`);
-  if (fn === "accounting_confirm_bank_transaction" && ok.length) lines.push(notIntegrated("付款成功通知信（Email）").message);
+  // 取消入帳：付款成功通知信撤回結果（已撤回／已寄出無法撤回／寄送中無法撤回；migration 0109）
+  if (fn === "accounting_revert_bank_transaction") {
+    for (const r of ok) {
+      const w = (r as { mailWithdraw?: string | null }).mailWithdraw;
+      if (w === "WITHDRAWN" || w === "ALREADY_SENT" || w === "SENDING") lines.push(String(r.message ?? ""));
+    }
+  }
+  if (fn === "accounting_confirm_bank_transaction" && ok.length) {
+    const n = (await deliveryNotice(session.tenantId, "EMAIL", "付款成功通知信（Email）")).message;
+    if (n) lines.push(n);
+  }
   const message = lines.join("<br>");
   if (ok.length === 0) throw badRequest(message);
   return actionOk(message, { data: results });

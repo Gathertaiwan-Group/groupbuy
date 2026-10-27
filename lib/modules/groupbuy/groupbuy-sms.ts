@@ -10,6 +10,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { fragment, post, requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { actionOk } from "@/lib/core/http/responses";
 import { loadGroupBuyMenu } from "@/lib/core/groupbuy-menu";
 import { ownGroupBuyIds } from "./common";
@@ -56,13 +57,12 @@ async function sendSMS(ctx: RequestContext): Promise<Response> {
       content: body,
       points,
       status: "NOT_SENT_UNINTEGRATED",
-      error_message: "簡訊服務未串接，僅建立紀錄",
     })),
   );
   if (error) throw new Error(`[GroupBuy/sendSMS] ${error.message}`);
   const { data: gb } = await db.from("group_buys").select("sms_count").eq("tenant_id", session.tenantId).eq("id", id).maybeSingle<{ sms_count: number }>();
   await db.from("group_buys").update({ sms_count: (gb?.sms_count ?? 0) + phones.length }).eq("tenant_id", session.tenantId).eq("id", id);
-  const ni = notIntegrated("發送簡訊");
+  const ni = await deliveryNotice(session.tenantId, "SMS", "發送簡訊");
   return actionOk(`${ni.message}已建立 ${phones.length} 則簡訊紀錄（每則 ${points} 點，共 ${phones.length * points} 點）。`, ni);
 }
 

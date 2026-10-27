@@ -14,6 +14,7 @@ import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/typ
 import { fragment, get, post, requireSession } from "@/lib/core/http/route-helpers";
 import { actionOk, json } from "@/lib/core/http/responses";
 import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { enumOptions } from "@/lib/core/enums";
 import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import { rowToApi, type Row } from "@/lib/db/mapping";
@@ -299,7 +300,8 @@ async function exportOrders(ctx: RequestContext): Promise<Response> {
     if (x.sendShippingEmail) {
       const { data: emails } = await db().from("sales_orders").select("id, group_buy_id, customer_email").eq("tenant_id", session.tenantId).in("id", orders.map((o) => Number(o.id)));
       await recordEmails(session, (emails ?? []) as Row[]);
-      lines.push(notIntegrated("出貨通知信（Email）").message);
+      const n = (await deliveryNotice(session.tenantId, "EMAIL", "出貨通知信（Email）")).message;
+      if (n) lines.push(n);
     }
   } else {
     lines.push("回壓訂單：系統不會更新既有訂單。");
@@ -481,7 +483,10 @@ async function importShippingCsv(ctx: RequestContext): Promise<Response> {
   if (skippedExists.length) msg.push(`已有貨運編號略過 ${skippedExists.length} 筆：${list(skippedExists)}`);
   if (inactive.length) msg.push(`已取消／合併／拆單的訂單略過 ${inactive.length} 筆：${list(inactive)}`);
   if (invalid) msg.push(`缺少訂單編號或貨運編號的資料列 ${invalid} 列`);
-  if (mailed) msg.push(`${notIntegrated("出貨通知信（Email）").message}（${mailed} 筆）`);
+  if (mailed) {
+    const n = (await deliveryNotice(session.tenantId, "EMAIL", "出貨通知信（Email）")).message;
+    msg.push(n ? `${n}（${mailed} 筆）` : `已排入出貨通知信 ${mailed} 筆`);
+  }
   if (markedGroup) msg.push("此團已結團且已無可出貨訂單，已標示為「出完貨」");
   return actionOk(msg.join("<br>"), { count: done.length });
 }

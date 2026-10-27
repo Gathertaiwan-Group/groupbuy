@@ -1060,7 +1060,7 @@ async function rrSubmit(ctx: RequestContext): Promise<Response> {
   if (await boolParam(ctx, "optionRegenVirtualAccount")) notes.push(notIntegrated("重新產生虛擬帳號").message);
   if (await boolParam(ctx, "optionRenewCVSPickup")) notes.push(notIntegrated("重新產生超商取貨付款單號").message);
   await db().from("orders_rr_drafts").delete().eq("tenant_id", session.tenantId).eq("session_key", session.sessionId);
-  return actionOk(notes.join("<br>"));
+  return actionOk(notes.filter(Boolean).join("<br>"));
 }
 
 /* ─────────────────────────── 路由 ─────────────────────────── */

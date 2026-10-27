@@ -132,3 +132,59 @@ describe("登入認證碼防呆（依實際寄送狀態）", () => {
     assert.match(String(S.adminSecuritySaveError(sec, d)), /白名單/);
   });
 });
+
+type M = typeof import("./message-template-logic");
+const M: M = await import(new URL("./message-template-logic.ts", import.meta.url).href);
+
+describe("系統信範本渲染", () => {
+  const order = {
+    uuid: "GB123",
+    customer_firstname: "王<小明>",
+    grand_total: "1234.5",
+    total_paid: 0,
+    date_payment_due: "2026-10-01T04:30:00Z",
+    shipping_receipt_number: "T999",
+    cvs_store_name: "7-11 大安",
+    group_buys: { title: "秋季團 & 好物", short_url: "ak98i" },
+  };
+  const vars = M.orderVars(order, { tenantCode: "guest_ep", tenantName: "給樂", baseUrl: "https://x.test/" });
+  test("變數（中英文名稱）", () => {
+    assert.equal(vars.orderNo, "GB123");
+    assert.equal(vars.grandTotal, "1,234.5");
+    assert.equal(vars.paymentDue, "2026-10-01 12:30");
+    assert.equal(vars.orderUrl, "https://x.test/guest_ep/p/ak98i/SalesOrder/show.do?uuid=GB123");
+    const out = M.renderTemplate("{{訂單編號}}/{{ orderNo }}/{{顧客姓名}}/{{unknown}}", { ...vars, content: "" }, { html: true });
+    assert.equal(out, "GB123/GB123/王&lt;小明&gt;/{{unknown}}");
+  });
+  test("主旨不 escape、去換行；內文 HTML escape；原內容純文字轉 <br>", () => {
+    const r = M.applyTemplate(
+      { subject: "【{{團購名稱}}】訂單 {{訂單編號}}", body: "<p>{{顧客姓名}} 您好</p><div>{{原內容}}</div><p>{{取貨門市}}</p>" },
+      { subject: "舊主旨", body: "第一行\n第二行 <x>" },
+      vars,
+    );
+    assert.equal(r.applied, true);
+    assert.equal(r.subject, "【秋季團 & 好物】訂單 GB123");
+    assert.equal(r.body, "<p>王&lt;小明&gt; 您好</p><div>第一行<br>第二行 &lt;x&gt;</div><p>7-11 大安</p>");
+  });
+  test("沒設定（或只有空白 HTML）→ 用原內容", () => {
+    const cur = { subject: "原主旨", body: "原內文" };
+    assert.deepEqual(M.applyTemplate({ subject: "", body: "<p>&nbsp;</p>" }, cur, vars), { ...cur, applied: false });
+    assert.deepEqual(M.applyTemplate({ subject: null, body: undefined }, cur, vars), { ...cur, applied: false });
+    const onlySubject = M.applyTemplate({ subject: "新 {{orderNo}}", body: "" }, cur, vars);
+    assert.deepEqual([onlySubject.subject, onlySubject.body], ["新 GB123", "原內文"]);
+  });
+  test("樣板代碼 → 設定鍵", () => {
+    assert.deepEqual(M.templatePrefNames("ORDER_CREATED"), ["EMAIL_SALES_ORDER_SUBJECT", "EMAIL_SALES_ORDER_BODY"]);
+    assert.deepEqual(M.templatePrefNames("PAID"), ["EMAIL_PAID_SUBJECT", "EMAIL_PAID_BODY"]);
+    assert.equal(M.templatePrefNames("ADMIN_WTOKEN"), null);
+    assert.equal(M.templatePrefNames(null), null);
+  });
+  test("簡訊點數", () => {
+    assert.equal(M.smsPoints("a".repeat(70)), 1);
+    assert.equal(M.smsPoints("a".repeat(71)), 2);
+    assert.equal(M.smsPoints("字".repeat(135)), 3);
+  });
+  test("寄出前去掉未串接說明", () => {
+    assert.equal(L.cleanBody("訂單 A 已確認收到匯款 NT$100（匯款對帳入帳；Email 未串接，僅記錄）"), "訂單 A 已確認收到匯款 NT$100");
+  });
+});

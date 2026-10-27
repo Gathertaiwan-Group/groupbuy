@@ -4,7 +4,7 @@ import { get, post, any } from "@/lib/core/http/route-helpers";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { html, actionOk } from "@/lib/core/http/responses";
 import { badRequest } from "@/lib/core/http/errors";
-import { notIntegrated } from "@/lib/core/http/errors";
+import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { renderTemplate } from "@/lib/core/render/template";
 import { getServiceClient } from "@/lib/supabase/server";
 import { feVars, scopeFromTenantPath } from "./site";
@@ -66,7 +66,7 @@ async function send(ctx: RequestContext): Promise<Response> {
     message,
   });
   if (e2) throw new Error(`寫入客服訊息失敗：${e2.message}`);
-  // 原站會另寄通知信給賣家（客服信箱）：未串接 Email，只記錄
+  // 原站會另寄通知信給賣家（客服信箱）：寫 email_messages，Email 可寄時由排程寄出
   const support = groupBuy?.email_support?.trim();
   if (support) {
     await db.from("email_messages").insert({
@@ -79,8 +79,8 @@ async function send(ctx: RequestContext): Promise<Response> {
       status: "NOT_SENT_UNINTEGRATED",
     });
   }
-  const ni = notIntegrated("客服訊息通知信");
-  return actionOk("您的訊息已送出，我們會盡快回覆您！", { notIntegrated: ni.notIntegrated, notIntegratedMessage: ni.message });
+  const ni = await deliveryNotice(tenant.id, "EMAIL", "客服訊息通知信");
+  return actionOk("您的訊息已送出，我們會盡快回覆您！", ni.notIntegrated ? { notIntegrated: true, notIntegratedMessage: ni.message } : {});
 }
 
 export const onlineHelpRoutes: RouteDef[] = [

@@ -156,12 +156,15 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 
 ## 12. Email／簡訊寄送（fix20，`lib/modules/core/delivery*.ts`）
 
-- 各功能照舊寫 `email_messages`／`sms_messages`（未串接時 `NOT_SENT_UNINTEGRATED`）。排程 `delivery` 工作：逾時的 `SENDING` → `FAILED`（結果不明、不重寄）→ 有可用服務商的租戶把**最近**的未串接紀錄轉 `QUEUED`（一般 6 小時內、驗證碼類 25 分鐘內；更舊的不補寄）→ 條件式取件 `QUEUED→SENDING`（同一筆只有一個執行者拿到）→ `SENT`／`FAILED`／`BLOCKED`。只有「確定未送出」的錯誤（連線失敗、SMTP 寄件前的 4xx、HTTP 429/5xx〔Resend 帶 Idempotency-Key、三竹帶 clientid〕）回 `QUEUED` 延後重試，上限 3 次。整次排程仍在 `cron_locks` 租約內。回應只有筆數。
+- 各功能照舊寫 `email_messages`／`sms_messages`（未串接時 `NOT_SENT_UNINTEGRATED`）。排程 `delivery` 工作：逾時的 `SENDING` → `FAILED`（結果不明、不重寄）→ 有可用服務商的租戶把**最近**的未串接紀錄轉 `QUEUED`（一般 6 小時內、驗證碼類 25 分鐘內；更舊的不補寄）→ 條件式取件 `QUEUED→SENDING`（同一筆只有一個執行者拿到）→ `SENT`／`FAILED`／`BLOCKED`。只有「確定未送出」的錯誤（連線失敗、SMTP 寄件前的 4xx、HTTP 429/5xx〔Resend 帶 Idempotency-Key、三竹帶 clientid〕）回 `QUEUED` 延後重試，每筆**最多嘗試 3 次**（含第一次，即最多重試 2 次）。整次排程仍在 `cron_locks` 租約內。回應只有筆數。
 - 時效性訊息即時寄：登入認證碼（`login-wtoken.ts`）、寄送測試信；失敗留給排程（測試信不重試）。
 - 服務商（全部走環境變數或系統設定；repo 不放金鑰）：Email＝租戶「收/寄信設定」的自有 Gmail（帳號＋應用程式密碼，加密存 DB，金鑰由 `SESSION_SECRET` 導出）→ `RESEND_API_KEY`＋`MAIL_FROM` → `SMTP_HOST`(+`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`)＋`MAIL_FROM`；簡訊＝三竹 `MITAKE_USERNAME`＋`MITAKE_PASSWORD`（原站簡訊商不明）。`RESEND_API_URL`／`MITAKE_API_URL`／`GMAIL_SMTP_HOST|PORT|SECURE` 只供測試指向本機 mock。
 - 安全預設：沒有服務商 → 不寄、紀錄維持未串接、登入認證碼規則不可選（`deliveryStatus()` 實際判斷）。`MESSAGE_DELIVERY_MODE` 未設定＝`whitelist`：只寄 `MESSAGE_TEST_WHITELIST`（Email／手機），其他一律 `BLOCKED`（攔下記錄、之後也不補寄）；`live` 才寄給所有收件者；`off` 全關。`MESSAGE_DELIVERY_TENANTS`（租戶代碼或 id）可限定租戶。
-- 寄出前會刪掉內文中含 `【未串接】` 的提示行。Email／簡訊餘額（帳務設定 creditEmail／creditSms）不扣點。
-- 已知限制：銀行對帳「取消入帳」只會把仍為 `NOT_SENT_UNINTEGRATED` 的付款成功信標成 FAILED；已轉 `QUEUED`／已寄出的不會撤回。
+- 寄出前會刪掉內文中含 `【未串接】` 的提示行與「（…未串接…）」說明。
+- 系統信範本（`core/message-template-logic.ts`）：訂單相關信（訂單成立、已付款〔含匯款對帳 SQL 產生的 PAID〕、出貨、展延、未付款提醒、訂單更新、取消、退款、可自取、超取、優惠碼、自訂）寄送時依「本團 → 綁定標籤 → 系統設定」的 `EMAIL_<X>_SUBJECT／_BODY` 渲染；沒填則用原內容。變數 `{{訂單編號}} {{顧客姓名}} {{訂單金額}} {{已付金額}} {{繳款期限}} {{團購名稱}} {{訂單網址}} {{查貨號碼}} {{取貨門市}} {{商店名稱}} {{原內容}}`（英文別名見檔頭；內文值 HTML escape；不認得的原樣保留；訂單網址用 `SITE_URL`，未設定則用 Vercel 正式網域）。後台「寄信」編輯器送出的內容（`content_final=true`）不再套範本；編輯器預填（`orders/order-ops.ts emailTemplateContent`）同樣套範本。
+- 扣點（migration 0109）：帳務設定 `ACCOUNT_SETTINGS.creditEmail／creditSms`（月結單頁、簡訊點數查詢顯示同一個值）。未設定（null）＝不計點。寄送前 `delivery_credit_reserve` 鎖列預扣（餘額不足 → `BLOCKED`「餘額不足」＋後台鈴鐺通知，同管道每天一則）；寄出成功 `CHARGED`、失敗退回 `RELEASED`；`message_credit_ledger`（channel＋message_id 唯一）保證不重扣。Email 每封 1 點、簡訊 70 字內 1 點、超過每 67 字 1 點；寄給管理員的登入認證碼與測試信不計點。處理逾時（結果不明）的不退點。
+- 【未串接】提示依實際可寄與否動態顯示（`deliveryNotice()`）：可寄時不顯示（或顯示「已排入寄信」）。
+- 銀行對帳「取消入帳」：付款成功信仍為未串接或已排入未取走（`QUEUED`）→ 撤回（`FAILED`「已取消入帳（撤回，未寄出）」）；寄送中／已寄出 → 無法撤回，回應逐筆說明（`mailWithdraw`）。
 
 ## 13. 金流／物流／電子發票（綠界，fix21）
 
