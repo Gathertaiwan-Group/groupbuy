@@ -17,7 +17,6 @@ import { saveCheckout, type AddressDraft } from "./cart-store";
 import { ipOf, isEmail, isPhone, rateLimit } from "./guard";
 import { grantOrderView } from "./order-grant";
 import { appendBlacklistLog, findBlacklistMatch } from "@/lib/modules/marketing/blacklist";
-import { syncCouponTotals } from "@/lib/modules/marketing/pricing-loader";
 import { storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
 import { deliveryFlatpickrOptions } from "./cart-api";
 import { taipeiDate } from "@/lib/core/time";
@@ -500,10 +499,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   const result = data as { salesOrderId: number; uuid: string };
   if (p.pointsUsed > 0) await saveCheckout(cc.cart!, { points: 0 });
   if (hit) await logBlacklist(tenant.id, hit, `可下單但無法付款：訂單 ${result.uuid}（IP ${ip}）`);
-  // 折扣碼使用次數已在 sf_place_order 交易內原子遞增；這裡同步優惠卷的總數／已使用／可用數（marketing）
-  for (const gcId of new Set(usedCoupons.map((c) => c.groupBuyCouponId))) {
-    await syncCouponTotals(getServiceClient(), tenant.id, gcId).catch((e) => console.warn("[storefront] 同步優惠卷總數失敗", e));
-  }
+  // 折扣碼使用次數與優惠卷統計（已使用／可用數）都已在 sf_place_order 交易內處理（6006 帳本＋8002 marketing_sync_coupon_totals）
 
   // 6) 訂單成立通知信（未串接 Email：只寫紀錄）
   const to = String(order.customer_email ?? "");

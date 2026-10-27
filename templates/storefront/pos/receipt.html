@@ -27,7 +27,8 @@ table{width:100%;border-collapse:collapse}td{vertical-align:top;padding:1px 0}
 	<h1>{{tenantName}}</h1>
 	<div class="c">{{groupBuy.title}}</div>
 	<div class="c big">交易明細（收據）</div>
-	{{#if voided}}<div class="void-banner">已作廢</div>{{#if voidDateString}}<div class="c">作廢時間：{{voidDateString}}</div>{{/if}}{{/if}}
+	{{!-- fix5：已作廢（有 POS 作廢沖銷紀錄）／已取消（後台取消）／已刪除 --}}
+	{{#if statusBanner}}<div class="void-banner">{{statusBanner}}</div>{{#if statusDateString}}<div class="c">{{statusDateLabel}}：{{statusDateString}}</div>{{/if}}{{/if}}
 	<hr>
 	<div>訂單編號：{{order.uuid}}</div>
 	<div>交易時間：{{order.dateString}}</div>

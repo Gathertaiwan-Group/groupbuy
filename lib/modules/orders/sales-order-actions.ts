@@ -537,6 +537,12 @@ async function couponList(ctx: RequestContext): Promise<Response> {
   return json({ code: 200, data: rows });
 }
 
+/** 後台使用／移除優惠卷的名額調整（migration 8002 marketing_order_coupon_adjust：used_count＋帳本＋優惠卷統計，單一交易） */
+async function adjustOrderCouponUsage(tenantId: number, salesOrderId: number, couponCodeId: number, delta: 1 | -1): Promise<void> {
+  const { error } = await db().rpc("marketing_order_coupon_adjust", { p_tenant_id: tenantId, p_sales_order_id: salesOrderId, p_coupon_code_id: couponCodeId, p_delta: delta });
+  if (error) throw new Error(`[orders] 調整優惠卷使用次數失敗：${error.message}`);
+}
+
 /** POST /ajax/SalesOrderCoupon/delete（groupBuyFlatRateShippingId＝訂單優惠卷 id） */
 async function couponDelete(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
@@ -545,10 +551,8 @@ async function couponDelete(ctx: RequestContext): Promise<Response> {
   if (!data) throw notFound("找不到優惠卷");
   const c = data as Row;
   await db().from("sales_order_coupons").delete().eq("tenant_id", session.tenantId).eq("id", id);
-  if (c.coupon_code_id) {
-    const { data: cc } = await db().from("coupon_codes").select("used_count").eq("tenant_id", session.tenantId).eq("id", c.coupon_code_id).maybeSingle();
-    if (cc) await db().from("coupon_codes").update({ used_count: Math.max(0, num((cc as Row).used_count) - 1) }).eq("tenant_id", session.tenantId).eq("id", c.coupon_code_id);
-  }
+  // 名額：used_count、帳本、優惠卷統計在同一交易調整（8002；已取消訂單的名額早已退回，不會重複扣）
+  if (c.coupon_code_id) await adjustOrderCouponUsage(session.tenantId, Number(c.sales_order_id), Number(c.coupon_code_id), -1);
   await addOrderHistory(session, Number(c.sales_order_id), `移除優惠卷 ${c.coupon ?? ""}`);
   await recalcOrderAmounts(session, Number(c.sales_order_id), { shipping: false, salesRules: false, discountDelta: -num(c.discount) });
   return actionOk("已移除優惠卷");
@@ -591,7 +595,7 @@ async function couponRedeem(ctx: RequestContext): Promise<Response> {
     coupon: code,
     discount,
   });
-  await client.from("coupon_codes").update({ used_count: num(cc.used_count) + 1, date_used: nowIso() }).eq("tenant_id", session.tenantId).eq("id", cc.id);
+  await adjustOrderCouponUsage(session.tenantId, id, Number(cc.id), 1);
   await addOrderHistory(session, id, `使用優惠卷 ${code}（折抵 $${discount}）`);
   await recalcOrderAmounts(session, id, { shipping: false, salesRules: false, discountDelta: discount });
   return actionOk(`已套用優惠碼 ${code}`);

@@ -253,22 +253,16 @@ export async function recordCouponUse(db: Db, tenantId: number, couponCodeId: nu
   await syncCouponTotals(db, tenantId, Number(r.group_buy_coupon_id));
 }
 
-/** 依 coupon_codes 重算 group_buy_coupons.coupon_used_total / coupon_available_total */
+/**
+ * 依 coupon_codes 重算 group_buy_coupons.coupon_used_total / coupon_available_total。
+ * 公式只存在 DB（migration 8002 marketing_sync_coupon_totals：已使用＝used_count > 0 的折扣碼數）；
+ * 下單／POS 結帳／作廢／取消／還原／後台使用與移除優惠卷都在各自交易內呼叫同一支函式。
+ */
 export async function syncCouponTotals(db: Db, tenantId: number, groupBuyCouponId: number): Promise<{ total: number; used: number; available: number }> {
-  const codes = await q<{ used_count: number }>(
-    db.from("coupon_codes").select("used_count").eq("tenant_id", tenantId).eq("group_buy_coupon_id", groupBuyCouponId),
-    "讀取折扣碼",
-  );
-  const total = codes.length;
-  const used = codes.filter((c) => num(c.used_count) > 0).length;
-  const available = total - used;
-  const { error } = await db
-    .from("group_buy_coupons")
-    .update({ coupon_used_total: used, coupon_available_total: available })
-    .eq("tenant_id", tenantId)
-    .eq("id", groupBuyCouponId);
+  const { data, error } = await db.rpc("marketing_sync_coupon_totals", { p_tenant_id: tenantId, p_group_buy_coupon_id: groupBuyCouponId });
   if (error) throw new Error(`[pricing-loader] 更新優惠卷統計：${error.message}`);
-  return { total, used, available };
+  const r = (data ?? {}) as { total?: number; used?: number; available?: number };
+  return { total: num(r.total), used: num(r.used), available: num(r.available) };
 }
 
 /**

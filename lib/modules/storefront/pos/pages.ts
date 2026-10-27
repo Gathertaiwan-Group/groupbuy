@@ -12,6 +12,7 @@ import { groupBuyByShortUrl, imageUrl, tenantById, taipeiYear } from "../site";
 import { formatPrice } from "../catalog";
 import { posScope, db, q, num, str, catalogFor, type PosScope } from "./core";
 import { activeRules } from "./api";
+import { receiptStatus } from "./receipt-status";
 
 const taipeiToday = () => taipeiDateTime(new Date()).slice(0, 10);
 const dayStartIso = (ymd: string) => new Date(`${ymd}T00:00:00+08:00`).toISOString();
@@ -226,6 +227,10 @@ export async function receipt(ctx: RequestContext): Promise<Response> {
   const pays = await q(db().from("pos_payments").select("payment_method_tag, amount, cash_received, change_amount, admin_user_id, kind, created_at").eq("tenant_id", scope.session.tenantId).eq("sales_order_id", id).order("id"), "讀取付款明細");
   const tenant = await tenantById(scope.session.tenantId);
   const lines = items.map((i) => ({ title: str(i.title), price: num(i.price), total: num(i.total), subtotal: num(i.price) * num(i.total), discount: num(i.discount) && !rules.length ? num(i.discount) : 0, backOrder: !!i.back_order }));
+  // fix5：「已作廢」只給有 POS 作廢沖銷紀錄的單；後台取消顯示「已取消」、不顯示沖銷列與淨額
+  const st = receiptStatus(str(o.state), pays.map((p) => ({ kind: str(p.kind), amount: num(p.amount) })));
+  const firstVoid = pays.find((p) => str(p.kind) === "VOID");
+  const statusAt = st.banner === "已作廢" ? (o.date_canceled ?? firstVoid?.created_at) : st.banner === "已取消" ? o.date_canceled : null;
   return html(
     renderTemplate("storefront/pos/receipt.html", {
       tenantName: tenant?.name ?? scope.session.tenantName ?? "",
@@ -254,9 +259,10 @@ export async function receipt(ctx: RequestContext): Promise<Response> {
         isVoid: str(p.kind) === "VOID",
         dateString: str(p.kind) === "VOID" ? taipeiDateTime(p.created_at, true) : "",
       })),
-      voided: str(o.state) === "CANCELED" || pays.some((p) => str(p.kind) === "VOID"),
-      voidDateString: o.date_canceled ? taipeiDateTime(o.date_canceled, true) : "",
-      hasVoidPayments: pays.some((p) => str(p.kind) === "VOID"),
+      statusBanner: st.banner ?? "",
+      statusDateLabel: st.dateLabel,
+      statusDateString: statusAt ? taipeiDateTime(statusAt, true) : "",
+      hasVoidPayments: st.hasVoidPayments,
       netPaid: pays.reduce((s, p) => s + num(p.amount), 0),
       receiptLabel: RECEIPT_LABEL(o),
     }),
