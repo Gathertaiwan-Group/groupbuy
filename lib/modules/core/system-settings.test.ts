@@ -19,12 +19,34 @@ test("未設定 → 預設值（行為不變）", () => {
   assert.equal(L.isLowStock(0, L.lowStockNotificationOf(null)), false);
 });
 
-test("登入安全性：IP 白名單／ALWAYS", () => {
-  const ip = L.adminSecurityOf({ rule: "IP" });
-  assert.equal(L.needsWtoken(ip, false), true);
-  assert.equal(L.needsWtoken(ip, true), false);
-  assert.equal(L.needsWtoken(L.adminSecurityOf({ rule: "always" }), true), true);
+test("登入安全性：IP 白名單／ALWAYS（寄送已串接、有收件者時）", () => {
+  const on = { email: true, sms: true };
+  const ip = L.adminSecurityOf({ rule: "IP", send: "SYS_EMAIL", email: "a@b.co" });
+  assert.equal(L.needsWtoken(ip, false, on), true);
+  assert.equal(L.needsWtoken(ip, true, on), false);
+  assert.equal(L.needsWtoken(L.adminSecurityOf({ rule: "always", send: "SYS_SMS", phone: "0912" }), true, on), true);
   assert.equal(L.adminSecurityOf({ rule: "XX" }).rule, "NONE");
+});
+
+test("登入安全性防呆：認證碼送不到 → 不要求認證碼、不可儲存", () => {
+  // 目前 Email／簡訊皆未串接（預設 MESSAGE_DELIVERY）
+  assert.deepEqual(L.MESSAGE_DELIVERY, { email: false, sms: false });
+  for (const send of ["USER_EMAIL", "USER_SMS", "SYS_EMAIL", "SYS_SMS"]) {
+    for (const rule of ["IP", "ALWAYS"]) {
+      const sec = L.adminSecurityOf({ rule, send, email: "a@b.co", phone: "0912" });
+      assert.equal(L.wtokenDeliverable(sec), false, `${rule}/${send}`);
+      assert.equal(L.needsWtoken(sec, false), false, `${rule}/${send} 登入不得被鎖`);
+      assert.match(String(L.adminSecuritySaveError(sec)), /尚未串接/, `${rule}/${send} 儲存須擋下`);
+    }
+  }
+  assert.equal(L.adminSecuritySaveError(L.adminSecurityOf({ rule: "NONE" })), null);
+  assert.equal(L.adminSecuritySaveError(L.adminSecurityOf(null)), null);
+  // 已串接但管理員沒有個人 email／電話、或系統收件者空白 → 仍送不到
+  const on = { email: true, sms: true };
+  assert.equal(L.needsWtoken(L.adminSecurityOf({ rule: "ALWAYS", send: "USER_EMAIL" }), false, on), false);
+  assert.match(String(L.adminSecuritySaveError(L.adminSecurityOf({ rule: "ALWAYS", send: "USER_SMS" }), on)), /個人/);
+  assert.match(String(L.adminSecuritySaveError(L.adminSecurityOf({ rule: "IP", send: "SYS_EMAIL" }), on)), /Email/);
+  assert.equal(L.adminSecuritySaveError(L.adminSecurityOf({ rule: "IP", send: "SYS_EMAIL", email: "a@b.co" }), on), null);
 });
 
 test("帳務：明確關閉才生效", () => {

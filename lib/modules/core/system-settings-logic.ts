@@ -40,11 +40,48 @@ export function adminSecurityOf(s: Json | null | undefined): AdminSecurity {
     phone: text(s?.phone),
   };
 }
-/** 本次登入是否需要認證碼 */
-export function needsWtoken(sec: AdminSecurity, ipWhitelisted: boolean): boolean {
+/**
+ * Email／簡訊寄送串接狀態。🔴 目前兩者皆未串接（只寫待寄紀錄 NOT_SENT_UNINTEGRATED，不會寄出）。
+ * 真正串接寄送後才把對應值改成 true，「需認證碼」的登入規則才會生效。
+ */
+export interface MessageDelivery {
+  email: boolean;
+  sms: boolean;
+}
+export const MESSAGE_DELIVERY: MessageDelivery = { email: false, sms: false };
+
+/**
+ * 認證碼能否實際送達管理員：通知方式對應的管道已串接，且有收件者。
+ * USER_EMAIL／USER_SMS：管理員帳號沒有個人 email／電話欄位 → 收件者永遠空白 → 不可送達。
+ * SYS_EMAIL／SYS_SMS：需填寫系統收件 email／電話。
+ */
+export function wtokenDeliverable(sec: AdminSecurity, delivery: MessageDelivery = MESSAGE_DELIVERY): boolean {
+  const sms = sec.send === "USER_SMS" || sec.send === "SYS_SMS";
+  if (!(sms ? delivery.sms : delivery.email)) return false;
+  if (sec.send === "USER_EMAIL" || sec.send === "USER_SMS") return false;
+  return sms ? !!sec.phone : !!sec.email;
+}
+
+/** 儲存設定時檢查：需認證碼的規則（IP／ALWAYS）在認證碼送不到時不可儲存（否則管理員會被鎖在門外）。回錯誤訊息或 null */
+export function adminSecuritySaveError(sec: AdminSecurity, delivery: MessageDelivery = MESSAGE_DELIVERY): string | null {
+  if (sec.rule === "NONE" || wtokenDeliverable(sec, delivery)) return null;
+  const sms = sec.send === "USER_SMS" || sec.send === "SYS_SMS";
+  if (!(sms ? delivery.sms : delivery.email)) {
+    return `${sms ? "簡訊" : "Email"}寄送尚未串接，認證碼無法寄出；選擇需要認證碼的規則會讓管理員無法登入，請維持「不需要」`;
+  }
+  if (sec.send === "USER_EMAIL" || sec.send === "USER_SMS") return "管理員帳號沒有個人 Email／電話，請改用系統 Email／簡訊通知";
+  return sms ? "請填寫接收認證碼的電話" : "請填寫接收認證碼的 Email";
+}
+
+/**
+ * 本次登入是否需要認證碼。
+ * 防呆：規則需要認證碼、但認證碼送不到（寄送未串接／無收件者）→ 不要求認證碼（等同「不需要」），
+ * 避免舊資料或直接改庫設成 IP／ALWAYS 時，所有管理員永久無法登入。登入流程會記錄警告。
+ */
+export function needsWtoken(sec: AdminSecurity, ipWhitelisted: boolean, delivery: MessageDelivery = MESSAGE_DELIVERY): boolean {
+  if (sec.rule === "NONE" || !wtokenDeliverable(sec, delivery)) return false;
   if (sec.rule === "ALWAYS") return true;
-  if (sec.rule === "IP") return !ipWhitelisted;
-  return false;
+  return !ipWhitelisted;
 }
 
 /* ── GBA 帳務設定（ACCOUNT_SETTINGS）── */

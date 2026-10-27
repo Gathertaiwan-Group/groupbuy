@@ -21,6 +21,7 @@ import { get, post, route, requireSession } from "@/lib/core/http/route-helpers"
 import { FieldErrors, badRequest, notFound } from "@/lib/core/http/errors";
 import { json } from "@/lib/core/http/responses";
 import { flattenDotted, parseEditorRequest } from "@/lib/core/editor/protocol";
+import { adminSecurityOf, adminSecuritySaveError } from "@/lib/modules/core/system-settings-logic";
 import {
   DEF_BY_NAME,
   PREFERENCE_CATALOG,
@@ -89,6 +90,9 @@ const SYS_SETTINGS: Record<string, SettingsSpec & { title: string }> = {
     defaults: { rule: "NONE", send: "USER_EMAIL" },
     validate(s, errors) {
       if (s.email && !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(String(s.email))) errors.push({ name: "email", status: "Email 格式錯誤" });
+      // 認證碼送不到（Email／簡訊未串接、或無收件者）時不可選需要認證碼的規則，否則管理員會無法登入（登入流程另有防呆）
+      const lockout = adminSecuritySaveError(adminSecurityOf(s));
+      if (lockout) errors.push({ name: "rule", status: lockout });
     },
   },
   taxInfoSettings: {

@@ -17,7 +17,7 @@ import { DUMMY_HASH, hashPassword, verifyPassword } from "@/lib/core/auth/passwo
 import { requireSession } from "@/lib/core/http/route-helpers";
 import { parseEditorRequest, editorResponse } from "@/lib/core/editor/protocol";
 import { getAdminSecurity } from "./system-settings";
-import { needsWtoken } from "./system-settings-logic";
+import { needsWtoken, wtokenDeliverable } from "./system-settings-logic";
 import { addIpWhitelist, ipWhitelisted, issueWtoken, verifyWtoken } from "./login-wtoken";
 
 const MAX_FAILURES = 5; // 同帳號 15 分鐘內失敗上限
@@ -184,6 +184,10 @@ export async function login(ctx: RequestContext): Promise<Response> {
   // 系統設定「管理員登入安全性設定」：需認證碼時，未帶或帶錯 wtoken → 485（登入頁顯示驗證碼欄）
   const sec = await getAdminSecurity(user.tenant_id);
   const ip = clientIp(ctx.req);
+  // 防呆：規則需要認證碼但認證碼送不到（Email／簡訊未串接、無收件者）→ 不要求認證碼，避免管理員永久無法登入（needsWtoken 內判斷）
+  if (sec.rule !== "NONE" && !wtokenDeliverable(sec)) {
+    console.warn(`[login] 租戶 ${user.tenant_id} 登入安全性設定為 ${sec.rule}，但認證碼無法寄送（${sec.send}）→ 本次不要求認證碼`);
+  }
   if (sec.rule !== "NONE" && needsWtoken(sec, sec.rule === "IP" ? await ipWhitelisted(user.id, ip) : false)) {
     const wtoken = ((await ctx.param("wtoken")) ?? "").trim();
     if (!wtoken) {
@@ -265,7 +269,7 @@ export async function resendWtoken(ctx: RequestContext): Promise<Response> {
   const { data: user } = await db.from("admin_users").select("id, tenant_id, account, is_active").eq("id", adminUserId).maybeSingle<AdminRow>();
   if (!user || user.is_active === false) return json({ code: 400, error: "請先輸入帳號密碼登入" }, { status: 400 });
   const sec = await getAdminSecurity(user.tenant_id);
-  if (sec.rule === "NONE") return json({ code: 400, error: "目前不需要認證碼，請直接登入" }, { status: 400 });
+  if (sec.rule === "NONE" || !wtokenDeliverable(sec)) return json({ code: 400, error: "目前不需要認證碼，請直接登入" }, { status: 400 });
   const r = await issueWtoken(user, sec, clientIp(ctx.req));
   return json({ code: 485, error: r.issued ? WTOKEN_ISSUED_MSG : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait }, { status: 485 });
 }
