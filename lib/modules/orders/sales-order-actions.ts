@@ -139,6 +139,7 @@ async function markAsPaid(ctx: RequestContext): Promise<Response> {
   const target = rows.filter((r) => r.state === "PROCESSING");
   if (!target.length) throw badRequest("僅能將「處理中」的訂單設為已付款");
   let mailMsg = "";
+  let noMail = 0;
   for (const r of target) {
     const id = Number(r.id);
     const paid = num(r.total_paid) > 0 ? num(r.total_paid) : num(r.grand_total);
@@ -147,6 +148,7 @@ async function markAsPaid(ctx: RequestContext): Promise<Response> {
     await adminUpdateOrders(session, [id], { total_paid: paid, date_paid: nowIso(), status: "PAID_EMAIL_SENT" }, "設為已付款");
     if (alreadyPaid) {
       await addOrderHistory(session, id, "訂單原已付款，未重寄已付款通知信");
+      noMail++;
       continue;
     }
     // 付款成功通知信：與線上付款同一接點（依範本、白名單模式）；入帳事件＝設定前的訂單版本（並行重送同鍵只寄一封，取消入帳後再設定＝新事件）
@@ -155,7 +157,8 @@ async function markAsPaid(ctx: RequestContext): Promise<Response> {
     await addOrderHistory(session, id, q.queued ? `寄送已付款通知信${mailMsg}` : "已付款通知信先前已寄送（或顧客無 Email），不重寄");
   }
   const skipped = rows.length - target.length;
-  return actionOk(`已設為已付款 ${target.length} 筆${skipped ? `（略過非處理中 ${skipped} 筆）` : ""}；${mailMsg || "已排入已付款通知信"}`, mailMsg ? { notIntegrated: true } : {});
+  const mailText = noMail === target.length ? "訂單原已付款，未重寄已付款通知信" : `${mailMsg || "已排入已付款通知信"}${noMail ? `（${noMail} 筆原已付款，未重寄）` : ""}`;
+  return actionOk(`已設為已付款 ${target.length} 筆${skipped ? `（略過非處理中 ${skipped} 筆）` : ""}；${mailText}`, mailMsg ? { notIntegrated: true } : {});
 }
 
 /** POST /ajax/SalesOrder/extendPaymentDue：展延繳款期限並寄展延通知信（未串接） */

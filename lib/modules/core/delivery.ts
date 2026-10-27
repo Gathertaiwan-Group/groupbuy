@@ -366,8 +366,10 @@ async function staleVerdict(ch: Channel, row: Row, rc: RunCtx): Promise<{ v: Sta
     const p = rc.smsP.has(tenantId) ? rc.smsP.get(tenantId) : await smsProviderFor(tenantId, rc.cfg);
     return { v: { status: "UNKNOWN", reason: unqueryableReason(p?.kind ?? "none") }, provider: p?.kind ?? "" };
   }
-  const t = await emailTransportFor(tenantId, rc.cfg);
+  // 查詢不受 MESSAGE_DELIVERY_TENANTS 限制（當初已取件寄送）；但 Resend 查詢會以同一冪等鍵重送，仍須遵守全關與白名單
+  const t = await emailTransportFor(tenantId, { ...rc.cfg, tenants: null });
   const kind = !t ? "none" : t.kind === "gmail" ? "gmail" : t.provider.kind;
+  if (t && !recipientAllowed(rc.cfg, "EMAIL", String(row.to_email ?? ""))) return { v: { status: "UNKNOWN", reason: "收件者不在目前允許寄送的範圍（白名單），未向服務商查詢" }, provider: kind };
   if (!t || t.kind === "gmail" || t.provider.kind !== "resend" || !t.provider.resend) return { v: { status: "UNKNOWN", reason: unqueryableReason(kind) }, provider: kind === "none" ? "" : kind };
   // 重建與當初相同的內容（同一冪等鍵必須同內容，否則 Resend 回 422 → 結果不明）
   const to = String(row.to_email ?? "").trim();
