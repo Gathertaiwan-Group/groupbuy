@@ -290,10 +290,10 @@ insert into groupbuy.item_sales_rules (tenant_id, item_id, sales_rule_id, group_
 insert into groupbuy.item_sales_rule_tags (tenant_id, item_id, tag) values (${T}, 36800771, '買2件9折');
 ${insert("group_buy_coupons", ["id", "tenant_id", "group_buy_id", "coupon_template_id", "use_template", "title", "category", "dollar_or_percentage", "discount", "minimum",
   "available_quota", "coupon_used_total", "coupon_available_total", "coupon_settings", "created_at"], [
-  [958301, T, 405167, 1536, "true", q("滿3000折300"), q("MINIMUM_PRICE_MEET"), q("DOLLAR"), 300, 3000, -1, 2, 98, j({ maxDiscount: "", customerOnly: false, royaltyProgramId: [], redeemNumber: 1 }), tw("2026-10-21 16:00")],
-  [958302, T, 405163, 1422, "true", q("滿千折200"), q("MINIMUM_PRICE_MEET"), q("DOLLAR"), 200, 1000, -1, 3, 47, j({ maxDiscount: "", customerOnly: true, royaltyProgramId: [701001], redeemNumber: 1 }), tw("2026-10-01 10:00")],
+  [958301, T, 405167, 1536, "true", q("滿3000折300"), q("MINIMUM_PRICE_MEET"), q("DOLLAR"), 300, 3000, -1, 0, 1, j({ maxDiscount: "", customerOnly: false, royaltyProgramId: [], redeemNumber: 1 }), tw("2026-10-21 16:00")],
+  [958302, T, 405163, 1422, "true", q("滿千折200"), q("MINIMUM_PRICE_MEET"), q("DOLLAR"), 200, 1000, -1, 1, 1, j({ maxDiscount: "", customerOnly: true, royaltyProgramId: [701001], redeemNumber: 1 }), tw("2026-10-01 10:00")],
 ])}
-${insert("coupon_codes", ["id", "tenant_id", "group_buy_coupon_id", "code", "max_uses", "used_count"], [[958201, T, 958301, q("GB300"), -1, 2], [958202, T, 958302, q("MOON200"), 50, 3]])}
+${insert("coupon_codes", ["id", "tenant_id", "group_buy_coupon_id", "code", "max_uses", "used_count"], [[958201, T, 958301, q("GB300"), -1, 0], [958202, T, 958302, q("MOON200"), 50, 2]])}
 ${insert("lotteries", ["id", "tenant_id", "group_buy_id", "title", "quota", "order_by", "date_start", "date_end", "number_of_orders", "amount_of_orders"], [
   [958001, T, 405167, q("首購抽好禮"), 2, q("DATE_PAID"), tw("2026-10-21 15:42"), tw("2026-10-28 23:59"), -1, 500],
   [958002, T, 405163, q("前 10 名下單送提袋"), 10, q("UUID"), tw("2026-10-01 10:00"), tw("2026-10-15 23:59"), 10, -1]])}
@@ -692,6 +692,12 @@ begin
 end $$;
 select groupbuy.refresh_tenant_statistics(${T});
 select groupbuy.refresh_tenant_statistics(${P});
+-- 8007：依示範訂單優惠明細建名額帳本（BACKFILL_DEMO），折扣碼／優惠條件使用次數與優惠卷統計重算成與帳本一致
+do $$ begin
+  if to_regprocedure('groupbuy.marketing_reconcile_demo_usage()') is not null then
+    perform groupbuy.marketing_reconcile_demo_usage();
+  end if;
+end $$;
 `;
 
 const counts = `

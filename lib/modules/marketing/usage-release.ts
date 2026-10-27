@@ -414,3 +414,65 @@ export function isOrphanCouponUsage(
   if (orderCoupons.some((c) => c.groupBuyCouponId === couponId && c.couponCodeId == null)) return false;
   return true;
 }
+
+// ───────────── fix13（migration 8007）─────────────
+
+/**
+ * 結帳開頭一次取得的名額列鎖（與 DB marketing_lock_checkout 同順序）：
+ * 折扣碼 → 團購優惠卷（payload 指定 ∪ 折扣碼所屬）→ 優惠條件，各 id 升冪。
+ * 8006 以前 payload 沒帶「折扣碼所屬優惠卷」時，該優惠卷要到寫帳本重算統計（優惠條件之後）才鎖 → 不是全域順序。
+ */
+export function checkoutLockOrder(p: UsagePayload, parents?: CodeParents): { kind: UsageKind; id: number }[] {
+  return usageLockOrder(usageLedgerFromPayload(p), parents);
+}
+
+/** 示範資料自洽的輸入：一張示範訂單的優惠明細與是否仍占用名額（marketing_order_holds_usage） */
+export interface DemoOrderUsage {
+  orderId: number;
+  holds: boolean;
+  couponCodeIds: (number | null)[];
+  /** 明細上的團購優惠卷（無折扣碼時仍記一列優惠卷帳本） */
+  groupBuyCouponIds: (number | null)[];
+  salesRuleIds: (number | null)[];
+}
+
+/**
+ * 示範資料自洽（DB marketing_reconcile_demo_usage 的同規則純函式）：依示範訂單優惠明細建帳本（不占用的單標記已退回），
+ * 折扣碼 used_count／優惠條件 used_quota＝未退回帳本列數量合計；團購優惠卷統計依折扣碼重算。
+ */
+export function reconcileDemoUsage(
+  orders: DemoOrderUsage[],
+  codes: { id: number; groupBuyCouponId: number | null; maxUses?: number | null }[],
+  coupons: { id: number; availableQuota?: number | null }[],
+  ruleIds: number[],
+): { ledger: (UsageLedgerRow & { orderId: number })[]; usedCount: Map<number, number>; usedQuota: Map<number, number>; couponStats: Map<number, { used: number; available: number }> } {
+  const parent = new Map(codes.map((c) => [c.id, c.groupBuyCouponId]));
+  const ledger: (UsageLedgerRow & { orderId: number })[] = [];
+  for (const o of orders) {
+    const rows = new Map<string, UsageLedgerRow & { orderId: number }>();
+    const add = (kind: UsageKind, id: number | null | undefined) => {
+      if (id == null) return;
+      const k = `${kind}:${id}`;
+      const r = rows.get(k);
+      if (r) r.qty += 1;
+      else rows.set(k, { orderId: o.orderId, kind, refId: id, qty: 1, released: !o.holds });
+    };
+    o.couponCodeIds.forEach((c, i) => {
+      if (c != null && parent.has(c)) add("COUPON_CODE", c);
+      add("GROUP_BUY_COUPON", o.groupBuyCouponIds[i] ?? (c != null ? parent.get(c) : null));
+    });
+    o.salesRuleIds.forEach((r) => add("SALES_RULE", r));
+    ledger.push(...rows.values());
+  }
+  const sum = (kind: UsageKind, id: number) => ledger.filter((r) => r.kind === kind && r.refId === id && !r.released).reduce((a, r) => a + r.qty, 0);
+  const usedCount = new Map(codes.map((c) => [c.id, sum("COUPON_CODE", c.id)]));
+  const usedQuota = new Map(ruleIds.map((id) => [id, sum("SALES_RULE", id)]));
+  const couponStats = new Map(
+    coupons.map((g) => {
+      const mine = codes.filter((c) => c.groupBuyCouponId === g.id);
+      const t = couponTotals(mine.map((c) => usedCount.get(c.id) ?? 0), { availableQuota: g.availableQuota ?? -1, maxUses: mine.map((c) => c.maxUses ?? -1) });
+      return [g.id, { used: t.used, available: t.available }];
+    }),
+  );
+  return { ledger, usedCount, usedQuota, couponStats };
+}

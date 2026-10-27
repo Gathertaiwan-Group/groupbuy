@@ -646,3 +646,106 @@ describe("migration 8006（fix11）", () => {
     assert.doesNotMatch(body, /from\("sales_order_coupons"\)\.delete\(\)/);
   });
 });
+
+describe("fix13 ①示範資料自洽（reconcileDemoUsage，同 8007 marketing_reconcile_demo_usage）", () => {
+  const { reconcileDemoUsage } = R;
+  // 正式示範資料：MOON200（958202，屬 958302，max 50）兩張處理中訂單使用；GB300（958201，屬 958301）無訂單；規則 958401 兩張處理中訂單
+  const res = reconcileDemoUsage(
+    [
+      { orderId: 900033, holds: true, couponCodeIds: [958202], groupBuyCouponIds: [958302], salesRuleIds: [] },
+      { orderId: 900037, holds: true, couponCodeIds: [958202], groupBuyCouponIds: [958302], salesRuleIds: [] },
+      { orderId: 900002, holds: true, couponCodeIds: [], groupBuyCouponIds: [], salesRuleIds: [958401] },
+      { orderId: 900008, holds: true, couponCodeIds: [], groupBuyCouponIds: [], salesRuleIds: [958401] },
+    ],
+    [{ id: 958201, groupBuyCouponId: 958301, maxUses: -1 }, { id: 958202, groupBuyCouponId: 958302, maxUses: 50 }],
+    [{ id: 958301, availableQuota: -1 }, { id: 958302, availableQuota: -1 }],
+    [958401, 958402, 958403, 958404],
+  );
+  test("帳本 6 列（2 單×折扣碼＋優惠卷、2 單規則）", () => {
+    assert.equal(res.ledger.length, 6);
+    assert.ok(res.ledger.every((r) => !r.released && r.qty === 1));
+  });
+  test("折扣碼：MOON200 3→2、GB300 2→0", () => {
+    assert.equal(res.usedCount.get(958202), 2);
+    assert.equal(res.usedCount.get(958201), 0);
+  });
+  test("規則：958401 0→2、958402 1→0", () => {
+    assert.equal(res.usedQuota.get(958401), 2);
+    assert.equal(res.usedQuota.get(958402), 0);
+  });
+  test("優惠卷「已使用／剩餘」：3/47→1/1、2/98→0/1（每張優惠卷只有 1 張折扣碼）", () => {
+    assert.deepEqual(res.couponStats.get(958302), { used: 1, available: 1 });
+    assert.deepEqual(res.couponStats.get(958301), { used: 0, available: 1 });
+  });
+  test("不占用的單（已取消）帳本標記已退回、不計入", () => {
+    const r = reconcileDemoUsage([{ orderId: 1, holds: false, couponCodeIds: [5], groupBuyCouponIds: [null], salesRuleIds: [7] }], [{ id: 5, groupBuyCouponId: 9 }], [{ id: 9 }], [7]);
+    assert.ok(r.ledger.every((x) => x.released));
+    assert.equal(r.usedCount.get(5), 0);
+    assert.equal(r.usedQuota.get(7), 0);
+    assert.deepEqual(r.ledger.map((x) => `${x.kind}:${x.refId}`).sort(), ["COUPON_CODE:5", "GROUP_BUY_COUPON:9", "SALES_RULE:7"]);
+  });
+  test("無折扣碼優惠卷明細 → 只記優惠卷列", () => {
+    const r = reconcileDemoUsage([{ orderId: 1, holds: true, couponCodeIds: [null], groupBuyCouponIds: [9], salesRuleIds: [] }], [], [{ id: 9 }], []);
+    assert.deepEqual(r.ledger.map((x) => `${x.kind}:${x.refId}`), ["GROUP_BUY_COUPON:9"]);
+  });
+});
+
+describe("fix13 ②結帳開頭一次依全域順序取鎖", () => {
+  const { checkoutLockOrder, isGlobalLockOrder } = R;
+  const parents = new Map([[11, 21]]);
+  test("payload 沒帶折扣碼所屬優惠卷 → 仍在優惠條件之前鎖（CC → G → SR）", () => {
+    const seq = checkoutLockOrder({ couponCodeIds: [11], groupBuyCouponIds: [], salesRuleIds: [31] }, parents);
+    assert.deepEqual(seq, [{ kind: "COUPON_CODE", id: 11 }, { kind: "GROUP_BUY_COUPON", id: 21 }, { kind: "SALES_RULE", id: 31 }]);
+    assert.equal(isGlobalLockOrder(seq), true);
+  });
+  test("8006 舊順序（core CC → SR，寫帳本後才重算 G）不是全域順序", () => {
+    assert.equal(isGlobalLockOrder([{ kind: "COUPON_CODE", id: 11 }, { kind: "SALES_RULE", id: 31 }, { kind: "GROUP_BUY_COUPON", id: 21 }]), false);
+  });
+});
+
+describe("migration 8007（fix13）", () => {
+  const sql = readFileSync(new URL("../../../supabase/migrations/8007_marketing_usage_upfront_locks_demo_reconcile.sql", import.meta.url), "utf8");
+  const fn = (name: string) => {
+    const a = sql.indexOf(`function groupbuy.${name}(`);
+    const b = sql.indexOf("$$;", a);
+    return sql.slice(a, b);
+  };
+  test("marketing_lock_refs：折扣碼 → 優惠卷（含折扣碼所屬）→ 優惠條件，各 id 升冪", () => {
+    const b = fn("marketing_lock_refs");
+    const a1 = b.indexOf("from groupbuy.coupon_codes cc");
+    const a2 = b.indexOf("from groupbuy.group_buy_coupons g");
+    const a3 = b.indexOf("from groupbuy.sales_rules s");
+    assert.ok(a1 > 0 && a1 < a2 && a2 < a3);
+    assert.match(b.slice(a2, a3), /cc\.group_buy_coupon_id/);
+    assert.equal((b.match(/order by (cc|g|s)\.id\s+for update/g) ?? []).length, 3);
+  });
+  test("結帳包裝函式：先 marketing_lock_checkout（草稿單 → 庫存 → 會員 → 名額）再 core", () => {
+    for (const f of ["sf_place_order", "pos_checkout"]) {
+      const b = fn(f);
+      assert.ok(b.indexOf("marketing_lock_checkout(") > 0 && b.indexOf("marketing_lock_checkout(") < b.indexOf("_core(v_p)"));
+    }
+    const c = fn("marketing_lock_checkout");
+    const order = ["from groupbuy.sales_orders", "from groupbuy.items", "from groupbuy.customers", "marketing_lock_refs("].map((s) => c.indexOf(s));
+    assert.ok(order.every((x, i) => x > 0 && (i === 0 || x > order[i - 1])), String(order));
+    assert.match(c, /for no key update/);
+  });
+  test("後台使用／移除優惠卷：訂單之後一次鎖折扣碼＋所屬優惠卷；移除先鎖再刪明細", () => {
+    const a = fn("marketing_order_coupon_adjust");
+    assert.ok(a.indexOf("marketing_lock_refs(p_tenant_id, array[p_coupon_code_id], null, null)") > a.indexOf("from groupbuy.sales_orders"));
+    const r = fn("marketing_order_coupon_remove");
+    assert.ok(r.indexOf("marketing_lock_refs(") < r.indexOf("delete from groupbuy.sales_order_coupons"));
+  });
+  test("合併訂單：迴圈前一次鎖全部組的訂單與相連帳本名額列", () => {
+    const b = fn("orders_join_orders");
+    const loop = b.indexOf("for g in select x from jsonb_array_elements(p_groups) x loop");
+    assert.ok(b.indexOf("order by id for update") < loop && b.indexOf("marketing_lock_usage_refs(p_tenant_id, v_comp)") < loop);
+  });
+  test("示範資料自洽：BACKFILL_DEMO、限示範租戶與 id 區段、套用時執行", () => {
+    assert.match(sql, /'CHECKOUT', 'BACKFILL', 'ADMIN', 'BACKFILL_DEMO'/);
+    const b = fn("marketing_reconcile_demo_usage");
+    assert.match(b, /code in \('guest_ep', 'groupbuyforms'\)/);
+    assert.match(b, /between 900001 and 900999/);
+    assert.match(b, /on conflict \(sales_order_id, kind, ref_id\) do nothing/);
+    assert.match(sql, /groupbuy\.marketing_reconcile_demo_usage\(\);\s*end \$\$;/);
+  });
+});
