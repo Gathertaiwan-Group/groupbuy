@@ -223,7 +223,7 @@ export async function receipt(ctx: RequestContext): Promise<Response> {
   const items = await q(db().from("order_items").select("title, price, total, discount, back_order").eq("tenant_id", scope.session.tenantId).eq("sales_order_id", id).order("seq").order("id"), "讀取訂單商品");
   const rules = await q(db().from("sales_order_sales_rules").select("title, discount").eq("tenant_id", scope.session.tenantId).eq("sales_order_id", id), "讀取優惠條件");
   const coupons = await q(db().from("sales_order_coupons").select("coupon, discount").eq("tenant_id", scope.session.tenantId).eq("sales_order_id", id), "讀取優惠卷");
-  const pays = await q(db().from("pos_payments").select("payment_method_tag, amount, cash_received, change_amount, admin_user_id").eq("tenant_id", scope.session.tenantId).eq("sales_order_id", id).order("id"), "讀取付款明細");
+  const pays = await q(db().from("pos_payments").select("payment_method_tag, amount, cash_received, change_amount, admin_user_id, kind, created_at").eq("tenant_id", scope.session.tenantId).eq("sales_order_id", id).order("id"), "讀取付款明細");
   const tenant = await tenantById(scope.session.tenantId);
   const lines = items.map((i) => ({ title: str(i.title), price: num(i.price), total: num(i.total), subtotal: num(i.price) * num(i.total), discount: num(i.discount) && !rules.length ? num(i.discount) : 0, backOrder: !!i.back_order }));
   return html(
@@ -245,7 +245,19 @@ export async function receipt(ctx: RequestContext): Promise<Response> {
       subtotal: lines.reduce((s, l) => s + l.subtotal, 0),
       rules: rules.map((r) => ({ title: str(r.title), discount: num(r.discount) })),
       coupons: coupons.map((c) => ({ coupon: str(c.coupon), discount: num(c.discount) })),
-      payments: pays.map((p) => ({ tag: str(p.payment_method_tag), amount: num(p.amount), cashReceived: p.cash_received == null ? null : num(p.cash_received), change: num(p.change_amount) })),
+      payments: pays.map((p) => ({
+        tag: str(p.payment_method_tag),
+        amount: num(p.amount),
+        cashReceived: p.cash_received == null ? null : num(p.cash_received),
+        change: num(p.change_amount),
+        // fix4：POS 作廢寫的負數沖銷列（6005 kind=VOID）要標示清楚，不能看起來像第二筆付款
+        isVoid: str(p.kind) === "VOID",
+        dateString: str(p.kind) === "VOID" ? taipeiDateTime(p.created_at, true) : "",
+      })),
+      voided: str(o.state) === "CANCELED" || pays.some((p) => str(p.kind) === "VOID"),
+      voidDateString: o.date_canceled ? taipeiDateTime(o.date_canceled, true) : "",
+      hasVoidPayments: pays.some((p) => str(p.kind) === "VOID"),
+      netPaid: pays.reduce((s, p) => s + num(p.amount), 0),
       receiptLabel: RECEIPT_LABEL(o),
     }),
   );

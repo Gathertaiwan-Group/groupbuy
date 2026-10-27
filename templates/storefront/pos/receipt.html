@@ -15,6 +15,8 @@ hr{border:0;border-top:1px dashed #000;margin:6px 0}
 table{width:100%;border-collapse:collapse}td{vertical-align:top;padding:1px 0}
 .big{font-size:15px;font-weight:bold}
 .note{font-size:11px;color:#555}
+.void-banner{text-align:center;font-size:15px;font-weight:bold;border:2px solid #000;margin:6px 0;padding:3px 0;letter-spacing:4px}
+.void-row td{font-weight:bold}
 .actions{text-align:center;margin:12px}
 .actions button{font-size:14px;padding:6px 18px}
 @media print{body{background:#fff}.receipt{box-shadow:none;margin:0 auto}.actions{display:none}}
@@ -25,6 +27,7 @@ table{width:100%;border-collapse:collapse}td{vertical-align:top;padding:1px 0}
 	<h1>{{tenantName}}</h1>
 	<div class="c">{{groupBuy.title}}</div>
 	<div class="c big">交易明細（收據）</div>
+	{{#if voided}}<div class="void-banner">已作廢</div>{{#if voidDateString}}<div class="c">作廢時間：{{voidDateString}}</div>{{/if}}{{/if}}
 	<hr>
 	<div>訂單編號：{{order.uuid}}</div>
 	<div>交易時間：{{order.dateString}}</div>
@@ -46,8 +49,9 @@ table{width:100%;border-collapse:collapse}td{vertical-align:top;padding:1px 0}
 	</table>
 	<hr>
 	<table>
-	{{#each payments}}<tr><td>{{this.tag}}</td><td class="r">{{this.amount}}</td></tr>
-	{{#if this.cashReceived}}<tr><td>&nbsp;實收</td><td class="r">{{this.cashReceived}}</td></tr><tr><td>&nbsp;找零</td><td class="r">{{this.change}}</td></tr>{{/if}}{{/each}}
+	{{#each payments}}{{#if this.isVoid}}<tr class="void-row"><td>{{this.tag}}（作廢沖銷）</td><td class="r">{{this.amount}}</td></tr>{{#if this.dateString}}<tr><td colspan="2" class="note">&nbsp;{{this.dateString}}</td></tr>{{/if}}{{else}}<tr><td>{{this.tag}}</td><td class="r">{{this.amount}}</td></tr>
+	{{#if this.cashReceived}}<tr><td>&nbsp;實收</td><td class="r">{{this.cashReceived}}</td></tr><tr><td>&nbsp;找零</td><td class="r">{{this.change}}</td></tr>{{/if}}{{/if}}{{/each}}
+	{{#if hasVoidPayments}}<tr class="big"><td>實付淨額</td><td class="r">NT${{netPaid}}</td></tr>{{/if}}
 	{{#unless payments.length}}<tr><td>付款狀態</td><td class="r">未付款</td></tr>{{/unless}}
 	</table>
 	<hr>
