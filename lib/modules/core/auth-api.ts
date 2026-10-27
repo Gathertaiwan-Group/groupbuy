@@ -17,8 +17,9 @@ import { DUMMY_HASH, hashPassword, verifyPassword } from "@/lib/core/auth/passwo
 import { requireSession } from "@/lib/core/http/route-helpers";
 import { parseEditorRequest, editorResponse } from "@/lib/core/editor/protocol";
 import { getAdminSecurity } from "./system-settings";
-import { needsWtoken, wtokenDeliverable } from "./system-settings-logic";
+import { MESSAGE_DELIVERY, needsWtoken, wtokenDeliverable, type MessageDelivery } from "./system-settings-logic";
 import { addIpWhitelist, ipWhitelisted, issueWtoken, verifyWtoken } from "./login-wtoken";
+import { deliveryStatus } from "./delivery";
 
 const MAX_FAILURES = 5; // 同帳號 15 分鐘內失敗上限
 const IP_MAX_FAILURES = 30; // 同 IP 15 分鐘內失敗上限（跨帳號猜密碼）
@@ -184,25 +185,36 @@ export async function login(ctx: RequestContext): Promise<Response> {
   // 系統設定「管理員登入安全性設定」：需認證碼時，未帶或帶錯 wtoken → 485（登入頁顯示驗證碼欄）
   const sec = await getAdminSecurity(user.tenant_id);
   const ip = clientIp(ctx.req);
+  // Email／簡訊是否實際可寄（服務商設定＋寄送模式＋白名單）；規則為「不需要」時不必查
+  const delivery: MessageDelivery = sec.rule === "NONE" ? MESSAGE_DELIVERY : await deliveryStatus(user.tenant_id);
   // 防呆：規則需要認證碼但認證碼送不到（Email／簡訊未串接、無收件者）→ 不要求認證碼，避免管理員永久無法登入（needsWtoken 內判斷）
-  if (sec.rule !== "NONE" && !wtokenDeliverable(sec)) {
+  if (sec.rule !== "NONE" && !wtokenDeliverable(sec, delivery)) {
     console.warn(`[login] 租戶 ${user.tenant_id} 登入安全性設定為 ${sec.rule}，但認證碼無法寄送（${sec.send}）→ 本次不要求認證碼`);
   }
-  if (sec.rule !== "NONE" && needsWtoken(sec, sec.rule === "IP" ? await ipWhitelisted(user.id, ip) : false)) {
+  if (sec.rule !== "NONE" && needsWtoken(sec, sec.rule === "IP" ? await ipWhitelisted(user.id, ip) : false, delivery)) {
     const wtoken = ((await ctx.param("wtoken")) ?? "").trim();
+    let skip = false;
     if (!wtoken) {
-      const r = await issueWtoken(user, sec, ip);
-      await finishAttempt(attemptId, false, "WTOKEN_REQUIRED", user);
-      return json(
-        { code: 485, error: r.issued ? WTOKEN_ISSUED_MSG : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait },
-        { status: 485 },
-      );
+      const r = await issueWtoken(user, sec, ip, delivery);
+      if (r.failed) {
+        // 防呆：認證碼確定寄不出去（服務商拒絕／帳密錯誤）→ 本次不要求認證碼，避免管理員被鎖在門外
+        console.warn(`[login] 租戶 ${user.tenant_id} 認證碼寄送失敗 → 本次不要求認證碼`);
+        skip = true;
+      } else {
+        await finishAttempt(attemptId, false, "WTOKEN_REQUIRED", user);
+        return json(
+          { code: 485, error: r.issued ? wtokenIssuedMsg(r.sent) : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait },
+          { status: 485 },
+        );
+      }
     }
-    if (!(await verifyWtoken(user.id, wtoken))) {
-      await finishAttempt(attemptId, false, "BAD_WTOKEN", user);
-      return json({ code: 485, error: "認證碼錯誤或已失效" }, { status: 485 });
+    if (!skip) {
+      if (!(await verifyWtoken(user.id, wtoken))) {
+        await finishAttempt(attemptId, false, "BAD_WTOKEN", user);
+        return json({ code: 485, error: "認證碼錯誤或已失效" }, { status: 485 });
+      }
+      if (sec.rule === "IP") await addIpWhitelist(user.tenant_id, user.id, ip);
     }
-    if (sec.rule === "IP") await addIpWhitelist(user.tenant_id, user.id, ip);
   }
 
   const { cookie } = await createSession({ adminUserId: user.id, tenantId: user.tenant_id, persistent: kmsi, req: ctx.req });
@@ -243,7 +255,8 @@ export async function authRemembered(): Promise<Response> {
   return json({ code: 401, error: "請重新輸入帳號密碼登入" }, { status: 401 });
 }
 
-const WTOKEN_ISSUED_MSG = "需要登入認證碼：已產生 6 碼認證碼並記入通知待寄紀錄（【未串接】Email／簡訊寄送，不會實際寄出）";
+const wtokenIssuedMsg = (sent?: boolean) =>
+  sent ? "需要登入認證碼：已寄出 6 碼認證碼（10 分鐘內有效）" : "需要登入認證碼：已產生 6 碼認證碼，寄送中；若未收到請於倒數結束後重送";
 
 /**
  * POST /ajax/AdminUser/resendWtoken（username）：重送登入認證碼。
@@ -269,9 +282,11 @@ export async function resendWtoken(ctx: RequestContext): Promise<Response> {
   const { data: user } = await db.from("admin_users").select("id, tenant_id, account, is_active").eq("id", adminUserId).maybeSingle<AdminRow>();
   if (!user || user.is_active === false) return json({ code: 400, error: "請先輸入帳號密碼登入" }, { status: 400 });
   const sec = await getAdminSecurity(user.tenant_id);
-  if (sec.rule === "NONE" || !wtokenDeliverable(sec)) return json({ code: 400, error: "目前不需要認證碼，請直接登入" }, { status: 400 });
-  const r = await issueWtoken(user, sec, clientIp(ctx.req));
-  return json({ code: 485, error: r.issued ? WTOKEN_ISSUED_MSG : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait }, { status: 485 });
+  const delivery = sec.rule === "NONE" ? MESSAGE_DELIVERY : await deliveryStatus(user.tenant_id);
+  if (sec.rule === "NONE" || !wtokenDeliverable(sec, delivery)) return json({ code: 400, error: "目前不需要認證碼，請直接登入" }, { status: 400 });
+  const r = await issueWtoken(user, sec, clientIp(ctx.req), delivery);
+  if (r.failed) return json({ code: 400, error: "認證碼寄送失敗，請直接重新登入" }, { status: 400 });
+  return json({ code: 485, error: r.issued ? wtokenIssuedMsg(r.sent) : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait }, { status: 485 });
 }
 
 /** POST /ajax/GoogleRecaptcha/verify（未串接 Google reCAPTCHA：直接通過） */

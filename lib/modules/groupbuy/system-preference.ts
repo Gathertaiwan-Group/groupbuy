@@ -7,14 +7,16 @@
 // - 設定鍵目錄沿用「進階設定」（groupbuy/preference.ts PREFERENCE_CATALOG）：進階設定未設定時顯示「來自系統設定」的同名鍵，
 //   前台讀設定時依「本團 → 綁定標籤 → 系統設定」取值（storefront/site.ts groupBuyPreferences）。
 // - 金流／物流／電子發票服務商的金鑰類編輯器（綠界、Stripe、LINE Pay…）不提供：對外服務一律未串接，且不在共用庫存放第三方密鑰。
-// - 收/寄信設定：只存帳號、寄送人名稱、收件信箱；密碼不保存；「寄送測試信」回【未串接】（不寄出任何信）。
+// - 收/寄信設定（fix20）：帳號、寄送人名稱、收件信箱；自有信箱密碼以 AES-256-GCM 加密存 settings.passwordEnc（不回傳前端）。
+//   「寄送測試信」POST /ajax/SystemPreference/sendTestEmail（core/delivery.ts sendTestEmail）：未設定寄信服務 → 回【未串接】；
+//   有設定 → 測試收件白名單模式寄到白名單第一個 Email（正式模式寄到客服信箱）。原站 JS 以 GET 帶密碼於網址 → 已改成 POST（ARCHITECTURE §9）。
 //
 // 端點（皆可帶 .do 與 /{租戶}/ 前綴；需 permissions.systemPreference）：
 //   GET|POST /ajax/SystemPreference/list                         列表（目錄鍵＋本租戶已設定值）
 //   POST     /ajax/SystemPreference/update[?systemPreferenceId=] Editor edit（列 id）或 create（spEditor：name＋prefValue）
 //   POST     /ajax/SystemPreference/delete?systemPreferenceId=   刪除（回到預設）
 //   GET|POST /ajax/SystemPreference/<editor>                     專用編輯器（見 SYS_SETTINGS）
-//   GET      /ajax/SystemPreference/sendTestEmail                【未串接】
+//   POST     /ajax/SystemPreference/sendTestEmail                寄送測試信（emailAddress、emailPassword）
 import { getServiceClient } from "@/lib/supabase/server";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, post, route, requireSession } from "@/lib/core/http/route-helpers";
@@ -22,6 +24,7 @@ import { FieldErrors, badRequest, notFound } from "@/lib/core/http/errors";
 import { json } from "@/lib/core/http/responses";
 import { flattenDotted, parseEditorRequest } from "@/lib/core/editor/protocol";
 import { adminSecurityOf, adminSecuritySaveError } from "@/lib/modules/core/system-settings-logic";
+import { deliveryStatus, encryptSecret, sendTestEmail } from "@/lib/modules/core/delivery";
 import {
   DEF_BY_NAME,
   PREFERENCE_CATALOG,
@@ -90,9 +93,7 @@ const SYS_SETTINGS: Record<string, SettingsSpec & { title: string }> = {
     defaults: { rule: "NONE", send: "USER_EMAIL" },
     validate(s, errors) {
       if (s.email && !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(String(s.email))) errors.push({ name: "email", status: "Email 格式錯誤" });
-      // 認證碼送不到（Email／簡訊未串接、或無收件者）時不可選需要認證碼的規則，否則管理員會無法登入（登入流程另有防呆）
-      const lockout = adminSecuritySaveError(adminSecurityOf(s));
-      if (lockout) errors.push({ name: "rule", status: lockout });
+      // 認證碼送不到時不可選需要認證碼的規則：依實際寄送設定判斷，在 postSysSettings（需非同步讀取寄送設定）
     },
   },
   taxInfoSettings: {
@@ -131,8 +132,14 @@ const SYS_SETTINGS: Record<string, SettingsSpec & { title: string }> = {
   emailSettings: {
     title: "收/寄信設定",
     pref: "EMAIL_SETTINGS",
-    // 密碼不保存（自有信箱寄信未串接）
+    // password 不經一般欄位合併：postSysSettings 加密成 passwordEnc；讀取時不回傳（password 一律空白）
     fields: { account: "text", name: "text", address: "text", addressDaily: "text" },
+    derive: () => ({ password: "", passwordEnc: null }),
+    validate(s, errors) {
+      for (const k of ["address", "addressDaily"]) {
+        if (s[k] && !String(s[k]).split(",").every((x) => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(x.trim()))) errors.push({ name: k, status: "Email 格式錯誤" });
+      }
+    },
   },
 };
 
@@ -294,7 +301,36 @@ async function postSysSettings(ctx: RequestContext, spec: SettingsSpec): Promise
     return json({ code: 200, data: [] });
   }
   const values = flattenDotted(req.rows[0]?.values ?? {});
-  const { next, touched } = mergeSettingsValues(spec, settingsOf(row ?? null), values);
+  const base = settingsOf(row ?? null);
+  // 自有信箱密碼：不以明文存；有輸入才更新，帳號清空或更換時一併清掉舊密碼
+  let password: string | null = null;
+  if (spec.pref === "EMAIL_SETTINGS") {
+    password = String(values.password ?? "");
+    delete values.password;
+  }
+  const { next, touched: merged } = mergeSettingsValues(spec, base, values);
+  let touched = merged;
+  if (spec.pref === "EMAIL_SETTINGS") {
+    const account = String(next.account ?? "").trim();
+    if (password && !account) throw new FieldErrors([{ name: "account", status: "請填寫帳號" }]);
+    if (password && !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(account)) throw new FieldErrors([{ name: "account", status: "帳號須為單一 Email" }]);
+    if (password) {
+      const enc = encryptSecret(password);
+      if (!enc) throw new FieldErrors([{ name: "password", status: "伺服器未設定加密金鑰，無法保存密碼" }]);
+      next.passwordEnc = enc;
+      touched = true;
+    } else if (!account || account !== String(base.account ?? "").trim()) {
+      if (next.passwordEnc !== undefined) touched = true;
+      delete next.passwordEnc;
+    }
+    delete next.password;
+  }
+  if (spec.pref === "ADMIN_SECURITY_SETTINGS") {
+    // 認證碼送不到（寄送未串接、無收件者、不在測試白名單）時不可選需要認證碼的規則，否則管理員會無法登入（登入流程另有防呆）
+    const sec = adminSecurityOf(next);
+    const lockout = sec.rule === "NONE" ? null : adminSecuritySaveError(sec, await deliveryStatus(s.tenantId));
+    if (lockout) throw new FieldErrors([{ name: "rule", status: lockout }]);
+  }
   let saved: SysRow | null = row ?? null;
   if (touched || !row) saved = await upsertRow(s.tenantId, spec.pref, { pref_value: JSON.stringify(next), settings: next });
   return json({ code: 200, data: [settingsPayload(spec, saved)] });
@@ -306,16 +342,24 @@ export async function systemSetting(tenantId: number, name: string): Promise<{ v
   return row ? { value: row.pref_value, settings: settingsOf(row) } : null;
 }
 
+/** POST /ajax/SystemPreference/sendTestEmail（emailAddress、emailPassword；皆可空白＝用已儲存的寄信方式） */
+async function sendTestEmailRoute(ctx: RequestContext): Promise<Response> {
+  const s = session(ctx);
+  const r = await sendTestEmail(s.tenantId, {
+    emailAddress: String((await ctx.param("emailAddress")) ?? "").slice(0, 200),
+    emailPassword: String((await ctx.param("emailPassword")) ?? "").slice(0, 200),
+  });
+  return r.ok ? json({ code: 200, error: r.message }) : json({ code: 400, error: r.message }, { status: 400 });
+}
+
 const opt = { permission: PERM };
 export const systemPreferenceRoutes: RouteDef[] = [
   route(["GET", "POST"], "/ajax/SystemPreference/list", listSys, opt),
   post("/ajax/SystemPreference/update", updateSys, opt),
   post("/ajax/SystemPreference/delete", deleteSys, opt),
-  get(
-    "/ajax/SystemPreference/sendTestEmail",
-    () => json({ code: 400, error: "【未串接】自有信箱寄信未串接，無法寄送測試信" }, { status: 400 }),
-    opt,
-  ),
+  // 原站以 GET 帶密碼（會留在網址／記錄）→ 不處理，請前端改用 POST（public/public/scripts/dataTable.api.min.js 已修補）
+  get("/ajax/SystemPreference/sendTestEmail", () => json({ code: 400, error: "請重新整理頁面後再寄送測試信" }, { status: 400 }), opt),
+  post("/ajax/SystemPreference/sendTestEmail", sendTestEmailRoute, opt),
   ...Object.entries(SYS_SETTINGS).flatMap(([name, spec]) => [
     get(`/ajax/SystemPreference/${name}`, (ctx) => getSysSettings(ctx, spec), opt),
     post(`/ajax/SystemPreference/${name}`, (ctx) => postSysSettings(ctx, spec), opt),

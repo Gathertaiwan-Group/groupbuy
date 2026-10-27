@@ -105,7 +105,7 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 只用 `groupbuy` schema；service-role client（`lib/supabase/server.ts`，`cache: no-store`）；**每個查詢以 session 的 tenant_id 過濾**（`crud.ts`、`dtQuery` 自動加）。anon/authenticated 對所有表無權限（RLS＋revoke）。
 - 原站 JSON 鍵 ↔ 欄位：datamodel 的 `EntityDef`（`lib/db/entity-types.ts` 介面合約）＋ `rowToApi/apiToRow`。
 - 列舉：`groupbuy.enum_options` → `lib/core/enums.ts`（每個執行個體快取 10 分鐘）。
-- 系統設定頁 `/backend/SystemPreference/panel`（需 `permissions.systemPreference`；推導頁，後端 `lib/modules/groupbuy/system-preference.ts`）：設定鍵目錄沿用進階設定＋原站 `dataTable.api.min.js` 的系統層專用編輯器（帳務、收/寄信〔測試信【未串接】、不存密碼〕、銀行對帳格式、主題顏色、稅籍、寄件人、通知、愛心碼…）；金流/物流/電子發票金鑰類不提供。前台 `groupBuyPreferences` 依「本團 → 綁定標籤 → 系統設定」取值。
+- 系統設定頁 `/backend/SystemPreference/panel`（需 `permissions.systemPreference`；推導頁，後端 `lib/modules/groupbuy/system-preference.ts`）：設定鍵目錄沿用進階設定＋原站 `dataTable.api.min.js` 的系統層專用編輯器（帳務、收/寄信〔自有信箱密碼 AES-256-GCM 加密存 `passwordEnc`、不回傳；寄送測試信見 §12〕、銀行對帳格式、主題顏色、稅籍、寄件人、通知、愛心碼…）；金流/物流/電子發票金鑰類不提供。前台 `groupBuyPreferences` 依「本團 → 綁定標籤 → 系統設定」取值。
 - 系統設定（`groupbuy.system_preferences`，tenant＋name 唯一）：示範租戶 guest_ep 的值由 migration 0103 寫入推導的預設值（系統信主旨／內容為通用文字、無庫存顯示＝OUT_OF_STOCK、電子發票／信用卡服務商＝NONE；原站樣板未擷取）。0102 已作廢（內容移除）。groupbuy 進階設定頁以同名鍵讀取。
 - 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage（`gb/` 檔名含 UUID、內容不變 → 轉址可快取：瀏覽器 1 天、Vercel 邊緣一年〔每次部署清除〕；轉址目標含 Supabase 專案網址，所以瀏覽器不設長期）；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN（快取一天）。
 - Migration：`scripts/apply-migrations.mjs`（Management API，單一交易＋帳本），CI 在 main push 且 migration 有變更時自動套用；**禁止 `supabase db push`**（共用庫）。
@@ -131,12 +131,13 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 | `public/public/scripts/dataTable.config.min.js`（Editor upload 預設、CKEditor5 轉接器）、`dataTable.min.js`（CKEditor4 filebrowserImageUploadUrl） | `https://groupbuyforms.com/json/uploadImage` → `/json/uploadImage` | 原站上傳到外部主機 |
 | `public/public/scripts/gbs_api.min.js` | `"https://gbf.tw/"+t` → `(GBF.shortUrlBase || "https://gbf.tw/")+t` | 賣場網址彈窗顯示本系統網址 |
 | `public/public/js/ckeditor5/translations/en.min.js` | 空檔 | 原站此檔 404 |
+| `public/public/scripts/dataTable.api.min.js`（EmailSettings.sendTestEmail） | `$.ajax({url:…/sendTestEmail` → `$.ajax({type:"POST",url:…` | 原站以 GET 把信箱密碼放在網址（會進存取記錄）；改 POST（帶 CSRF token） |
 | `public/scripts/footerEditor.js`（gapfill 新鏡射） | 上傳網址 `https://groupbuyforms.com/json/uploadImage/vcf` → `/json/uploadImage/vcf`；上傳回應為字串時才 `$.parseJSON`；`(https:)//cdn.groupbuyforms.com/upload/images/` → `/upload/images/` | 舊版 Footer 編輯器上傳改存本系統 |
 
 ## 10. 部署與 CI
 
 - Vercel：`vercel.json` regions `hnd1`；push main 自動部署；函式 `maxDuration 60s`；**請求本體上限 4.5MB**。
-- 排程：`vercel.json` crons 每日 16:05 UTC（台灣 00:05，Hobby 方案每日上限一次）呼叫 `/api/cron/run`（`lib/modules/core/cron.ts`）；以 Vercel env `CRON_SECRET` 驗證（`Authorization: Bearer`，未設定回 503）。工作（皆冪等）：跨租戶到期上下架/變價排程、排程發布文章、團購勾「自動取消逾期訂單」的逾期未付款訂單取消（歷程 [系統]）、過期 session／90 天前登入紀錄清理。手動：`curl -H "Authorization: Bearer $CRON_SECRET" https://groupbuy-delta.vercel.app/api/cron/run[?jobs=schedulers,posts,autoCancel,housekeeping]`。排程另由各頁惰性執行補足當日內的時間精度。
+- 排程：`vercel.json` crons 每日 16:05 UTC（台灣 00:05，Hobby 方案每日上限一次）呼叫 `/api/cron/run`（`lib/modules/core/cron.ts`）；以 Vercel env `CRON_SECRET` 驗證（`Authorization: Bearer`，未設定回 503）。工作（皆冪等）：跨租戶到期上下架/變價排程、排程發布文章、團購勾「自動取消逾期訂單」的逾期未付款訂單取消（歷程 [系統]）、通知（未付款提醒／低庫存）、Email／簡訊寄送（delivery，§12）、過期 session／90 天前登入紀錄清理。手動：`curl -H "Authorization: Bearer $CRON_SECRET" https://groupbuy-delta.vercel.app/api/cron/run[?jobs=schedulers,posts,autoCancel,notifications,delivery,housekeeping]`。排程另由各頁惰性執行補足當日內的時間精度。
 - GitHub Actions `CI`：`npm ci` → `npm run typecheck` → `npm run build`（不帶 Supabase env，build 不得連 DB）；main push 時套用 migration（需 secrets）。
 - 本機 build 不覆蓋 dev：`NEXT_DIST_DIR=.next-build npm run build`（`next.config.mjs` 的 `distDir`），**build 完立刻 `rm -rf .next-build`**（多 agent 共用磁碟；守則見 MODULE_GUIDE §2）。
 
@@ -151,4 +152,14 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - 請求解析：巢狀鍵只寫自有屬性（`toString[x]` 之類不會改到內建物件）、擋 `__proto__/prototype/constructor`；DataTables `iColumns`≤500、`iSortingCols`≤50。
 - crudRoutes：save/update/delete 端點只接受各自的 Editor action（沒有專屬端點的動作才由其他端點代收；可用 `actions` 收緊）。樂觀鎖條件放進 UPDATE（並行編輯只有一個成功）；列表排序最後補唯一鍵。
 - 密碼只存 bcrypt；登入失敗鎖定；帳號不存在時仍跑一次 bcrypt（避免時間差探測）。
-- 對外服務（簡訊、Email、金流、物流、電子發票、FB、reCAPTCHA）一律未串接，回應帶 `【未串接】`。
+- 對外服務（金流、物流、電子發票、FB、reCAPTCHA）未串接，回應帶 `【未串接】`；Email／簡訊見 §12（未設定服務商時同樣不寄出）。
+
+## 12. Email／簡訊寄送（fix20，`lib/modules/core/delivery*.ts`）
+
+- 各功能照舊寫 `email_messages`／`sms_messages`（未串接時 `NOT_SENT_UNINTEGRATED`）。排程 `delivery` 工作：逾時的 `SENDING` → `FAILED`（結果不明、不重寄）→ 有可用服務商的租戶把**最近**的未串接紀錄轉 `QUEUED`（一般 6 小時內、驗證碼類 25 分鐘內；更舊的不補寄）→ 條件式取件 `QUEUED→SENDING`（同一筆只有一個執行者拿到）→ `SENT`／`FAILED`／`BLOCKED`。只有「確定未送出」的錯誤（連線失敗、SMTP 寄件前的 4xx、HTTP 429/5xx〔Resend 帶 Idempotency-Key、三竹帶 clientid〕）回 `QUEUED` 延後重試，上限 3 次。整次排程仍在 `cron_locks` 租約內。回應只有筆數。
+- 時效性訊息即時寄：登入認證碼（`login-wtoken.ts`）、寄送測試信；失敗留給排程（測試信不重試）。
+- 服務商（全部走環境變數或系統設定；repo 不放金鑰）：Email＝租戶「收/寄信設定」的自有 Gmail（帳號＋應用程式密碼，加密存 DB，金鑰由 `SESSION_SECRET` 導出）→ `RESEND_API_KEY`＋`MAIL_FROM` → `SMTP_HOST`(+`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`)＋`MAIL_FROM`；簡訊＝三竹 `MITAKE_USERNAME`＋`MITAKE_PASSWORD`（原站簡訊商不明）。`RESEND_API_URL`／`MITAKE_API_URL`／`GMAIL_SMTP_HOST|PORT|SECURE` 只供測試指向本機 mock。
+- 安全預設：沒有服務商 → 不寄、紀錄維持未串接、登入認證碼規則不可選（`deliveryStatus()` 實際判斷）。`MESSAGE_DELIVERY_MODE` 未設定＝`whitelist`：只寄 `MESSAGE_TEST_WHITELIST`（Email／手機），其他一律 `BLOCKED`（攔下記錄、之後也不補寄）；`live` 才寄給所有收件者；`off` 全關。`MESSAGE_DELIVERY_TENANTS`（租戶代碼或 id）可限定租戶。
+- 寄出前會刪掉內文中含 `【未串接】` 的提示行。Email／簡訊餘額（帳務設定 creditEmail／creditSms）不扣點。
+- 已知限制：銀行對帳「取消入帳」只會把仍為 `NOT_SENT_UNINTEGRATED` 的付款成功信標成 FAILED；已轉 `QUEUED`／已寄出的不會撤回。
+

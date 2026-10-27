@@ -1,0 +1,134 @@
+// Email／簡訊寄送純邏輯單元測試（node:test，不連 DB、不寄信）。
+// 執行：node --experimental-strip-types --test lib/modules/core/delivery.test.ts
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+
+type L = typeof import("./delivery-logic");
+const L: L = await import(new URL("./delivery-logic.ts", import.meta.url).href);
+type S = typeof import("./system-settings-logic");
+const S: S = await import(new URL("./system-settings-logic.ts", import.meta.url).href);
+
+describe("deliveryConfigFromEnv", () => {
+  test("什麼都沒設定 → 無服務商、預設白名單模式", () => {
+    const c = L.deliveryConfigFromEnv({});
+    assert.equal(c.mode, "whitelist");
+    assert.equal(c.email, null);
+    assert.equal(c.sms, null);
+    assert.equal(c.tenants, null);
+    assert.equal(c.whitelist.emails.size, 0);
+  });
+  test("只有金鑰沒有寄件人 → 不算設定", () => {
+    assert.equal(L.deliveryConfigFromEnv({ RESEND_API_KEY: "k" }).email, null);
+    assert.equal(L.deliveryConfigFromEnv({ SMTP_HOST: "h" }).email, null);
+    assert.equal(L.deliveryConfigFromEnv({ MITAKE_USERNAME: "u" }).sms, null);
+  });
+  test("Resend 優先於 SMTP；SMTP 埠與 TLS", () => {
+    const c = L.deliveryConfigFromEnv({ RESEND_API_KEY: "k", SMTP_HOST: "h", MAIL_FROM: "a@b.co" });
+    assert.equal(c.email?.kind, "resend");
+    assert.equal(c.email?.resend?.url, L.RESEND_DEFAULT_URL);
+    const s = L.deliveryConfigFromEnv({ SMTP_HOST: "h", MAIL_FROM: "a@b.co", SMTP_PORT: "465" });
+    assert.deepEqual([s.email?.kind, s.email?.smtp?.port, s.email?.smtp?.secure], ["smtp", 465, true]);
+    const s2 = L.deliveryConfigFromEnv({ SMTP_HOST: "h", MAIL_FROM: "a@b.co", SMTP_PORT: "1025", SMTP_SECURE: "0" });
+    assert.deepEqual([s2.email?.smtp?.port, s2.email?.smtp?.secure], [1025, false]);
+  });
+  test("模式、白名單、租戶範圍", () => {
+    const c = L.deliveryConfigFromEnv({ MESSAGE_DELIVERY_MODE: "LIVE", MESSAGE_TEST_WHITELIST: "A@X.co; 0912-345-678\n+886922333444, bad", MESSAGE_DELIVERY_TENANTS: "guest_ep, 12" });
+    assert.equal(c.mode, "live");
+    assert.deepEqual([...c.whitelist.emails], ["a@x.co"]);
+    assert.deepEqual([...c.whitelist.phones].sort(), ["0912345678", "0922333444"]);
+    assert.deepEqual(c.tenants, ["guest_ep", "12"]);
+    assert.equal(L.tenantInScope(c, { id: 12 }), true);
+    assert.equal(L.tenantInScope(c, { id: 5, code: "GUEST_EP" }), true);
+    assert.equal(L.tenantInScope(c, { id: 5, code: "other" }), false);
+    assert.equal(L.deliveryConfigFromEnv({ MESSAGE_DELIVERY_MODE: "whatever" }).mode, "whitelist");
+  });
+});
+
+describe("recipientAllowed", () => {
+  const wl = L.parseWhitelist("ok@test.dev 0912345678");
+  test("白名單模式只放行白名單", () => {
+    const c = { mode: "whitelist" as const, whitelist: wl };
+    assert.equal(L.recipientAllowed(c, "EMAIL", " OK@test.dev "), true);
+    assert.equal(L.recipientAllowed(c, "EMAIL", "real@customer.tw"), false);
+    assert.equal(L.recipientAllowed(c, "SMS", "+886912345678"), true);
+    assert.equal(L.recipientAllowed(c, "SMS", "0911000000"), false);
+  });
+  test("off 一律不可；live 只看格式", () => {
+    assert.equal(L.recipientAllowed({ mode: "off", whitelist: wl }, "EMAIL", "ok@test.dev"), false);
+    assert.equal(L.recipientAllowed({ mode: "live", whitelist: wl }, "EMAIL", "real@customer.tw"), true);
+    assert.equal(L.recipientAllowed({ mode: "live", whitelist: wl }, "EMAIL", "a@b"), false);
+    assert.equal(L.recipientAllowed({ mode: "live", whitelist: wl }, "EMAIL", "x@y.co, z@w.co"), false);
+    assert.equal(L.recipientAllowed({ mode: "live", whitelist: wl }, "SMS", "-"), false);
+  });
+});
+
+describe("重試與錯誤分類", () => {
+  test("可重試且未達上限 → QUEUED 並延後；否則 FAILED", () => {
+    const now = Date.UTC(2026, 9, 1);
+    const a = L.afterFailure(1, true, now);
+    assert.equal(a.status, "QUEUED");
+    assert.equal(new Date(a.nextAttemptAt!).getTime() - now, 2 * 60_000);
+    assert.equal(new Date(L.afterFailure(2, true, now).nextAttemptAt!).getTime() - now, 10 * 60_000);
+    assert.deepEqual(L.afterFailure(L.MAX_ATTEMPTS, true, now), { status: "FAILED", nextAttemptAt: null });
+    assert.deepEqual(L.afterFailure(1, false, now), { status: "FAILED", nextAttemptAt: null });
+  });
+  test("SMTP：只有確定未交出的錯誤可重試", () => {
+    assert.equal(L.smtpRetryable({ code: "ECONNECTION", command: "CONN" }), true);
+    assert.equal(L.smtpRetryable({ code: "EDNS" }), true);
+    assert.equal(L.smtpRetryable({ code: "ECONNECTION" }), false);
+    assert.equal(L.smtpRetryable({ code: "ECONNECTION", command: "DATA" }), false);
+    assert.equal(L.smtpRetryable({ code: "ETIMEDOUT", command: "CONN" }), true);
+    assert.equal(L.smtpRetryable({ code: "ETIMEDOUT" }), false);
+    assert.equal(L.smtpRetryable({ code: "EENVELOPE", command: "RCPT TO", responseCode: 451 }), true);
+    assert.equal(L.smtpRetryable({ code: "EENVELOPE", command: "RCPT TO", responseCode: 550 }), false);
+    assert.equal(L.smtpRetryable({ code: "EAUTH", command: "AUTH PLAIN", responseCode: 535 }), false);
+    assert.equal(L.smtpRetryable({ code: "EMESSAGE", command: "DATA", responseCode: 451 }), false);
+  });
+  test("HTTP：網路錯誤／429／5xx 可重試", () => {
+    assert.equal(L.httpRetryable(null), true);
+    assert.equal(L.httpRetryable(429), true);
+    assert.equal(L.httpRetryable(503), true);
+    assert.equal(L.httpRetryable(422), false);
+  });
+});
+
+describe("三竹簡訊回應", () => {
+  test("成功／重複／錯誤", () => {
+    assert.deepEqual(L.parseMitakeResponse("[1]\r\nmsgid=123\r\nstatuscode=1\r\nAccountPoint=99\r\n"), { ok: true, retryable: false, msgid: "123", statuscode: "1", duplicate: false });
+    assert.equal(L.parseMitakeResponse("[1]\nmsgid=9\nstatuscode=e\nDuplicate=Y\n").ok, true);
+    const e = L.parseMitakeResponse("[1]\nstatuscode=e\n");
+    assert.deepEqual([e.ok, e.retryable], [false, false]);
+    assert.match(L.mitakeErrorText(e.statuscode), /帳號、密碼錯誤/);
+    assert.equal(L.parseMitakeResponse("[1]\nstatuscode=*\n").retryable, true);
+    assert.equal(L.parseMitakeResponse("").ok, false);
+  });
+});
+
+describe("內容處理", () => {
+  test("去掉【未串接】提示行、遮蔽收件者、手機正規化", () => {
+    assert.equal(L.cleanBody("訂單編號：A1\n【未串接】Email 寄送尚未開通\n金額：100"), "訂單編號：A1\n金額：100");
+    assert.equal(L.maskRecipient("abcdef@x.co"), "ab***@x.co");
+    assert.equal(L.maskRecipient("0912345678"), "0912***678");
+    assert.equal(L.normalizePhone("+886 912-345-678"), "0912345678");
+    assert.equal(L.normalizePhone("abc"), "");
+    assert.equal(L.looksHtml("<p>hi</p>"), true);
+    assert.equal(L.looksHtml("a < b"), false);
+  });
+});
+
+describe("登入認證碼防呆（依實際寄送狀態）", () => {
+  const sec = S.adminSecurityOf({ rule: "ALWAYS", send: "SYS_EMAIL", email: "admin@test.dev" });
+  test("未串接 → 不可送達", () => assert.equal(S.wtokenDeliverable(sec, { email: false, sms: false }), false));
+  test("已串接、白名單內 → 可送達", () => {
+    const d = { email: true, sms: false, allowEmail: (to: string) => to === "admin@test.dev" };
+    assert.equal(S.wtokenDeliverable(sec, d), true);
+    assert.equal(S.needsWtoken(sec, false, d), true);
+    assert.equal(S.adminSecuritySaveError(sec, d), null);
+  });
+  test("已串接、不在白名單 → 不可送達、不可儲存、登入不鎖", () => {
+    const d = { email: true, sms: false, allowEmail: () => false };
+    assert.equal(S.wtokenDeliverable(sec, d), false);
+    assert.equal(S.needsWtoken(sec, false, d), false);
+    assert.match(String(S.adminSecuritySaveError(sec, d)), /白名單/);
+  });
+});

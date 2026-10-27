@@ -1,7 +1,7 @@
 // 排程端點：GET|POST /api/cron/run（Vercel Cron 每日呼叫；也可手動觸發）。
 // 驗證：Authorization: Bearer <CRON_SECRET>（Vercel Cron 在專案設了 CRON_SECRET 時自動帶上）或 x-cron-secret 標頭；
 //       未設定 CRON_SECRET → 503、不符 → 401。不需後台登入、不吃 CSRF（無 cookie）。
-// 參數：?jobs=schedulers,posts,autoCancel,housekeeping（預設全部）。每項工作皆冪等、可重跑：
+// 參數：?jobs=schedulers,posts,autoCancel,notifications,delivery,housekeeping（預設全部）。每項工作皆冪等、可重跑：
 //   schedulers    跨租戶執行到期的上下架／變價排程（items/scheduler.ts runAllDueSchedulers；條件式搶占，不會重複執行）
 //   posts         排程發布（status=FUTURE）的文章發佈時間已到 → 改為已發布（PUBLISH、is_published=true）
 //   autoCancel    團購勾「自動取消逾期訂單」（autoCancelExpired）時，逾期未付款訂單 → 取消（補回庫存、歷程記 [系統]）
@@ -12,7 +12,9 @@
 //                 未付款提醒（UNPAID_NOTIFICATION_SETTINGS）→ 未付款的新訂單／處理中訂單，下單後每 hours 小時一封、最多 retry 封，
 //                   只寫入 email_messages（template＝UNPAID_REMINDER、status＝NOT_SENT_UNINTEGRATED），🔴不寄出任何信
 //                 低庫存通知（LOW_STOCK_NOTIFICATION_SETTINGS）→ 上架中一般商品可售庫存低於門檻 → 後台站內通知（system_notifications，
-//                   category＝LOW_STOCK；同商品 24 小時內只通知一次）；有填通知 email 另寫一筆待寄紀錄（不寄出）
+//                   category＝LOW_STOCK；同商品 24 小時內只通知一次）；有填通知 email 另寫一筆待寄紀錄（由 delivery 工作寄出）
+//   delivery      fix20：Email／簡訊待寄紀錄批次寄出（core/delivery.ts runDelivery：QUEUED→SENDING→SENT／FAILED／BLOCKED，
+//                 重試上限 3、同一筆不重寄；未設定服務商＝不寄、紀錄維持未串接；回應只含筆數）
 //   housekeeping  清除過期的後台／會員 session、90 天前的登入紀錄、1 天前的前台限流計數、過期的登入認證碼
 // 原站沒有可擷取的排程器畫面；工作範圍依 repo 內既有排程程式碼與 spec（SPEC.md §「訂單成立」autoCancelExpired 推論）。
 // Hobby 方案 Cron 每天最多一次（vercel.json crons，保留當備援）；高頻由 GitHub Actions .github/workflows/cron.yml 每 10 分鐘呼叫。
@@ -21,6 +23,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import type { RequestContext } from "@/lib/core/http/types";
 import { json } from "@/lib/core/http/responses";
 import { runAllDueSchedulers } from "@/lib/modules/items/scheduler";
+import { runDelivery } from "./delivery";
 import { cronAuthorized, isAutoCancelable, parseJobs, type CronJob } from "./cron-logic";
 import { readSystemSettingAllTenants, SYS_KEYS } from "./system-settings";
 import { isLowStock, lowStockNotificationOf, unpaidNotificationOf, unpaidRemindersDue } from "./system-settings-logic";
@@ -225,11 +228,14 @@ async function jobHousekeeping(): Promise<Row> {
   return out;
 }
 
+let cronStartedAt = Date.now();
 const JOBS: Record<CronJob, () => Promise<Row>> = {
   schedulers: async () => runAllDueSchedulers() as unknown as Promise<Row>,
   posts: jobPosts,
   autoCancel: jobAutoCancel,
   notifications: jobNotifications,
+  // 排程函式上限 60 秒（cronRun 開始後 30 秒起不再開始寄新的一筆）
+  delivery: () => runDelivery({ deadlineMs: cronStartedAt + 30_000 }),
   housekeeping: jobHousekeeping,
 };
 
@@ -248,6 +254,7 @@ export async function cronRun(ctx: RequestContext): Promise<Response> {
   if (got !== true) {
     return json({ code: 200, skipped: "另一個排程執行中", startedAt: new Date(started).toISOString(), jobs: {} }, { status: 200, headers: { "Cache-Control": "no-store" } });
   }
+  cronStartedAt = started; // 取得租約後才設定（被略過的並行請求不影響執行中的這次）
   const results: Row = {};
   let failed = false;
   try {
