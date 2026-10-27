@@ -516,14 +516,14 @@ async function adjustOrderCouponUsage(tenantId: number, salesOrderId: number, co
 async function couponDelete(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const id = Number(await strParam(ctx, "groupBuyFlatRateShippingId")) || Number(await strParam(ctx, "salesOrderCouponId"));
-  const { data } = await db().from("sales_order_coupons").select("id,sales_order_id,coupon,coupon_code_id,discount").eq("tenant_id", session.tenantId).eq("id", id).maybeSingle();
+  // 8006：刪訂單優惠明細＋used_count、帳本、優惠卷統計在同一個 DB 交易（中途失敗整筆回滾，不會「明細已刪、名額未退」；
+  // 已取消訂單的名額早已退回，不會重複扣）
+  const { data, error } = await db().rpc("marketing_order_coupon_remove", { p_tenant_id: session.tenantId, p_sales_order_coupon_id: id });
+  if (error) throw new Error(`[orders] 移除優惠卷失敗：${error.message}`);
   if (!data) throw notFound("找不到優惠卷");
-  const c = data as Row;
-  await db().from("sales_order_coupons").delete().eq("tenant_id", session.tenantId).eq("id", id);
-  // 名額：used_count、帳本、優惠卷統計在同一交易調整（8002；已取消訂單的名額早已退回，不會重複扣）
-  if (c.coupon_code_id) await adjustOrderCouponUsage(session.tenantId, Number(c.sales_order_id), Number(c.coupon_code_id), -1);
-  await addOrderHistory(session, Number(c.sales_order_id), `移除優惠卷 ${c.coupon ?? ""}`);
-  await recalcOrderAmounts(session, Number(c.sales_order_id), { shipping: false, salesRules: false, discountDelta: -num(c.discount) });
+  const c = data as { salesOrderId: number; coupon: string | null; couponCodeId: number | null; discount: number | string | null };
+  await addOrderHistory(session, Number(c.salesOrderId), `移除優惠卷 ${c.coupon ?? ""}`);
+  await recalcOrderAmounts(session, Number(c.salesOrderId), { shipping: false, salesRules: false, discountDelta: -num(c.discount) });
   return actionOk("已移除優惠卷");
 }
 

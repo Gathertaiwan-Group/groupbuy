@@ -367,3 +367,50 @@ export function checkoutCouponError(rej: CouponRejection | null | undefined): st
   if (rej.kind === "QUOTA") return "優惠碼已達使用上限，請移除後再結帳";
   return `優惠碼「${rej.code}」已失效（${rej.reason}），請移除後再結帳`;
 }
+
+// ───────────── fix11（migration 8006） ─────────────
+
+/** 名額列的全域加鎖順序（與結帳相同）：折扣碼 → 團購優惠卷（含折扣碼所屬）→ 優惠條件，各依 id 由小到大、去重。
+ *  一次改多張單時，必須把「所有」單的帳本合併後只排一次（8006 statement-level 觸發器）；逐張排好再串接（8005 for each row）不是全域順序。 */
+export function usageLockOrder(ledger: Pick<UsageLedgerRow, "kind" | "refId">[], parents?: CodeParents): { kind: UsageKind; id: number }[] {
+  const cc = new Set<number>();
+  const g = new Set<number>();
+  const sr = new Set<number>();
+  for (const r of ledger) {
+    if (r.kind === "COUPON_CODE") {
+      cc.add(r.refId);
+      const p = parents?.get(r.refId);
+      if (p != null) g.add(p);
+    } else if (r.kind === "GROUP_BUY_COUPON") g.add(r.refId);
+    else sr.add(r.refId);
+  }
+  const sorted = (s: Set<number>) => [...s].sort((a, b) => a - b);
+  return [
+    ...sorted(cc).map((id) => ({ kind: "COUPON_CODE" as const, id })),
+    ...sorted(g).map((id) => ({ kind: "GROUP_BUY_COUPON" as const, id })),
+    ...sorted(sr).map((id) => ({ kind: "SALES_RULE" as const, id })),
+  ];
+}
+
+/** 加鎖序列是否符合全域順序（不會與結帳互等） */
+export function isGlobalLockOrder(seq: { kind: UsageKind; id: number }[]): boolean {
+  const rank: Record<UsageKind, number> = { COUPON_CODE: 0, GROUP_BUY_COUPON: 1, SALES_RULE: 2 };
+  for (let i = 1; i < seq.length; i++) {
+    const a = seq[i - 1];
+    const b = seq[i];
+    if (rank[a.kind] > rank[b.kind] || (rank[a.kind] === rank[b.kind] && a.id >= b.id)) return false;
+  }
+  return true;
+}
+
+/** 團購優惠卷帳本列是否為孤兒（可刪）：這張單已沒有同優惠卷的折扣碼帳本列，且沒有該優惠卷的「無折扣碼」明細（POS 允許 couponCodeId null） */
+export function isOrphanCouponUsage(
+  couponId: number,
+  orderLedger: Pick<UsageLedgerRow, "kind" | "refId">[],
+  parents: CodeParents,
+  orderCoupons: { groupBuyCouponId: number | null; couponCodeId: number | null }[],
+): boolean {
+  if (orderLedger.some((r) => r.kind === "COUPON_CODE" && parents.get(r.refId) === couponId)) return false;
+  if (orderCoupons.some((c) => c.groupBuyCouponId === couponId && c.couponCodeId == null)) return false;
+  return true;
+}

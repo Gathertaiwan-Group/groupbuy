@@ -576,3 +576,73 @@ describe("migration 8005（fix10）", () => {
     assert.match(sql, /sqlerrm like 'MKT_RECLAIM_QUOTA%'/);
   });
 });
+
+describe("fix11 ①一個 UPDATE 改多張單：加鎖順序", () => {
+  const { usageLockOrder, isGlobalLockOrder } = R;
+  const parents = new Map([[11, 21]]);
+  const A = [{ kind: "SALES_RULE" as const, refId: 31 }];
+  const B = [{ kind: "COUPON_CODE" as const, refId: 11 }, { kind: "GROUP_BUY_COUPON" as const, refId: 21 }];
+  test("逐張排好再串接（8005 for each row）：SR 先於 CC → 不是全域順序（會與結帳 CC→G→SR 互等）", () => {
+    const perRow = [...usageLockOrder(A, parents), ...usageLockOrder(B, parents)];
+    assert.equal(isGlobalLockOrder(perRow), false);
+  });
+  test("全部單的帳本合併後排一次（8006 statement-level）：CC → G → SR", () => {
+    const all = usageLockOrder([...A, ...B], parents);
+    assert.deepEqual(all, [{ kind: "COUPON_CODE", id: 11 }, { kind: "GROUP_BUY_COUPON", id: 21 }, { kind: "SALES_RULE", id: 31 }]);
+    assert.equal(isGlobalLockOrder(all), true);
+  });
+  test("去重、各類依 id 由小到大、折扣碼所屬優惠卷一併納入", () => {
+    const all = usageLockOrder([{ kind: "SALES_RULE", refId: 9 }, { kind: "COUPON_CODE", refId: 11 }, { kind: "SALES_RULE", refId: 3 }, { kind: "COUPON_CODE", refId: 5 }, { kind: "COUPON_CODE", refId: 11 }], parents);
+    assert.deepEqual(all.map((x) => `${x.kind[0]}${x.id}`), ["C5", "C11", "G21", "S3", "S9"]);
+  });
+});
+
+describe("fix11 ③無折扣碼的優惠卷帳本列不是孤兒", () => {
+  const { isOrphanCouponUsage } = R;
+  const parents = new Map([[11, 21]]);
+  test("沒有同優惠卷折扣碼列、也沒有無折扣碼明細 → 孤兒", () => {
+    assert.equal(isOrphanCouponUsage(21, [], parents, [{ groupBuyCouponId: 21, couponCodeId: 11 }]), true);
+  });
+  test("POS 無折扣碼結帳（couponCodeId null）→ 合法列", () => {
+    assert.equal(isOrphanCouponUsage(21, [], parents, [{ groupBuyCouponId: 21, couponCodeId: null }]), false);
+  });
+  test("還有同優惠卷的折扣碼列 → 保留", () => {
+    assert.equal(isOrphanCouponUsage(21, [{ kind: "COUPON_CODE", refId: 11 }], parents, []), false);
+  });
+});
+
+describe("migration 8006（fix11）", () => {
+  const sql = readFileSync(new URL("../../../supabase/migrations/8006_marketing_usage_statement_lock_coupon_remove.sql", import.meta.url), "utf8");
+  const fn = (name: string) => {
+    const a = sql.indexOf(`function groupbuy.${name}(`);
+    const b = sql.indexOf("$$;", a);
+    return sql.slice(a, b);
+  };
+  test("① 觸發器改 for each statement（transition table），舊 for each row 觸發器移除", () => {
+    assert.match(sql, /drop trigger if exists sales_orders_marketing_usage on groupbuy\.sales_orders;/);
+    assert.match(sql, /after update on groupbuy\.sales_orders\s+referencing old table as old_rows new table as new_rows\s+for each statement/);
+    assert.match(fn("trg_sales_orders_marketing_usage_stmt"), /o\.state is distinct from n\.state/);
+  });
+  test("① 先一次鎖好全部訂單的名額列，再逐張同步", () => {
+    const b = fn("marketing_sync_orders_usage");
+    assert.ok(b.indexOf("marketing_usage_component") > 0);
+    assert.ok(b.indexOf("marketing_lock_usage_refs(p_tenant_id, v_ids)") > 0);
+    assert.ok(b.indexOf("marketing_lock_usage_refs") < b.indexOf("marketing_sync_order_usage"));
+  });
+  test("② 移除訂單優惠卷：同一函式內刪明細＋調名額", () => {
+    const b = fn("marketing_order_coupon_remove");
+    assert.ok(b.indexOf("for update") < b.indexOf("delete from groupbuy.sales_order_coupons"));
+    assert.ok(b.indexOf("delete from groupbuy.sales_order_coupons") < b.indexOf("marketing_order_coupon_adjust(p_tenant_id, s.sales_order_id, s.coupon_code_id, -1)"));
+  });
+  test("③ 孤兒清除排除無折扣碼優惠卷", () => {
+    assert.match(fn("marketing_order_coupon_adjust"), /and not groupbuy\.marketing_is_codeless_coupon_usage\(p_tenant_id, p_sales_order_id, c\.group_buy_coupon_id\)/);
+    assert.match(fn("marketing_is_codeless_coupon_usage"), /soc\.coupon_code_id is null/);
+  });
+  test("② couponDelete 改呼叫單一交易的 RPC，不再由 JS 先刪明細", () => {
+    const src = readFileSync(new URL("../orders/sales-order-actions.ts", import.meta.url), "utf8");
+    const a = src.indexOf("async function couponDelete(");
+    const body = src.slice(a, src.indexOf("\n}\n", a));
+    assert.match(body, /rpc\("marketing_order_coupon_remove"/);
+    assert.doesNotMatch(body, /from\("sales_order_coupons"\)\.delete\(\)/);
+  });
+});
