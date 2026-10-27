@@ -188,3 +188,45 @@ describe("系統信範本渲染", () => {
     assert.equal(L.cleanBody("訂單 A 已確認收到匯款 NT$100（匯款對帳入帳；Email 未串接，僅記錄）"), "訂單 A 已確認收到匯款 NT$100");
   });
 });
+
+describe("fix22：寄送逾時查詢（mock 服務商）", () => {
+  const p = { apiKey: "k", url: "https://resend.mock/emails" };
+  const payload = { from: "a@b.co", to: ["x@y.co"], subject: "s", text: "b" };
+  const mock = (post: () => Response | Promise<Response>, get?: () => Response) => {
+    const calls: { method: string; url: string; key: string | null }[] = [];
+    const f = (async (url: string, init: RequestInit = {}) => {
+      const method = init.method ?? "GET";
+      calls.push({ method, url, key: new Headers(init.headers).get("Idempotency-Key") });
+      if (method === "POST") return post();
+      return get ? get() : new Response("{}", { status: 404 });
+    }) as unknown as typeof fetch;
+    return { f, calls };
+  };
+  test("同冪等鍵重送取回原 id → 再查 last_event → 已寄出", async () => {
+    const m = mock(() => new Response(JSON.stringify({ id: "em_1" })), () => new Response(JSON.stringify({ id: "em_1", last_event: "delivered" })));
+    const v = await L.resendLookup(p, payload, "gb-email-9", m.f);
+    assert.deepEqual(v, { status: "SENT", messageId: "em_1", note: "Resend 查詢結果：delivered" });
+    assert.equal(m.calls[0].key, "gb-email-9");
+    assert.equal(m.calls[1].url, "https://resend.mock/emails/em_1");
+  });
+  test("last_event＝bounced → 失敗", async () => {
+    const m = mock(() => new Response(JSON.stringify({ id: "em_2" })), () => new Response(JSON.stringify({ last_event: "bounced" })));
+    assert.equal((await L.resendLookup(p, payload, "k2", m.f)).status, "FAILED");
+  });
+  test("內容已變更（422 idempotency）→ 結果不明；409／5xx／連線失敗 → 下次再查", async () => {
+    assert.equal((await L.resendLookup(p, payload, "k", mock(() => new Response('{"name":"invalid_idempotent_request"}', { status: 422 })).f)).status, "UNKNOWN");
+    assert.equal((await L.resendLookup(p, payload, "k", mock(() => new Response("", { status: 409 })).f)).status, "WAIT");
+    assert.equal((await L.resendLookup(p, payload, "k", mock(() => new Response("", { status: 503 })).f)).status, "WAIT");
+    assert.equal((await L.resendLookup(p, payload, "k", mock(() => { throw new Error("ECONNRESET"); }).f)).status, "WAIT");
+  });
+  test("查不到事件仍以受理為準", async () => {
+    const m = mock(() => new Response(JSON.stringify({ id: "em_3" })));
+    assert.deepEqual(await L.resendLookup(p, payload, "k", m.f), { status: "SENT", messageId: "em_3", note: "Resend 已受理" });
+  });
+  test("SMTP／Gmail／三竹無法查詢 → 結果不明原因", () => {
+    assert.match(L.unqueryableReason("smtp"), /SMTP/);
+    assert.match(L.unqueryableReason("gmail"), /SMTP/);
+    assert.match(L.unqueryableReason("mitake"), /三竹/);
+    assert.match(L.unqueryableReason("none"), /無法查詢/);
+  });
+});

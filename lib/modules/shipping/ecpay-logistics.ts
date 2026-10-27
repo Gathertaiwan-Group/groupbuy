@@ -398,7 +398,7 @@ async function notify(ctx: RequestContext): Promise<Response> {
     if (status === "PICKED") {
       try {
         const { data: so } = await db.from("sales_orders").select("payment_method").eq("tenant_id", t.tenant_id).eq("id", t.sales_order_id).maybeSingle<{ payment_method: number | null }>();
-        if (Number(so?.payment_method) === 64) await queuePaymentEmail(t.tenant_id, t.sales_order_id, "超商取貨付款");
+        if (Number(so?.payment_method) === 64) await queuePaymentEmail(t.tenant_id, t.sales_order_id, "超商取貨付款", `COD:${t.merchant_trade_no}`);
       } catch (e) {
         console.error("[logistics] 寫入付款成功通知信失敗", t.sales_order_id, (e as Error).message);
       }
@@ -440,7 +440,7 @@ async function applyCodPayment(t: { tenant_id: number; sales_order_id: number; c
   });
   if (aerr) return "ERROR";
   const r = data as { result: string; tenantId?: number; salesOrderId?: number };
-  if (r.result === "PAID" && r.tenantId && r.salesOrderId) await afterPaid(r.tenantId, r.salesOrderId, "超商取貨付款");
+  if (r.result === "PAID" && r.tenantId && r.salesOrderId) await afterPaid(r.tenantId, r.salesOrderId, "超商取貨付款", `COD:${t.merchant_trade_no}`);
   return r.result;
 }
 

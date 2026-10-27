@@ -61,7 +61,13 @@ export interface RefundResult {
   ok: boolean;
   message: string;
   steps: DoActionResult[];
+  /** 部分退刷失敗且可能是尚未關帳（未關帳只能全額放棄授權） */
+  notClosed?: boolean;
 }
+
+/** 部分退刷被綠界拒絕時給管理員的說明（未關帳只能全額放棄授權） */
+export const PARTIAL_REFUND_NOT_CLOSED =
+  "綠界只有「已關帳」的信用卡交易可以部分退刷；尚未關帳的交易只能全額放棄授權。請改為全額退刷，或待綠界關帳（通常為授權日次日）後再部分退刷";
 
 export interface CheckoutForm {
   action: string;
@@ -103,6 +109,11 @@ export interface TradeQuery {
   amount: number | null;
   tradeNo: string | null;
   message: string;
+  /** 付款時間（ISO；已付款時） */
+  paidAt?: string | null;
+  paymentType?: string;
+  /** 綠界查詢回應（已驗章） */
+  raw?: Record<string, string>;
 }
 
 export interface PaymentProvider {
@@ -114,8 +125,11 @@ export interface PaymentProvider {
   parseNotify(form: Record<string, string>): PaymentNotify | null;
   parsePaymentInfo(form: Record<string, string>): PaymentInfoNotify | null;
   queryTrade(merchantTradeNo: string): Promise<TradeQuery>;
-  /** 全額退款（取消授權／退刷）；不支援的服務商回 ok:false */
-  refund(input: { merchantTradeNo: string; tradeNo: string; amount: number }): Promise<RefundResult>;
+  /**
+   * 退款（取消授權／退刷）。partial＝true：只退 amount（部分退刷；綠界須已關帳），否則視為全額（amount＝原授權金額）。
+   * 不支援的服務商回 ok:false
+   */
+  refund(input: { merchantTradeNo: string; tradeNo: string; amount: number; partial?: boolean }): Promise<RefundResult>;
   /** 回應綠界通知的固定字串 */
   readonly ackOk: string;
 }
@@ -303,16 +317,22 @@ export class EcpayPayment implements PaymentProvider {
   }
 
   /**
-   * 全額退款：綠界不提供測試／正式通用的授權狀態查詢，依文件的處理順序嘗試——
+   * 全額退款（partial 未設定）：綠界不提供測試／正式通用的授權狀態查詢，依文件的處理順序嘗試——
    * N 放棄（已授權／操作取消）→ E 取消關帳＋N 放棄（要關帳）→ R 退刷（已關帳）。任何一步成功即停止。
    */
-  async refund(input: { merchantTradeNo: string; tradeNo: string; amount: number }): Promise<RefundResult> {
+  async refund(input: { merchantTradeNo: string; tradeNo: string; amount: number; partial?: boolean }): Promise<RefundResult> {
     const steps: DoActionResult[] = [];
     const run = async (a: "R" | "E" | "N") => {
-      const r = await this.doAction({ ...input, action: a });
+      const r = await this.doAction({ merchantTradeNo: input.merchantTradeNo, tradeNo: input.tradeNo, amount: input.amount, action: a });
       steps.push(r);
       return r;
     };
+    // 部分退刷：只能對「已關帳」的交易做 R（退刷金額＝本次金額）；N 放棄授權只能全額，不可用於部分
+    if (input.partial) {
+      const r = await run("R");
+      if (r.ok) return { ok: true, message: `已部分退刷 ${Math.round(input.amount)} 元`, steps };
+      return { ok: false, notClosed: true, message: `${PARTIAL_REFUND_NOT_CLOSED}（綠界回應 R:${r.message}）`, steps };
+    }
     if ((await run("N")).ok) return { ok: true, message: "已取消授權（放棄）", steps };
     if ((await run("E")).ok) {
       if ((await run("N")).ok) return { ok: true, message: "已取消關帳並放棄授權", steps };
@@ -351,6 +371,46 @@ export class EcpayPayment implements PaymentProvider {
       amount: Number.isFinite(amount) ? amount : null,
       tradeNo: q.TradeNo || null,
       message: `TradeStatus=${q.TradeStatus ?? ""}`,
+      paidAt: parseTaipeiTime(q.PaymentDate),
+      paymentType: String(q.PaymentType ?? ""),
+      raw: q,
     };
   }
+}
+
+/* ───────────── fix22：未完成付款的期限（排程確認逾期用） ───────────── */
+
+/** 綠界付款頁（信用卡／定期定額／銀聯）未完成的時限（分鐘）；台灣 Pay QR 時效較短 */
+export const PAGE_TIMEOUT_MIN = 60;
+export const TWQR_TIMEOUT_MIN = 30;
+/** 期限後再等的緩衝：付款頁 30 分鐘、超商代碼 2 小時、ATM 1 天（銀行入帳通知可能延遲） */
+export const GRACE_MS = { page: 30 * 60_000, cvs: 2 * 3600_000, atm: 86400_000 } as const;
+
+/**
+ * 一筆「處理中」付款交易何時可以向綠界確認並視為逾期。
+ * - 信用卡／定期定額／銀聯／台灣 Pay：建立時間＋付款頁時限＋緩衝
+ * - ATM：取號通知的 ExpireDate（只有日期＝當天 23:59:59 前可繳）＋1 天緩衝；沒收到取號通知 → 建立時記錄的 deadlineAt（無則建立＋3 天）＋緩衝
+ * - 超商代碼：ExpireDate（含時間）＋2 小時；沒收到取號通知 → deadlineAt（無則建立＋7 天）＋緩衝
+ */
+export function paymentDeadline(tx: { payment_method: number; created_at: string; raw_response?: Record<string, unknown> | null }): Date {
+  const created = new Date(tx.created_at).getTime();
+  const raw = (tx.raw_response ?? {}) as Record<string, unknown>;
+  const info = (raw.paymentInfo ?? null) as Record<string, string> | null;
+  const planned = typeof raw.deadlineAt === "string" ? new Date(raw.deadlineAt).getTime() : NaN;
+  const pm = Number(tx.payment_method);
+  if (pm === PM.VIRTUAL_BANK) {
+    const exp = info?.ExpireDate ? parseTaipeiTime(info.ExpireDate) : null;
+    if (exp) {
+      const dateOnly = !/\d{1,2}:\d{2}/.test(String(info?.ExpireDate ?? ""));
+      return new Date(new Date(exp).getTime() + (dateOnly ? 86400_000 : 0) + GRACE_MS.atm);
+    }
+    return new Date((Number.isFinite(planned) ? planned : created + 3 * 86400_000) + GRACE_MS.atm);
+  }
+  if (pm === PM.CVS_CODE) {
+    const exp = info?.ExpireDate ? parseTaipeiTime(info.ExpireDate) : null;
+    if (exp) return new Date(new Date(exp).getTime() + GRACE_MS.cvs);
+    return new Date((Number.isFinite(planned) ? planned : created + 7 * 86400_000) + GRACE_MS.cvs);
+  }
+  const min = pm === PM.TAIWANPAY ? TWQR_TIMEOUT_MIN : PAGE_TIMEOUT_MIN;
+  return new Date(created + min * 60_000 + GRACE_MS.page);
 }

@@ -516,6 +516,50 @@ export async function voidInvoicesForOrders(scope: TenantScope, orderIds: number
   return msgs;
 }
 
+/**
+ * fix22：線上部分退款後依退款金額開立折讓（單一品項「退款折讓」）。
+ * 只處理已開立（可折讓）的發票；預約中／未串接 → 回提示請人工處理。回傳給管理員看的訊息。
+ */
+export async function allowanceForRefund(scope: TenantScope, orderId: number, amount: number, reason: string): Promise<string[]> {
+  const db = getServiceClient();
+  const { data } = await db.from("invoices").select(SELECT).eq("tenant_id", scope.tenantId).eq("sales_order_id", orderId).in("invoice_status", [...ALLOWANCABLE, ...SCHEDULED]).order("id", { ascending: false });
+  const rows = (data ?? []) as InvRow[];
+  const inv = rows.find((r) => ALLOWANCABLE.includes(r.invoice_status) && r.invoice_number);
+  if (!inv) {
+    return rows.some((r) => SCHEDULED.includes(r.invoice_status)) ? ["電子發票尚未開立（預約中）：開立時仍為原金額，請人工調整或開立後折讓"] : [];
+  }
+  const prev = Number(inv.allowance_amount ?? 0);
+  if (prev + amount > Number(inv.amount) + 0.001) return [`發票 ${inv.invoice_number} 折讓總額會超過發票金額，未自動折讓，請人工處理`];
+  const p = await einvoiceProviderFor(scope.tenantId, inv.group_buy_id);
+  if (!p) return [`發票 ${inv.invoice_number} 服務商未串接，請人工開立折讓 ${money(amount)} 元`];
+  const { data: od } = await db.from("sales_orders").select("customer_firstname, customer_email").eq("tenant_id", scope.tenantId).eq("id", orderId).maybeSingle<{ customer_firstname: string | null; customer_email: string | null }>();
+  const r = await p.allowance({
+    invoiceNumber: String(inv.invoice_number),
+    invoiceDate: invoiceDateOf(inv),
+    amount,
+    items: [{ name: "退款折讓", count: 1, unitPrice: amount, amount }],
+    reason,
+    customerName: od?.customer_firstname ?? null,
+    email: od?.customer_email ?? null,
+  });
+  if (!r.ok) {
+    await db.from("invoices").update({ error_message: `折讓失敗：${r.message}`.slice(0, 500) }).eq("tenant_id", scope.tenantId).eq("id", inv.id);
+    return [`發票 ${inv.invoice_number} 折讓失敗：${r.message}`];
+  }
+  const now = new Date().toISOString();
+  const items = (inv.items ?? []).map((it) => ({ ...it, allowances: [...(it.allowances ?? [])] }));
+  const entry = { total: 0, unitPrice: amount, totalPrice: amount, date: now, reason, allowanceNumber: r.allowanceNumber };
+  if (items.length) items[0].allowances!.push(entry);
+  else items.push({ invoiceItemId: 0, name: "退款折讓", unitPrice: amount, total: 0, totalPrice: 0, allowances: [entry] });
+  await db
+    .from("invoices")
+    .update({ items, allowance_amount: prev + amount, allowance_reason: reason, date_allowance: now, invoice_status: "ALLOWANCE_SENT", allowance_number: r.allowanceNumber, error_message: null })
+    .eq("tenant_id", scope.tenantId)
+    .eq("id", inv.id);
+  await db.from("sales_order_histories").insert({ tenant_id: scope.tenantId, sales_order_id: orderId, actor: "SYSTEM", note: `[電子發票] 發票 ${inv.invoice_number} 折讓 ${money(amount)} 元 ${r.allowanceNumber ?? ""}（${reason}）${envSuffix()}`.slice(0, 1000) });
+  return [`發票 ${inv.invoice_number} 已折讓 ${money(amount)} 元${r.allowanceNumber ? `（折讓單 ${r.allowanceNumber}）` : ""}${envSuffix()}`];
+}
+
 /* ───────────────────────── 動作 ───────────────────────── */
 
 async function idsParam(ctx: RequestContext): Promise<number[]> {

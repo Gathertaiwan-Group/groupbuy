@@ -85,6 +85,38 @@
 					});
 				};
 				next();
+			},
+			{{!-- fix22：退刷（可輸入金額）。部分退刷累計不超過已付未退；綠界只有已關帳的信用卡交易可部分退刷，未關帳只能全額放棄授權 --}}
+			refund: function(node) {
+				var rows = table.rows({ selected: true }).data().toArray();
+				if (rows.length !== 1) { displayAlertWarning('請選擇一筆訂單'); return; }
+				var id = rows[0].salesOrderId;
+				var fail = function(jqXHR) {
+					var j = jqXHR && jqXHR.responseJSON;
+					displayAlertWarning((j && (j.error || j.message)) || '退刷失敗');
+				};
+				$.post(GBF.baseUrl + '/ajax/SalesOrderTransaction/refundInfo', { salesOrderId: id }).done(function(j) {
+					var d = j && j.data;
+					if (!d) { displayAlertWarning('讀取可退金額失敗'); return; }
+					if (d.pending) { displayAlertWarning('訂單 ' + d.uuid + ' 有退款處理中，請稍後再試'); return; }
+					if (!(d.remain > 0)) { displayAlertWarning('訂單 ' + d.uuid + ' 的線上付款已全額退款'); return; }
+					var amt = window.prompt('訂單 ' + d.uuid + (d.sandbox ? '（綠界測試環境）' : '') + '\n已付 ' + d.paid + ' 元、已退 ' + d.refunded + ' 元，最多可退 ' + d.remain + ' 元\n\n請輸入退刷金額（預設為全部可退金額）。\n注意：綠界只有「已關帳」的信用卡交易可部分退刷；未關帳只能全額放棄授權。', String(d.remain));
+					if (amt === null) return;
+					amt = $.trim(String(amt)).replace(/,/g, '');
+					if (!/^[1-9][0-9]*$/.test(amt) || Number(amt) > d.remain) { displayAlertWarning('退刷金額必須是 1～' + d.remain + ' 的整數'); return; }
+					var reason = window.prompt('退刷原因（選填）', '');
+					if (reason === null) return;
+					if (!window.confirm('確定對訂單 ' + d.uuid + ' 退刷 ' + amt + ' 元？此動作無法復原')) return;
+					if (typeof btnStartLoading === 'function') btnStartLoading($(node));
+					$.post(GBF.baseUrl + '/ajax/SalesOrderTransaction/refund', { salesOrderId: id, amount: amt, reason: reason })
+						.done(function(r) {
+							delete epst.results[id];
+							displayAlertSuccess((r && r.message) || '已退刷');
+							table.ajax.reload(null, false);
+						})
+						.fail(fail)
+						.always(function() { if (typeof btnStopLoading === 'function') btnStopLoading($(node)); });
+				}).fail(fail);
 			}
 		};
 
@@ -125,6 +157,13 @@
 					text: '檢核',
 					action: function ( e, dt, node, config ) {
 						epst.verify(node);
+					}
+				},
+				{
+					extend: "selectedSingle",
+					text: '退刷',
+					action: function ( e, dt, node, config ) {
+						epst.refund(node);
 					}
 				},
 				'excel',

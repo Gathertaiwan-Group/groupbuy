@@ -21,6 +21,8 @@ import { enumLabel } from "@/lib/core/enums";
 import { verifyResultText, verifySummary, type VerifyTx } from "./transaction-verify";
 import { ecpayPayment } from "./gateway";
 import type { PaymentProvider } from "@/lib/integrations/payment";
+import { refundableOf, refundOrderPayment } from "./payment-gateway";
+import { envSuffix } from "./gateway";
 
 async function verify(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
@@ -91,7 +93,44 @@ export async function gatewayCheck(
   return { checked: true, mismatch, lines };
 }
 
+/* ───────────── fix22：後台退刷（可輸入金額；部分退刷累計 ≤ 已付未退） ───────────── */
+
+async function orderOf(tenantId: number, id: number): Promise<{ id: number; uuid: string }> {
+  const { data, error } = await getServiceClient().from("sales_orders").select("id, uuid").eq("tenant_id", tenantId).eq("id", id).maybeSingle<{ id: number; uuid: string }>();
+  if (error) throw new Error(`[accounting] ${error.message}`);
+  if (!data) throw notFound("找不到訂單");
+  return data;
+}
+
+/** POST /ajax/SalesOrderTransaction/refundInfo  salesOrderId → 已付／已退／可退金額 */
+async function refundInfo(ctx: RequestContext): Promise<Response> {
+  const session = requireSession(ctx);
+  const id = Number((await ctx.param("salesOrderId")) ?? "");
+  if (!Number.isSafeInteger(id) || id <= 0) throw badRequest("缺少參數 salesOrderId");
+  const o = await orderOf(session.tenantId, id);
+  const r = await refundableOf(session.tenantId, id);
+  if (!r) throw badRequest(`訂單 ${o.uuid} 沒有可退款的線上付款（綠界信用卡／LINE Pay）`);
+  return json({ code: 200, data: { salesOrderId: id, uuid: o.uuid, ...r, sandbox: !!envSuffix() } });
+}
+
+/** POST /ajax/SalesOrderTransaction/refund  salesOrderId、amount（空白＝退全部可退金額）、reason */
+async function refund(ctx: RequestContext): Promise<Response> {
+  const session = requireSession(ctx);
+  const id = Number((await ctx.param("salesOrderId")) ?? "");
+  if (!Number.isSafeInteger(id) || id <= 0) throw badRequest("缺少參數 salesOrderId");
+  const rawAmt = String((await ctx.param("amount")) ?? "").trim().replace(/,/g, "");
+  const amount = rawAmt === "" ? null : Number(rawAmt);
+  if (amount != null && !(Number.isInteger(amount) && amount > 0)) throw badRequest("退款金額必須是正整數");
+  const reason = String((await ctx.param("reason")) ?? "").trim().slice(0, 200) || "後台退刷";
+  const o = await orderOf(session.tenantId, id);
+  const r = await refundOrderPayment(session, id, reason, amount);
+  if (!r.ok || r.skipped) throw badRequest(`訂單 ${o.uuid}：${r.message}`);
+  return json({ code: 200, message: `訂單 ${o.uuid}：${r.message}`, data: [{ salesOrderId: id, amount: r.amount, totalPaid: r.totalPaid, fullyRefunded: r.fullyRefunded }] });
+}
+
 export const salesOrderTransactionRoutes: RouteDef[] = [
+  post("/ajax/SalesOrderTransaction/refundInfo", refundInfo),
+  post("/ajax/SalesOrderTransaction/refund", refund),
   page("/backend/SalesOrderTransaction/list", {
     template: "accounting/salesordertransaction-list.html",
     title: (ctx) => `金流交易紀錄 - ${ctx.groupBuy?.title ?? ""}`,

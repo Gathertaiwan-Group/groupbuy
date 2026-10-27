@@ -15,6 +15,10 @@
 //                   category＝LOW_STOCK；同商品 24 小時內只通知一次）；有填通知 email 另寫一筆待寄紀錄（由 delivery 工作寄出）
 //   delivery      fix20：Email／簡訊待寄紀錄批次寄出（core/delivery.ts runDelivery：QUEUED→SENDING→SENT／FAILED／BLOCKED，
 //                 最多嘗試 3 次〔含第一次〕、同一筆不重寄；未設定服務商＝不寄、紀錄維持未串接；回應只含筆數）
+//   gatewayExpire fix22：「處理中」的線上付款超過付款期限（信用卡／台灣 Pay 依付款頁時限、ATM／超商代碼依取號通知的 ExpireDate）
+//                 → 向綠界 QueryTradeInfo 確認：未付款 → 交易標為失敗（付款逾期）＋訂單歷程；已付款 → 照入帳流程補入帳（冪等）。
+//                 排在 autoCancel 之前（通知遺失但其實已付款的訂單先補入帳，不會被自動取消）。
+//                 測試模式（GATEWAY_MODE≠production）可帶 ?asOf=ISO 時間模擬「現在」；正式模式忽略
 //   housekeeping  清除過期的後台／會員 session、90 天前的登入紀錄、1 天前的前台限流計數、過期的登入認證碼
 // 原站沒有可擷取的排程器畫面；工作範圍依 repo 內既有排程程式碼與 spec（SPEC.md §「訂單成立」autoCancelExpired 推論）。
 // Hobby 方案 Cron 每天最多一次（vercel.json crons，保留當備援）；高頻由 GitHub Actions .github/workflows/cron.yml 每 10 分鐘呼叫。
@@ -25,6 +29,8 @@ import { json } from "@/lib/core/http/responses";
 import { runAllDueSchedulers } from "@/lib/modules/items/scheduler";
 import { runDelivery } from "./delivery";
 import { processDueInvoices } from "@/lib/modules/accounting/invoices";
+import { expireStalePayments } from "@/lib/modules/accounting/payment-gateway";
+import { isSandbox } from "@/lib/modules/accounting/gateway";
 import { cronAuthorized, isAutoCancelable, parseJobs, type CronJob } from "./cron-logic";
 import { readSystemSettingAllTenants, SYS_KEYS } from "./system-settings";
 import { isLowStock, lowStockNotificationOf, unpaidNotificationOf, unpaidRemindersDue } from "./system-settings-logic";
@@ -248,9 +254,11 @@ async function jobEinvoice(): Promise<Row> {
 }
 
 let cronStartedAt = Date.now();
+let cronAsOf: Date | undefined;
 const JOBS: Record<CronJob, () => Promise<Row>> = {
   schedulers: async () => runAllDueSchedulers() as unknown as Promise<Row>,
   posts: jobPosts,
+  gatewayExpire: () => expireStalePayments({ asOf: cronAsOf, deadlineMs: cronStartedAt + 20_000 }),
   autoCancel: jobAutoCancel,
   notifications: jobNotifications,
   // 排程函式上限 60 秒（cronRun 開始後 30 秒起不再開始寄新的一筆）
@@ -275,6 +283,10 @@ export async function cronRun(ctx: RequestContext): Promise<Response> {
     return json({ code: 200, skipped: "另一個排程執行中", startedAt: new Date(started).toISOString(), jobs: {} }, { status: 200, headers: { "Cache-Control": "no-store" } });
   }
   cronStartedAt = started; // 取得租約後才設定（被略過的並行請求不影響執行中的這次）
+  // 測試模式才接受 asOf（模擬現在時間，用於確認逾期付款）；正式模式一律現在
+  const asOfRaw = ctx.query.get("asOf");
+  const asOf = asOfRaw && isSandbox() ? new Date(asOfRaw) : null;
+  cronAsOf = asOf && Number.isFinite(asOf.getTime()) ? asOf : undefined;
   const results: Row = {};
   let failed = false;
   try {

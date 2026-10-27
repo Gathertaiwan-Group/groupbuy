@@ -2,7 +2,9 @@
 //
 // 流程：各功能照舊寫入 email_messages／sms_messages（未串接時 status＝NOT_SENT_UNINTEGRATED）。
 //   排程 /api/cron/run 的 delivery 工作（runDelivery）：
-//     1) 逾時的 SENDING（租約過期）→ FAILED（結果不明，為避免重複寄送不自動重寄）
+//     1) 逾時的 SENDING（租約過期）→ fix22：向服務商查詢（Resend：同一冪等鍵重送＝取回原結果＋GET /emails/{id}）→ SENT／FAILED；
+//        暫時查不到 → 維持寄送中下次再查；無法查詢（SMTP／Gmail／三竹、內容已變更、超過 23 小時）→ UNKNOWN「結果不明」
+//        （視同已寄出、不重寄；後台鈴鐺通知＋訂單歷程，供人工確認）
 //     2) 有可用服務商的租戶：最近的 NOT_SENT_UNINTEGRATED → QUEUED（時間窗見 PROMOTE_*；歷史紀錄不會被補寄）
 //     3) 取件：QUEUED → SENDING（條件式更新，同一筆只有一個執行者取得）→ 寄送 → SENT／FAILED／BLOCKED，
 //        或「確定未送出」的錯誤回 QUEUED 延後重試（最多嘗試 3 次，含第一次）
@@ -37,7 +39,11 @@ import {
   parseMitakeResponse,
   recipientAllowed,
   resendIdempotencyKey,
+  resendLookup,
+  RESEND_LOOKUP_WINDOW_MS,
   smtpRetryable,
+  unqueryableReason,
+  type StaleVerdict,
   tenantInScope,
   type Channel,
   type DeliveryConfig,
@@ -204,21 +210,26 @@ async function sendViaSmtp(
   }
 }
 
-async function sendViaResend(p: { apiKey: string; url: string }, t: EmailTransport, msg: EmailMsg): Promise<SendOutcome> {
+/** Resend 請求內容（寄送與逾時查詢共用：同一冪等鍵必須送同一內容） */
+function resendPayload(t: EmailTransport, msg: EmailMsg): Record<string, unknown> {
   const from = fromAddress(t);
   const html = looksHtml(msg.body);
+  return {
+    from: from.name ? `${from.name} <${from.address}>` : from.address,
+    to: [msg.to],
+    subject: msg.subject,
+    ...(html ? { html: msg.body } : { text: msg.body }),
+    ...(t.replyTo ? { reply_to: t.replyTo } : {}),
+  };
+}
+
+async function sendViaResend(p: { apiKey: string; url: string }, t: EmailTransport, msg: EmailMsg): Promise<SendOutcome> {
   let res: Response;
   try {
     res = await fetch(p.url, {
       method: "POST",
       headers: { Authorization: `Bearer ${p.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": resendIdempotencyKey(msg.id) },
-      body: JSON.stringify({
-        from: from.name ? `${from.name} <${from.address}>` : from.address,
-        to: [msg.to],
-        subject: msg.subject,
-        ...(html ? { html: msg.body } : { text: msg.body }),
-        ...(t.replyTo ? { reply_to: t.replyTo } : {}),
-      }),
+      body: JSON.stringify(resendPayload(t, msg)),
       signal: AbortSignal.timeout(10_000),
       cache: "no-store",
     });
@@ -285,16 +296,114 @@ const TBL: Record<Channel, { table: string; to: string; cols: string }> = {
   SMS: { table: "sms_messages", to: "telephone", cols: "id, tenant_id, telephone, content, attempts" },
 };
 
-/** 逾時的 SENDING → FAILED（不重寄） */
-async function reapStale(ch: Channel): Promise<number> {
+/**
+ * fix22：逾時的 SENDING（租約過期＝寄送中途逾時或程序中斷，結果不明）→ 向服務商查詢，不再靜默標失敗。
+ * 先以條件式更新取得處理權（同一筆只有一個執行者查詢），依查詢結果：
+ *   SENT → 已寄出（扣點確定）；FAILED → 失敗（退點）；WAIT → 維持寄送中、延長租約，下次排程再查（超過 23 小時改為結果不明）；
+ *   UNKNOWN → 結果不明（視同已寄出：扣點確定、不重寄）＋後台鈴鐺通知＋訂單歷程，供人工確認。
+ */
+async function reconcileStale(ch: Channel, rc: RunCtx): Promise<Row> {
+  const out = { sent: 0, failed: 0, unknown: 0, wait: 0 };
+  const nowIso = new Date().toISOString();
   const { data, error } = await db()
     .from(TBL[ch].table)
-    .update({ status: "FAILED", error_message: "寄送結果不明（處理逾時）；為避免重複寄送，不自動重寄", lease_holder: null, lease_until: null, updated_at: new Date().toISOString() })
+    .select(`${TBL[ch].cols}, updated_at, created_at`)
     .eq("status", "SENDING")
-    .lt("lease_until", new Date().toISOString())
-    .select("id");
-  if (error) throw new Error(`回收逾時寄送失敗：${error.message}`);
-  return (data ?? []).length;
+    .lt("lease_until", nowIso)
+    .order("id")
+    .limit(20);
+  if (error) throw new Error(`讀取逾時寄送失敗：${error.message}`);
+  for (const row of (data ?? []) as unknown as Row[]) {
+    const id = Number(row.id);
+    const { data: got } = await db()
+      .from(TBL[ch].table)
+      .update({ lease_holder: rc.holder, lease_until: new Date(Date.now() + LEASE_SECONDS * 1000).toISOString() })
+      .eq("id", id)
+      .eq("status", "SENDING")
+      .lt("lease_until", new Date().toISOString())
+      .select("id");
+    if (!got?.length) continue;
+    let v: StaleVerdict;
+    let provider = "";
+    try {
+      ({ v, provider } = await staleVerdict(ch, row, rc));
+    } catch (e) {
+      v = { status: "WAIT", reason: errText(e) };
+    }
+    const age = Date.now() - new Date(String(row.updated_at ?? row.created_at ?? nowIso)).getTime();
+    if (v.status === "WAIT" && age > RESEND_LOOKUP_WINDOW_MS) v = { status: "UNKNOWN", reason: `逾 23 小時仍無法查詢（${v.reason}）` };
+    if (v.status === "WAIT") {
+      out.wait++;
+      // 維持寄送中（不更新 updated_at：以第一次取件時間計算查詢期限），租約延到下次排程
+      await db().from(TBL[ch].table).update({ lease_holder: null, lease_until: new Date(Date.now() + 5 * 60_000).toISOString(), error_message: `寄送結果查詢中：${v.reason}`.slice(0, 500) }).eq("id", id).eq("lease_holder", rc.holder);
+      continue;
+    }
+    if (v.status === "SENT") {
+      out.sent++;
+      await finish(ch, id, rc.holder, { status: "SENT", sent_at: new Date().toISOString(), provider, provider_message_id: v.messageId, error_message: `處理逾時後向服務商查詢：${v.note}`.slice(0, 500), next_attempt_at: null });
+      await settleCredit(ch, id, true);
+      continue;
+    }
+    if (v.status === "FAILED") {
+      out.failed++;
+      await finish(ch, id, rc.holder, { status: "FAILED", provider, provider_message_id: v.messageId, error_message: v.reason.slice(0, 500), next_attempt_at: null });
+      await settleCredit(ch, id, false);
+      continue;
+    }
+    out.unknown++;
+    const msg = `寄送結果不明（處理逾時，${v.reason}）；視同已寄出、不自動重寄，請人工確認收件者是否收到`;
+    await finish(ch, id, rc.holder, { status: "UNKNOWN", provider: provider || null, error_message: msg.slice(0, 500), next_attempt_at: null });
+    await settleCredit(ch, id, true);
+    await flagUnknown(ch, row, msg);
+  }
+  return out;
+}
+
+/** 逾時那一筆向服務商查詢的結論（不寫 DB） */
+async function staleVerdict(ch: Channel, row: Row, rc: RunCtx): Promise<{ v: StaleVerdict; provider: string }> {
+  const tenantId = Number(row.tenant_id);
+  if (ch === "SMS") {
+    const p = rc.smsP.has(tenantId) ? rc.smsP.get(tenantId) : await smsProviderFor(tenantId, rc.cfg);
+    return { v: { status: "UNKNOWN", reason: unqueryableReason(p?.kind ?? "none") }, provider: p?.kind ?? "" };
+  }
+  const t = await emailTransportFor(tenantId, rc.cfg);
+  const kind = !t ? "none" : t.kind === "gmail" ? "gmail" : t.provider.kind;
+  if (!t || t.kind === "gmail" || t.provider.kind !== "resend" || !t.provider.resend) return { v: { status: "UNKNOWN", reason: unqueryableReason(kind) }, provider: kind === "none" ? "" : kind };
+  // 重建與當初相同的內容（同一冪等鍵必須同內容，否則 Resend 回 422 → 結果不明）
+  const to = String(row.to_email ?? "").trim();
+  let subject = String(row.subject ?? "").replace(/[\r\n]+/g, " ").trim();
+  let body = cleanBody(row.body as string);
+  if (!row.content_final) ({ subject, body } = await renderWithTemplate(row, { subject, body }));
+  const payload = resendPayload(t, { id: Number(row.id), to, subject: subject || "(無主旨)", body });
+  return { v: await resendLookup(t.provider.resend, payload, resendIdempotencyKey(Number(row.id))), provider: "resend" };
+}
+
+/** 結果不明：後台鈴鐺通知（同一筆一則）＋訂單歷程（Email 有訂單時） */
+async function flagUnknown(ch: Channel, row: Row, msg: string): Promise<void> {
+  const tenantId = Number(row.tenant_id);
+  const label = ch === "EMAIL" ? "Email" : "簡訊";
+  const to = maskRecipient(String(row[TBL[ch].to] ?? ""));
+  const { error } = await db()
+    .from("system_notifications")
+    .upsert(
+      {
+        tenant_id: tenantId,
+        admin_user_id: null,
+        category: "DELIVERY",
+        title: `${label}寄送結果不明（#${Number(row.id)}，收件者 ${to}），請人工確認`,
+        descr: msg,
+        url: null,
+        dedupe_key: `DELIVERY_UNKNOWN:${ch}:${Number(row.id)}`,
+      },
+      { onConflict: "tenant_id,dedupe_key", ignoreDuplicates: true },
+    );
+  if (error) console.error("[delivery] 寫入結果不明通知失敗", error.message);
+  if (ch === "EMAIL" && row.sales_order_id) {
+    const { error: hErr } = await db()
+      .from("sales_order_histories")
+      .insert({ tenant_id: tenantId, sales_order_id: Number(row.sales_order_id), actor: "SYSTEM", note: `[寄信] ${String(row.subject ?? "").slice(0, 60)}：${msg}`.slice(0, 1000) });
+    if (hErr) console.error("[delivery] 寫入訂單歷程失敗", hErr.message);
+  }
 }
 
 /** 有可用服務商的租戶：最近的未串接紀錄 → QUEUED */
@@ -411,11 +520,15 @@ async function renderWithTemplate(row: Row, current: { subject: string; body: st
 
 /**
  * 寫入一封「付款成功通知信」待寄紀錄（template PAYMENT_RECEIVED → 寄送時依 EMAIL_PAID_* 範本渲染，沒填用下面的預設文字）。
- * 冪等：(tenant_id, dedupe_key) 唯一，dedupe_key＝PAID:<訂單 id>（同一張訂單不論來源只寄一封）。
+ * 冪等：(tenant_id, dedupe_key) 唯一，dedupe_key＝PAID:<訂單 id>:<入帳事件>（fix22：以「入帳事件」為鍵——同一事件的重送／
+ *   多個接點只寄一封；取消入帳〔退款、改回未付款〕後再重新入帳＝新事件 → 再寄一封）。
+ *   入帳事件：線上付款＝<金流商>:<商店訂單編號>、超商取貨付款＝COD:<托運單商店訂單編號>、後台設為已付款＝ADMIN:<設定前訂單的 updated_at>。
  * 狀態：Email 可寄 → QUEUED（排程寄出，白名單模式只寄白名單）；未串接 → NOT_SENT_UNINTEGRATED（只記錄）。
  * 回傳 { queued: 是否新寫入, notice: 【未串接】提示或空字串 }。訂單沒有 Email → 不寫。
  */
-export async function queuePaymentEmail(tenantId: number, salesOrderId: number, source: string): Promise<{ queued: boolean; notice: string }> {
+export async function queuePaymentEmail(tenantId: number, salesOrderId: number, source: string, eventKey: string): Promise<{ queued: boolean; notice: string }> {
+  const ev = String(eventKey ?? "").trim();
+  if (!ev) throw new Error("付款成功通知信缺少入帳事件鍵");
   const { data: o, error } = await db()
     .from("sales_orders")
     .select("id, uuid, group_buy_id, customer_firstname, customer_email, total_paid, grand_total, group_buys(title)")
@@ -441,7 +554,7 @@ export async function queuePaymentEmail(tenantId: number, salesOrderId: number, 
         subject: `${title ? `【${title}】` : ""}已收到您的付款 ${String(o.uuid ?? "")}`,
         body: `${String(o.customer_firstname ?? "")} 您好：\n我們已收到您的付款 $${paid}（${source}），將儘快為您安排出貨。\n訂單編號：${String(o.uuid ?? "")}`,
         status: available ? "QUEUED" : "NOT_SENT_UNINTEGRATED",
-        dedupe_key: `PAID:${salesOrderId}`,
+        dedupe_key: `PAID:${salesOrderId}:${ev}`.slice(0, 200),
       },
       { onConflict: "tenant_id,dedupe_key", ignoreDuplicates: true },
     )
@@ -622,7 +735,7 @@ export async function runDelivery(opt: { deadlineMs?: number; batch?: number } =
   if (error) throw new Error(`讀取租戶失敗：${error.message}`);
   const inScope = ((tenants ?? []) as { id: number; code: string | null }[]).filter((t) => tenantInScope(cfg, t));
   for (const ch of chans) {
-    out[ch.toLowerCase()] = { reaped: await reapStale(ch), promoted: 0, sent: 0, failed: 0, blocked: 0, retry: 0, available: 0 };
+    out[ch.toLowerCase()] = { stale: await reconcileStale(ch, rc), promoted: 0, sent: 0, failed: 0, blocked: 0, retry: 0, available: 0 };
     if (cfg.mode === "off") continue;
     // 可寄的租戶：環境變數服務商 → 範圍內全部租戶；Email 另含已設定自有信箱的租戶
     let ids: number[] = [];

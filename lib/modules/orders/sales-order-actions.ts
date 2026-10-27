@@ -74,7 +74,7 @@ async function cancelOrder(ctx: RequestContext): Promise<Response> {
   if (["true", "1", "on"].includes(String((await strParam(ctx, "refundOnline")) ?? ""))) {
     for (const r of target) {
       try {
-        const res = await refundOrderPayment(session, Number(r.id), staffNote || "訂單取消");
+        const res = await refundOrderPayment(session, Number(r.id), staffNote || "訂單取消", null, { invoice: false }); // 發票由下方 voidInvoicesForOrders 作廢
         if (!res.skipped) refundMsg += `<br>${res.message}`;
       } catch (e) {
         refundMsg += `<br>退款失敗：${(e as Error).message}`;
@@ -135,16 +135,22 @@ async function undoCancelOrder(ctx: RequestContext): Promise<Response> {
 async function markAsPaid(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ids = await selectedIds(ctx);
-  const rows = await fetchOrders(session, ids, "id,state,grand_total,total_paid,customer_email,group_buy_id");
+  const rows = await fetchOrders(session, ids, "id,state,status,grand_total,total_paid,customer_email,group_buy_id,updated_at");
   const target = rows.filter((r) => r.state === "PROCESSING");
   if (!target.length) throw badRequest("僅能將「處理中」的訂單設為已付款");
   let mailMsg = "";
   for (const r of target) {
     const id = Number(r.id);
     const paid = num(r.total_paid) > 0 ? num(r.total_paid) : num(r.grand_total);
+    // fix22：已是「付款成功」且已付足額 → 不是新的入帳事件（重複點擊不重寄）
+    const alreadyPaid = String(r.status ?? "").startsWith("PAID") && num(r.total_paid) > 0 && num(r.total_paid) >= num(r.grand_total);
     await adminUpdateOrders(session, [id], { total_paid: paid, date_paid: nowIso(), status: "PAID_EMAIL_SENT" }, "設為已付款");
-    // 付款成功通知信：與線上付款同一接點（依範本、白名單模式、同一訂單只寄一封）
-    const q = await queuePaymentEmail(session.tenantId, id, "後台設為已付款");
+    if (alreadyPaid) {
+      await addOrderHistory(session, id, "訂單原已付款，未重寄已付款通知信");
+      continue;
+    }
+    // 付款成功通知信：與線上付款同一接點（依範本、白名單模式）；入帳事件＝設定前的訂單版本（並行重送同鍵只寄一封，取消入帳後再設定＝新事件）
+    const q = await queuePaymentEmail(session.tenantId, id, "後台設為已付款", `ADMIN:${String(r.updated_at ?? "")}`);
     mailMsg = q.notice;
     await addOrderHistory(session, id, q.queued ? `寄送已付款通知信${mailMsg}` : "已付款通知信先前已寄送（或顧客無 Email），不重寄");
   }

@@ -229,3 +229,80 @@ export const PROMOTE_CODE_WINDOW_MS = 25 * 60_000;
 export const CODE_TEMPLATES = ["CUSTOMER_ACTIVATE", "CUSTOMER_RESET_PASSWORD", "ADMIN_WTOKEN"];
 /** SENDING 租約：超過即視為結果不明（不重寄） */
 export const LEASE_SECONDS = 120;
+
+/* ───────────── fix22：寄送處理逾時（結果不明）→ 向服務商查詢 ───────────── */
+
+/**
+ * 逾時 SENDING 的判定：
+ *   SENT     服務商確認已受理（Resend 回原請求的 email id）
+ *   FAILED   服務商確認寄送失敗（Resend last_event＝bounced／failed）
+ *   WAIT     暫時查不到（連線失敗、429/5xx、同鍵請求仍在處理 409）→ 維持寄送中，下次排程再查
+ *   UNKNOWN  無法查詢（SMTP／Gmail／三竹、內容已變更、超過冪等鍵保存期限…）→ 視同已寄出、不重寄，後台標「結果不明」供人工確認
+ */
+export type StaleVerdict =
+  | { status: "SENT"; messageId: string | null; note: string }
+  | { status: "FAILED"; reason: string; messageId: string | null }
+  | { status: "WAIT"; reason: string }
+  | { status: "UNKNOWN"; reason: string };
+
+/** Resend 冪等鍵保存 24 小時；保守以 23 小時為查詢期限 */
+export const RESEND_LOOKUP_WINDOW_MS = 23 * 3600_000;
+
+/** 不能查詢寄送結果的服務商 → 結果不明的原因 */
+export function unqueryableReason(kind: string): string {
+  if (kind === "gmail" || kind === "smtp") return "SMTP 寄信服務無法查詢單封寄送結果";
+  if (kind === "mitake") return "三竹簡訊無法以本系統紀錄查詢寄送結果";
+  return "寄信服務已變更或未設定，無法查詢寄送結果";
+}
+
+/**
+ * Resend：以同一 Idempotency-Key 重送「同一內容」＝查詢原請求結果（Resend 對 24 小時內同鍵請求回傳原結果、不會再寄一次；
+ * 原請求其實沒送達 Resend 時，這次才真正寄出——那封本來就沒寄過，不會重複）。取得 email id 後再以 GET /emails/{id} 查最後事件。
+ */
+export async function resendLookup(
+  p: { apiKey: string; url: string },
+  payload: Record<string, unknown>,
+  idempotencyKey: string,
+  fetcher: typeof fetch = fetch,
+): Promise<StaleVerdict> {
+  let res: Response;
+  try {
+    res = await fetcher(p.url, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${p.apiKey}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+  } catch (e) {
+    return { status: "WAIT", reason: `Resend 查詢連線失敗：${e instanceof Error ? e.message : String(e)}` };
+  }
+  const text = await res.text().catch(() => "");
+  if (res.status === 409 || res.status === 429 || res.status >= 500) return { status: "WAIT", reason: `Resend 查詢暫時失敗（HTTP ${res.status}）` };
+  if (!res.ok) {
+    if (res.status === 422 && /idempot/i.test(text)) return { status: "UNKNOWN", reason: "信件內容已變更，無法以冪等鍵向 Resend 查詢原寄送結果" };
+    return { status: "UNKNOWN", reason: `Resend 查詢回應 HTTP ${res.status}：${text.replace(/\s+/g, " ").slice(0, 160)}` };
+  }
+  let id: string | null = null;
+  try {
+    id = String((JSON.parse(text) as Record<string, unknown>).id ?? "") || null;
+  } catch {
+    /* 非 JSON */
+  }
+  if (!id) return { status: "SENT", messageId: null, note: "Resend 已受理（無信件編號）" };
+  try {
+    const g = await fetcher(`${p.url.replace(/\/+$/, "")}/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${p.apiKey}` },
+      signal: AbortSignal.timeout(10_000),
+      cache: "no-store",
+    });
+    if (g.ok) {
+      const ev = String(((await g.json().catch(() => ({}))) as Record<string, unknown>).last_event ?? "");
+      if (ev === "bounced" || ev === "failed") return { status: "FAILED", reason: `Resend 查詢結果：${ev}（退信／寄送失敗）`, messageId: id };
+      return { status: "SENT", messageId: id, note: `Resend 查詢結果：${ev || "已受理"}` };
+    }
+  } catch {
+    /* 查詢事件失敗：已確認受理即可 */
+  }
+  return { status: "SENT", messageId: id, note: "Resend 已受理" };
+}

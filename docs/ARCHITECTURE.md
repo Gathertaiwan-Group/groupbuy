@@ -137,7 +137,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 ## 10. 部署與 CI
 
 - Vercel：`vercel.json` regions `hnd1`；push main 自動部署；函式 `maxDuration 60s`；**請求本體上限 4.5MB**。
-- 排程：`vercel.json` crons 每日 16:05 UTC（台灣 00:05，Hobby 方案每日上限一次）呼叫 `/api/cron/run`（`lib/modules/core/cron.ts`）；以 Vercel env `CRON_SECRET` 驗證（`Authorization: Bearer`，未設定回 503）。工作（皆冪等）：跨租戶到期上下架/變價排程、排程發布文章、團購勾「自動取消逾期訂單」的逾期未付款訂單取消（歷程 [系統]）、通知（未付款提醒／低庫存）、Email／簡訊寄送（delivery，§12）、過期 session／90 天前登入紀錄清理。手動：`curl -H "Authorization: Bearer $CRON_SECRET" https://groupbuy-delta.vercel.app/api/cron/run[?jobs=schedulers,posts,autoCancel,notifications,delivery,housekeeping]`。排程另由各頁惰性執行補足當日內的時間精度。
+- 排程：`vercel.json` crons 每日 16:05 UTC（台灣 00:05，Hobby 方案每日上限一次）呼叫 `/api/cron/run`（`lib/modules/core/cron.ts`）；以 Vercel env `CRON_SECRET` 驗證（`Authorization: Bearer`，未設定回 503）。工作（皆冪等）：跨租戶到期上下架/變價排程、排程發布文章、未完成線上付款的逾期確認（gatewayExpire，§13）、團購勾「自動取消逾期訂單」的逾期未付款訂單取消（歷程 [系統]）、通知（未付款提醒／低庫存）、Email／簡訊寄送（delivery，§12）、過期 session／90 天前登入紀錄清理。手動：`curl -H "Authorization: Bearer $CRON_SECRET" https://groupbuy-delta.vercel.app/api/cron/run[?jobs=schedulers,posts,gatewayExpire,autoCancel,notifications,delivery,einvoice,housekeeping]`。排程另由各頁惰性執行補足當日內的時間精度。
 - GitHub Actions `CI`：`npm ci` → `npm run typecheck` → `npm run build`（不帶 Supabase env，build 不得連 DB）；main push 時套用 migration（需 secrets）。
 - 本機 build 不覆蓋 dev：`NEXT_DIST_DIR=.next-build npm run build`（`next.config.mjs` 的 `distDir`），**build 完立刻 `rm -rf .next-build`**（多 agent 共用磁碟；守則見 MODULE_GUIDE §2）。
 
@@ -156,7 +156,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 
 ## 12. Email／簡訊寄送（fix20，`lib/modules/core/delivery*.ts`）
 
-- 各功能照舊寫 `email_messages`／`sms_messages`（未串接時 `NOT_SENT_UNINTEGRATED`）。排程 `delivery` 工作：逾時的 `SENDING` → `FAILED`（結果不明、不重寄）→ 有可用服務商的租戶把**最近**的未串接紀錄轉 `QUEUED`（一般 6 小時內、驗證碼類 25 分鐘內；更舊的不補寄）→ 條件式取件 `QUEUED→SENDING`（同一筆只有一個執行者拿到）→ `SENT`／`FAILED`／`BLOCKED`。只有「確定未送出」的錯誤（連線失敗、SMTP 寄件前的 4xx、HTTP 429/5xx〔Resend 帶 Idempotency-Key、三竹帶 clientid〕）回 `QUEUED` 延後重試，每筆**最多嘗試 3 次**（含第一次，即最多重試 2 次）。整次排程仍在 `cron_locks` 租約內。回應只有筆數。
+- 各功能照舊寫 `email_messages`／`sms_messages`（未串接時 `NOT_SENT_UNINTEGRATED`）。排程 `delivery` 工作：逾時的 `SENDING`（fix22）→ 向服務商查詢：Resend 以同一 Idempotency-Key 重送同內容取回原結果（24 小時內不會重寄）再 `GET /emails/{id}` 看 last_event → `SENT`／`FAILED`（bounced/failed）；暫時查不到（409/429/5xx/連線）→ 維持寄送中下次再查（超過 23 小時改結果不明）；SMTP／Gmail／三竹無法查詢、內容已變更（422）→ `UNKNOWN`「結果不明」（視同已寄出、不重寄、扣點確定；後台鈴鐺通知 category `DELIVERY`＋訂單歷程，供人工確認）→ 有可用服務商的租戶把**最近**的未串接紀錄轉 `QUEUED`（一般 6 小時內、驗證碼類 25 分鐘內；更舊的不補寄）→ 條件式取件 `QUEUED→SENDING`（同一筆只有一個執行者拿到）→ `SENT`／`FAILED`／`BLOCKED`。只有「確定未送出」的錯誤（連線失敗、SMTP 寄件前的 4xx、HTTP 429/5xx〔Resend 帶 Idempotency-Key、三竹帶 clientid〕）回 `QUEUED` 延後重試，每筆**最多嘗試 3 次**（含第一次，即最多重試 2 次）。整次排程仍在 `cron_locks` 租約內。回應只有筆數。
 - 時效性訊息即時寄：登入認證碼（`login-wtoken.ts`）、寄送測試信；失敗留給排程（測試信不重試）。
 - 服務商（全部走環境變數或系統設定；repo 不放金鑰）：Email＝租戶「收/寄信設定」的自有 Gmail（帳號＋應用程式密碼，加密存 DB，金鑰由 `SESSION_SECRET` 導出）→ `RESEND_API_KEY`＋`MAIL_FROM` → `SMTP_HOST`(+`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASS`)＋`MAIL_FROM`；簡訊＝三竹 `MITAKE_USERNAME`＋`MITAKE_PASSWORD`（原站簡訊商不明）。`RESEND_API_URL`／`MITAKE_API_URL`／`GMAIL_SMTP_HOST|PORT|SECURE` 只供測試指向本機 mock。
 - 安全預設：沒有服務商 → 不寄、紀錄維持未串接、登入認證碼規則不可選（`deliveryStatus()` 實際判斷）。`MESSAGE_DELIVERY_MODE` 未設定＝`whitelist`：只寄 `MESSAGE_TEST_WHITELIST`（Email／手機），其他一律 `BLOCKED`（攔下記錄、之後也不補寄）；`live` 才寄給所有收件者；`off` 全關。`MESSAGE_DELIVERY_TENANTS`（租戶代碼或 id）可限定租戶。
@@ -164,7 +164,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - 系統信範本（`core/message-template-logic.ts`）：訂單相關信（訂單成立、已付款〔含匯款對帳 SQL 產生的 PAID〕、出貨、展延、未付款提醒、訂單更新、取消、退款、可自取、超取、優惠碼、自訂）寄送時依「本團 → 綁定標籤 → 系統設定」的 `EMAIL_<X>_SUBJECT／_BODY` 渲染；沒填則用原內容。變數 `{{訂單編號}} {{顧客姓名}} {{訂單金額}} {{已付金額}} {{繳款期限}} {{團購名稱}} {{訂單網址}} {{查貨號碼}} {{取貨門市}} {{商店名稱}} {{原內容}}`（英文別名見檔頭；內文值 HTML escape；不認得的原樣保留；訂單網址用 `SITE_URL`，未設定則用 Vercel 正式網域）。後台「寄信」編輯器送出的內容（`content_final=true`）不再套範本；編輯器預填（`orders/order-ops.ts emailTemplateContent`）同樣套範本。
 - 扣點（migration 0109）：帳務設定 `ACCOUNT_SETTINGS.creditEmail／creditSms`（月結單頁、簡訊點數查詢顯示同一個值）。未設定（null）＝不計點。寄送前 `delivery_credit_reserve` 鎖列預扣（餘額不足 → `BLOCKED`「餘額不足」＋後台鈴鐺通知，同管道每天一則）；寄出成功 `CHARGED`、失敗退回 `RELEASED`；`message_credit_ledger`（channel＋message_id 唯一）保證不重扣。Email 每封 1 點、簡訊 70 字內 1 點、超過每 67 字 1 點；寄給管理員的登入認證碼與測試信不計點。處理逾時（結果不明）的不退點。
 - 【未串接】提示依實際可寄與否動態顯示（`deliveryNotice()`）：可寄時不顯示（或顯示「已排入寄信」）。
-- 付款成功通知信接點（`queuePaymentEmail()`，template `PAYMENT_RECEIVED`、`dedupe_key=PAID:<訂單id>` → 同一訂單不論來源只寄一封）：綠界線上付款入帳（`gateway_apply_payment` 回 PAID）、後台「設為已付款」、綠界物流通知「已取件」且付款方式為超商付款取貨（64）。匯款對帳入帳仍由 SQL 函式寫 template `PAID`。
+- 付款成功通知信接點（`queuePaymentEmail()`，template `PAYMENT_RECEIVED`、fix22 起 `dedupe_key=PAID:<訂單id>:<入帳事件>` → 同一入帳事件不論來源／重送只寄一封；取消入帳〔退款、改回未付款〕後再重新入帳＝新事件 → 再寄一封。入帳事件：線上付款 `<金流商>:<商店訂單編號>`、超商取貨付款 `COD:<托運單編號>`、後台設為已付款 `ADMIN:<設定前訂單 updated_at>`〔原已付足額則不寄〕）：綠界線上付款入帳（`gateway_apply_payment` 回 PAID）、後台「設為已付款」、綠界物流通知「已取件」且付款方式為超商付款取貨（64）。匯款對帳入帳仍由 SQL 函式寫 template `PAID`。
 - 銀行對帳「取消入帳」：付款成功信仍為未串接或已排入未取走（`QUEUED`）→ 撤回（`FAILED`「已取消入帳（撤回，未寄出）」）；寄送中／已寄出 → 無法撤回，回應逐筆說明（`mailWithdraw`）。
 
 ## 13. 金流／物流／電子發票（綠界，fix21）
@@ -183,4 +183,6 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
   - 宅配：綠界 `HOME`（黑貓 TCAT 常溫／冷藏／冷凍、中華郵政 POST 常溫；宅配通已由綠界終止）；「綠界取得托運單號」依配送方式自動選超商或宅配，溫層取訂單貨運標籤（含「冷凍」「冷藏」）；寄件地址取「寄件人設定」address（開頭郵遞區號）。全家冷凍綠界不支援（B2C 只有 7-11 冷凍 UNIMARTFREEZE）。
   - 超商取貨付款：取號時記代收金額（4004 `collection_amount`），物流狀態「已取件」→ 以 `ECPAY_COD` 交易入帳（gateway_apply_payment，冪等）。
   - 金流對帳「檢核」：綠界交易逐筆 QueryTradeInfo 比對（`gatewayLines／gatewayMismatch`）。
-
+- **fix22**：
+  - 未完成付款逾期：排程 `gatewayExpire`（排在 autoCancel 前）取「處理中」付款交易，期限（`payment.ts paymentDeadline`）＝信用卡／定期定額／銀聯 建立＋60 分、台灣 Pay＋30 分（再緩衝 30 分）；ATM 依取號通知 ExpireDate（日期＝當天結束）＋1 天；超商代碼依 ExpireDate＋2 小時；沒收到取號通知時用建立時記錄的 `raw_response.deadlineAt`。過期 → QueryTradeInfo：未付款／查無（10200047）→ 交易 `FAILED`（verify_result「付款逾期…」）＋訂單歷程（條件式只改仍 PENDING 的列；之後若真的收到付款通知仍會入帳）；已付款且金額相符 → `gateway_apply_payment` 補入帳＋`afterPaid`；查詢失敗 → 下次再查。LINE Pay 處理中 1 天後標逾期（未 Confirm 不會扣款）。測試模式可帶 `?asOf=ISO` 模擬現在（正式模式忽略）。
+  - 部分退刷：後台「金流交易紀錄」選一筆訂單 →「退刷」輸入金額（預設全部可退；`/ajax/SalesOrderTransaction/refundInfo|refund`）。DB `gateway_refund_begin`（鎖原付款交易；累計成功退款＋本次 ≤ 已付；同時只能一筆處理中；退款交易 `原編號R<序號>`、`parent_transaction_id`）→ 綠界（第一次且全額：N → E＋N → R；其餘一律 R＝部分退刷，綠界只有已關帳交易可部分退刷，被拒時提示「未關帳只能全額放棄授權」）／LINE Pay Refund（refundAmount）→ `gateway_refund_finish`（同一交易寫回狀態並扣回訂單已付金額＋歷程）。退款成功後：全部退完 → 作廢發票；部分 → `allowanceForRefund` 依退款金額開折讓（單一品項「退款折讓」；發票預約中／未串接則提示人工）。取消訂單「同時退刷」＝退全部可退金額（發票由取消流程作廢）。

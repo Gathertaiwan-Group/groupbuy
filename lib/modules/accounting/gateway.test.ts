@@ -155,7 +155,8 @@ describe("金流 adapter", () => {
     reply.CheckMacValue = core.checkMacValue(reply, AIO.key, AIO.iv, "sha256");
     const body = new URLSearchParams(reply).toString();
     const ok = new pay.EcpayPayment({ merchantId: AIO.merchant, hashKey: AIO.key, hashIV: AIO.iv }, true, (async () => new Response(body)) as typeof fetch);
-    assert.deepEqual(await ok.queryTrade("X1"), { status: "PAID", amount: 310, tradeNo: "T1", message: "TradeStatus=1" });
+    const q = await ok.queryTrade("X1");
+    assert.deepEqual({ status: q.status, amount: q.amount, tradeNo: q.tradeNo, message: q.message }, { status: "PAID", amount: 310, tradeNo: "T1", message: "TradeStatus=1" });
     const bad = new pay.EcpayPayment({ merchantId: AIO.merchant, hashKey: AIO.key, hashIV: AIO.iv }, true, (async () => new Response(body.replace("TradeAmt=310", "TradeAmt=1"))) as typeof fetch);
     assert.equal((await bad.queryTrade("X1")).status, "UNKNOWN");
   });
@@ -404,5 +405,74 @@ describe("fix21 續：LINE Pay（mock）", () => {
     assert.equal(r.ok, false);
     assert.equal(r.returnCode, "1172");
     assert.equal((await c.confirm("../x", 1)).ok, false);
+  });
+});
+
+describe("fix22：部分退刷、付款期限、查詢回應", () => {
+  const creds = { merchantId: AIO.merchant, hashKey: AIO.key, hashIV: AIO.iv };
+  const mk = (ok: Record<string, boolean>) => {
+    const calls: { a: string; amt: string }[] = [];
+    const f = (async (_u: string, init: RequestInit) => {
+      const q = new URLSearchParams(String(init.body));
+      calls.push({ a: q.get("Action")!, amt: q.get("TotalAmount")! });
+      return new Response(`RtnCode=${ok[q.get("Action")!] ? 1 : 10000002}&RtnMsg=x`);
+    }) as unknown as typeof fetch;
+    return { p: new pay.EcpayPayment(creds, true, f), calls };
+  };
+  test("部分退刷只做 R（金額＝本次金額），不做 N／E", async () => {
+    const t = mk({ R: true, N: true, E: true });
+    const r = await t.p.refund({ merchantTradeNo: "GB1", tradeNo: "T", amount: 120, partial: true });
+    assert.equal(r.ok, true);
+    assert.deepEqual(t.calls, [{ a: "R", amt: "120" }]);
+  });
+  test("部分退刷被拒（未關帳）→ 提示只能全額放棄授權", async () => {
+    const t = mk({ N: true });
+    const r = await t.p.refund({ merchantTradeNo: "GB1", tradeNo: "T", amount: 120, partial: true });
+    assert.equal(r.ok, false);
+    assert.equal(r.notClosed, true);
+    assert.match(r.message, /已關帳/);
+    assert.match(r.message, /全額放棄授權/);
+    assert.deepEqual(t.calls.map((c) => c.a), ["R"]);
+  });
+  test("全額退款金額帶原授權金額", async () => {
+    const t = mk({ N: true });
+    assert.equal((await t.p.refund({ merchantTradeNo: "GB1", tradeNo: "T", amount: 300 })).ok, true);
+    assert.deepEqual(t.calls, [{ a: "N", amt: "300" }]);
+  });
+  test("付款期限：信用卡／台灣 Pay 依付款頁時限", () => {
+    const created = "2026-10-28T00:00:00.000Z";
+    assert.equal(pay.paymentDeadline({ payment_method: pay.PM.CREDIT, created_at: created }).toISOString(), "2026-10-28T01:30:00.000Z");
+    assert.equal(pay.paymentDeadline({ payment_method: pay.PM.TAIWANPAY, created_at: created }).toISOString(), "2026-10-28T01:00:00.000Z");
+  });
+  test("付款期限：ATM 依 ExpireDate（日期＝當天結束）＋1 天；超商代碼依 ExpireDate＋2 小時", () => {
+    const created = "2026-10-28T00:00:00.000Z";
+    // 2026/10/31（台灣當天 00:00＝10/30 16:00Z）→ 當天結束 10/31 16:00Z → ＋1 天
+    assert.equal(
+      pay.paymentDeadline({ payment_method: pay.PM.VIRTUAL_BANK, created_at: created, raw_response: { paymentInfo: { ExpireDate: "2026/10/31" } } }).toISOString(),
+      "2026-11-01T16:00:00.000Z",
+    );
+    assert.equal(
+      pay.paymentDeadline({ payment_method: pay.PM.CVS_CODE, created_at: created, raw_response: { paymentInfo: { ExpireDate: "2026/10/29 12:00:00" } } }).toISOString(),
+      "2026-10-29T06:00:00.000Z",
+    );
+    // 沒收到取號通知：用建立時記錄的 deadlineAt；都沒有 → ATM 3 天、超商 7 天
+    assert.equal(
+      pay.paymentDeadline({ payment_method: pay.PM.VIRTUAL_BANK, created_at: created, raw_response: { deadlineAt: "2026-10-29T00:00:00.000Z" } }).toISOString(),
+      "2026-10-30T00:00:00.000Z",
+    );
+    assert.equal(pay.paymentDeadline({ payment_method: pay.PM.CVS_CODE, created_at: created }).toISOString(), "2026-11-04T02:00:00.000Z");
+  });
+  test("QueryTradeInfo：已付款帶付款時間；查無交易（10200047）＝未付款", async () => {
+    const mkq = (fields: Record<string, string>) => {
+      const q: Record<string, string> = { MerchantID: AIO.merchant, ...fields };
+      q.CheckMacValue = core.checkMacValue(q, AIO.key, AIO.iv, "sha256");
+      return (async () => new Response(new URLSearchParams(q).toString())) as unknown as typeof fetch;
+    };
+    const paid = await new pay.EcpayPayment(creds, true, mkq({ MerchantTradeNo: "GB1", TradeStatus: "1", TradeAmt: "300", TradeNo: "2610", PaymentDate: "2026/10/28 10:00:00", PaymentType: "Credit_CreditCard" })).queryTrade("GB1");
+    assert.equal(paid.status, "PAID");
+    assert.equal(paid.paidAt, "2026-10-28T02:00:00.000Z");
+    assert.equal(paid.paymentType, "Credit_CreditCard");
+    const none = await new pay.EcpayPayment(creds, true, mkq({ MerchantTradeNo: "GB2", TradeStatus: "10200047", TradeAmt: "0" })).queryTrade("GB2");
+    assert.equal(none.status, "UNPAID");
   });
 });
