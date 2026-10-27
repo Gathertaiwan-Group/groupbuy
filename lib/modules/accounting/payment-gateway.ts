@@ -11,6 +11,7 @@
 //   POST /gateway/ecpay/payment/notify   ReturnURL
 //   POST /gateway/ecpay/payment/info     PaymentInfoURL（ATM 虛擬帳號／超商代碼）
 //   POST /gateway/ecpay/payment/result   OrderResultURL（瀏覽器導回；同樣驗章入帳後 303 到訂單頁）
+import { queuePaymentEmail } from "@/lib/modules/core/delivery";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { post } from "@/lib/core/http/route-helpers";
 import { redirect } from "@/lib/core/http/responses";
@@ -119,6 +120,14 @@ export async function applyNotify(provider: PaymentProvider, n: PaymentNotify, s
   }
   const r = data as ApplyResult;
   if (r.result === "NOT_FOUND") return { reply: "0|order not found", applied: r };
+  if (r.result === "PAID" && r.tenantId && r.salesOrderId) {
+    // 付款成功通知信（core/delivery.ts：依範本、白名單模式、同一訂單只寄一封；失敗不影響回應綠界）
+    try {
+      await queuePaymentEmail(r.tenantId, r.salesOrderId, "線上付款");
+    } catch (e) {
+      console.error("[gateway] 寫入付款成功通知信失敗", r.salesOrderId, (e as Error).message);
+    }
+  }
   if (r.result === "PAID" && r.tenantId && r.salesOrderId) {
     // 付款後依設定開立電子發票（失敗只記錄在發票紀錄，不影響回應綠界）
     try {

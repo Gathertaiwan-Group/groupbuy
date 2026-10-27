@@ -10,6 +10,7 @@
 //
 // 防重複：sales_order_cvs_traces 同一訂單只能有一張 active 的綠界托運單（migration 4003 唯一索引）；
 // 先寫一筆「取號中」佔位再呼叫綠界，失敗時刪除佔位。
+import { queuePaymentEmail } from "@/lib/modules/core/delivery";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, post, requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest, notFound } from "@/lib/core/http/errors";
@@ -263,6 +264,15 @@ async function notify(ctx: RequestContext): Promise<Response> {
     if (status === "RETURNED") patch.date_returned = now;
     await db.from("sales_order_cvs_traces").update(patch).eq("id", t.id);
     await db.from("sales_order_histories").insert({ tenant_id: t.tenant_id, sales_order_id: t.sales_order_id, actor: "SYSTEM", note: `[物流] 綠界狀態：${text}${provider.sandbox ? "（測試環境）" : ""}` });
+    // 超商付款取貨（payment_method 64）已取貨＝已付款 → 付款成功通知信（同一訂單只寄一封；失敗不影響回應綠界）
+    if (status === "PICKED") {
+      try {
+        const { data: so } = await db.from("sales_orders").select("payment_method").eq("tenant_id", t.tenant_id).eq("id", t.sales_order_id).maybeSingle<{ payment_method: number | null }>();
+        if (Number(so?.payment_method) === 64) await queuePaymentEmail(t.tenant_id, t.sales_order_id, "超商取貨付款");
+      } catch (e) {
+        console.error("[logistics] 寫入付款成功通知信失敗", t.sales_order_id, (e as Error).message);
+      }
+    }
   }
   return ack(provider.ackOk);
 }

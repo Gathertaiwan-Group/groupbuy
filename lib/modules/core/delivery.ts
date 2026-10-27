@@ -390,7 +390,10 @@ export async function renderOrderEmail(
   if (!o) return { ...current, applied: false };
   const tpl = await templateValues(tenantId, o.group_buy_id ? Number(o.group_buy_id) : null, names);
   const t = await tenantOf(tenantId);
-  return applyTemplate(tpl, current, orderVars(o, { tenantCode: t.code ?? "", tenantName: t.name ?? "", baseUrl: siteBaseUrl() }));
+  const vars = orderVars(o, { tenantCode: t.code ?? "", tenantName: t.name ?? "", baseUrl: siteBaseUrl() });
+  // 付款成功信：超商取貨付款等「已收款但訂單尚未記已付金額」時，已付金額以訂單金額顯示
+  if (names[0] === "EMAIL_PAID_SUBJECT" && !(Number(o.total_paid) > 0)) vars.totalPaid = vars.grandTotal;
+  return applyTemplate(tpl, current, vars);
 }
 
 async function renderWithTemplate(row: Row, current: { subject: string; body: string }): Promise<{ subject: string; body: string }> {
@@ -402,6 +405,49 @@ async function renderWithTemplate(row: Row, current: { subject: string; body: st
     console.error(`[delivery] 套用系統信範本失敗（#${row.id}），改用原內容`, errText(e));
     return current;
   }
+}
+
+/* ───────────── 付款成功通知信（線上付款入帳／後台設為已付款／超商取貨付款）───────────── */
+
+/**
+ * 寫入一封「付款成功通知信」待寄紀錄（template PAYMENT_RECEIVED → 寄送時依 EMAIL_PAID_* 範本渲染，沒填用下面的預設文字）。
+ * 冪等：(tenant_id, dedupe_key) 唯一，dedupe_key＝PAID:<訂單 id>（同一張訂單不論來源只寄一封）。
+ * 狀態：Email 可寄 → QUEUED（排程寄出，白名單模式只寄白名單）；未串接 → NOT_SENT_UNINTEGRATED（只記錄）。
+ * 回傳 { queued: 是否新寫入, notice: 【未串接】提示或空字串 }。訂單沒有 Email → 不寫。
+ */
+export async function queuePaymentEmail(tenantId: number, salesOrderId: number, source: string): Promise<{ queued: boolean; notice: string }> {
+  const { data: o, error } = await db()
+    .from("sales_orders")
+    .select("id, uuid, group_buy_id, customer_firstname, customer_email, total_paid, grand_total, group_buys(title)")
+    .eq("tenant_id", tenantId)
+    .eq("id", salesOrderId)
+    .maybeSingle<Row>();
+  if (error) throw new Error(`讀取訂單失敗：${error.message}`);
+  const notice = (await deliveryNotice(tenantId, "EMAIL", "付款成功通知信（Email）")).message;
+  const to = String(o?.customer_email ?? "").trim();
+  if (!o || !to) return { queued: false, notice };
+  const title = String((o.group_buys as Row | null)?.title ?? "");
+  const paid = Number(o.total_paid ?? 0) || Number(o.grand_total ?? 0);
+  const available = !!(await emailTransportFor(tenantId).catch(() => null));
+  const { data: ins, error: iErr } = await db()
+    .from("email_messages")
+    .upsert(
+      {
+        tenant_id: tenantId,
+        group_buy_id: o.group_buy_id ?? null,
+        sales_order_id: salesOrderId,
+        template: "PAYMENT_RECEIVED",
+        to_email: to,
+        subject: `${title ? `【${title}】` : ""}已收到您的付款 ${String(o.uuid ?? "")}`,
+        body: `${String(o.customer_firstname ?? "")} 您好：\n我們已收到您的付款 $${paid}（${source}），將儘快為您安排出貨。\n訂單編號：${String(o.uuid ?? "")}`,
+        status: available ? "QUEUED" : "NOT_SENT_UNINTEGRATED",
+        dedupe_key: `PAID:${salesOrderId}`,
+      },
+      { onConflict: "tenant_id,dedupe_key", ignoreDuplicates: true },
+    )
+    .select("id");
+  if (iErr) throw new Error(`寫入付款成功通知信失敗：${iErr.message}`);
+  return { queued: (ins ?? []).length > 0, notice };
 }
 
 /* ───────────── 餘額扣點（帳務設定 creditEmail／creditSms；migration 0109）───────────── */

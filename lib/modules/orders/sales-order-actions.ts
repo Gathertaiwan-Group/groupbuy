@@ -3,6 +3,7 @@
 //   DataTableConfig.actionButton（確認框）→ 成功 actionOk(訊息)；失敗 HTTP 4xx {error}（顯示在確認框）
 //   initAjaxForm 表單（取消訂單、設為已出貨、拆單…）→ {code:200, error:訊息, data:[…]}
 //   Editor（寄信、更新超取小白單、設為準備出貨中）→ {data:[…]}（另帶 message/notIntegrated）
+import { queuePaymentEmail } from "@/lib/modules/core/delivery";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { fragment, get, post, requireSession } from "@/lib/core/http/route-helpers";
 import { HttpError, badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
@@ -128,9 +129,11 @@ async function markAsPaid(ctx: RequestContext): Promise<Response> {
   for (const r of target) {
     const id = Number(r.id);
     const paid = num(r.total_paid) > 0 ? num(r.total_paid) : num(r.grand_total);
-    const c = await emailTemplateContent(session, id, "PAYMENT_RECEIVED");
-    mailMsg = await recordEmail(session, { salesOrderId: id, groupBuyId: (r.group_buy_id as number) ?? null, template: "PAYMENT_RECEIVED", toEmail: String(r.customer_email ?? ""), subject: c.subject, body: c.body, contentFinal: true });
-    await adminUpdateOrders(session, [id], { total_paid: paid, date_paid: nowIso(), status: "PAID_EMAIL_SENT" }, `設為已付款，寄送已付款通知信${mailMsg}`);
+    await adminUpdateOrders(session, [id], { total_paid: paid, date_paid: nowIso(), status: "PAID_EMAIL_SENT" }, "設為已付款");
+    // 付款成功通知信：與線上付款同一接點（依範本、白名單模式、同一訂單只寄一封）
+    const q = await queuePaymentEmail(session.tenantId, id, "後台設為已付款");
+    mailMsg = q.notice;
+    await addOrderHistory(session, id, q.queued ? `寄送已付款通知信${mailMsg}` : "已付款通知信先前已寄送（或顧客無 Email），不重寄");
   }
   const skipped = rows.length - target.length;
   return actionOk(`已設為已付款 ${target.length} 筆${skipped ? `（略過非處理中 ${skipped} 筆）` : ""}；${mailMsg || "已排入已付款通知信"}`, mailMsg ? { notIntegrated: true } : {});

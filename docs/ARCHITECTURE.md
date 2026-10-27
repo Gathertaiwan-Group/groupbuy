@@ -164,6 +164,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - 系統信範本（`core/message-template-logic.ts`）：訂單相關信（訂單成立、已付款〔含匯款對帳 SQL 產生的 PAID〕、出貨、展延、未付款提醒、訂單更新、取消、退款、可自取、超取、優惠碼、自訂）寄送時依「本團 → 綁定標籤 → 系統設定」的 `EMAIL_<X>_SUBJECT／_BODY` 渲染；沒填則用原內容。變數 `{{訂單編號}} {{顧客姓名}} {{訂單金額}} {{已付金額}} {{繳款期限}} {{團購名稱}} {{訂單網址}} {{查貨號碼}} {{取貨門市}} {{商店名稱}} {{原內容}}`（英文別名見檔頭；內文值 HTML escape；不認得的原樣保留；訂單網址用 `SITE_URL`，未設定則用 Vercel 正式網域）。後台「寄信」編輯器送出的內容（`content_final=true`）不再套範本；編輯器預填（`orders/order-ops.ts emailTemplateContent`）同樣套範本。
 - 扣點（migration 0109）：帳務設定 `ACCOUNT_SETTINGS.creditEmail／creditSms`（月結單頁、簡訊點數查詢顯示同一個值）。未設定（null）＝不計點。寄送前 `delivery_credit_reserve` 鎖列預扣（餘額不足 → `BLOCKED`「餘額不足」＋後台鈴鐺通知，同管道每天一則）；寄出成功 `CHARGED`、失敗退回 `RELEASED`；`message_credit_ledger`（channel＋message_id 唯一）保證不重扣。Email 每封 1 點、簡訊 70 字內 1 點、超過每 67 字 1 點；寄給管理員的登入認證碼與測試信不計點。處理逾時（結果不明）的不退點。
 - 【未串接】提示依實際可寄與否動態顯示（`deliveryNotice()`）：可寄時不顯示（或顯示「已排入寄信」）。
+- 付款成功通知信接點（`queuePaymentEmail()`，template `PAYMENT_RECEIVED`、`dedupe_key=PAID:<訂單id>` → 同一訂單不論來源只寄一封）：綠界線上付款入帳（`gateway_apply_payment` 回 PAID）、後台「設為已付款」、綠界物流通知「已取件」且付款方式為超商付款取貨（64）。匯款對帳入帳仍由 SQL 函式寫 template `PAID`。
 - 銀行對帳「取消入帳」：付款成功信仍為未串接或已排入未取走（`QUEUED`）→ 撤回（`FAILED`「已取消入帳（撤回，未寄出）」）；寄送中／已寄出 → 無法撤回，回應逐筆說明（`mailWithdraw`）。
 
 ## 13. 金流／物流／電子發票（綠界，fix21）
