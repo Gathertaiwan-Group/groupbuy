@@ -29,6 +29,7 @@ import { sanitizeLike } from "@/lib/core/datatables/query";
 import type { EditorOptions } from "@/lib/core/datatables/response";
 import { editorIds, editorResponse, flattenDotted, parseEditorRequest } from "@/lib/core/editor/protocol";
 import { enumOptionsFor } from "@/lib/core/enums";
+import { getAccountSettings } from "@/lib/modules/core/system-settings";
 import { dbFriendlyError, insertGroupBuyWithShortUrl, ownGroupBuyIds, parseIdList, sysTagsByGroupBuy } from "./common";
 
 const FEATURE_TAGS = ["TOP", "MAIN", "REF", "DRAFT", "UNCLOSED", "CLOSED", "CLOSING", "UNSHIPPING", "SHIPPING", "SHIPPED", "PREVIEWABLE"];
@@ -390,6 +391,18 @@ export async function fetchGroupBuyApiRows(session: AdminSession, ids: number[])
   return rows;
 }
 
+/**
+ * 系統設定「GBA帳務設定 → 允許自定義付款方式」明確關閉（paymentMethodCustom=0）時，不可新勾選「自定義」付款方式。
+ * 未設定＝允許（與先前相同）；已勾選的既有團購維持不變（只擋新加入）。
+ */
+async function assertCustomPaymentAllowed(session: AdminSession, values: Values, existing?: Row): Promise<void> {
+  const pm = arrayValue(values, "paymentMethod");
+  if (!pm || !pm.map(String).includes("CUSTOM")) return;
+  if (existing && (Number(existing.payment_methods) & 256) !== 0) return;
+  const acc = await getAccountSettings(session.tenantId);
+  if (!acc.paymentMethodCustom) throw new FieldErrors([{ name: "paymentMethod[]", status: "系統設定未允許自定義付款方式（GBA帳務設定）" }]);
+}
+
 async function createGroupBuys(ctx: RequestContext, session: AdminSession, reqRows: { values: Values }[]): Promise<Response> {
   const db = getServiceClient();
   const createdIds: number[] = [];
@@ -397,6 +410,7 @@ async function createGroupBuys(ctx: RequestContext, session: AdminSession, reqRo
     const values = flattenDotted(r.values);
     const errors = validateValues(values, "create");
     if (errors.length) throw new FieldErrors(errors);
+    await assertCustomPaymentAllowed(session, values);
     const dbRow = toDbRow(values, undefined);
     dbRow.tenant_id = session.tenantId;
     if (!dbRow.render) dbRow.render = "TYPE3";
@@ -428,6 +442,7 @@ async function updateGroupBuys(ctx: RequestContext, session: AdminSession, req: 
     const values = flattenDotted(r.values);
     const errors = validateValues(values, "edit", existing);
     if (errors.length) throw new FieldErrors(errors);
+    await assertCustomPaymentAllowed(session, values, existing);
     const dbRow = toDbRow(values, existing);
     delete dbRow.tenant_id;
     if (Object.keys(dbRow).length) {

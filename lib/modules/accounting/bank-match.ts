@@ -228,7 +228,17 @@ export function matchBankLines(
 
     // 指定訂單編號
     if (line.uuidHint) {
-      const o = byUuid.get(line.uuidHint);
+      // 自定義對帳格式（系統設定 BANK_FORMAT_SETTINGS.uuidFmt）可能只擷取到訂單編號尾碼（例 GG12345 → 12345）：
+      // 完整編號找不到時，以「尾碼唯一符合」對應訂單；多筆符合視為找不到（不猜）
+      let o = byUuid.get(line.uuidHint);
+      if (!o && line.uuidHint.length >= 4 && line.uuidHint.length < 12) {
+        const hits = orders.filter((x) => x.uuid.endsWith(line.uuidHint as string));
+        if (hits.length === 1) o = hits[0];
+        else if (hits.length > 1) {
+          results.push({ ...base, code: "NOT_FOUND", status: `訂單編號尾碼 ${line.uuidHint} 符合多筆訂單（${uuidList(hits)}），請指定完整訂單編號` });
+          continue;
+        }
+      }
       if (!o) {
         results.push({ ...base, code: "NOT_FOUND", status: `找不到訂單 ${line.uuidHint}` });
         continue;

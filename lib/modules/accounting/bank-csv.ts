@@ -386,7 +386,10 @@ function uuidFromText(text: string): string | null {
  * 銀行對帳檔（已解碼的文字）。有表頭：依欄名對應；沒表頭：逐列找日期、金額、帳號。
  * 只取「入帳」列（存入金額 > 0）；支出、合計、空白列計入 skipped。
  */
-export function parseBankFile(text: string, bankProvider: string): ParseResult {
+export function parseBankFile(text: string, bankProvider: string, custom?: BankFormat | null): ParseResult {
+  if (String(bankProvider ?? "").toUpperCase() === "CUSTOM" && custom && custom.date !== null && custom.debit !== null) {
+    return parseBankFileCustom(text, custom);
+  }
   const mode = accountModeOf(bankProvider);
   const srcLines = String(text ?? "").replace(/^﻿/, "").replace(/\r\n?/g, "\n").split("\n");
   const nonEmpty = srcLines.filter((l) => l.trim() !== "");
@@ -478,6 +481,120 @@ export function parseBankFile(text: string, bankProvider: string): ParseResult {
     }
     const memo = rest.filter((c) => cleanAccount(c) !== accountRaw).join(" ");
     out.lines.push({ lineNo, raw, date: dt.date, time, amount, account, accountRaw, uuidHint: uuidFromText(memo), memo });
+  });
+  return out;
+}
+
+/* ───────────────────────── 自定義格式（系統設定） ───────────────────────── */
+
+/**
+ * 自定義銀行對帳檔案格式（系統設定 BANK_FORMAT_SETTINGS；原站 bankFormat 編輯器）：
+ *   date／debit／note＝欄位序號（0＝A 欄、1＝B 欄…）；dateFmt＝日期格式（例 yyyy/MM/dd）；
+ *   uuidFmt＝訂單號碼格式（正規表示式，取第 1 個括號群組，例 GG([\d]{5}) 比對備註 GG12345）；locale＝zh_TW／en。
+ * 只在對帳銀行選「自定義」(CUSTOM) 且設定了日期欄與金額欄時使用；未設定時 CUSTOM 沿用通用解析。
+ */
+export interface BankFormat {
+  date: number | null;
+  debit: number | null;
+  note: number | null;
+  dateFmt: string;
+  uuidFmt: string;
+  locale: string;
+}
+
+const EN_MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** 依 Java 風格日期格式解析（yyyy／yyy(民國)／yy／MMM(英文月)／MM／M／dd／d／HH／mm／ss）；不符回 null */
+export function parseDateByFormat(input: string, fmt: string): { date: string; time: string | null } | null {
+  const f = String(fmt ?? "").trim();
+  const v = String(input ?? "").trim();
+  if (!f || !v) return null;
+  const parts: string[] = [];
+  let re = "";
+  const tokens = /yyyy|yyy|yy|MMM|MM|M|dd|d|HH|H|mm|ss/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  while ((m = tokens.exec(f))) {
+    re += esc(f.slice(last, m.index));
+    const t = m[0];
+    parts.push(t);
+    re += t === "MMM" ? "([A-Za-z]{3,9})" : t === "yyyy" ? "(\\d{4})" : t === "yyy" ? "(\\d{2,4})" : t.length === 2 ? "(\\d{1,2})" : "(\\d{1,2})";
+    last = m.index + t.length;
+  }
+  re += esc(f.slice(last));
+  const mm = new RegExp(`^${re}`).exec(v);
+  if (!mm) return null;
+  let y = NaN, mo = NaN, d = NaN, hh = -1, mi = 0, ss = 0;
+  parts.forEach((t, i) => {
+    const x = mm[i + 1];
+    if (t === "yyyy") y = Number(x);
+    else if (t === "yyy") y = rocToYear(x);
+    else if (t === "yy") y = 2000 + Number(x);
+    else if (t === "MMM") mo = EN_MONTHS.indexOf(x.slice(0, 3).toLowerCase()) + 1;
+    else if (t === "MM" || t === "M") mo = Number(x);
+    else if (t === "dd" || t === "d") d = Number(x);
+    else if (t === "HH" || t === "H") hh = Number(x);
+    else if (t === "mm") mi = Number(x);
+    else if (t === "ss") ss = Number(x);
+  });
+  const date = validYmd(y, mo, d);
+  if (!date) return null;
+  const time = hh >= 0 && hh < 24 && mi < 60 && ss < 60 ? `${pad2(hh)}:${pad2(mi)}:${pad2(ss)}` : null;
+  return { date, time };
+}
+
+/** uuidFmt 比對文字 → 擷取到的訂單編號（只留數字；群組 1 優先、否則整段）；格式錯誤或不符回 null */
+export function uuidByFormat(text: string, uuidFmt: string): string | null {
+  const f = String(uuidFmt ?? "").trim();
+  if (!f) return null;
+  let re: RegExp;
+  try {
+    re = new RegExp(f);
+  } catch {
+    return null;
+  }
+  const m = re.exec(String(text ?? ""));
+  if (!m) return null;
+  const d = digitsOf(m[1] ?? m[0]);
+  return d.length >= 4 ? d : null;
+}
+
+/** 依自定義格式解析（欄位序號固定；日期／金額無法解析的列視為表頭或非入帳列略過） */
+export function parseBankFileCustom(text: string, fmt: BankFormat): ParseResult {
+  const srcLines = String(text ?? "").replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n");
+  const nonEmpty = srcLines.filter((l) => l.trim() !== "");
+  const delim = detectDelimiter(nonEmpty);
+  const out: ParseResult = { lines: [], issues: [], skipped: 0, format: `custom:${fmt.date}/${fmt.debit}/${fmt.note ?? "-"}` };
+  const en = fmt.locale === "en";
+  srcLines.forEach((line, r) => {
+    if (line.trim() === "") return;
+    const row = splitCsvRow(line, delim);
+    const raw = line.trim();
+    const cell = (i: number | null) => (i === null || i < 0 ? "" : String(row[i] ?? "").trim());
+    const dateCell = cell(fmt.date);
+    const dt = (fmt.dateFmt ? parseDateByFormat(dateCell, fmt.dateFmt) : null) ?? parseDateTime(dateCell);
+    // en：金額可能用千分位逗號、小數點；zh_TW 同 parseAmount 規則
+    const amtCell = cell(fmt.debit);
+    const amount = parseAmount(en ? amtCell.replace(/[^0-9.\-]/g, "") : amtCell);
+    if (!dt || amount === null || amount <= 0) {
+      out.skipped++;
+      return;
+    }
+    const note = cell(fmt.note);
+    const uuidHint = uuidByFormat(note, fmt.uuidFmt) ?? uuidFromText(note);
+    // 帳號：備註欄扣掉「訂單號碼格式」比對到的那段後，取最長的 5 碼以上數字
+    let rest = note;
+    if (fmt.uuidFmt) {
+      try {
+        rest = note.replace(new RegExp(fmt.uuidFmt), " ");
+      } catch {
+        /* 格式錯誤：不扣除 */
+      }
+    }
+    const account = accountFromText(rest);
+    const accountRaw = account;
+    out.lines.push({ lineNo: r + 1, raw, date: dt.date, time: dt.time, amount, account, accountRaw, uuidHint, memo: note });
   });
   return out;
 }

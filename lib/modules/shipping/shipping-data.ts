@@ -3,6 +3,7 @@
 import { getServiceClient } from "@/lib/supabase/server";
 import { rowToApi, type Row } from "@/lib/db/mapping";
 import { flatRateShipping } from "@/lib/db/entities/flatRateShipping";
+import { getAccountSettings } from "@/lib/modules/core/system-settings";
 import type { CartLine, FeeRule, GroupBuyShippingContext, ItemSetRuleBinding } from "./shipping-fee";
 
 type Db = ReturnType<typeof getServiceClient>;
@@ -29,11 +30,12 @@ export function feeRuleFromRow(row: Row): FeeRule {
 
 /** 讀取團購的運費設定（一律以 tenantId 過濾） */
 export async function loadGroupBuyShipping(tenantId: number, groupBuyId: number, db: Db = getServiceClient()): Promise<GroupBuyShippingData> {
-  const [gbRes, bindRes, itemBindRes, gbisRes] = await Promise.all([
+  const [gbRes, bindRes, itemBindRes, gbisRes, account] = await Promise.all([
     db.from("group_buys").select("id, island_disabled, oversea_disabled, shipping_tag, group_buy_settings").eq("tenant_id", tenantId).eq("id", groupBuyId).maybeSingle(),
     db.from("group_buy_flat_rate_shippings").select("id, flat_rate_shipping_id, seq").eq("tenant_id", tenantId).eq("group_buy_id", groupBuyId),
     db.from("group_buy_item_set_flat_rate_shippings").select("id, group_buy_item_set_id, flat_rate_shipping_id").eq("tenant_id", tenantId).eq("group_buy_id", groupBuyId),
     db.from("group_buy_item_sets").select("id, item_set_id").eq("tenant_id", tenantId).eq("group_buy_id", groupBuyId),
+    getAccountSettings(tenantId),
   ]);
   for (const r of [gbRes, bindRes, itemBindRes, gbisRes]) if (r.error) throw new Error(`[shipping] 讀取運費設定失敗：${r.error.message}`);
   const gb = (gbRes.data ?? null) as Row | null;
@@ -82,6 +84,7 @@ export async function loadGroupBuyShipping(tenantId: number, groupBuyId: number,
       islandDisabled: !!gb?.island_disabled,
       overseaDisabled: !!gb?.oversea_disabled,
       backOrderCodDisabled: settings.backOrderCodDisabled === true || settings.backOrderCodDisabled === "true",
+      itemInternalShipping: account.itemInternalShippingPrice,
     },
     rules,
     itemSetRules,

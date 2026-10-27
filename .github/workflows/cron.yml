@@ -1,0 +1,40 @@
+# 排程：每 10 分鐘呼叫正式站 /api/cron/run（Bearer CRON_SECRET）。
+# Vercel Hobby 的 Cron 一天只能一次（vercel.json 的每日 cron 保留當備援）；高頻排程改由 GitHub Actions 觸發。
+# 端點各工作皆冪等（見 lib/modules/core/cron.ts），重複呼叫無副作用。GitHub 排程可能延遲數分鐘，屬正常。
+name: Cron
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "只跑指定工作（逗號分隔，留空＝全部）"
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: cron-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      CRON_URL: https://groupbuy-delta.vercel.app/api/cron/run
+      JOBS: ${{ github.event.inputs.jobs }}
+    steps:
+      - name: Call /api/cron/run
+        run: |
+          if [ -z "$CRON_SECRET" ]; then echo "::error::CRON_SECRET 未設定"; exit 1; fi
+          url="$CRON_URL"
+          if [ -n "$JOBS" ]; then url="$url?jobs=$(printf '%s' "$JOBS" | tr -cd 'A-Za-z,')"; fi
+          code=$(curl -sS -o body.json -w '%{http_code}' --max-time 120 -X POST -H "Authorization: Bearer $CRON_SECRET" "$url" || echo 000)
+          echo "HTTP $code"
+          head -c 2000 body.json || true
+          echo
+          [ "$code" = "200" ] || { echo "::error::cron 回應 HTTP $code"; exit 1; }

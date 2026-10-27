@@ -32,6 +32,14 @@
 				html += '<div class="col-12 small">儲值金額:'+credit + " 已使用金額:"+creditUsed+ '剩餘金額:'+ (credit-creditUsed)+ '</div>'
 			html += '</div>'
 		});
+		{{!-- 系統設定「GBA帳務設定」的 Email／簡訊餘額（本系統：有設定才顯示） --}}
+		var ac = (json && json.accountCredits) || {};
+		if (ac.creditEmail != null || ac.creditSms != null) {
+			html += '<div class="row mb-2"><div class="col-12 small" id="accountCredits">'
+				+ (ac.creditEmail != null ? 'Email餘額:' + escHtml(ac.creditEmail) + ' ' : '')
+				+ (ac.creditSms != null ? '簡訊餘額:' + escHtml(ac.creditSms) : '')
+				+ '</div></div>';
+		}
 		$area.html(html);
 	}
 

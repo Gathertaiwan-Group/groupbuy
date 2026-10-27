@@ -22,6 +22,7 @@ import { parseDtRequest } from "@/lib/core/datatables/request";
 import { dtResponse } from "@/lib/core/datatables/response";
 import { editorIds, editorResponse, flattenDotted, parseEditorRequest } from "@/lib/core/editor/protocol";
 import { enumOptions, enumOptionsFor } from "@/lib/core/enums";
+import { getBankFormat } from "@/lib/modules/core/system-settings";
 import { accountModeOf, bankCsvTemplate, decodeBankFile, digitsOf, parseBankFile, parseManualText, type BankLine } from "./bank-csv";
 import { matchBankLines, type ExistingBankTx, type MatchCode, type MatchOrder } from "./bank-match";
 import { fetchAll, parseIdList, requireGroupBuyId, taipeiDay, taipeiIso, taipeiTime } from "./common";
@@ -212,7 +213,9 @@ async function importBankTransaction(ctx: RequestContext): Promise<Response> {
       : { data: null };
     if (!up) throw new FieldErrors([{ name: "note", status: "找不到上傳的檔案，請重新上傳" }]);
     fileName = up.filename;
-    const r = parseBankFile(up.content, bankProvider);
+    // 對帳銀行選「自定義」時套用系統設定的自定義對帳格式（未設定 → 通用解析，與先前相同）
+    const custom = bankProvider === "CUSTOM" ? await getBankFormat(session.tenantId) : null;
+    const r = parseBankFile(up.content, bankProvider, custom);
     if (r.lines.length === 0) {
       throw new FieldErrors([{ name: "note", status: "檔案中沒有可辨識的入帳明細（需有日期、存入金額、帳號欄位；請確認對帳銀行格式或改用範本）" }]);
     }

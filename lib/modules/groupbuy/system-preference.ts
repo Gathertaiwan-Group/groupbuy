@@ -84,8 +84,12 @@ const SYS_SETTINGS: Record<string, SettingsSpec & { title: string }> = {
   adminSecuritySettings: {
     title: "管理員登入安全性設定",
     pref: "ADMIN_SECURITY_SETTINGS",
-    fields: { rule: { enum: ["", "NONE", "IP", "ALWAYS"] } },
-    defaults: { rule: "NONE" },
+    // 原站欄位：rule、send（認證碼通知方式）、email、phone；登入流程見 core/auth-api.ts＋core/login-wtoken.ts（寄送未串接，只寫待寄紀錄）
+    fields: { rule: { enum: ["", "NONE", "IP", "ALWAYS"] }, send: { enum: ["", "USER_EMAIL", "USER_SMS", "SYS_EMAIL", "SYS_SMS"] }, email: "text", phone: "text" },
+    defaults: { rule: "NONE", send: "USER_EMAIL" },
+    validate(s, errors) {
+      if (s.email && !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(String(s.email))) errors.push({ name: "email", status: "Email 格式錯誤" });
+    },
   },
   taxInfoSettings: {
     title: "稅籍設定",

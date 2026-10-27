@@ -23,6 +23,7 @@ import { json } from "@/lib/core/http/responses";
 import { listEntity, type ListSpec } from "@/lib/core/entity/crud";
 import { enumLabel, enumOptionsFor } from "@/lib/core/enums";
 import { fetchAll, money, taipeiDay } from "./common";
+import { getAccountSettings } from "@/lib/modules/core/system-settings";
 
 type PlanRow = {
   id: number;
@@ -125,7 +126,11 @@ async function listBills(ctx: RequestContext): Promise<Response> {
       return api;
     },
     options: () => enumOptionsFor({ billingType: "BillingTransaction.billingType" }),
-    extra: async () => ({ billingPlans: await billingPlansOf(session) }),
+    // accountCredits：系統設定「GBA帳務設定」的 Email／簡訊餘額（未設定為 null，頁面不顯示）
+    extra: async () => {
+      const [plans, acc] = await Promise.all([billingPlansOf(session), getAccountSettings(session.tenantId)]);
+      return { billingPlans: plans, accountCredits: { creditEmail: acc.creditEmail, creditSms: acc.creditSms } };
+    },
   };
   return listEntity(ctx, billingTransaction, spec);
 }

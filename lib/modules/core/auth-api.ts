@@ -16,6 +16,9 @@ import {
 import { DUMMY_HASH, hashPassword, verifyPassword } from "@/lib/core/auth/password";
 import { requireSession } from "@/lib/core/http/route-helpers";
 import { parseEditorRequest, editorResponse } from "@/lib/core/editor/protocol";
+import { getAdminSecurity } from "./system-settings";
+import { needsWtoken } from "./system-settings-logic";
+import { addIpWhitelist, ipWhitelisted, issueWtoken, verifyWtoken } from "./login-wtoken";
 
 const MAX_FAILURES = 5; // 同帳號 15 分鐘內失敗上限
 const IP_MAX_FAILURES = 30; // 同 IP 15 分鐘內失敗上限（跨帳號猜密碼）
@@ -98,7 +101,7 @@ async function openAttempt(ctx: RequestContext, account: string): Promise<{ atte
   const accFailures: AttemptRow[] = [];
   for (const r of acc as AttemptRow[]) {
     if (r.success) break; // 最近一次成功之前的失敗不算
-    if (r.reason === "LOCKED") continue; // 舊版寫入的鎖定紀錄不算失敗
+    if (r.reason === "LOCKED" || r.reason === "WTOKEN_REQUIRED") continue; // 舊版鎖定紀錄、密碼正確但待輸入認證碼 → 不算失敗
     accFailures.push(r);
   }
   let wait = lockWait(accFailures, ins.id, MAX_FAILURES);
@@ -116,7 +119,7 @@ async function openAttempt(ctx: RequestContext, account: string): Promise<{ atte
       await db.from("admin_login_attempts").delete().eq("id", ins.id);
       throw busy();
     }
-    const ipFailures = (byIp as AttemptRow[]).filter((r) => r.reason !== "LOCKED");
+    const ipFailures = (byIp as AttemptRow[]).filter((r) => r.reason !== "LOCKED" && r.reason !== "WTOKEN_REQUIRED");
     wait = lockWait(ipFailures, ins.id, IP_MAX_FAILURES);
   }
 
@@ -178,6 +181,26 @@ export async function login(ctx: RequestContext): Promise<Response> {
     return json({ code: 403, error: "此帳號已停用" }, { status: 403 });
   }
 
+  // 系統設定「管理員登入安全性設定」：需認證碼時，未帶或帶錯 wtoken → 485（登入頁顯示驗證碼欄）
+  const sec = await getAdminSecurity(user.tenant_id);
+  const ip = clientIp(ctx.req);
+  if (sec.rule !== "NONE" && needsWtoken(sec, sec.rule === "IP" ? await ipWhitelisted(user.id, ip) : false)) {
+    const wtoken = ((await ctx.param("wtoken")) ?? "").trim();
+    if (!wtoken) {
+      const r = await issueWtoken(user, sec, ip);
+      await finishAttempt(attemptId, false, "WTOKEN_REQUIRED", user);
+      return json(
+        { code: 485, error: r.issued ? WTOKEN_ISSUED_MSG : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait },
+        { status: 485 },
+      );
+    }
+    if (!(await verifyWtoken(user.id, wtoken))) {
+      await finishAttempt(attemptId, false, "BAD_WTOKEN", user);
+      return json({ code: 485, error: "認證碼錯誤或已失效" }, { status: 485 });
+    }
+    if (sec.rule === "IP") await addIpWhitelist(user.tenant_id, user.id, ip);
+  }
+
   const { cookie } = await createSession({ adminUserId: user.id, tenantId: user.tenant_id, persistent: kmsi, req: ctx.req });
   ctx.cookies.set.push(cookie);
   await db.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
@@ -216,9 +239,35 @@ export async function authRemembered(): Promise<Response> {
   return json({ code: 401, error: "請重新輸入帳號密碼登入" }, { status: 401 });
 }
 
-/** POST /ajax/AdminUser/resendWtoken（簡訊/Email 二階段驗證碼：未串接） */
-export async function resendWtoken(): Promise<Response> {
-  return json({ code: 400, error: "【未串接】二階段驗證碼發送：本系統未串接簡訊/Email 服務。" }, { status: 400 });
+const WTOKEN_ISSUED_MSG = "需要登入認證碼：已產生 6 碼認證碼並記入通知待寄紀錄（【未串接】Email／簡訊寄送，不會實際寄出）";
+
+/**
+ * POST /ajax/AdminUser/resendWtoken（username）：重送登入認證碼。
+ * 只在該帳號「剛通過密碼驗證、尚待輸入認證碼」（10 分鐘內有 WTOKEN_REQUIRED 紀錄）時才重發，避免未驗證密碼就能洗待寄紀錄。
+ * 寄送未串接：只寫入待寄紀錄。
+ */
+export async function resendWtoken(ctx: RequestContext): Promise<Response> {
+  const username = ((await ctx.param("username")) ?? "").trim();
+  const db = getServiceClient();
+  const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const { data: att } = username
+    ? await db
+        .from("admin_login_attempts")
+        .select("admin_user_id")
+        .eq("account", username.slice(0, 100))
+        .eq("reason", "WTOKEN_REQUIRED")
+        .gte("created_at", since)
+        .order("created_at", { ascending: false })
+        .limit(1)
+    : { data: null };
+  const adminUserId = Number((att ?? [])[0]?.admin_user_id ?? 0);
+  if (!adminUserId) return json({ code: 400, error: "請先輸入帳號密碼登入" }, { status: 400 });
+  const { data: user } = await db.from("admin_users").select("id, tenant_id, account, is_active").eq("id", adminUserId).maybeSingle<AdminRow>();
+  if (!user || user.is_active === false) return json({ code: 400, error: "請先輸入帳號密碼登入" }, { status: 400 });
+  const sec = await getAdminSecurity(user.tenant_id);
+  if (sec.rule === "NONE") return json({ code: 400, error: "目前不需要認證碼，請直接登入" }, { status: 400 });
+  const r = await issueWtoken(user, sec, clientIp(ctx.req));
+  return json({ code: 485, error: r.issued ? WTOKEN_ISSUED_MSG : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait }, { status: 485 });
 }
 
 /** POST /ajax/GoogleRecaptcha/verify（未串接 Google reCAPTCHA：直接通過） */

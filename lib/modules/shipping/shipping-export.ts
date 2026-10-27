@@ -9,6 +9,8 @@ import { enumOptions } from "@/lib/core/enums";
 import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import type { Row } from "@/lib/db/mapping";
 import { db, str } from "./common";
+import { getShippingSender } from "@/lib/modules/core/system-settings";
+import { hasSender, type ShippingSender } from "@/lib/modules/core/system-settings-logic";
 
 export type ExportOrder = Row & {
   order_items: Row[];
@@ -77,6 +79,8 @@ export interface Labels {
   deliverTime: Map<string, string>;
   receiptType: Map<string, string>;
   itemState: Map<string, string>;
+  /** 寄件人（系統設定 SHIPPING_INFO_SETTINGS；未設定＝空白，標準格式不加寄件人欄） */
+  sender?: ShippingSender | null;
 }
 
 export async function loadLabels(): Promise<Labels> {
@@ -109,7 +113,7 @@ export const DEFAULT_SHIPPING_TAG = {
 };
 
 /** 標準格式（推導） */
-function standardFormat(provider: string, uuidHeader: string, receiptHeader: string): string {
+function standardFormat(provider: string, uuidHeader: string, receiptHeader: string, withSender = false): string {
   const unique = provider.replace(/_(STANDARD|CUSTOM\d*|FROZEN)$/, "");
   if (unique === "SE" || unique === "FAMI") {
     return (
@@ -117,9 +121,12 @@ function standardFormat(provider: string, uuidHeader: string, receiptHeader: str
       "order.uuid,shipping.name.only,shipping.phone,cvsStoreId,cvsStoreName,order.itemsList,payOnDelivery,note,#"
     );
   }
+  // 宅配：系統設定有寄件人時，在貨運編號前加「寄件人／寄件人電話／寄件人地址」三欄（未設定＝原格式）
+  const sh = withSender ? ",寄件人,寄件人電話,寄件人地址" : "";
+  const st = withSender ? ",sender.name,sender.phone,sender.address" : "";
   return (
-    `${uuidHeader},收件人,收件人電話,郵遞區號,收件地址,商品,件數,代收金額,配送時段,備註,${receiptHeader}\n` +
-    "order.uuid,shipping.name.only,shipping.phone,shipping.postcode,shipping.address,order.itemsList,order.itemsTotal,payOnDelivery,deliver.time.shortCode,note,#"
+    `${uuidHeader},收件人,收件人電話,郵遞區號,收件地址,商品,件數,代收金額,配送時段,備註${sh},${receiptHeader}\n` +
+    `order.uuid,shipping.name.only,shipping.phone,shipping.postcode,shipping.address,order.itemsList,order.itemsTotal,payOnDelivery,deliver.time.shortCode,note${st},#`
   );
 }
 
@@ -132,12 +139,12 @@ export interface ExportFormat {
 const splitCsvLine = (s: string) => s.split(",").map((x) => x.trim());
 
 /** 貨運標籤 → 匯出格式（null＝本站預設標準格式） */
-export function resolveFormat(tag: Row | null): ExportFormat {
+export function resolveFormat(tag: Row | null, withSender = false): ExportFormat {
   const provider = str(tag?.shipping_provider);
   const custom = str(tag?.shipping_export_format);
   const uuidHeader = str(tag?.sales_order_uuid) || DEFAULT_SHIPPING_TAG.salesOrderUuid;
   const receiptHeader = str(tag?.sales_order_shipping_receipt_number) || DEFAULT_SHIPPING_TAG.salesOrderShippingReceiptNumber;
-  const text = custom || standardFormat(provider, uuidHeader, receiptHeader);
+  const text = custom || standardFormat(provider, uuidHeader, receiptHeader, withSender);
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length >= 2) {
     const headers = splitCsvLine(lines[0]);
@@ -211,6 +218,9 @@ function orderToken(token: string, o: ExportOrder, L: Labels): string | number {
     case "order.coupon.code":
       return o.sales_order_coupons.map((c) => str(c.coupon)).filter(Boolean).join(",");
     case "order.salesRules": return o.sales_order_sales_rules.map((r) => str(r.title)).filter(Boolean).join(",");
+    case "sender.name": return L.sender?.name ?? "";
+    case "sender.phone": return L.sender?.telephone ?? "";
+    case "sender.address": return L.sender?.address ?? "";
     case "cvsStoreId": return str(o.cvs_store_id);
     case "cvsStoreName": return str(o.cvs_store_name);
     case "billing.name":
@@ -379,8 +389,9 @@ export interface ExportFile {
 
 /** 貨運清單 */
 export async function shippingListFile(tenantId: number, orders: ExportOrder[], tag: Row | null, fileFormat: string, prefix = "貨運清單"): Promise<ExportFile> {
-  const [items, L] = await Promise.all([loadItemsOf(tenantId, orders), loadLabels()]);
-  const rows = buildShippingRows(orders, items, resolveFormat(tag), L);
+  const [items, L, sender] = await Promise.all([loadItemsOf(tenantId, orders), loadLabels(), getShippingSender(tenantId)]);
+  L.sender = sender;
+  const rows = buildShippingRows(orders, items, resolveFormat(tag, hasSender(sender)), L);
   const name = `${prefix}${tag ? `_${str(tag.title) || str(tag.tag)}` : ""}_${stamp()}`;
   if (str(fileFormat).toUpperCase() === "CSV") return { body: toCsv(rows), filename: `${name}.csv`, type: "text/csv;charset=UTF-8" };
   return { body: await toXlsx("貨運清單", rows), filename: `${name}.xlsx`, type: XLSX_TYPE };
@@ -418,8 +429,11 @@ export async function itemsFile(orders: ExportOrder[]): Promise<ExportFile> {
   return { body: await toXlsx("出貨商品", rows), filename: `出貨商品_${stamp()}.xlsx`, type: XLSX_TYPE };
 }
 
-export async function labelFile(orders: ExportOrder[]): Promise<ExportFile> {
-  const rows: (string | number)[][] = [["訂單編號", "收件人", "收件人電話", "郵遞區號", "收件地址", "配送方式", "商品", "備註"]];
+export async function labelFile(orders: ExportOrder[], tenantId?: number): Promise<ExportFile> {
+  // 系統設定有寄件人時，地址單加寄件人三欄（未設定＝原格式）
+  const sender = tenantId ? await getShippingSender(tenantId) : null;
+  const withSender = hasSender(sender);
+  const rows: (string | number)[][] = [["訂單編號", "收件人", "收件人電話", "郵遞區號", "收件地址", "配送方式", "商品", "備註", ...(withSender ? ["寄件人", "寄件人電話", "寄件人地址"] : [])]];
   const L = await loadLabels();
   for (const o of orders) {
     rows.push([
@@ -431,6 +445,7 @@ export async function labelFile(orders: ExportOrder[]): Promise<ExportFile> {
       L.shippingType.get(str(o.shipping_type)) ?? str(o.shipping_type),
       shippableItems(o).map((i) => itemLabel(i, "short")).join(", "),
       str(o.note),
+      ...(withSender && sender ? [sender.name, sender.telephone, sender.address] : []),
     ]);
   }
   return { body: await toXlsx("地址單", rows), filename: `地址單_${stamp()}.xlsx`, type: XLSX_TYPE };

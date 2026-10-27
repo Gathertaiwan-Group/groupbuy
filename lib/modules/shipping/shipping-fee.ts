@@ -139,6 +139,8 @@ export interface GroupBuyShippingContext {
   overseaDisabled?: boolean | null;
   /** 貨到付款不可含預購 */
   backOrderCodDisabled?: boolean | null;
+  /** 單件商品內部運費計入運費成本（系統設定 ACCOUNT_SETTINGS.itemInternalShippingPrice；未設定＝true） */
+  itemInternalShipping?: boolean | null;
 }
 
 export interface ItemSetRuleBinding {
@@ -813,7 +815,7 @@ export function calculateShippingFee(input: ShippingFeeInput): ShippingFeeResult
   for (const l of lines) {
     if (l.excludeShippingRule) continue;
     perItem += num(l.shippingPrice) * num(l.quantity);
-    internal += num(l.internalShippingPrice) * num(l.quantity);
+    if (input.groupBuy?.itemInternalShipping !== false) internal += num(l.internalShippingPrice) * num(l.quantity);
   }
   if (perItem > 0) subs.push({ flatRateShippingId: 0, title: "單件商品運費", shippingAmount: round(perItem), groupBuyItemSetIds: [] });
 

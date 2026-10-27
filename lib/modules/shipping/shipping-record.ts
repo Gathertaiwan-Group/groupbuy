@@ -327,7 +327,7 @@ export async function recordDownload(session: AdminSession, action: string, reco
   const orders = await loadExportOrders(session.tenantId, ids);
   let file: ExportFile;
   if (action === "exportItems") file = await itemsFile(orders);
-  else if (action === "exportLabel") file = await labelFile(orders);
+  else if (action === "exportLabel") file = await labelFile(orders, session.tenantId);
   else if (action === "downloadShippingCsv") {
     const rec = records[0];
     const filter = (rec.filter ?? {}) as Row;
