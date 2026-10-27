@@ -1,7 +1,7 @@
 // 排程端點：GET|POST /api/cron/run（Vercel Cron 每日呼叫；也可手動觸發）。
 // 驗證：Authorization: Bearer <CRON_SECRET>（Vercel Cron 在專案設了 CRON_SECRET 時自動帶上）或 x-cron-secret 標頭；
 //       未設定 CRON_SECRET → 503、不符 → 401。不需後台登入、不吃 CSRF（無 cookie）。
-// 參數：?jobs=schedulers,posts,autoCancel,notifications,delivery,housekeeping（預設全部）。每項工作皆冪等、可重跑：
+// 參數：?jobs=schedulers,posts,autoCancel,notifications,delivery,einvoice,housekeeping（預設全部）。每項工作皆冪等、可重跑：
 //   schedulers    跨租戶執行到期的上下架／變價排程（items/scheduler.ts runAllDueSchedulers；條件式搶占，不會重複執行）
 //   posts         排程發布（status=FUTURE）的文章發佈時間已到 → 改為已發布（PUBLISH、is_published=true）
 //   autoCancel    團購勾「自動取消逾期訂單」（autoCancelExpired）時，逾期未付款訂單 → 取消（補回庫存、歷程記 [系統]）
@@ -24,6 +24,7 @@ import type { RequestContext } from "@/lib/core/http/types";
 import { json } from "@/lib/core/http/responses";
 import { runAllDueSchedulers } from "@/lib/modules/items/scheduler";
 import { runDelivery } from "./delivery";
+import { processDueInvoices } from "@/lib/modules/accounting/invoices";
 import { cronAuthorized, isAutoCancelable, parseJobs, type CronJob } from "./cron-logic";
 import { readSystemSettingAllTenants, SYS_KEYS } from "./system-settings";
 import { isLowStock, lowStockNotificationOf, unpaidNotificationOf, unpaidRemindersDue } from "./system-settings-logic";
@@ -228,6 +229,24 @@ async function jobHousekeeping(): Promise<Row> {
   return out;
 }
 
+/** fix21：到期的預約電子發票（付款後 N 日開立）送綠界開立（accounting/invoices.ts processDueInvoices；服務商未設定的團購略過） */
+async function jobEinvoice(): Promise<Row> {
+  const { data, error } = await db()
+    .from("invoices")
+    .select("tenant_id")
+    .in("invoice_status", ["SEND_EINVOICE", "PENDING_EINVOICE"])
+    .lte("date_einvoice", new Date().toISOString())
+    .limit(500);
+  if (error) throw new Error(error.message);
+  const tenants = [...new Set(((data ?? []) as { tenant_id: number }[]).map((r) => r.tenant_id))];
+  let sent = 0;
+  for (const t of tenants) {
+    if (Date.now() > cronStartedAt + 40_000) break;
+    sent += await processDueInvoices(t, 20);
+  }
+  return { tenants: tenants.length, processed: sent };
+}
+
 let cronStartedAt = Date.now();
 const JOBS: Record<CronJob, () => Promise<Row>> = {
   schedulers: async () => runAllDueSchedulers() as unknown as Promise<Row>,
@@ -236,6 +255,7 @@ const JOBS: Record<CronJob, () => Promise<Row>> = {
   notifications: jobNotifications,
   // 排程函式上限 60 秒（cronRun 開始後 30 秒起不再開始寄新的一筆）
   delivery: () => runDelivery({ deadlineMs: cronStartedAt + 30_000 }),
+  einvoice: jobEinvoice,
   housekeeping: jobHousekeeping,
 };
 

@@ -3,7 +3,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 /** 排程工作代碼（?jobs=a,b 只跑指定工作；未指定＝全部） */
-export const CRON_JOBS = ["schedulers", "posts", "autoCancel", "notifications", "delivery", "housekeeping"] as const;
+export const CRON_JOBS = ["schedulers", "posts", "autoCancel", "notifications", "delivery", "einvoice", "housekeeping"] as const;
 export type CronJob = (typeof CRON_JOBS)[number];
 
 /**

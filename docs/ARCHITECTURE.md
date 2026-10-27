@@ -105,7 +105,7 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 只用 `groupbuy` schema；service-role client（`lib/supabase/server.ts`，`cache: no-store`）；**每個查詢以 session 的 tenant_id 過濾**（`crud.ts`、`dtQuery` 自動加）。anon/authenticated 對所有表無權限（RLS＋revoke）。
 - 原站 JSON 鍵 ↔ 欄位：datamodel 的 `EntityDef`（`lib/db/entity-types.ts` 介面合約）＋ `rowToApi/apiToRow`。
 - 列舉：`groupbuy.enum_options` → `lib/core/enums.ts`（每個執行個體快取 10 分鐘）。
-- 系統設定頁 `/backend/SystemPreference/panel`（需 `permissions.systemPreference`；推導頁，後端 `lib/modules/groupbuy/system-preference.ts`）：設定鍵目錄沿用進階設定＋原站 `dataTable.api.min.js` 的系統層專用編輯器（帳務、收/寄信〔自有信箱密碼 AES-256-GCM 加密存 `passwordEnc`、不回傳；寄送測試信見 §12〕、銀行對帳格式、主題顏色、稅籍、寄件人、通知、愛心碼…）；金流/物流/電子發票金鑰類不提供。前台 `groupBuyPreferences` 依「本團 → 綁定標籤 → 系統設定」取值。
+- 系統設定頁 `/backend/SystemPreference/panel`（需 `permissions.systemPreference`；推導頁，後端 `lib/modules/groupbuy/system-preference.ts`）：設定鍵目錄沿用進階設定＋原站 `dataTable.api.min.js` 的系統層專用編輯器（帳務、收/寄信〔自有信箱密碼 AES-256-GCM 加密存 `passwordEnc`、不回傳；寄送測試信見 §12〕、銀行對帳格式、主題顏色、稅籍、寄件人、通知、愛心碼…）；金流/物流/電子發票金鑰不存 DB，只走環境變數（見 §13）。前台 `groupBuyPreferences` 依「本團 → 綁定標籤 → 系統設定」取值。
 - 系統設定（`groupbuy.system_preferences`，tenant＋name 唯一）：示範租戶 guest_ep 的值由 migration 0103 寫入推導的預設值（系統信主旨／內容為通用文字、無庫存顯示＝OUT_OF_STOCK、電子發票／信用卡服務商＝NONE；原站樣板未擷取）。0102 已作廢（內容移除）。groupbuy 進階設定頁以同名鍵讀取。
 - 上傳：Supabase Storage 公開 bucket `groupbuy-uploads`（首次上傳時自動建立），路徑 `images/gb/<租戶>/<yyyymm>/<uuid>.<ext>`；紀錄寫 `groupbuy.uploads`；前端網址 `/upload/images/<id>` → 302 到 Storage（`gb/` 檔名含 UUID、內容不變 → 轉址可快取：瀏覽器 1 天、Vercel 邊緣一年〔每次部署清除〕；轉址目標含 Supabase 專案網址，所以瀏覽器不設長期）；非 `gb/` 開頭（原站舊資料）→ 302 回原站 CDN（快取一天）。
 - Migration：`scripts/apply-migrations.mjs`（Management API，單一交易＋帳本），CI 在 main push 且 migration 有變更時自動套用；**禁止 `supabase db push`**（共用庫）。
@@ -152,7 +152,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - 請求解析：巢狀鍵只寫自有屬性（`toString[x]` 之類不會改到內建物件）、擋 `__proto__/prototype/constructor`；DataTables `iColumns`≤500、`iSortingCols`≤50。
 - crudRoutes：save/update/delete 端點只接受各自的 Editor action（沒有專屬端點的動作才由其他端點代收；可用 `actions` 收緊）。樂觀鎖條件放進 UPDATE（並行編輯只有一個成功）；列表排序最後補唯一鍵。
 - 密碼只存 bcrypt；登入失敗鎖定；帳號不存在時仍跑一次 bcrypt（避免時間差探測）。
-- 對外服務（金流、物流、電子發票、FB、reCAPTCHA）未串接，回應帶 `【未串接】`；Email／簡訊見 §12（未設定服務商時同樣不寄出）。
+- 對外服務：金流／物流／電子發票已串綠界（見 §13，預設沙盒）；Email／簡訊見 §12（未設定服務商時同樣不寄出）；FB、reCAPTCHA 未串接，回應帶 `【未串接】`。
 
 ## 12. Email／簡訊寄送（fix20，`lib/modules/core/delivery*.ts`）
 
@@ -162,4 +162,14 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - 安全預設：沒有服務商 → 不寄、紀錄維持未串接、登入認證碼規則不可選（`deliveryStatus()` 實際判斷）。`MESSAGE_DELIVERY_MODE` 未設定＝`whitelist`：只寄 `MESSAGE_TEST_WHITELIST`（Email／手機），其他一律 `BLOCKED`（攔下記錄、之後也不補寄）；`live` 才寄給所有收件者；`off` 全關。`MESSAGE_DELIVERY_TENANTS`（租戶代碼或 id）可限定租戶。
 - 寄出前會刪掉內文中含 `【未串接】` 的提示行。Email／簡訊餘額（帳務設定 creditEmail／creditSms）不扣點。
 - 已知限制：銀行對帳「取消入帳」只會把仍為 `NOT_SENT_UNINTEGRATED` 的付款成功信標成 FAILED；已轉 `QUEUED`／已寄出的不會撤回。
+
+## 13. 金流／物流／電子發票（綠界，fix21）
+
+- **adapter**：`lib/integrations/`（純邏輯，不 import 別名，單元測試 `lib/modules/accounting/gateway.test.ts` 以官方範例向量驗簽章／AES）：`payment.ts`（AIO：信用卡、ATM 虛擬帳號、超商代碼）、`logistics.ts`（超商取貨 C2C／B2C：電子地圖、建立／取消托運單、列印、狀態通知）、`einvoice.ts`（B2C：開立、以自訂編號查詢、作廢、折讓、作廢折讓）、`config.ts`（環境變數）、`ecpay/core.ts`（CheckMacValue SHA256／MD5、AES）。換其他服務商時實作同一介面。
+- **金鑰只放環境變數**（Vercel env，repo 不放）：`GATEWAY_MODE`（≠`production` 一律連綠界 Stage＝沙盒，畫面標示「測試模式」；正式模式拒用官方公開測試特店）、`ECPAY_PAYMENT_*`、`ECPAY_LOGISTICS_*`＋`ECPAY_LOGISTICS_TYPE`（C2C／B2C）、`ECPAY_INVOICE_*`（各 `_MERCHANT_ID`／`_HASH_KEY`／`_HASH_IV`）、選填 `GATEWAY_PUBLIC_BASE_URL`（回呼網址，本機測試指向正式站）。
+- **服務商選擇**（`lib/modules/accounting/gateway.ts`）：線上付款＝團購 `ccp` → 進階設定 `CREDITCARD_PROVIDER`，NONE 用平台預設（已設金鑰的綠界），其他服務商＝未串接；電子發票＝`EINVOICE_PROVIDER` 為 ECPAY／TEST 才開立；物流＝有金鑰即啟用（全家冷凍不支援）。
+- **金流**：前台訂單頁「前往付款」（`/p/:shortUrl/SalesOrder/payOnline`，剛下單自動前往）→ 建 PENDING 交易（每次新的 MerchantTradeNo）→ 綠界。回呼 `/gateway/ecpay/payment/{notify,info,result}`：驗 CheckMacValue＋特店、成功時 QueryTradeInfo 回查（不符回 `0|` 讓綠界重送）、入帳走 DB 函式 `gateway_apply_payment`（3503/3504：交易→訂單取鎖、冪等、金額檢查、遲到通知遇已取消／退款／已付清只記歷程不改訂單）。正式模式拒收模擬付款。入帳狀態＝`PAID_EMAIL_SENT`（同後台「設為已付款」；付款成功信不在本流程寄）。
+- **物流**：結帳頁電子地圖 `cvsMap`（`storefront/cvs-map.ts`）→ 綠界 → `/gateway/ecpay/cvsmap/:tenant/:shortUrl`（以 HMAC(SESSION_SECRET) 綁購物袋，跨站 POST 不靠 cookie）；後台取號／取消取號／列印（`shipping/ecpay-logistics.ts`；`sales_order_cvs_traces` 同訂單只能一張 active 托運單，4003），狀態通知 `/gateway/ecpay/logistics/notify`。寄件人取系統設定「寄件人設定」。
+- **電子發票**（`accounting/invoices.ts`）：付款入帳後依 `EINVOICE_TO_SEND_STATE`（預設付款後）／`EINVOICE_DAYS_TO_SEND` 開立（>0 天由 cron `einvoice` 工作到期開立）；開立先以條件式更新取得處理權，RelateNumber＝訂單編號＋發票 id（綠界擋重複，重複時查回）；作廢先作廢折讓單；後台取消訂單時自動作廢。
+- **沙盒保護**：沙盒不把真實 Email／手機送給綠界（發票通知改 `sandbox@example.com`、物流不送收件人 Email）。
 
