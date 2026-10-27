@@ -177,7 +177,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - **電子發票**（`accounting/invoices.ts`）：付款入帳後依 `EINVOICE_TO_SEND_STATE`（預設付款後）／`EINVOICE_DAYS_TO_SEND` 開立（>0 天由 cron `einvoice` 工作到期開立）；開立先以條件式更新取得處理權，RelateNumber＝訂單編號＋發票 id（綠界擋重複，重複時查回）；作廢先作廢折讓單；後台取消訂單時自動作廢。
 - **沙盒保護**：沙盒不把真實 Email／手機送給綠界（發票通知改 `sandbox@example.com`、物流不送收件人 Email）。
 - **fix21 續**：
-  - 付款方式：信用卡、ATM、超商代碼之外，綠界 AIO 另接定期定額（`Credit`＋`Period*`，團購設定 `periodType／periodFrequency／periodExecTimes`，預設每月 12 期；第二期起由 `/gateway/ecpay/payment/period` 記 `PERIOD` 交易＋歷程，不另建訂單）、銀聯卡（`UnionPay=1`，無 OrderResultURL）、台灣 Pay（`TWQR`，需綠界開通）。LINE Pay 走 `lib/integrations/linepay.ts`（v3 Request/Confirm/Refund，env `LINEPAY_CHANNEL_ID／LINEPAY_CHANNEL_SECRET`，`/gateway/linepay/confirm`）。悠遊付無公開 API，未串接。
+  - 付款方式：信用卡、ATM、超商代碼之外，綠界 AIO 另接定期定額（`Credit`＋`Period*`，團購設定 `periodType／periodFrequency／periodExecTimes`，預設每月 12 期；第二期起由 `/gateway/ecpay/payment/period` 記 `CAPTURE` 交易（商店訂單編號＋P次數）＋歷程，不另建訂單）、銀聯卡（`UnionPay=1`，無 OrderResultURL）、台灣 Pay（`TWQR`，需綠界開通）。LINE Pay 走 `lib/integrations/linepay.ts`（v3 Request/Confirm/Refund，env `LINEPAY_CHANNEL_ID／LINEPAY_CHANNEL_SECRET`，`/gateway/linepay/confirm`）。悠遊付無公開 API，未串接。
   - 入帳成功（綠界、LINE Pay、超商取貨付款）→ `afterPaid`：以 fix20 的 `core/delivery.ts queuePaymentEmail` 排入付款成功通知信（同一訂單只寄一封），再依設定開立發票。
   - 退款：後台取消訂單勾「同時退刷」→ `refundOrderPayment`（綠界 `CreditDetail/DoAction` 依序 N → E＋N → R；LINE Pay Refund）；退款交易 `原商店訂單編號＋R`（唯一索引，冪等、失敗可重試），成功後扣回已付金額。
   - 宅配：綠界 `HOME`（黑貓 TCAT 常溫／冷藏／冷凍、中華郵政 POST 常溫；宅配通已由綠界終止）；「綠界取得托運單號」依配送方式自動選超商或宅配，溫層取訂單貨運標籤（含「冷凍」「冷藏」）；寄件地址取「寄件人設定」address（開頭郵遞區號）。全家冷凍綠界不支援（B2C 只有 7-11 冷凍 UNIMARTFREEZE）。

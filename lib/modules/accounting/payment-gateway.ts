@@ -247,7 +247,7 @@ async function periodNotify(ctx: RequestContext): Promise<Response> {
     sales_order_id: first.sales_order_id,
     provider: provider.code,
     payment_method: first.payment_method,
-    category: "PERIOD",
+    category: "CAPTURE", // 定期定額第二期起（category 有 check 限制；CAPTURE＝後續授權請款）
     merchant_trade_no: mtn,
     amount: Number.isFinite(n.amount) ? n.amount : 0,
     status: n.success ? "SUCCESS" : "FAILED",
