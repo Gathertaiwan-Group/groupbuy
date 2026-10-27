@@ -9,6 +9,7 @@ import { cartItems, findCart, ensureCart, deleteCartLine, updateCartLine, saveCh
 import { loadGroupBuyShippingRules, loadShippingPreload, priceCart, shippingAvailability, type FlatRateShippingRow, type PricingLine, type PricingResult } from "./pricing";
 import { isIslandPostcode } from "@/lib/modules/shipping/shipping-fee";
 import { groupBuyState } from "./form-page";
+import { cvsMapAvailable } from "./cvs-map";
 
 import { PM_CODES } from "./payment-codes";
 import { PM_LABEL_EN, uiLang, type UiLang } from "./i18n";
@@ -356,6 +357,7 @@ export async function buildCartData(
     tax: pricing.tax,
     subscriptionSetting: null,
   };
+  const mapOn = cvsMapAvailable(sel?.cvsType ? String(sel.cvsType) : null);
   const data: Record<string, unknown> = {
     uuid: cc.gb.uuid,
     currencySymbol: sym,
@@ -380,9 +382,9 @@ export async function buildCartData(
     defaultCountry: String(gbSetting(cc.gb, "country", "TW")) || "TW",
     hideShippingAddress: ["CVS", "PICKUP", "NOD"].includes(shippingType),
     cvsMapInfo: cvsInfo ? { cvsType: cvsInfo.cvsType, storeId: cvsInfo.storeId, storeName: cvsInfo.storeName, storeAddress: cvsInfo.storeAddress } : null,
-    // 超商電子地圖（綠界）未串接 → 不提供「電子地圖」選項；門市查詢見 cvs.ts
-    cvsMapEnabed: false,
-    cvsAvailableMethods: ["all", "store-name"],
+    // 超商電子地圖（綠界物流）：已設定物流金鑰且超商類型支援時只提供「電子地圖」；否則沿用門市查詢（cart-api cvsLookup）
+    cvsMapEnabed: mapOn,
+    cvsAvailableMethods: mapOn ? ["map"] : ["all", "store-name"],
     defaultCvsType: sel?.cvsType ?? "",
     amountToFreeShipping: pricing.shipping.amountToFreeShipping,
     creditCardSalesRule: null,

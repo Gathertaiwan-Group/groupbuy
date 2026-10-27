@@ -31,6 +31,9 @@ import { actionOk, json } from "@/lib/core/http/responses";
 import { crudRoutes, listEntity, type ListSpec, type WriteSpec } from "@/lib/core/entity/crud";
 import { enumLabel, enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { fetchAll, money, optionalGroupBuyId, parseIdList } from "./common";
+import { groupBuyPreferences } from "@/lib/modules/storefront/site";
+import { einvoiceProviderFor, envSuffix } from "./gateway";
+import { normalizeInvoiceItems, type EinvoiceProvider } from "@/lib/integrations/einvoice";
 
 const STATUS_ENUM = "Invoice.invoiceStatus";
 const SELECT = "*, sales_orders(uuid, group_buy_id)";
@@ -52,7 +55,7 @@ export interface InvoiceItem {
   unitPrice: number;
   total: number;
   totalPrice: number;
-  allowances?: { total: number; unitPrice: number; totalPrice: number; date: string; reason: string }[];
+  allowances?: { total: number; unitPrice: number; totalPrice: number; date: string; reason: string; allowanceNumber?: string | null; invalidated?: boolean }[];
 }
 
 type InvRow = Row & {
@@ -102,6 +105,12 @@ function invoiceApi(r: InvRow): Row {
 
 async function listInvoices(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
+  // 到期的預約發票（付款後 N 日開立）在打開列表時補開立（另由付款通知觸發）
+  try {
+    await processDueInvoices(session.tenantId, 5);
+  } catch (e) {
+    console.error("[accounting] 預約發票開立失敗", (e as Error).message);
+  }
   const groupBuyId = await optionalGroupBuyId(ctx, session);
   const spec: ListSpec = {
     select: SELECT,
@@ -163,12 +172,23 @@ const invoiceWrite: WriteSpec = {
 
 /* ───────────────────────── 訂單 → 發票資料 ───────────────────────── */
 
+type TenantScope = { tenantId: number; adminUserId?: number | null };
+
 type OrderForInvoice = {
   id: number;
   uuid: string;
   tenant_id: number;
   group_buy_id: number | null;
   state: string;
+  status: string;
+  total_paid: string | number;
+  customer_firstname: string | null;
+  customer_email: string | null;
+  customer_telephone: string | null;
+  billing_city: string | null;
+  billing_district: string | null;
+  billing_street: string | null;
+  cvs_address: string | null;
   grand_total: string | number;
   shipping_amount: string | number;
   discount_amount: string | number;
@@ -185,9 +205,9 @@ type OrderForInvoice = {
 };
 
 const ORDER_COLS =
-  "id, uuid, tenant_id, group_buy_id, state, grand_total, shipping_amount, discount_amount, extra_fee, cod_fee, billing_receipt_type, billing_receipt_title, billing_receipt_vat_id, billing_receipt_paper, billing_receipt_donate, billing_receipt_donation_code, billing_receipt_carrier_type, billing_receipt_carrier_num";
+  "id, uuid, tenant_id, group_buy_id, state, status, total_paid, customer_firstname, customer_email, customer_telephone, billing_city, billing_district, billing_street, cvs_address, grand_total, shipping_amount, discount_amount, extra_fee, cod_fee, billing_receipt_type, billing_receipt_title, billing_receipt_vat_id, billing_receipt_paper, billing_receipt_donate, billing_receipt_donation_code, billing_receipt_carrier_type, billing_receipt_carrier_num";
 
-async function findOrder(session: AdminSession, salesOrderId: unknown, uuid?: unknown): Promise<OrderForInvoice> {
+async function findOrder(session: TenantScope, salesOrderId: unknown, uuid?: unknown): Promise<OrderForInvoice> {
   const db = getServiceClient();
   let q = db.from("sales_orders").select(ORDER_COLS).eq("tenant_id", session.tenantId);
   const id = Number(salesOrderId);
@@ -200,7 +220,7 @@ async function findOrder(session: AdminSession, salesOrderId: unknown, uuid?: un
   return data;
 }
 
-async function orderInvoiceItems(session: AdminSession, o: OrderForInvoice): Promise<InvoiceItem[]> {
+async function orderInvoiceItems(session: TenantScope, o: OrderForInvoice): Promise<InvoiceItem[]> {
   const db = getServiceClient();
   const { data, error } = await db
     .from("order_items")
@@ -239,19 +259,13 @@ async function orderInvoiceItems(session: AdminSession, o: OrderForInvoice): Pro
   return items;
 }
 
-async function providerOf(session: AdminSession, groupBuyId: number | null): Promise<string> {
+/** 電子發票服務商：進階設定 EINVOICE_PROVIDER（本團 → 綁定標籤 → 系統設定） */
+async function providerOf(session: TenantScope, groupBuyId: number | null): Promise<string> {
   if (!groupBuyId) return "NONE";
-  const { data } = await getServiceClient()
-    .from("group_buy_preferences")
-    .select("pref_value")
-    .eq("tenant_id", session.tenantId)
-    .eq("group_buy_id", groupBuyId)
-    .eq("name", "EINVOICE_PROVIDER")
-    .maybeSingle<{ pref_value: string | null }>();
-  return data?.pref_value || "NONE";
+  return (await groupBuyPreferences(session.tenantId, groupBuyId)).EINVOICE_PROVIDER?.value || "NONE";
 }
 
-async function buildInvoiceRow(session: AdminSession, o: OrderForInvoice): Promise<Row> {
+async function buildInvoiceRow(session: TenantScope, o: OrderForInvoice): Promise<Row> {
   const amount = Number(o.grand_total) || 0;
   const sales = Math.round(amount / 1.05);
   const b2b = Number(o.billing_receipt_type) === 2;
@@ -282,6 +296,224 @@ async function buildInvoiceRow(session: AdminSession, o: OrderForInvoice): Promi
     date_einvoice: new Date().toISOString(),
     error_message: null,
   };
+}
+
+/* ───────────────────────── 送電子發票平台（綠界） ───────────────────────── */
+
+export interface SendResult {
+  ok: boolean;
+  skipped?: boolean;
+  message: string;
+  invoiceNumber?: string | null;
+}
+
+/** 綠界自訂發票編號：訂單編號＋發票 id（英數，同一張發票重送時相同 → 綠界擋重複開立） */
+export function relateNumberOf(inv: { id: number; merchant_order_id: string | null }): string {
+  const base = String(inv.merchant_order_id ?? "").split("#")[0].replace(/[^A-Za-z0-9]/g, "");
+  return `${base}I${inv.id}`.slice(-50);
+}
+
+/** 綠界回傳時間（yyyy-MM-dd HH:mm:ss，台灣時間）→ ISO */
+function ecpayTime(s: string | null | undefined): string {
+  const m = /^(\d{4})[-/](\d{2})[-/](\d{2})(?: (\d{2}):(\d{2}):(\d{2}))?/.exec(String(s ?? ""));
+  if (!m) return new Date().toISOString();
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +(m[4] ?? 0) - 8, +(m[5] ?? 0), +(m[6] ?? 0))).toISOString();
+}
+
+/** 發票開立日（台灣日期 yyyy-MM-dd；作廢／折讓 API 用） */
+function invoiceDateOf(inv: { date_einvoice: string | null }): string {
+  const d = inv.date_einvoice ? new Date(inv.date_einvoice) : new Date();
+  return new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 10);
+}
+
+async function syncOrderInvoice(scope: TenantScope, orderId: number | null, invoiceNumber: string | null, dateIso: string | null, note: string): Promise<void> {
+  if (!orderId) return;
+  const { error } = await getServiceClient().rpc("orders_admin_update", {
+    p_tenant_id: scope.tenantId,
+    p_ids: [orderId],
+    p_patch: { invoice_number: invoiceNumber, date_einvoice: dateIso },
+    p_admin_user_id: scope.adminUserId ?? null,
+    p_note: note,
+    p_actor: scope.adminUserId ? "ADMIN" : "SYSTEM",
+  });
+  if (error) console.error("[accounting] 回寫訂單發票號碼失敗", orderId, error.message);
+}
+
+function toProviderItems(items: InvoiceItem[], amount: number) {
+  return normalizeInvoiceItems(
+    items.map((it) => ({ name: it.name, count: it.total, unitPrice: it.unitPrice, amount: it.totalPrice })),
+    amount,
+  );
+}
+
+/**
+ * 開立一張發票到平台：只處理「預約中／發送失敗」（或卡在「等待發票號碼中」超過 10 分鐘的），
+ * 先以條件式更新取得處理權（並行只有一個成功），平台回「編號重複」時以自訂編號查回已開立的發票。
+ */
+export async function sendInvoice(scope: TenantScope, invoiceId: number, provider?: EinvoiceProvider | null): Promise<SendResult> {
+  const db = getServiceClient();
+  const { data: cur } = await db.from("invoices").select(SELECT).eq("tenant_id", scope.tenantId).eq("id", invoiceId).maybeSingle<InvRow & { updated_at: string }>();
+  if (!cur) return { ok: false, message: "找不到發票" };
+  const p = provider === undefined ? await einvoiceProviderFor(scope.tenantId, cur.group_buy_id) : provider;
+  if (!p) return { ok: false, skipped: true, message: "電子發票服務商未設定（進階設定「電子發票服務提供商」需為綠界）【未串接】" };
+  const stale = new Date(Date.now() - 10 * 60_000).toISOString();
+  let claim = db
+    .from("invoices")
+    .update({ invoice_status: "PENDING_EINVOICE", provider: p.code, error_message: null })
+    .eq("tenant_id", scope.tenantId)
+    .eq("id", invoiceId);
+  claim = cur.invoice_status === "PENDING_EINVOICE" ? claim.eq("invoice_status", "PENDING_EINVOICE").lt("updated_at", stale) : claim.in("invoice_status", ["SEND_EINVOICE", "EINVOICE_FAILED"]);
+  const { data: claimed, error: cerr } = await claim.select("id");
+  if (cerr) throw new Error(`[accounting] ${cerr.message}`);
+  if (!claimed?.length) return { ok: false, skipped: true, message: "發票正在開立或狀態已變更" };
+
+  const relate = relateNumberOf(cur);
+  let order: OrderForInvoice | null = null;
+  if (cur.sales_order_id) order = await findOrder(scope, cur.sales_order_id).catch(() => null);
+  const amount = Number(cur.amount);
+  const items = Array.isArray(cur.items) && cur.items.length ? cur.items : order ? await orderInvoiceItems(scope, order) : [];
+  const address = order ? [order.billing_city, order.billing_district, order.billing_street].filter(Boolean).join("") || order.cvs_address || "" : "";
+  let res = await p.issue({
+    relateNumber: relate,
+    amount,
+    items: toProviderItems(items, amount),
+    buyerVatId: cur.buyer_vat_id,
+    buyerTitle: cur.buyer_title,
+    buyerName: order?.customer_firstname ?? null,
+    email: order?.customer_email ?? null,
+    phone: order?.customer_telephone ?? null,
+    address,
+    carrierType: cur.carrier_type,
+    carrierNum: cur.carrier_num,
+    loveCode: cur.donation_code,
+    print: !!cur.buyer_vat_id,
+  });
+  if (!res.ok && (res.duplicate || /逾時|timeout|連線/i.test(res.message))) {
+    const q = await p.queryByRelateNumber(relate);
+    if (q.ok) res = q;
+  }
+  if (!res.ok || !res.invoiceNumber) {
+    await db
+      .from("invoices")
+      .update({ invoice_status: "EINVOICE_FAILED", error_message: `${res.message || "開立失敗"}${envSuffix()}`.slice(0, 500) })
+      .eq("tenant_id", scope.tenantId)
+      .eq("id", invoiceId);
+    return { ok: false, message: res.message || "開立失敗" };
+  }
+  const dateIso = ecpayTime(res.invoiceDate);
+  await db
+    .from("invoices")
+    .update({ invoice_status: "EINVOICE_SENT", invoice_number: res.invoiceNumber, random_number: res.randomNumber, date_einvoice: dateIso, error_message: null, items })
+    .eq("tenant_id", scope.tenantId)
+    .eq("id", invoiceId);
+  await syncOrderInvoice(scope, cur.sales_order_id, res.invoiceNumber, dateIso, `[電子發票] 開立 ${res.invoiceNumber}${envSuffix()}`);
+  return { ok: true, message: `已開立 ${res.invoiceNumber}${envSuffix()}`, invoiceNumber: res.invoiceNumber };
+}
+
+/** 作廢平台上的發票（有折讓單時先作廢折讓單）；成功 → 發票已作廢 */
+async function voidAtProvider(scope: TenantScope, inv: InvRow, reason: string, p: EinvoiceProvider): Promise<SendResult> {
+  const db = getServiceClient();
+  if (!inv.invoice_number) return { ok: false, message: "沒有發票號碼" };
+  const items = (inv.items ?? []).map((it) => ({ ...it, allowances: [...(it.allowances ?? [])] }));
+  for (const it of items) {
+    for (const a of it.allowances ?? []) {
+      if (!a.allowanceNumber || a.invalidated) continue;
+      const r = await p.allowanceInvalid({ invoiceNumber: inv.invoice_number, allowanceNumber: a.allowanceNumber, reason });
+      if (!r.ok && !/已作廢/.test(r.message)) {
+        await db.from("invoices").update({ items, error_message: `作廢折讓單失敗：${r.message}`.slice(0, 500) }).eq("tenant_id", scope.tenantId).eq("id", inv.id);
+        return { ok: false, message: `作廢折讓單 ${a.allowanceNumber} 失敗：${r.message}` };
+      }
+      a.invalidated = true;
+    }
+  }
+  const r = await p.invalid({ invoiceNumber: inv.invoice_number, invoiceDate: invoiceDateOf(inv), reason });
+  if (!r.ok && !/已作廢/.test(r.message)) {
+    await db.from("invoices").update({ items, error_message: `作廢失敗：${r.message}`.slice(0, 500) }).eq("tenant_id", scope.tenantId).eq("id", inv.id);
+    return { ok: false, message: r.message || "作廢失敗" };
+  }
+  const now = new Date().toISOString();
+  await db
+    .from("invoices")
+    .update({ items, invoice_status: "EINVOICE_INVALIDATED", invalid_reason: reason, date_invalidated: now, error_message: null })
+    .eq("tenant_id", scope.tenantId)
+    .eq("id", inv.id);
+  await syncOrderInvoice(scope, inv.sales_order_id, null, null, `[電子發票] 作廢 ${inv.invoice_number}（${reason}）${envSuffix()}`);
+  return { ok: true, message: `已作廢 ${inv.invoice_number}${envSuffix()}` };
+}
+
+/**
+ * 付款成功後依設定開立：發票未關閉、服務商為綠界、發送階段＝付款後（未設定視同付款後）、
+ * 三聯式且勾「三聯式不自動開立」者略過；EINVOICE_DAYS_TO_SEND＞0 時只建立預約（到期由 processDueInvoices 開立）。
+ */
+export async function autoIssueInvoiceOnPaid(tenantId: number, orderId: number): Promise<SendResult> {
+  const scope: TenantScope = { tenantId };
+  const o = await findOrder(scope, orderId);
+  if (!o.group_buy_id) return { ok: false, skipped: true, message: "無團購" };
+  const db = getServiceClient();
+  const { data: gb } = await db.from("group_buys").select("invoice_disabled, group_buy_settings").eq("tenant_id", tenantId).eq("id", o.group_buy_id).maybeSingle<{ invoice_disabled: boolean; group_buy_settings: Record<string, unknown> | null }>();
+  if (!gb || gb.invoice_disabled) return { ok: false, skipped: true, message: "團購已關閉發票" };
+  const p = await einvoiceProviderFor(tenantId, o.group_buy_id);
+  if (!p) return { ok: false, skipped: true, message: "未設定電子發票服務商" };
+  const prefs = await groupBuyPreferences(tenantId, o.group_buy_id);
+  const stage = String(prefs.EINVOICE_TO_SEND_STATE?.value ?? "PAID").toUpperCase() || "PAID";
+  if (stage !== "PAID") return { ok: false, skipped: true, message: "發送階段為出貨後" };
+  if (Number(o.billing_receipt_type) === 2 && (gb.group_buy_settings ?? {}).einvoice3CopiesDisabled === true) return { ok: false, skipped: true, message: "三聯式不自動開立" };
+  const { data: existing } = await db.from("invoices").select("id, invoice_status").eq("tenant_id", tenantId).eq("sales_order_id", o.id);
+  if (((existing ?? []) as { invoice_status: string }[]).some((r) => ACTIVE.includes(r.invoice_status))) return { ok: false, skipped: true, message: "已有發票" };
+  const days = Math.max(0, Math.min(60, Number(prefs.EINVOICE_DAYS_TO_SEND?.value ?? 0) || 0));
+  const row = await buildInvoiceRow(scope, o);
+  row.provider = p.code;
+  if (days > 0) row.date_einvoice = new Date(Date.now() + days * 86400_000).toISOString();
+  const { data: ins, error } = await db.from("invoices").insert(row).select("id").single<{ id: number }>();
+  if (error) throw new Error(`[accounting] ${error.message}`);
+  if (days > 0) return { ok: true, skipped: true, message: `已預約 ${days} 日後開立` };
+  return sendInvoice(scope, ins.id, p);
+}
+
+/** 到期的預約發票（預約中且開立時間已到；或卡在等待發票號碼中）→ 開立。回傳處理筆數 */
+export async function processDueInvoices(tenantId: number, limit = 20): Promise<number> {
+  const db = getServiceClient();
+  const now = new Date().toISOString();
+  const { data } = await db
+    .from("invoices")
+    .select("id, group_buy_id")
+    .eq("tenant_id", tenantId)
+    .in("invoice_status", ["SEND_EINVOICE", "PENDING_EINVOICE"])
+    .lte("date_einvoice", now)
+    .order("id")
+    .limit(limit);
+  let n = 0;
+  for (const r of (data ?? []) as { id: number; group_buy_id: number | null }[]) {
+    const p = await einvoiceProviderFor(tenantId, r.group_buy_id);
+    if (!p) continue;
+    const res = await sendInvoice({ tenantId }, r.id, p);
+    if (!res.skipped) n++;
+  }
+  return n;
+}
+
+/** 訂單取消時作廢該訂單的發票（已開立 → 平台作廢；預約中 → 取消預約） */
+export async function voidInvoicesForOrders(scope: TenantScope, orderIds: number[], reason: string): Promise<string[]> {
+  if (!orderIds.length) return [];
+  const db = getServiceClient();
+  const { data } = await db.from("invoices").select(SELECT).eq("tenant_id", scope.tenantId).in("sales_order_id", orderIds).in("invoice_status", [...VOIDABLE, ...SCHEDULED]);
+  const msgs: string[] = [];
+  for (const inv of (data ?? []) as InvRow[]) {
+    if (SCHEDULED.includes(inv.invoice_status)) {
+      await db.from("invoices").update({ invoice_status: "SEND_CANCELED", invalid_reason: reason }).eq("tenant_id", scope.tenantId).eq("id", inv.id).in("invoice_status", SCHEDULED);
+      msgs.push(`發票預約已取消`);
+      continue;
+    }
+    const p = await einvoiceProviderFor(scope.tenantId, inv.group_buy_id);
+    if (!p) {
+      await db.from("invoices").update({ invoice_status: "INVALIDATE_EINVOICE", invalid_reason: reason }).eq("tenant_id", scope.tenantId).eq("id", inv.id);
+      msgs.push(`發票 ${inv.invoice_number ?? ""} 已標示作廢（服務商未串接）`);
+      continue;
+    }
+    const r = await voidAtProvider(scope, inv, reason, p);
+    msgs.push(r.ok ? r.message : `發票 ${inv.invoice_number ?? ""} 作廢失敗：${r.message}`);
+  }
+  return msgs;
 }
 
 /* ───────────────────────── 動作 ───────────────────────── */
@@ -315,9 +547,15 @@ async function statusSend(ctx: RequestContext): Promise<Response> {
     if (error) throw new Error(`[accounting] ${error.message}`);
   }
   const msg = [`已重新排程 ${ok.length} 筆` + (skip.length ? `，略過 ${skip.length} 筆（僅能重新排程開立失敗的發票）` : "")];
-  if (ok.length) msg.push(notIntegrated("電子發票開立").message);
   if (!ok.length) throw badRequest(msg[0]);
-  return actionOk(msg.join("<br>"), { notIntegrated: true });
+  let unintegrated = false;
+  for (const r of ok) {
+    const res = await sendInvoice(session, r.id);
+    if (res.skipped) unintegrated = true;
+    else msg.push(`${r.merchant_order_id ?? r.id}：${res.ok ? res.message : `開立失敗：${res.message}`}`);
+  }
+  if (unintegrated) msg.push(notIntegrated("電子發票開立").message);
+  return actionOk(msg.join("<br>"), { notIntegrated: unintegrated });
 }
 
 /** 取消預約：「預約中／等待發票號碼中」→「已取消發送電子發票」 */
@@ -371,6 +609,7 @@ async function issueInvoice(ctx: RequestContext): Promise<Response> {
   for (const u of uuids) orders.push(await findOrder(session, null, u));
 
   const lines: string[] = [];
+  let unintegrated = false;
   const data: { salesOrderId: number; uuid: string; result: string; invoiceId?: number }[] = [];
   for (const o of orders) {
     if (["DRAFT", "CANCELED", "COMBINED"].includes(o.state)) {
@@ -406,12 +645,20 @@ async function issueInvoice(ctx: RequestContext): Promise<Response> {
       if (error) throw new Error(`[accounting] ${error.message}`);
       invoiceId = ins.id;
     }
-    lines.push(`${o.uuid}:【未串接】電子發票平台未串接，已建立預約開立紀錄（未實際開立、尚無發票號碼）`);
+    const p = await einvoiceProviderFor(session.tenantId, o.group_buy_id);
+    if (p) {
+      const res = await sendInvoice(session, invoiceId, p);
+      lines.push(`${o.uuid}:${res.ok ? res.message : `開立失敗：${res.message}`}`);
+      data.push({ salesOrderId: o.id, uuid: o.uuid, result: res.ok ? "SENT" : "FAILED", invoiceId });
+      continue;
+    }
+    unintegrated = true;
+    lines.push(`${o.uuid}:【未串接】電子發票服務商未設定為綠界，已建立預約開立紀錄（未實際開立、尚無發票號碼）`);
     data.push({ salesOrderId: o.id, uuid: o.uuid, result: "SCHEDULED", invoiceId });
   }
-  notIntegrated("電子發票開立");
+  if (unintegrated) notIntegrated("電子發票開立");
   const message = lines.join("<br>") + "<br>";
-  return actionOk(message, { data, notIntegrated: true });
+  return actionOk(message, { data, notIntegrated: unintegrated });
 }
 
 /** 作廢：uuid（逗號串）或 invoiceId；reason 必填；recordOnly＝只在系統記錄已作廢 */
@@ -446,14 +693,26 @@ async function issueInvalid(ctx: RequestContext): Promise<Response> {
   const results: { uuid: string | null; invoiceId: number | null; result: string }[] = [];
   const done = new Set<string>();
   const now = new Date().toISOString();
+  let unintegrated = false;
   for (const inv of targets) {
     const uuid = inv.sales_orders?.uuid ?? (inv.merchant_order_id ?? "").split("#")[0];
+    // 已在平台開立（或先前標示待作廢）且服務商為綠界：直接送平台作廢
+    if (!recordOnly && [...VOIDABLE, "INVALIDATE_EINVOICE"].includes(inv.invoice_status) && inv.invoice_number) {
+      const p = await einvoiceProviderFor(session.tenantId, inv.group_buy_id);
+      if (p) {
+        const r = await voidAtProvider(session, inv, reason, p);
+        results.push({ uuid, invoiceId: inv.id, result: r.ok ? "OK" : `作廢失敗：${r.message}` });
+        if (r.ok) done.add(uuid);
+        continue;
+      }
+    }
     let patch: Row | null = null;
     if (SCHEDULED.includes(inv.invoice_status)) patch = { invoice_status: "SEND_CANCELED", invalid_reason: reason };
     else if (VOIDABLE.includes(inv.invoice_status)) {
       patch = recordOnly
         ? { invoice_status: "EINVOICE_INVALIDATED", invalid_reason: reason, date_invalidated: now }
         : { invoice_status: "INVALIDATE_EINVOICE", invalid_reason: reason };
+      if (!recordOnly) unintegrated = true;
     }
     if (!patch) {
       results.push({ uuid, invoiceId: inv.id, result: `發票狀態為${await enumLabel(STATUS_ENUM, inv.invoice_status)}，無法作廢` });
@@ -468,9 +727,10 @@ async function issueInvalid(ctx: RequestContext): Promise<Response> {
   const okN = results.filter((r) => r.result === "OK").length;
   const lines = [`作廢 ${okN} 筆` + (results.length - okN ? `，未處理 ${results.length - okN} 筆` : "")];
   for (const r of results.filter((x) => x.result !== "OK")) lines.push(`${r.uuid ?? ""}：${r.result}`);
-  if (okN && !recordOnly) lines.push(notIntegrated("電子發票作廢").message + "（已標示為「作廢發票」，待串接後送出）");
+  if (okN && unintegrated) lines.push(notIntegrated("電子發票作廢").message + "（已標示為「作廢發票」，待串接後送出）");
+  else if (okN && !recordOnly) lines.push(`已送電子發票平台作廢${envSuffix()}`);
   if (!okN) throw badRequest(lines.join("<br>"));
-  return actionOk(lines.join("<br>"), { data: results, notIntegrated: !recordOnly });
+  return actionOk(lines.join("<br>"), { data: results, notIntegrated: unintegrated });
 }
 
 /** 發票品項（含已折讓）；舊資料沒有品項時由訂單商品推導 */
@@ -538,7 +798,29 @@ async function issueAllowance(ctx: RequestContext): Promise<Response> {
   const prev = Number(inv.allowance_amount ?? 0);
   if (prev + sum > Number(inv.amount) + 0.001) throw badRequest("折讓總額不可超過發票金額");
   const now = new Date().toISOString();
-  for (const l of lines) l.it.allowances!.push({ total: l.total, unitPrice: l.unitPrice, totalPrice: l.totalPrice, date: now, reason });
+  const p = recordOnly ? null : await einvoiceProviderFor(session.tenantId, inv.group_buy_id);
+  let allowanceNumber: string | null = null;
+  if (p) {
+    if (!inv.invoice_number) throw badRequest("發票尚未開立（沒有發票號碼），無法折讓");
+    const { data: od } = inv.sales_order_id
+      ? await getServiceClient().from("sales_orders").select("customer_firstname, customer_email").eq("tenant_id", session.tenantId).eq("id", inv.sales_order_id).maybeSingle<{ customer_firstname: string | null; customer_email: string | null }>()
+      : { data: null };
+    const r = await p.allowance({
+      invoiceNumber: inv.invoice_number,
+      invoiceDate: invoiceDateOf(inv),
+      amount: sum,
+      items: lines.map((l) => ({ name: l.it.name, count: l.total, unitPrice: l.unitPrice, amount: l.totalPrice })),
+      reason,
+      customerName: od?.customer_firstname ?? null,
+      email: od?.customer_email ?? null,
+    });
+    if (!r.ok) {
+      await getServiceClient().from("invoices").update({ error_message: `折讓失敗：${r.message}`.slice(0, 500) }).eq("tenant_id", session.tenantId).eq("id", inv.id);
+      throw badRequest(`折讓失敗：${r.message}`);
+    }
+    allowanceNumber = r.allowanceNumber;
+  }
+  for (const l of lines) l.it.allowances!.push({ total: l.total, unitPrice: l.unitPrice, totalPrice: l.totalPrice, date: now, reason, allowanceNumber });
   const { error } = await getServiceClient()
     .from("invoices")
     .update({
@@ -546,15 +828,18 @@ async function issueAllowance(ctx: RequestContext): Promise<Response> {
       allowance_amount: prev + sum,
       allowance_reason: reason,
       date_allowance: now,
-      invoice_status: recordOnly ? "ALLOWANCE_SENT" : "SEND_ALLOWANCE",
+      invoice_status: recordOnly || allowanceNumber ? "ALLOWANCE_SENT" : "SEND_ALLOWANCE",
+      ...(allowanceNumber ? { allowance_number: allowanceNumber, error_message: null } : {}),
     })
     .eq("tenant_id", session.tenantId)
     .eq("id", inv.id);
   if (error) throw new Error(`[accounting] ${error.message}`);
   const msg = recordOnly
     ? `折讓已記錄（NT$${money(sum)}，只記錄）`
-    : `已建立折讓紀錄 NT$${money(sum)}（狀態：開立折讓）<br>${notIntegrated("電子發票折讓").message}`;
-  return actionOk(msg, { notIntegrated: !recordOnly });
+    : allowanceNumber
+      ? `折讓已開立 ${allowanceNumber}（NT$${money(sum)}）${envSuffix()}`
+      : `已建立折讓紀錄 NT$${money(sum)}（狀態：開立折讓）<br>${notIntegrated("電子發票折讓").message}`;
+  return actionOk(msg, { notIntegrated: !recordOnly && !allowanceNumber });
 }
 
 /** 訂單的發票（InvoiceManager getList） */

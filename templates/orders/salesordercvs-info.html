@@ -1,5 +1,5 @@
 {{!-- 推導：原站「超商取貨資訊」彈窗（訂單列卡片「超商取貨」按鈕 → openForm('/ajax/SalesOrderCvs/displayInfo', 'salesOrderId=…')）spec 未擷取，全文依端點行為推導：
-     GET getInfo 顯示目前門市與物流編號；取號／取消取號（綠界物流未串接 → 顯示伺服器回傳的【未串接】訊息）；移除門市（POST clearCvs）；
+     GET getInfo 顯示目前門市與物流編號；取號／取消取號／列印寄件單（綠界物流；環境變數未設定時顯示伺服器回傳的【未串接】訊息）；移除門市（POST clearCvs）；
      變更門市用原站元件 CvsLookup（public/public/scripts/cvslookup.min.js，版面殼已載入），使用者點選門市後由元件把門市 POST 到 storeSelectEndpoint（updateCvsStore）。
      版型沿用後台彈窗與訂單列展開卡片（modal-header／modal-body 卡片＋ .row.py-2 .span-label 資料列）；訊息用 ias_v5 的 modalShowSuccess／modalShowDanger。 --}}
 <div class="modal-header">
@@ -63,6 +63,7 @@
 		<div class="card-footer">
 			<button type="button" class="btn btn-primary btn-sm" id="cvsAcquireNumberButton" title="取得超商取貨條（綠界物流）"><span>取號</span></button>
 			<button type="button" class="btn btn-warning btn-sm" id="cvsCancelNumberButton" title="取消超商取貨條（綠界物流）"><span>取消取號</span></button>
+			<button type="button" class="btn btn-default btn-sm" id="cvsPrintButton" title="列印寄件單（綠界物流）"><span>列印寄件單</span></button>
 		</div>
 	</div>
 </div> <!-- modal-body -->
@@ -145,6 +146,10 @@
 	$('#cvsCancelNumberButton').on('click', function () {
 		if (!confirm('確定要取消此訂單的超商取貨條？')) return;
 		postAction('cancelCvsPaymentNo', $(this), '已取消取號', '取消取號失敗');
+	});
+	$('#cvsPrintButton').on('click', function () {
+		if (!info.AllPayLogisticsID) { modalShowDanger($modal, '尚未取號'); return; }
+		window.open(endpoint('print') + '?salesOrderId=' + encodeURIComponent(salesOrderId), '_blank');
 	});
 	$('#cvsClearStoreButton').on('click', function () {
 		if (!confirm('確定要移除此訂單的超商門市？')) return;

@@ -14,6 +14,8 @@ import { formatPrice } from "./catalog";
 import { hasOrderViewGrant } from "./order-grant";
 import { clean, ipOf, rateLimit } from "./guard";
 import { PM_LABEL } from "./cart-data";
+import { paymentProviderFor } from "@/lib/modules/accounting/gateway";
+import { startPayment } from "@/lib/modules/accounting/payment-gateway";
 
 const ONLINE_PAYMENTS = new Set([4, 128, 1024, 4096, 8192, 16384]);
 
@@ -119,6 +121,22 @@ export async function renderOrderDetail(
   let paymentNotice = "";
   let canReportBankAccount = false;
   const open = ["NEW", "PROCESSING"].includes(o.state);
+  // 線上付款（綠界）：信用卡、ATM 虛擬帳號、超商代碼
+  const provider = !blocked && !paid && open ? await paymentProviderFor(tenant.id, gb) : null;
+  const gt = n(o.grand_total);
+  const canPayOnline = !!provider && provider.supports(pm) && gt > 0 && Number.isInteger(gt);
+  const vAccount = String(o.virtual_bank_account ?? "");
+  const storeCode = String(o.store_payment_code ?? "");
+  let payOnline: { label: string; sandbox: boolean; auto: boolean } | null = null;
+  if (canPayOnline) {
+    const hasCode = (pm === 2 && !!vAccount) || (pm === 32 && !!storeCode);
+    payOnline = {
+      label: pm === 2 ? (vAccount ? "重新取得 ATM 虛擬帳號" : "取得 ATM 虛擬帳號") : pm === 32 ? (storeCode ? "重新取得超商繳費代碼" : "取得超商繳費代碼") : "前往付款",
+      sandbox: provider!.sandbox,
+      auto: ctx.query.get("placed") === "1" && !hasCode,
+    };
+  }
+  if (!paid && ctx.query.get("paid") === "1" && !flash) flash = "付款結果確認中，請稍後重新整理此頁。";
   if (blocked) {
     paymentNotice = "此訂單目前無法付款，請聯絡賣家。";
   } else if (paid) {
@@ -135,10 +153,26 @@ export async function renderOrderDetail(
       paymentNotice = "賣家尚未設定匯款帳戶，請透過「我想問問題」聯絡賣家取得匯款資訊。";
     }
     canReportBankAccount = open;
+  } else if (pm === 2 && (vAccount || canPayOnline)) {
+    if (vAccount) {
+      const [bankCode, account] = vAccount.includes("-") ? vAccount.split("-", 2) : ["", vAccount];
+      if (bankCode) paymentRows.push({ label: "銀行代碼", value: bankCode, valueClass: "" });
+      paymentRows.push({ label: "虛擬帳號", value: account, valueClass: "bank-account-copy" });
+      paymentRows.push({ label: "應付金額", value: formatPrice(gt, cur), valueClass: "" });
+      paymentNotice = "請於繳費期限前以 ATM／網路銀行轉帳至上方虛擬帳號，入帳後系統會自動更新付款狀態。";
+    } else paymentNotice = "請按下方按鈕取得 ATM 虛擬帳號。";
   } else if (pm === 2) {
     paymentNotice = "【未串接】虛擬帳號金流尚未開通，請透過「我想問問題」聯絡賣家確認付款方式。";
+  } else if (ONLINE_PAYMENTS.has(pm) && canPayOnline) {
+    paymentNotice = "請按下方按鈕前往付款，付款完成後系統會自動更新付款狀態。";
   } else if (ONLINE_PAYMENTS.has(pm)) {
     paymentNotice = "線上付款尚未開通，訂單將維持「待付款」，請透過「我想問問題」聯絡賣家確認付款方式。【未串接金流】";
+  } else if (pm === 32 && (storeCode || canPayOnline)) {
+    if (storeCode) {
+      paymentRows.push({ label: "超商繳費代碼", value: storeCode, valueClass: "bank-account-copy" });
+      paymentRows.push({ label: "應付金額", value: formatPrice(gt, cur), valueClass: "" });
+      paymentNotice = "請於繳費期限前至 7-11／全家／萊爾富／OK 超商機台輸入繳費代碼列印繳費單付款。";
+    } else paymentNotice = "請按下方按鈕取得超商繳費代碼。";
   } else if (pm === 32) {
     paymentNotice = "【未串接】超商繳款代碼尚未開通，請聯絡賣家確認付款方式。";
   } else if (pm === 64) {
@@ -204,6 +238,7 @@ export async function renderOrderDetail(
     shippingLabel,
     paymentRows,
     paymentNotice,
+    payOnline,
     canReportBankAccount,
     items: vis.map((i) => ({
       title: String(i.title ?? ""),
@@ -266,6 +301,24 @@ async function updateBankAccount(ctx: RequestContext): Promise<Response> {
   return renderOrderDetail(ctx, tenant, gb, order.id, customer, "已收到您的匯款資訊，賣家對帳後會更新付款狀態。");
 }
 
+/** 前往線上付款（綠界）：只有查詢授權或會員本人、訂單處理中且未付款、付款方式支援時 */
+async function payOnline(ctx: RequestContext): Promise<Response> {
+  const { tenant, gb, order } = await authorizedOrder(ctx);
+  await rateLimit(`payonline:${ipOf(ctx)}`, 600, 20);
+  const { data } = await getServiceClient()
+    .from("sales_orders")
+    .select("id, tenant_id, uuid, group_buy_id, grand_total, payment_method, date_payment_due, state, total_paid, date_paid, blacklist_note")
+    .eq("tenant_id", tenant.id)
+    .eq("id", order.id)
+    .maybeSingle();
+  const o = data as (OrderFull & { tenant_id: number; group_buy_id: number | null }) | null;
+  if (!o) throw badRequest("找不到訂單");
+  if (!["NEW", "PROCESSING"].includes(o.state) || o.blacklist_note || isPaid(o)) throw badRequest("此訂單目前無法線上付款");
+  const provider = await paymentProviderFor(tenant.id, gb);
+  if (!provider || !provider.supports(n(o.payment_method))) throw badRequest("此訂單的付款方式不支援線上付款");
+  return startPayment(ctx, provider, o, { tenantCode: tenant.code, shortUrl: gb.short_url ?? "", gbTitle: gb.title });
+}
+
 async function inquireCancel(ctx: RequestContext): Promise<Response> {
   const { tenant, gb, order, customer } = await authorizedOrder(ctx);
   await rateLimit(`cancel:${ipOf(ctx)}`, 600, 10);
@@ -280,4 +333,5 @@ async function inquireCancel(ctx: RequestContext): Promise<Response> {
 export const orderDetailRoutes: RouteDef[] = [
   post("/p/:shortUrl/SalesOrder/updateBankAccount", updateBankAccount, { auth: "public" }),
   post("/p/:shortUrl/SalesOrder/inquireCancel", inquireCancel, { auth: "public" }),
+  post("/p/:shortUrl/SalesOrder/payOnline", payOnline, { auth: "public" }),
 ];

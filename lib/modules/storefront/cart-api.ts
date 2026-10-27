@@ -4,6 +4,7 @@ import { get, post, any } from "@/lib/core/http/route-helpers";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { json, html } from "@/lib/core/http/responses";
 import { notIntegrated } from "@/lib/core/http/errors";
+import { cvsMapAvailable } from "./cvs-map";
 import { getServiceClient } from "@/lib/supabase/server";
 import { gbSetting, groupBuyPreferences, scopeFromTenantPath, tenantByCode, type SfGroupBuy, type SfTenant } from "./site";
 import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext } from "./cart-data";
@@ -358,18 +359,6 @@ async function updateCvsStore(ctx: RequestContext): Promise<Response> {
   return json({ code: 200 });
 }
 
-/** 超商電子地圖（原站導向綠界電子地圖）：未串接物流，顯示說明頁 */
-async function cvsMap(ctx: RequestContext): Promise<Response> {
-  await scope(ctx);
-  const ni = notIntegrated("超商電子地圖");
-  return html(
-    `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>超商電子地圖</title>` +
-      `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.6.0/css/bootstrap.min.css"></head>` +
-      `<body class="p-4"><div class="alert alert-warning">${ni.message}<br>請關閉此視窗，改用「全部門市」或「搜尋門市」選取。</div>` +
-      `<button class="btn btn-primary" onclick="window.close()">關閉視窗</button></body></html>`,
-  );
-}
-
 /**
  * 超商門市查詢（原站寫死 /groupbuyforms/ajax/web/CvsLookup/lookup，所有租戶共用）。
  * - PICKUP（自取門市）：查本系統的 pickup_stores（tenantId＝自取通路 pickup_store_settings.id）
@@ -409,6 +398,8 @@ async function cvsLookup(ctx: RequestContext): Promise<Response> {
   }
   for (const t of types.filter((x) => x !== "PICKUP")) {
     if (storeCode && storeCode !== "000000") continue;
+    // 前台（帶團購 uuid）且綠界物流已啟用的超商：一律走電子地圖選店，不回測試門市
+    if (uuid && cvsMapAvailable(t)) continue;
     out.push({
       cvsType: t,
       storeCode: "000000",
@@ -507,7 +498,6 @@ export const cartRoutes: RouteDef[] = [
   post("/p/:shortUrl/ajax/web/ShoppingCart/updateShippingAddress", updateShippingAddress, { auth: "public" }),
   post("/p/:shortUrl/ajax/web/ShoppingCart/updateInfo", updateInfo, { auth: "public" }),
   post("/p/:shortUrl/ajax/web/ShoppingCart/updateCvsStore", updateCvsStore, { auth: "public" }),
-  get("/p/:shortUrl/ajax/web/ShoppingCart/cvsMap", cvsMap, { auth: "public" }),
   get("/ajax/web/CvsLookup/lookup", cvsLookup, { auth: "public" }),
   get("/p/:shortUrl/ajax/web/Item/showInfo", showInfo, { auth: "public" }),
   any("/p/:shortUrl/ajax/GroupBuyItem/updateItem", updateItem, { auth: "public" }),

@@ -37,6 +37,9 @@ import {
 import { recalcOrderAmounts } from "./pricing";
 import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 import { joinPlan } from "./join-plan";
+import { voidInvoicesForOrders } from "@/lib/modules/accounting/invoices";
+import { cancelCvsShipment, createCvsShipment } from "@/lib/modules/shipping/ecpay-logistics";
+import { logisticsProvider } from "@/lib/modules/accounting/gateway";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v) || 0);
 const nowIso = () => new Date().toISOString();
@@ -64,7 +67,16 @@ async function cancelOrder(ctx: RequestContext): Promise<Response> {
     if (staffNote) patch.staff_note = [r.staff_note, staffNote].filter((x) => x && String(x).trim()).join("\n");
     await adminUpdateOrders(session, [Number(r.id)], patch, `取消訂單${staffNote ? `：${staffNote}` : ""}`);
   }
-  return json({ code: 200, error: `成功取消 ${target.length} 筆訂單`, message: `成功取消 ${target.length} 筆訂單`, data: target.map((r) => Number(r.id)) });
+  // 取消時作廢已開立的電子發票（預約中的取消預約）；失敗只提示，不影響取消
+  let invoiceMsg = "";
+  try {
+    const msgs = await voidInvoicesForOrders(session, target.map((r) => Number(r.id)), "訂單取消");
+    if (msgs.length) invoiceMsg = `<br>${msgs.join("<br>")}`;
+  } catch (e) {
+    invoiceMsg = `<br>電子發票作廢失敗：${(e as Error).message}`;
+  }
+  const msg = `成功取消 ${target.length} 筆訂單${invoiceMsg}`;
+  return json({ code: 200, error: msg, message: msg, data: target.map((r) => Number(r.id)) });
 }
 
 /** POST /ajax/SalesOrder/undoCancelOrder（還原已取消訂單：重新扣庫存、重新計算金額） */
@@ -229,13 +241,26 @@ async function markAsCvsDateDued(ctx: RequestContext): Promise<Response> {
   return actionOk(`已將 ${target.length} 筆訂單設為未取貨`);
 }
 
-/** POST /ajax/SalesOrder/acquireCvsShippingNumber（綠界取得托運單號）：物流未串接 */
+/** POST /ajax/SalesOrder/acquireCvsShippingNumber（綠界取得托運單號）：逐筆建立綠界超商托運單（物流未設定時回【未串接】） */
 async function acquireCvsShippingNumber(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const ids = await selectedIds(ctx);
-  const n = notIntegrated("綠界物流取得托運單號");
-  for (const id of (await fetchOrders(session, ids, "id")).map((r) => Number(r.id))) await addOrderHistory(session, id, `綠界取得托運單號${n.message}`);
-  return jsonError(400, n.message, { notIntegrated: true });
+  const rows = (await fetchOrders(session, ids, "id")).map((r) => Number(r.id));
+  if (!logisticsProvider()) {
+    const n = notIntegrated("綠界物流取得托運單號");
+    for (const id of rows) await addOrderHistory(session, id, `綠界取得托運單號${n.message}`);
+    return jsonError(400, n.message, { notIntegrated: true });
+  }
+  if (rows.length > 50) throw badRequest("一次最多 50 筆");
+  const lines: string[] = [];
+  let ok = 0;
+  for (const id of rows) {
+    const r = await createCvsShipment(ctx, session, id);
+    if (r.ok) ok++;
+    lines.push(r.message);
+  }
+  if (!ok) throw badRequest(lines.join("<br>"));
+  return actionOk(`成功取號 ${ok} 筆${rows.length - ok ? `，失敗 ${rows.length - ok} 筆` : ""}<br>${lines.join("<br>")}`);
 }
 
 /** POST /ajax/SalesOrder/renewCVSPickup（更新超取小白單 Editor：uuids 換行多筆、print）：物流未串接 */
@@ -609,6 +634,17 @@ async function cvsNotIntegrated(ctx: RequestContext, feature: string): Promise<R
   return jsonError(400, n.message, { notIntegrated: true });
 }
 
+/** 超商取貨資訊彈窗「取號／取消取號」：綠界物流已設定 → 實際建立／取消托運單；否則【未串接】 */
+async function cvsShipmentAction(ctx: RequestContext, action: "acquire" | "cancel"): Promise<Response> {
+  if (!logisticsProvider()) return cvsNotIntegrated(ctx, action === "acquire" ? "更新/取得超商取貨條（綠界物流）" : "取消超商取貨條（綠界物流）");
+  const session = requireSession(ctx);
+  const id = Number(await strParam(ctx, "salesOrderId"));
+  await fetchOrder(session, id, "id");
+  const r = action === "acquire" ? await createCvsShipment(ctx, session, id) : await cancelCvsShipment(session, id);
+  if (!r.ok) throw badRequest(r.message);
+  return actionOk(r.message);
+}
+
 /** POST /ajax/SalesOrderCvs/clearCvs：移除訂單的超商門市 */
 async function cvsClear(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
@@ -914,8 +950,8 @@ export const salesOrderActionRoutes: RouteDef[] = [
     },
   }),
   get("/ajax/SalesOrderCvs/getInfo", cvsGetInfo),
-  post("/ajax/SalesOrderCvs/cancelCvsPaymentNo", (ctx) => cvsNotIntegrated(ctx, "取消超商取貨條（綠界物流）")),
-  post("/ajax/SalesOrderCvs/acquireCvsNumber", (ctx) => cvsNotIntegrated(ctx, "更新/取得超商取貨條（綠界物流）")),
+  post("/ajax/SalesOrderCvs/cancelCvsPaymentNo", (ctx) => cvsShipmentAction(ctx, "cancel")),
+  post("/ajax/SalesOrderCvs/acquireCvsNumber", (ctx) => cvsShipmentAction(ctx, "acquire")),
   post("/ajax/SalesOrderCvs/clearCvs", cvsClear),
   post("/ajax/SalesOrderCvs/updateCvsStore", cvsUpdateStore),
   // 寄信／授權

@@ -26,6 +26,12 @@
 			<div class="card-body"><div class="container">
 				{{#each paymentRows}}<div class="row"><div class="col-4">{{label}}</div><div class="col-8"><span class="{{valueClass}}">{{value}}</span></div></div>{{/each}}
 				{{#if paymentNotice}}<div class="alert alert-info"><i class="fa-light fa-circle-info"></i>{{paymentNotice}}</div>{{/if}}
+				{{!-- 線上付款（綠界）：沙盒時標示「測試模式」；剛下單時自動前往付款頁 --}}
+				{{#if payOnline}}<form method="post" action="{{gbfBaseUrl}}/SalesOrder/payOnline.do" class="text-center mt-2" id="payOnlineForm"><input type="hidden" name="uuid" value="{{order.uuid}}">
+					{{#if payOnline.sandbox}}<div class="alert alert-warning py-2 text-left"><i class="fa-light fa-triangle-exclamation"></i> 測試模式：付款只會連到綠界測試環境，不會實際扣款。</div>{{/if}}
+					<button type="submit" class="btn btn-primary px-4">{{payOnline.label}}</button>
+					{{#if payOnline.auto}}<div class="small text-muted mt-1">即將自動前往付款頁…</div><script>setTimeout(function(){var f=document.getElementById('payOnlineForm');if(f)f.submit();},1500);</script>{{/if}}
+				</form>{{/if}}
 				{{#if canReportBankAccount}}<form name="SalesOrderForm" method="post" action="{{gbfBaseUrl}}/SalesOrder/updateBankAccount.do" class="form-horizontal mt-3" id="bankAccountForm"><input type="hidden" name="uuid" value="{{order.uuid}}">
 					<div class="md-form mt-0"><label for="bankAccount">匯款帳號後五碼</label><input type="text" name="bankAccount" id="bankAccount" maxlength="5" minlength="5" value="{{order.billing_bank_account}}" class="mb-0 form-control" required></div>
 					<div class="text-center"><input name="submitButton" type="submit" class="btn btn-primary px-3" value="回報匯款資訊" /></div>

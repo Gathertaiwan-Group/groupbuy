@@ -6,6 +6,7 @@ import { pickupStoreRoutes } from "./pickup-store";
 import { cvsTraceRoutes } from "./cvs-trace";
 import { shippingRecordRoutes } from "./shipping-record";
 import { shippingCsvRoutes } from "./shipping-csv";
+import { ecpayLogisticsRoutes } from "./ecpay-logistics";
 
 export const routes: RouteDef[] = [
   ...flatRateRoutes,
@@ -15,4 +16,5 @@ export const routes: RouteDef[] = [
   ...cvsTraceRoutes,
   ...shippingRecordRoutes,
   ...shippingCsvRoutes,
+  ...ecpayLogisticsRoutes,
 ];

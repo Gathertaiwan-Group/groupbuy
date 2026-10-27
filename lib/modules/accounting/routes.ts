@@ -7,6 +7,7 @@ import { invoiceRoutes } from "./invoices";
 import { salesOrderTransactionRoutes } from "./sales-order-transactions";
 import { billingTransactionRoutes } from "./billing-transactions";
 import { refundRequisitionRoutes } from "./refund-requisitions";
+import { paymentGatewayRoutes } from "./payment-gateway";
 
 export const routes: RouteDef[] = [
   ...bankTransactionRoutes,
@@ -14,4 +15,5 @@ export const routes: RouteDef[] = [
   ...refundRequisitionRoutes,
   ...invoiceRoutes,
   ...billingTransactionRoutes,
+  ...paymentGatewayRoutes,
 ];
