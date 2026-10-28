@@ -1,5 +1,6 @@
 // 上傳試算表讀取（自取門市匯入、匯入貨運單共用）：.xlsx（exceljs）、.csv/.txt（papaparse；UTF-8 失敗時改 Big5）。
-// .xls（舊 BIFF 格式）不支援，回傳錯誤請使用者另存 .xlsx。
+// .xls（Excel 97–2003）以 orders/xls-biff8.ts 讀取（加密或 Excel 95 以前的格式回錯誤請另存 .xlsx）。
+import { readXlsRows, XlsError } from "@/lib/modules/orders/xls-biff8";
 import ExcelJS from "exceljs";
 import Papa from "papaparse";
 
@@ -44,7 +45,15 @@ export async function readSheet(file: File): Promise<string[][]> {
   const head = new Uint8Array(buf.slice(0, 8));
   const isZip = head[0] === 0x50 && head[1] === 0x4b;
   const isOle = head[0] === 0xd0 && head[1] === 0xcf && head[2] === 0x11 && head[3] === 0xe0;
-  if (isOle || (name.endsWith(".xls") && !isZip)) throw new SheetError("不支援 .xls 舊格式，請用 Excel 另存為 .xlsx 後再上傳");
+  if (isOle || (name.endsWith(".xls") && !isZip)) {
+    // .xls（Excel 97–2003）：orders 模組的 BIFF8 讀取器（補D）
+    try {
+      return readXlsRows(new Uint8Array(buf));
+    } catch (e) {
+      if (e instanceof XlsError) throw new SheetError(`${e.message}（或用 Excel 另存為 .xlsx 後再上傳）`);
+      throw e;
+    }
+  }
   let rows: string[][] = [];
   if (isZip || name.endsWith(".xlsx")) {
     const wb = new ExcelJS.Workbook();

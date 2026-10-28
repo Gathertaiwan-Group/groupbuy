@@ -19,6 +19,7 @@ import { enumOptions } from "@/lib/core/enums";
 import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import { rowToApi, type Row } from "@/lib/db/mapping";
 import { shippingTag as shippingTagEntity } from "@/lib/db/entities/shippingTag";
+import { postRegisteredNumber } from "./carrier-formats";
 import { db, str, tenantGroupBuy } from "./common";
 import { DEFAULT_SHIPPING_TAG, shippableItems, type ExportOrder } from "./shipping-export";
 import { updateOrders } from "./shipping-record";
@@ -363,12 +364,15 @@ async function importShippingCsv(ctx: RequestContext): Promise<Response> {
   const markGroupBuyShipped = on(await p("markGroupBuyShipped"));
   const actionWhenExists = ["OVERWRITE", "RESEND"].includes(await p("actionWhenExists")) ? await p("actionWhenExists") : "NONE";
   const selectedProvider = (await p("shippingProvider")).toUpperCase();
+  // 郵局掛號號碼（PARITY #74）：選郵局且有填「掛號號碼後8碼」→ 檔案的貨運編號視為前6碼，組成 14 碼
+  const postLast8 = (await p("serialNumberLast8")).trim();
   const fallbackDate = parseFileDate(await p("dateShipped")) ?? taipeiDate(new Date());
   const providers = new Set((await enumOptions("SalesOrder.shippingProvider")).map((o) => String(o.value)));
 
   // 檔案列 → {uuid, receipt, date, provider}
   const lines: { uuid: string; receipt: string; date: string; provider: string; row: number }[] = [];
   let invalid = 0;
+  const postErrors: string[] = [];
   rows.slice(1).forEach((r, i) => {
     const uuid = str(r[colUuid]);
     const receipt = str(r[colReceipt]);
@@ -379,8 +383,18 @@ async function importShippingCsv(ctx: RequestContext): Promise<Response> {
     }
     const d = colDate >= 0 ? parseFileDate(str(r[colDate])) : null;
     const prov = colProvider >= 0 ? str(r[colProvider]).toUpperCase() : "";
-    lines.push({ uuid, receipt, date: d ?? fallbackDate, provider: prov, row: i + 2 });
+    let rc = receipt;
+    if (postLast8 && (prov || selectedProvider) === "POST") {
+      const pr = postRegisteredNumber(receipt, postLast8);
+      if (!pr.value) {
+        postErrors.push(`第 ${i + 2} 列：${pr.error}`);
+        return;
+      }
+      rc = pr.value;
+    }
+    lines.push({ uuid, receipt: rc, date: d ?? fallbackDate, provider: prov, row: i + 2 });
   });
+  if (postErrors.length && /8 位數字/.test(postErrors[0])) throw badRequest(postErrors[0].replace(/^第 \d+ 列：/, ""));
   if (!lines.length) throw badRequest("檔案沒有可匯入的資料（需同時有訂單編號與貨運編號）");
 
   const uuids = [...new Set(lines.map((l) => l.uuid))];
@@ -483,6 +497,8 @@ async function importShippingCsv(ctx: RequestContext): Promise<Response> {
   if (skippedExists.length) msg.push(`已有貨運編號略過 ${skippedExists.length} 筆：${list(skippedExists)}`);
   if (inactive.length) msg.push(`已取消／合併／拆單的訂單略過 ${inactive.length} 筆：${list(inactive)}`);
   if (invalid) msg.push(`缺少訂單編號或貨運編號的資料列 ${invalid} 列`);
+  if (postErrors.length) msg.push(`郵局掛號號碼格式錯誤 ${postErrors.length} 列：${esc(postErrors.slice(0, 10).join("；"))}`);
+  else if (postLast8 && (selectedProvider === "POST" || lines.some((l) => l.provider === "POST"))) msg.push(`郵局掛號號碼已組成 14 碼（前6碼＋${esc(postLast8)}）`);
   if (mailed) {
     const n = (await deliveryNotice(session.tenantId, "EMAIL", "出貨通知信（Email）")).message;
     msg.push(n ? `${n}（${mailed} 筆）` : `已排入出貨通知信 ${mailed} 筆`);

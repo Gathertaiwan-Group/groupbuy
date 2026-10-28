@@ -1,7 +1,7 @@
 // 出貨檔案產生（匯出貨運清單、下載出貨商品、下載地址單、列印出貨商品共用）。
 //
 // 貨運清單格式＝貨運標籤（ShippingTag）的「自定義匯出格式」兩行：第一行欄位標題、第二行欄位代碼（貨運標籤頁的代碼按鈕）。
-// 沒有自定義格式時用本站的標準格式（推導；原站各物流商標準格式未合法取得）：宅配類一種、超商取貨（SE／FAMI）一種，
+// 沒有自定義格式時用各物流商的標準格式（推導；原站各物流商標準格式未合法取得，見 carrier-formats.ts：新竹／黑貓／宅配通／郵局／快遞國際／超商／一般宅配），
 // 標題列的「訂單編號／貨運編號」欄名取自貨運標籤設定，讓匯入貨運單能用同一組標頭對回訂單。
 // 代碼集合＝貨運標籤頁的代碼按鈕；「#」＝空白欄；未知代碼輸出空字串。格式含 item.* 代碼時每個訂單商品一列，否則每張訂單一列。
 import ExcelJS from "exceljs";
@@ -9,6 +9,7 @@ import { enumOptions } from "@/lib/core/enums";
 import { taipeiDate, taipeiDateTime } from "@/lib/core/time";
 import type { Row } from "@/lib/db/mapping";
 import { db, str } from "./common";
+import { carrierStandardFormat } from "./carrier-formats";
 import { getShippingSender } from "@/lib/modules/core/system-settings";
 import { hasSender, type ShippingSender } from "@/lib/modules/core/system-settings-logic";
 
@@ -112,22 +113,9 @@ export const DEFAULT_SHIPPING_TAG = {
   shippingProviderString: "",
 };
 
-/** 標準格式（推導） */
+/** 標準格式（推導；各物流商欄位見 carrier-formats.ts，PARITY #74）。未指定物流商＝一般宅配格式 */
 function standardFormat(provider: string, uuidHeader: string, receiptHeader: string, withSender = false): string {
-  const unique = provider.replace(/_(STANDARD|CUSTOM\d*|FROZEN)$/, "");
-  if (unique === "SE" || unique === "FAMI") {
-    return (
-      `${uuidHeader},收件人,收件人電話,取件門市代號,取件門市名稱,商品,代收金額,備註,${receiptHeader}\n` +
-      "order.uuid,shipping.name.only,shipping.phone,cvsStoreId,cvsStoreName,order.itemsList,payOnDelivery,note,#"
-    );
-  }
-  // 宅配：系統設定有寄件人時，在貨運編號前加「寄件人／寄件人電話／寄件人地址」三欄（未設定＝原格式）
-  const sh = withSender ? ",寄件人,寄件人電話,寄件人地址" : "";
-  const st = withSender ? ",sender.name,sender.phone,sender.address" : "";
-  return (
-    `${uuidHeader},收件人,收件人電話,郵遞區號,收件地址,商品,件數,代收金額,配送時段,備註${sh},${receiptHeader}\n` +
-    `order.uuid,shipping.name.only,shipping.phone,shipping.postcode,shipping.address,order.itemsList,order.itemsTotal,payOnDelivery,deliver.time.shortCode,note${st},#`
-  );
+  return carrierStandardFormat(provider, uuidHeader, receiptHeader, withSender);
 }
 
 export interface ExportFormat {
@@ -346,6 +334,8 @@ export function buildShippingRows(orders: ExportOrder[], items: Map<number, Row>
             qty.set(k, (qty.get(k) ?? 0) + n(i.total));
           }
           for (const k of itemCols) row.push(qty.get(k) ?? "");
+        } else if (t.startsWith("=")) {
+          row.push(t.slice(1)); // 固定值（標準格式的溫層／尺寸／件數）
         } else if (t.startsWith("item.")) {
           row.push(it ? itemToken(t, it, items.get(Number(it.item_id)), L) : "");
         } else {
