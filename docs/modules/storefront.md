@@ -1,6 +1,6 @@
 # storefront 模組（消費者前台）
 
-擁有者：storefront agent。程式：`lib/modules/storefront/**`、模板：`templates/storefront/**`、靜態檔：`public/modules/storefront/**`、migration：`supabase/migrations/6000–6002_storefront_*.sql`（6000 限流表、6001 原子下單函式 `sf_place_order`、6002 購物袋暫存表）＋ `0104_points_refund_on_cancel.sql`（取消／刪除訂單回補點數）、`0106_storefront_demo_ak98i_checkout.sql`（示範團購 ak98i 付款方式與訂購須知）、`0107_storefront_help_demo_data.sql`（說明中心／公告示範資料）。
+擁有者：storefront agent。程式：`lib/modules/storefront/**`、模板：`templates/storefront/**`、靜態檔：`public/modules/storefront/**`、migration：`supabase/migrations/6000–6002_storefront_*.sql`（6000 限流表、6001 原子下單函式 `sf_place_order`、6002 購物袋暫存表）＋ `0104_points_refund_on_cancel.sql`（取消／刪除訂單回補點數）、`0106_storefront_demo_ak98i_checkout.sql`（示範團購 ak98i 付款方式與訂購須知）、`0107_storefront_help_demo_data.sql`（說明中心／公告示範資料）、`6008_storefront_points_reward.sql`（點數回饋入帳，補A）。
 對外服務（Email、簡訊、金流、超商電子地圖／物流、Facebook 登入、reCAPTCHA）**一律未串接**：介面照原站，動作只寫 DB 紀錄（`email_messages`、`conversations`），回應／畫面帶【未串接】。
 
 ## 頁面與狀態
@@ -74,8 +74,9 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 
 ## 已知缺口
 
-- 贈品：引擎算出的自動／可選贈品目前只以提示呈現（`salesRuleResult.note`），尚未自動加入購物袋與訂單明細。
-- 點數回饋（引擎 `points`，會員獲點）未入帳；點數折抵（含取消回補）已實作。
+- 組合商品（補A）：原站 `.btn-bundle-select` 按鈕 HTML 與後端回應未擷取（推導）；OUTFIT_BUILDER／MATRIX_2D 版型以清單呈現、候選商品客製欄位 `attributeNoteList` 未輸出（前端送來的客製備註仍會保存）；組合主商品（BUNDLE_V2）本身不扣庫存。
+- 贈品（補A）：自選贈品沒有專屬挑選介面，沿用下單頁 GIFT 商品選單；贈品不計入運費重量／件數。
+- 點數回饋（補A）：入帳時機原站未擷取（推導：付款完成或訂單完成）；會員方案 `royalty_programs.point_rate` 未納入（示範資料皆 0）；後台關閉 ptEnabled 後，該團購訂單下次狀態變動時會扣回未完成的回饋。
 - Email 未串接時的註冊流程：註冊／未驗證帳號登入／「寄送帳號認證信」都會產生 6 碼驗證碼，只寫入 `email_messages`（狀態 `NOT_SENT_UNINTEGRATED`，後台寄信紀錄可查），回應只帶「【未串接】」提示與帳號 uuid，**不含驗證碼**。因此在正式站（`VERCEL_ENV=production`）消費者收不到碼、無法自行完成註冊驗證，須由管理者從寄信紀錄取得驗證碼轉交，或等 Email 串接後才開放。
   - 本機／預覽部署測試用：同時滿足 `VERCEL_ENV !== "production"` 且設定 `GROUPBUY_DEV_EXPOSE_CODES=1` 時，回應訊息尾端才附「（測試用驗證碼：xxxxxx）」。正式站絕不可設此旗標（即使設了，production 判斷仍會擋下）。
   - 重設密碼代碼一律只寫寄信紀錄、不放回應（不受旗標影響）。
@@ -85,6 +86,30 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 說明中心：快訊跑馬燈、導覽列樣式 2–8 與選單樣式 2–3 的差異、深色主題、文章瀏覽數未做；示範資料的分類節點（4411 以外）目前沒有文章（見推導段 0107 說明）。
 - 說明中心／公告／403 等沒有團購的官網頁：購物袋小工具在沒有購物袋 uuid（無團購）時不發 `addToShoppingCart` 請求（`web-foot-scripts.html` 的 `ShoppingCart.load()`），不再出現 `/p/null/...` 404；原站此情境的行為未擷取（推導）。
 - 正式網址的「送出訂單」「會員登入／註冊」未由 agent 執行（見下方驗證紀錄），需 user 同意後再做或由 user 手動點一次。
+
+## 組合商品、贈品、會員點數回饋（補A，PARITY #107／#116／#117／#121）
+
+**組合商品（新版 ItemBundleV2）選購**（`bundle.ts` 端點、`bundle-data.ts` 讀取與庫存、`bundle-logic.ts` 純函式＋`bundle-logic.test.ts`）
+- 下單頁：`item_type=BUNDLE_V2` 的商品以「選擇組合」按鈕（`.btn-bundle-select`，`data-item-id`／`data-set-id`）取代數量選單；組合只要子商品有貨就顯示（售完由視窗判斷）。
+- `GET /{t}/p/{s}/ajax/web/ItemBundleV2/config?itemId=&orderItemUuid=` → `{code:200,data:{itemBundleId,itemId,title,price,bundleConfig:{pricingMode,selectionMode,targetQuantity,optionGroups[]},maxPurchaseQty,quantity,initialSelection,isOutOfStock,isBackOrder,orderItemUuid}}`（鍵依 bundle-modal.min.js）。組合須 ACTIVE、主商品在本團購上架品項內。
+- `POST /{t}/p/{s}/ajax/web/ShoppingCart/addBundle?uuid=`（JSON `{itemId,groupBuyItemSetId,quantity,bundleSelection:[{itemId,quantity,attributeNote}],orderItemUuid}`）→ 成功回完整購物袋 `{code:200,data}`；驗證失敗回 `{code:400,message}`（HTTP 200，視窗保持開啟顯示訊息）。
+- 規則（推導）：任選／配件組合由消費者選（必選、最少／最多件數、RADIO 單選、CHECKBOX 每項 1 件、任選總件數＝targetQuantity、候選商品須在組合內且有貨未下架）；成套＝固定內容（defaultQty）；遞補／分流＝各群組第一個有庫存的候選；盲盒＝依 weight 隨機，加入購物袋時決定並保存。單組售價＝組合售價＋Σ priceOffset×數量（價格歸屬主商品，子商品單價 0）。客製備註去掉 `< >`。
+- 購物袋：一列＝一種組合內容（`item_bundle_id`、`bundle_selection`、`total`＝組數）；相同內容合併、編輯（orderItemUuid）改同一列。每次讀購物袋重驗：組合下架／內容不符目前設定 → 移除；依子商品可售量（扣安全庫存與其他明細占用）調整組數；JSON 主商品 `bundleRoot`、`bundleConfigable`，子商品 `bundleChild`、`parentUuid`、`visibleInCart`、`qtyPerBundle`。一般 addToShoppingCart 不可加 BUNDLE_V2（只能移除）。
+- 下單：主商品一列（`bundle_root`）＋子商品（`bundle_child`、`parent_order_item_id`、`qty_per_bundle`，現貨／預購分列），`sf_place_order` 只扣子商品庫存。
+
+**贈品**（`gift-logic.ts`＋`gift-logic.test.ts`、`cart-data.ts` applyGifts）
+- 自動贈品（GIFT_WITH_PURCHASE、*_NO_PICK、GIFT_LOTTERY）：依購物袋內容重算、依庫存配置（先現貨後預購、送完為止並提示），購物袋顯示為 0 元贈品；下單寫 `order_items.gift=true`、`sales_rule_id`，同交易扣庫存。
+- 自選贈品（其他 GIFT_* 類）：消費者在下單頁選 GIFT 0 元商品，數量超過可選件數自動調整、不符資格移除；`giftMandatory` 未選擋結帳。
+- 隨機贈品／隨機點數：引擎亂數以購物袋內容為種子，購物袋顯示與送出訂單結果一致。
+
+**會員點數回饋**（`points.ts` rewardPointsOf、migration `6008_storefront_points_reward.sql`）
+- 條件：團購 ptEnabled＋會員。點數＝引擎「會員點數累積」：優惠條件 dollarOrPercentage=POINT、優惠卷 POINT／POINT_RANDOM。購物袋 `salesOrder.rewardPoints` 與提示「完成付款後可獲得 N 點會員點數」。
+- 下單寫入 `sales_order_sales_rules.points`／`sales_order_coupons.points`（承諾點數）；DB 觸發器 `sf_sync_order_reward_points` 依訂單狀態入帳：已付金額 ≥ 訂單金額或 COMPLETE → `ADD_POINT`；CANCELED／DELETED／RETURNED／DRAFT／COMBINED → 扣回 `RETURN_POINT`（餘額不足扣到 0）；SPLITED 看拆出子單。帳本 `point_transactions.source='ORDER_REWARD'`，只補差額 → 重複觸發、取消後刪除、改回處理中都冪等；不動 0104 的折抵點數帳。
+- POS：結帳彈窗「獲得點數」勾選（預設）才寫入點數；`getPoints` 的 `possibleRewards` 為實際回饋點數；取貨付清（COMPLETE）即入帳，POS 作廢扣回。
+
+**POS 會員點數方案**（`royalty-program.ts`＋測試）：`GET {baseUrl}/ajax/CustomerRoyaltyProgram/get.do?customerId=` → `{code:200,data:{customerId,royaltyProgramId,royaltyProgramTitle,discountRate,dateExpiredString,isExpired,activated,pointsName,points}}`（只回本租戶會員，否則 404）。
+
+**實測（本機連正式庫，測試資料前綴 `[補A]`，結束已清除）**：bundle-modal 開窗→選 2 件（$350）→加入→編輯→送出訂單；竄改（非候選商品、件數不足、超過上限）皆擋；滿額自動贈品入袋與訂單、自選贈品 x3→1、贈品與子商品庫存扣減；會員單付款／取消／改回／刪除的點數帳本；POS 勾／不勾獲得點數、作廢扣回。
 
 ## 給 core 的問題
 
@@ -119,7 +144,7 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 付款：`getSupportPaymentMethods` 依團購付款方式（256＝自定義，名稱取團購設定 `customPaymentMethod`，示範為「現金」）。**刷卡機／金流／發票機一律【未串接】**，只記錄付款明細（`pos_payments`）。現金找零為本系統補充（原站付款金額上限＝待付款）：付款彈窗多一個「現金實收」欄，結帳時記錄實收與找零並顯示於收據。
 - 發票：開發票回【未串接】；「列印收據」（本系統補充）與「印發票」都開 `Invoice/print.do` 的交易明細收據（註明非統一發票）。
 - 原站以 `$.get` 呼叫的寫入端點，本系統只收 POST；`pos-after.js` 覆寫 `orderService` 對應方法（不修改原站檔）。
-- 推導項目：POS 版面 CSS、登入頁、商品明細／優惠條件／快速折價（折扣標籤）／優惠券／手動註冊會員／會員消費紀錄片段、日結（收款依 `pos_payments`、支出類別取自原站按鈕）、新增調撥精靈（送出走 warehouse 既有端點）、銷售分析彈窗（原站為寫死示意數字，本系統顯示今日實際資料，未設入口）、會員 QR（原站載入 qrcode.js；本系統端點回 1×1 圖＋`?format=json` 網址，由 cdnjs qrcodejs 在瀏覽器產生）、獲得點數（未實作回饋點數，固定 0）。
+- 推導項目：POS 版面 CSS、登入頁、商品明細／優惠條件／快速折價（折扣標籤）／優惠券／手動註冊會員／會員消費紀錄片段、日結（收款依 `pos_payments`、支出類別取自原站按鈕）、新增調撥精靈（送出走 warehouse 既有端點）、銷售分析彈窗（原站為寫死示意數字，本系統顯示今日實際資料，未設入口）、會員 QR（原站載入 qrcode.js；本系統端點回 1×1 圖＋`?format=json` 網址，由 cdnjs qrcodejs 在瀏覽器產生）、獲得點數（補A：結帳彈窗「獲得點數」顯示引擎算出的回饋點數 `possibleRewards`，勾選時結帳後寫入訂單優惠明細並依 6008 入帳）。
 - 查詢訂單分頁：`/ajax/SalesOrder/list`（orders 模組）＋`groupBuyId`，按鈕只做全選／取消選取／列印收據／**POS 作廢**／後台訂單管理（原站其餘批次按鈕請在後台訂單頁操作）。
 - **POS 作廢（本系統補充，fix3）**：POS 結帳的明細為「已出貨（已取貨）」，後台一般「刪除」只釋放未出貨明細，刪 POS 單不會回補庫存。改用作廢：`POST /pos/ajax/{租戶}/{短網址}/SalesOrder/void`（只收本 POS 團購的訂單）或後台 `POST /ajax/SalesOrder/posVoid`（salesOrderId=1,2、reason），確認框摘要 `GET /ajax/SalesOrder/posVoidPreview`。DB 函式 `pos_void_order`（migration 6005）單一交易：鎖訂單 → 已取消／已刪除擋下（重複作廢）、草稿／合併／拆單／退換貨不可作廢 → 結帳扣過的明細（SHIPPED／UNSHIPPING／SHIPPING）依庫存擁有者回補可售現貨／預購、明細改 CANCELLED → 依付款方式淨額寫負數 `pos_payments`（`kind=VOID`，日結依 `pos_payments` 加總，作廢當日即反映）→ 訂單 `state=CANCELED`（既有代碼「已取消」）、`total_paid=0`、log 與歷程（ADMIN＋操作者＋「POS 作廢：回補庫存 N 件，沖銷付款 $X（原因）」）；點數由 0104 觸發器回補、統計由 8001 觸發器重算。優惠名額由 6006 觸發器退回（見下條）。收據頁（`Invoice/print`）作廢單顯示「已作廢」框與作廢時間，沖銷列標「（作廢沖銷）」並加「實付淨額」（fix4）。後台訂單列表選到 POS 單時顯示提示、刪除前再確認一次（刪除規則不變）。
 - **作廢／取消退回優惠名額（fix4，migration 6006）**：帳本 `sales_order_marketing_usages` 記錄結帳當下實際 +1 的名額（折扣碼 `coupon_codes.used_count`、團購優惠卷 `group_buy_coupons.coupon_used_total`、優惠條件 `sales_rules.used_quota`；依 payload 的 couponCodeIds／groupBuyCouponIds／salesRuleIds，與 +1 同一依據）。`sf_place_order`／`pos_checkout` 改為薄包裝（原函式更名 `*_core`，🔴之後改下單／結帳請改 `_core`）。`sales_orders.state` 觸發器：進入 CANCELED／DELETED → 未退回的列扣回（不低於 0）並標 `released_at`；從那裡改回其他階段（還原已取消訂單）→ 重新占用。重複作廢／取消、取消後再刪除不重複退。6006 之前成立的訂單由 8002 回填（見下條）。規則鏡像與測試：`lib/modules/marketing/usage-release.ts`／`.test.ts`。

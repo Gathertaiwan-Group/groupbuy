@@ -27,10 +27,10 @@
 
 | 狀態 | 項數 |
 |---|---|
-| 完整 | 60 |
-| 部分 | 29 |
-| 缺 | 21 |
-| 推導 | 18 |
+| 完整 | 61 |
+| 部分 | 28 |
+| 缺 | 17 |
+| 推導 | 22 |
 | **合計** | **128** |
 
 另有 7 個原站已註解停用的入口不計入（§5）。
@@ -191,10 +191,10 @@
 
 | # | 模組 | 原站功能/端點 | 狀態 | 證據 | 補齊建議/工作量 |
 |---|---|---|---|---|---|
-| 104 | storefront | 團購表單下單頁 `/{shortUrl}`（TYPE3） | 部分 | lib/modules/storefront/pages-form.ts:30、form-page.ts；spec/html/fe-form-ak98i.html；贈品只顯示提示 pricing-marketing.ts:94、點數回饋未入帳（docs/modules/storefront.md:78） | 見 #116、#117 |
+| 104 | storefront | 團購表單下單頁 `/{shortUrl}`（TYPE3） | 完整 | lib/modules/storefront/pages-form.ts:30、form-page.ts；spec/html/fe-form-ak98i.html；組合／贈品／點數回饋已補（補A，見 #107、#116、#117） | — |
 | 105 | storefront | 其他發布樣式前台：TYPE1、CALENDAR、TRAVEL、SHOWCASE、LONGTERM、ALIAS、DISTRIBUTOR（FB 型前台亦同） | 推導 | pages-form.ts:15–21（HOME→官網、WH→404，其餘一律用 TYPE3 版面）；spec/SPEC.md §9 #7（原站帳號無這些樣式） | 需原站各樣式範例頁；每種 M，合計 L（推導） |
 | 106 | storefront | 購物袋／結帳 AJAX `/{t}/p/{s}/ajax/web/ShoppingCart/*`（加入、優惠碼、點數、配送、付款、地址、訂閱） | 完整 | storefront/cart-api.ts；spec/SPEC.md §8 對應端點全命中 | — |
-| 107 | storefront | 前台組合商品（新版）選購 `/ajax/web/ItemBundleV2/config`、`/ajax/web/ShoppingCart/addBundle` | 缺 | 原站 public/public/scripts/bundle-modal.min.js 寫死兩個端點；templates/storefront/form.html:349 已載入該 JS；路由表無 | 後台組合（#40）已有資料，補 config 輸出＋加入購物袋（含庫存/價格驗證）；M |
+| 107 | storefront | 前台組合商品（新版）選購 `/ajax/web/ItemBundleV2/config`、`/ajax/web/ShoppingCart/addBundle` | 推導 | 補A：storefront/bundle.ts:34（config）、:64（addBundle）、:115（路由）；規則 bundle-logic.ts（單元測試 bundle-logic.test.ts）；購物袋重驗 cart-data.ts:129；下單主＋子商品 order-place.ts:272、扣子商品庫存 :403；下單頁按鈕 templates/storefront/partials/form-itemsets.html:12。本機實測：bundle-modal 開窗→選 2 件→加入購物袋（$350 含加價）→編輯→送出訂單，訂單明細 bundle_root／bundle_child／parent_order_item_id／qty_per_bundle 正確、子商品庫存扣減 | 原站後端與 `.btn-bundle-select` 按鈕 HTML 未擷取：回應鍵依 bundle-modal.min.js 推導；OUTFIT_BUILDER／MATRIX_2D 版型以清單呈現、候選商品客製欄位 attributeNoteList 未輸出（見 docs/modules/storefront.md） |
 | 108 | storefront | 超商門市電子地圖／門市查詢 `/ajax/web/ShoppingCart/cvsMap`、`/ajax/web/CvsLookup/lookup` | 部分 | storefront/cart-api.ts:365、:406（無物流金鑰時回【未串接】測試門市）；storefront/cvs-map.ts（綠界沙盒） | 綠界正式物流特店；S（外部帳號） |
 | 109 | storefront | 送出訂單 `confirmOrder`、訂單完成頁、訂單明細、前往付款 | 推導 | storefront/order-place.ts、order-detail.ts:169–181；spec/SPEC.md §9 #2（原站送出後流程未擷取） | — |
 | 110 | storefront | 訂單查詢 `/{shortUrl}/order`、`/ajax/web/SalesOrder/queryUuid` | 完整 | pages-form.ts:31、order-query.ts；spec/html/fe-order-query.html | — |
@@ -203,12 +203,12 @@
 | 113 | storefront | 我想問問題 `/{t}/p/{s}/OnlineHelp/show` | 完整 | storefront/onlinehelp.ts:88；spec/html/fe-onlinehelp-modal.html | — |
 | 114 | storefront | 隱私權政策／服務條款／賣家頁 404／預覽 403 | 完整 | storefront/pages-static.ts:23–26；spec/html/fe-privacy.html、fe-terms.html、fe-seller-page.html、fe-error-403.html | — |
 | 115 | storefront | 說明中心（官網型 HOME）`/jranv`、`/menu/…`、文章、分類、標籤、搜尋、news/faq；系統公告 `/groupbuyforms/News/list` | 部分 | storefront/help.ts:470、:480；docs/modules/storefront.md:85（快訊跑馬燈、導覽列樣式 2–8、選單樣式 2–3、深色主題、文章瀏覽數未做） | 依 HomeView 設定逐項補；M |
-| 116 | storefront | 贈品加入購物袋與訂單明細 | 缺 | storefront/pricing-marketing.ts:94（只以提示呈現） | 引擎已算出 auto/pick，補購物袋明細＋下單寫入＋庫存；M |
-| 117 | storefront | 會員點數回饋入帳（獲點） | 缺 | docs/modules/storefront.md:78；order-place.ts:482 只有折抵扣點 | 付款/完成時寫 point_transactions（含取消回補）；M |
+| 116 | storefront | 贈品加入購物袋與訂單明細 | 推導 | 補A：pricing-marketing.ts:102（auto/pick）；cart-data.ts:239 applyGifts（自動贈品依庫存入袋、自選贈品限量／必選擋結帳）；gift-logic.ts（單元測試 gift-logic.test.ts）；order-place.ts:369（gift、sales_rule_id）、:403（扣庫存）。本機實測：滿額自動贈品入袋與訂單、自選贈品 x3 調整為 1、贈品庫存各 −1 | 自選贈品的挑選介面原站未擷取：沿用下單頁 GIFT 商品選單，0 元 GIFT 商品不符資格時移除 |
+| 117 | storefront | 會員點數回饋入帳（獲點） | 推導 | 補A：order-place.ts:577（各優惠點數寫入 sales_order_sales_rules／sales_order_coupons.points）；supabase/migrations/6008_storefront_points_reward.sql（付款完成或已完成入帳 ADD_POINT、取消／刪除／退貨扣回 RETURN_POINT，帳本 source=ORDER_REWARD 冪等）；POS 結帳 pos/api.ts:796。本機實測：前台會員單 未付→部分付款 0 點→付清 +30→重複更新不變→取消 −30→改回 +30→刪除 −30→再刪不變；POS 勾「獲得點數」+20、不勾 0、作廢扣回（餘額不足只扣到 0） | 原站入帳時機設定未擷取（推導：付款完成或訂單完成）；會員方案 point_rate 未納入（示範資料皆 0） |
 | 118 | storefront | 官網型商城頁：購物袋 `/{shortUrl}/bag`、商品頁 `/ajax/web/Item/show`、`/ajax/web/Item/getItem`、會員頁、連結類別 ITEM／ITEM_SET／ITEM_SYS／CUSTOM_WEB／MEMBER | 缺 | templates/storefront/partials/web-foot-scripts.html:97、:810、:1207 會呼叫；本機與正式站 `/gbhme/bag` 皆 404；spec/SPEC.md §9 #7（HOME 實際商城頁未擷取） | 推導官網商城（商品列表/內頁/購物袋/結帳沿用 TYPE3 流程）；L（推導） |
 | 119 | storefront | POS 門市收銀 `/{shortUrl}/pos`（商品、草稿、會員、優惠、結帳、日結、調撥） | 推導 | storefront/pos/routes.ts:19；spec/POS_SPEC.md §0（HTML/CSS 被擋，行為約 90% 依 pos-main.js） | — |
 | 120 | storefront | POS 刷卡機／發票機／電子發票開立 `Invoice/issueInvoice` | 部分 | storefront/pos/api.ts:687、:799；templates/storefront/pos/receipt.html:60（收據非統一發票） | 硬體與發票服務商；L（外部帳號） |
-| 121 | storefront | POS 會員點數方案 `/ajax/CustomerRoyaltyProgram/get` | 缺 | public/pos/Pos/js/pos-main.js 呼叫；路由表無 | 回傳會員點數方案（已有 customer_royalty 資料時）；S |
+| 121 | storefront | POS 會員點數方案 `/ajax/CustomerRoyaltyProgram/get` | 推導 | 補A：pos/api.ts:583、pos/routes.ts:68（`{baseUrl}`＝`/{租戶}/p/{短網址}`）；royalty-program.ts（單元測試 royalty-program.test.ts）；getPoints 的 possibleRewards 改為實際回饋點數 pos/api.ts:545。本機實測：200 回 royaltyProgramId／dateExpiredString、不存在會員 404、未登入 401 | 原站回應其餘鍵未擷取；編輯器送出的 `/ajax/Customer/activate` 屬 #123 |
 | 122 | storefront | 前台 Facebook 快速登入 `/ajax/web/CustomerFacebook/auth`、FB SDK | 缺 | 原站 public/public/scripts/ias_v5.min.js；templates/storefront/form.html:383–385（按下顯示【未串接】） | Facebook App；M（外部帳號） |
 
 ### 2.11 跨模組／後台會員
@@ -228,9 +228,9 @@
 
 | 端點 | 呼叫來源（原站 JS） | 有無 UI 入口 | 列 |
 |---|---|---|---|
-| `/ajax/web/ItemBundleV2/config`、`/ajax/web/ShoppingCart/addBundle` | public/public/scripts/bundle-modal.min.js | 有（前台表單已載入） | 107 |
+| `/ajax/web/ItemBundleV2/config`、`/ajax/web/ShoppingCart/addBundle` | public/public/scripts/bundle-modal.min.js | 有（前台表單已載入） | 107（補A 已補） |
 | `/ajax/web/Item/show`、`/ajax/web/Item/getItem` | templates/storefront/partials/web-foot-scripts.html:810、:935、:1207（原站 web 共用 script） | 官網商城頁才會觸發 | 118 |
-| `/ajax/CustomerRoyaltyProgram/get` | public/pos/Pos/js/pos-main.js | 有（POS 會員） | 121 |
+| `/ajax/CustomerRoyaltyProgram/get` | public/pos/Pos/js/pos-main.js | 有（POS 會員） | 121（補A 已補） |
 | `/{租戶}/ajax/pos/Invoice/print` | public/public/scripts/backend/salesOrderList.min.js | `posEnabled` 時 | 68 |
 | `/ajax/Tpl/createShipment` | salesOrderList.min.js | `tplEnabled` 時 | 67 |
 | `/ajax/Sms/sendSMS` | public/public/scripts/sms.min.js（預設值） | 擷取頁皆覆寫網址 | 81 |
@@ -254,7 +254,7 @@
 | 位置 | 情況 | 列 |
 |---|---|---|
 | templates/analytics/salesordermonthlystatistics-list.html:91 | `form action="/backend/CustomerPointSummary/download"`，路由不存在 | 91 |
-| templates/storefront/form.html:349 | 載入 bundle-modal.min.js，其端點不存在 | 107 |
+| templates/storefront/form.html:349 | 載入 bundle-modal.min.js，其端點不存在 | 107（補A 已補） |
 | templates/storefront/partials/web-foot-scripts.html:97 | 官網購物袋連結 `/{shortUrl}/bag` → 404 | 118 |
 | templates/core/system-preference-csveditor.html:5 | 只有標題與「csv 匯出欄位設定」一行字，無任何功能 | 11 |
 | templates/orders/salesorderreturn-list.html:60–64、templates/orders/helpdesk-conversation-list.html:18 | Editor 的 create/edit 指向不存在的 `save.do`／`update.do`，但對應按鈕原站即已註解、畫面上沒有入口 | 不影響（59、62） |
@@ -327,10 +327,7 @@
 - #101／#103 轉正式收款、其他金流服務商 — S／L〔外部〕
 
 **storefront**
-- #107 前台組合商品（新版）選購 — M
-- #116 贈品加入購物袋與訂單 — M
-- #117 會員點數回饋入帳 — M
-- #121 POS 會員點數方案 `/ajax/CustomerRoyaltyProgram/get` — S
+- ~~#107 前台組合商品（新版）選購~~、~~#116 贈品加入購物袋與訂單~~、~~#117 會員點數回饋入帳~~、~~#121 POS 會員點數方案~~ — 補A 已補（推導，見 §2）
 - #115 說明中心跑馬燈、導覽列/選單樣式、深色主題、瀏覽數 — M
 - #118 官網型商城頁（購物袋、商品頁、會員頁、各連結類別）— L〔推導〕
 - #105 TYPE1/CALENDAR/TRAVEL/SHOWCASE/LONGTERM/ALIAS/DISTRIBUTOR/FB 前台樣式 — L〔推導〕
