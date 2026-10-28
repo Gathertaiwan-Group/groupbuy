@@ -19,6 +19,7 @@ import { homeViewSectionRoutes } from "./homeview-section";
 import { webEditorRoutes } from "./web-editor";
 import { fbGroupRoutes } from "./fb-group";
 import { preferencePageRoutes } from "./preference-pages";
+import { groupBuyExtraRoutes } from "./groupbuy-extras";
 
 export const routes: RouteDef[] = [
   ...groupBuyListRoutes,
@@ -39,4 +40,5 @@ export const routes: RouteDef[] = [
   ...webEditorRoutes,
   ...fbGroupRoutes,
   ...preferencePageRoutes,
+  ...groupBuyExtraRoutes, // 補D：XLS 表頭解析、團購管理員授權、商品 Feed
 ];

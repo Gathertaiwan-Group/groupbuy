@@ -13,6 +13,7 @@ import * as io from "./template-io";
 import * as lookup from "./lookup";
 import { itemModalRoutes } from "./item-modals";
 import { runDueSchedulersSafe, schedulerRoutes } from "./scheduler";
+import { itemExtraRoutes } from "./item-extras";
 
 const LIST: ("GET" | "POST")[] = ["GET", "POST"];
 
@@ -97,4 +98,5 @@ export const routes: RouteDef[] = [
 
   /* 排程 */
   ...schedulerRoutes,
+  ...itemExtraRoutes, // 補D：商品關鍵字、會員方案商品綁定、會員卡 lookup、客製化備註同步
 ];

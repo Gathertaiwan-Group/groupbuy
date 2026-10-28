@@ -92,7 +92,7 @@
 	・soI18n：public/scripts/salesOrder.js 直接呼叫 soI18n(key)；salesOrderList.min.js 的取詞函式在 window.soI18n 存在時改呼叫 soI18n(key, 預設字)。
 	  回傳規則比照 salesOrderList.min.js 自己的 fallback：字典值 → 預設字 → key。
 	・salesOrderConf：鍵依 SalesOrderModule.init 實際讀取的鍵；值由 sales-order-list.ts 的 conf 與共用變數 tenantCode 帶入；
-	  posEnabled／tplEnabled 目前 conf 沒有對應資料鍵 → 預設 false（日後 conf 提供同名鍵即生效）。 --}}
+	  posEnabled＝租戶有 POS 型團購（orders/pos-invoice-print.ts；列印發票走 /ajax/pos/Invoice/print 轉 POS 收據）；tplEnabled 目前 conf 沒有對應資料鍵 → 預設 false。 --}}
 	/* 訂單管理頁 UI 字典：SalesOrderModule（salesOrderList.min.js）與 salesOrder.js 共用 */
 	var salesOrderI18n = {
 		/* 既有多國語言鍵 */

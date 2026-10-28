@@ -1,11 +1,9 @@
 // 匯入外部訂單（所有訂單頁工具列「匯入外部訂單」，原站 Editor：#importSalesOrdersForm／#importSalesOrdersTable）。
 //   GET  /ajax/SalesOrder/getImportSalesOrderPreference?groupBuyId=   上次的欄位對應 {data:{colFirstname:'姓名',…, countryColMapping, paymentMethodColMapping}}
-//   POST /ajax/SalesOrder/uploadSalesOrders                           Editor upload（xlsx/csv）→ {upload:{id}, data:[{label,value}]（檔案標頭）}
+//   POST /ajax/SalesOrder/uploadSalesOrders                           Editor upload（xlsx/xls/csv）→ {upload:{id}, data:[{label,value}]（檔案標頭）}
 //   POST /ajax/SalesOrder/importSalesOrders?groupBuyId=               Editor create（preview=1 預覽／0 實際匯入）→ {data:[每列結果], options}
 // 檔案解析結果暫存在 order_module_settings（name='importUpload'，匯入後刪除）。
 // 每列＝一個商品；「來源平台訂單號碼」相同的列合併為同一張訂單（未指定則每列一張）。商品以「商品貨號」對應本團購的商品代碼（uid）。
-import ExcelJS from "exceljs";
-import Papa from "papaparse";
 import { randomUUID } from "node:crypto";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, post, requireSession } from "@/lib/core/http/route-helpers";
@@ -15,6 +13,7 @@ import { parseEditorRequest } from "@/lib/core/editor/protocol";
 import { enumOptions } from "@/lib/core/enums";
 import type { Row } from "@/lib/db/mapping";
 import { addOrderHistory, adjustItemStock, db, strParam } from "./common";
+import { readSpreadsheetRows, SpreadsheetError } from "./spreadsheet";
 
 const MAX_ROWS = 5000;
 const COLS = [
@@ -26,40 +25,13 @@ type Col = (typeof COLS)[number];
 
 /* ─────────────────────────── 檔案解析 ─────────────────────────── */
 
-function cellText(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (v instanceof Date) return v.toISOString().slice(0, 10);
-  if (typeof v === "object") {
-    const o = v as Record<string, unknown>;
-    if (Array.isArray(o.richText)) return (o.richText as { text: string }[]).map((t) => t.text).join("");
-    if ("result" in o) return cellText(o.result);
-    if ("text" in o) return String(o.text);
-    if ("hyperlink" in o) return String(o.hyperlink);
-    return JSON.stringify(v);
-  }
-  return String(v).trim();
-}
-
 async function parseFile(file: File): Promise<string[][]> {
-  const buf = Buffer.from(await file.arrayBuffer());
-  const name = (file.name || "").toLowerCase();
-  if (name.endsWith(".xlsx") || buf.subarray(0, 2).toString("binary") === "PK") {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buf as unknown as ArrayBuffer);
-    const ws = wb.worksheets[0];
-    if (!ws) throw badRequest("檔案沒有工作表");
-    const rows: string[][] = [];
-    ws.eachRow({ includeEmpty: false }, (row) => {
-      const vals = (row.values as unknown[]).slice(1).map(cellText);
-      rows.push(vals);
-    });
-    return rows;
+  try {
+    return (await readSpreadsheetRows(file.name || "", new Uint8Array(await file.arrayBuffer()))).rows;
+  } catch (e) {
+    if (e instanceof SpreadsheetError) throw badRequest(e.message);
+    throw e;
   }
-  if (name.endsWith(".xls")) throw badRequest("不支援舊版 .xls 格式，請另存為 .xlsx 或 .csv 後再上傳");
-  let text = new TextDecoder("utf-8").decode(buf);
-  if (text.includes("�")) text = new TextDecoder("big5").decode(buf);
-  const parsed = Papa.parse<string[]>(text.replace(/^﻿/, ""), { skipEmptyLines: true });
-  return (parsed.data as string[][]).map((r) => r.map((c) => String(c ?? "").trim()));
 }
 
 /* ─────────────────────────── 端點 ─────────────────────────── */

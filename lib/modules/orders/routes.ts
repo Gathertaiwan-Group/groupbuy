@@ -8,6 +8,7 @@ import { reservationRoutes } from "./reservations";
 import { helpdeskRoutes } from "./helpdesk";
 import { preorderToStockRoutes } from "./preorder-to-stock";
 import { posVoidRoutes } from "./pos-void";
+import { posInvoicePrintRoutes } from "./pos-invoice-print";
 
 export const routes: RouteDef[] = [
   ...salesOrderListRoutes, // 所有訂單／單一團購訂單／分割訂單／自取訂單／批次操作／匯出匯入／列印
@@ -16,4 +17,5 @@ export const routes: RouteDef[] = [
   ...helpdeskRoutes, // 客服對話
   ...preorderToStockRoutes, // 預購商品轉現貨
   ...posVoidRoutes, // POS 作廢（回補已取貨庫存、沖銷付款）
+  ...posInvoicePrintRoutes, // 訂單頁 POS 列印發票（轉到 POS 收據）
 ];

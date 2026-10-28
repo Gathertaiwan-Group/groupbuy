@@ -408,6 +408,14 @@ $(document).ready(function() {
 				}
 			},
 
+			{
+				// 補D（推導入口）：原站 itemKeywordManager（dataTable.api.min.js）→ /ajax/ItemKeywordTag/save
+				extend: "selected",
+				text: '新增關鍵字',
+				action: function ( e, dt, node, config ) {
+					itemKeywordManager.showEditor('#itemDataTable', groupBuyId);
+				}
+			},
 			{ extend: 'duplicate'},
 			{
 				text:'複製其他品項商品',
@@ -590,6 +598,9 @@ $(document).ready(function() {
 		var btns = [{ className: 'btn btn-sm btn-default btn-action', text: '庫存紀錄', action: 'log' }];
 		if (d.stockCache > 0) btns.push({ className: 'btn btn-sm btn-default btn-action', text: '保留庫存轉換', action: 'cacheToStock' });
 		if (d.shareStock && !d.shareStockParent) btns.push({ className: 'btn btn-sm btn-warning btn-action', text: '解除共用庫存', action: 'unbind' });
+		// 補D（推導入口）：原站 itemAttrNoteSyncManager／itemRoyaltyProgramManager（dataTable.api.min.js）的觸發處未擷取
+		btns.push({ className: 'btn btn-sm btn-default btn-action', text: '複製客製化備註', action: 'attrSync' });
+		if (d.itemType == 'RP') btns.push({ className: 'btn btn-sm btn-info btn-action', text: '綁定會員方案', action: 'rp' });
 		var funcExtra = createButtonGroupHTML(d.itemId, btns);
 		return '<div class="item-details">' + info
 			+ '<div class="panel-body"></div>'
@@ -761,6 +772,12 @@ $(document).ready(function() {
 		switch (action) {
 			case 'log':
 				itemLog(id);
+				break;
+			case 'attrSync':
+				itemAttrNoteSyncManager.showEditor(id, groupBuyId);
+				break;
+			case 'rp':
+				itemRoyaltyProgramManager.setItemId(id).setRoyaltyProgramId(null).get();
 				break;
 			case 'cacheToStock':
 				showCacheToStock($(row.node()).find('td.data-stock').get(0) || row.node(), data);

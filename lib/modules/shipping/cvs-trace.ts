@@ -13,6 +13,9 @@
 //   GET  /ajax/SalesOrderCVSTrace/getCvsReturnStats  {data:{thisMonthRate,lastMonthRate}}（本月／上月 CVS 未取退貨率 %）
 //   列展開「商品」：三個列表的每列都帶 orderItems:[{title,total,backOrder}]（本站設計，前端不另外請求）
 //   GET  /ajax/Sms/getBalance                     sms.js 開啟簡訊視窗時查點數 →【未串接】
+//   POST /ajax/Sms/sendSMS                        smsManager.prepareSms 未帶網址時的預設端點（keyColumn＝telephone）：
+//        data[0][telephone]（換行多筆，上限 100）、body、confirm、groupBuyId（可 0）→ 每支電話一筆 sms_messages，
+//        之後由 core/delivery 排程寄送（MESSAGE_DELIVERY_MODE 白名單／未設定服務商時不寄出，見 ARCHITECTURE §12）
 //
 // 推導（原站未擷取到資料，records=0）：各列表的篩選條件、已收貨／已完成對訂單的影響、未取退貨率公式 —— 見 docs/modules/shipping.md。
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
@@ -26,7 +29,8 @@ import { enumOptionsFor } from "@/lib/core/enums";
 import { salesOrderCvsTraceList } from "@/lib/db/entities/salesOrderCvsTraceList";
 import type { EntityDef } from "@/lib/db/entity-types";
 import type { Row } from "@/lib/db/mapping";
-import { db, paramIds, str } from "./common";
+import { db, paramIds, str, tenantGroupBuy } from "./common";
+import { smsPoints as smsPointsOf, validateSmsSend } from "./sms-request";
 
 type AnyQuery = Parameters<NonNullable<ListSpec["where"]>>[0];
 
@@ -307,6 +311,29 @@ async function sendSMS(ctx: RequestContext): Promise<Response> {
   return actionOk(msg, { ...ni, data: [] });
 }
 
+/** 簡訊管理預設端點 /ajax/Sms/sendSMS（PARITY #81）：直接以電話號碼發送，接既有 sms_messages → delivery 寄送流程 */
+async function sendSmsByPhone(ctx: RequestContext): Promise<Response> {
+  const session = requireSession(ctx);
+  const pick = async (k: string) => str((await ctx.param(`data[0][${k}]`)) ?? (await ctx.param(k)));
+  const body = (await pick("body")).trim();
+  const { phones, errors } = validateSmsSend({ telephone: await pick("telephone"), body, confirm: await pick("confirm") });
+  if (errors.length) throw new FieldErrors(errors);
+  const gbRaw = await pick("groupBuyId");
+  let groupBuyId: number | null = null;
+  if (gbRaw && gbRaw !== "0") {
+    const gb = await tenantGroupBuy(session, gbRaw);
+    if (!gb) throw notFound("找不到團購");
+    groupBuyId = gb.id;
+  }
+  const points = smsPointsOf(body);
+  const { error } = await db()
+    .from("sms_messages")
+    .insert(phones.map((telephone) => ({ tenant_id: session.tenantId, group_buy_id: groupBuyId, telephone, content: body, points, status: "NOT_SENT_UNINTEGRATED" })));
+  if (error) throw new Error(`[shipping] 寫入簡訊紀錄失敗：${error.message}`);
+  const ni = await deliveryNotice(session.tenantId, "SMS", "發送簡訊");
+  return actionOk(`${ni.message}已建立 ${phones.length} 則簡訊紀錄（每則 ${points} 點，共 ${phones.length * points} 點）。`, { ...ni, data: [] });
+}
+
 /** 頁面 Editor 的 create／edit／remove（原站工具列按鈕已註解，列按鈕只有「商品」） */
 async function unsupported(ctx: RequestContext): Promise<Response> {
   requireSession(ctx);
@@ -384,4 +411,5 @@ export const cvsTraceRoutes: RouteDef[] = [
   post("/ajax/SalesOrderCVSTrace/action", unsupported),
   get("/ajax/SalesOrderCVSTrace/getCvsReturnStats", getCvsReturnStats),
   get("/ajax/Sms/getBalance", smsBalance),
+  post("/ajax/Sms/sendSMS", sendSmsByPhone),
 ];

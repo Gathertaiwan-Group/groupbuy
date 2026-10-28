@@ -25,6 +25,7 @@ import { editorIds, editorResponse, flattenDotted, parseEditorRequest } from "@/
 import { enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { getBankFormat } from "@/lib/modules/core/system-settings";
 import { accountModeOf, bankCsvTemplate, decodeBankFile, digitsOf, parseBankFile, parseManualText, type BankLine } from "./bank-csv";
+import { readSpreadsheetRows, rowsToCsv, spreadsheetKind, SpreadsheetError } from "@/lib/modules/orders/spreadsheet";
 import { matchBankLines, type ExistingBankTx, type MatchCode, type MatchOrder } from "./bank-match";
 import { fetchAll, parseIdList, requireGroupBuyId, taipeiDay, taipeiIso, taipeiTime } from "./common";
 
@@ -285,12 +286,24 @@ async function uploadBankTransactionCSV(ctx: RequestContext): Promise<Response> 
   const file = body.files.get("upload")?.[0];
   if (!file) return json({ fieldErrors: [{ name: "note", status: "請選擇檔案" }], data: [] });
   const name = String(file.name || "bank.csv");
-  if (/\.(xlsx?|xlsm|ods)$/i.test(name)) {
-    return json({ fieldErrors: [{ name: "note", status: "請將 Excel 檔另存為 CSV（逗號分隔）後再上傳" }], data: [] });
+  if (/\.ods$/i.test(name)) {
+    return json({ fieldErrors: [{ name: "note", status: "請將 ODS 檔另存為 .xlsx、.xls 或 CSV（逗號分隔）後再上傳" }], data: [] });
   }
   if (file.size > MAX_UPLOAD_BYTES) return json({ fieldErrors: [{ name: "note", status: "檔案太大（上限 4MB）" }], data: [] });
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const { text, encoding } = decodeBankFile(bytes);
+  // .xls／.xlsx（PARITY #100）：讀第一張工作表 → 轉成 CSV 文字，之後與 CSV 走同一套 42 種銀行格式解析
+  let text: string;
+  let encoding: string;
+  const kind = spreadsheetKind(name, bytes);
+  if (kind !== "csv") {
+    try {
+      text = rowsToCsv((await readSpreadsheetRows(name, bytes)).rows);
+      encoding = kind;
+    } catch (e) {
+      if (e instanceof SpreadsheetError) return json({ fieldErrors: [{ name: "note", status: e.message }], data: [] });
+      throw e;
+    }
+  } else ({ text, encoding } = decodeBankFile(bytes));
   const key = randomBytes(8).toString("hex");
   const safeName = name.replace(/[<>&"'\\/\u0000-\u001f]/g, "_").slice(0, 120);
   const { error } = await getServiceClient().from("bank_statement_uploads").insert({

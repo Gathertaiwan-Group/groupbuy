@@ -2,8 +2,9 @@
 // 原站：spec/html/invoice-list.html、spec/runtime/invoice-list.records.txt、SPEC「電子發票」、7.5；
 //       前端程式 public/scripts/invoice.js（invoiceManager：showStatus/issueBySalesOrderId/prepareAllowance）、
 //       public/public/scripts/invoice_v2.min.js（InvoiceManager：訂單發票彈窗，訂單頁使用）。
-// 電子發票平台一律「未串接」：開立／作廢／折讓都只寫 groupbuy.invoices 紀錄（預約中／作廢發票／開立折讓），
-// 回應帶【未串接】；勾「只記錄」時直接標成已作廢／折讓已開立（不需送平台）。
+// fix21 起串綠界電子發票：團購進階設定 EINVOICE_PROVIDER＝ECPAY／TEST 且金鑰已設定時直接送平台開立／作廢／折讓；
+// 未啟用時只寫 groupbuy.invoices 紀錄（預約中／作廢發票／開立折讓）並回【未串接】；勾「只記錄」時直接標成已作廢／折讓已開立。
+// 彈窗提示字依啟用狀態動態產生（einvoice-notice.ts）。
 //
 // 端點（皆可帶 .do 與 /{租戶}/ 前綴）：
 //   GET  /backend/Invoice/list                         頁面
@@ -32,7 +33,8 @@ import { crudRoutes, listEntity, type ListSpec, type WriteSpec } from "@/lib/cor
 import { enumLabel, enumOptions, enumOptionsFor } from "@/lib/core/enums";
 import { fetchAll, money, optionalGroupBuyId, parseIdList } from "./common";
 import { groupBuyPreferences } from "@/lib/modules/storefront/site";
-import { einvoiceProviderFor, envSuffix } from "./gateway";
+import { einvoiceProviderFor, envSuffix, isSandbox } from "./gateway";
+import { einvoiceNotice, type EinvoiceNoticeKind } from "./einvoice-notice";
 import { normalizeInvoiceItems, type EinvoiceProvider } from "@/lib/integrations/einvoice";
 
 const STATUS_ENUM = "Invoice.invoiceStatus";
@@ -917,6 +919,19 @@ async function previewInvoice(ctx: RequestContext): Promise<Response> {
 
 /* ───────────────────────── 彈窗（推導） ───────────────────────── */
 
+/** 彈窗提示字：依各筆所屬團購是否啟用綠界電子發票（PARITY #99；取代寫死的「平台尚未串接」） */
+async function noticeFor(tenantId: number, kind: EinvoiceNoticeKind, groupBuyIds: (number | null)[]) {
+  const cache = new Map<number | null, boolean>();
+  let enabled = 0;
+  let disabled = 0;
+  for (const g of groupBuyIds) {
+    if (!cache.has(g)) cache.set(g, !!(await einvoiceProviderFor(tenantId, g)));
+    if (cache.get(g)) enabled++;
+    else disabled++;
+  }
+  return einvoiceNotice(kind, { enabled, disabled, sandbox: isSandbox() });
+}
+
 async function invalidFragmentData(ctx: RequestContext & { session: AdminSession }): Promise<Record<string, unknown>> {
   const session = ctx.session;
   const uuidParam = String(ctx.query.get("uuid") ?? "");
@@ -943,7 +958,13 @@ async function invalidFragmentData(ctx: RequestContext & { session: AdminSession
     statusLabel: labels.get(r.invoice_status) ?? r.invoice_status,
     voidable: VOIDABLE.includes(r.invoice_status) || SCHEDULED.includes(r.invoice_status),
   }));
-  return { uuid: uuids.join(","), invoiceIdParam: invoiceIds.join(","), invoices: list, hasVoidable: list.some((x) => x.voidable) };
+  return {
+    uuid: uuids.join(","),
+    invoiceIdParam: invoiceIds.join(","),
+    invoices: list,
+    hasVoidable: list.some((x) => x.voidable),
+    einvoiceNotice: await noticeFor(session.tenantId, "invalid", rows.map((r) => r.group_buy_id)),
+  };
 }
 
 async function issueInvoiceFragmentData(ctx: RequestContext & { session: AdminSession }): Promise<Record<string, unknown>> {
@@ -951,8 +972,9 @@ async function issueInvoiceFragmentData(ctx: RequestContext & { session: AdminSe
   const ids = parseIdList(ctx.query.get("salesOrderIds") ?? ctx.query.get("salesOrderId"));
   const db = getServiceClient();
   const orders = ids.length
-    ? (((await db.from("sales_orders").select("id, uuid, state, grand_total, billing_receipt_type, billing_receipt_vat_id").eq("tenant_id", session.tenantId).in("id", ids)).data ?? []) as {
+    ? (((await db.from("sales_orders").select("id, uuid, group_buy_id, state, grand_total, billing_receipt_type, billing_receipt_vat_id").eq("tenant_id", session.tenantId).in("id", ids)).data ?? []) as {
         id: number;
+        group_buy_id: number | null;
         uuid: string;
         state: string;
         grand_total: number;
@@ -964,6 +986,7 @@ async function issueInvoiceFragmentData(ctx: RequestContext & { session: AdminSe
   return {
     salesOrderIds: orders.map((o) => o.id).join(","),
     orders: orders.map((o) => ({ uuid: o.uuid, amount: money(o.grand_total), receipt: receipt[o.billing_receipt_type] ?? "", vat: o.billing_receipt_vat_id ?? "" })),
+    einvoiceNotice: await noticeFor(session.tenantId, "issue", orders.map((o) => o.group_buy_id)),
   };
 }
 
@@ -996,7 +1019,13 @@ export const invoiceRoutes: RouteDef[] = [
       const id = Number(ctx.query.get("invoiceId"));
       if (!Number.isSafeInteger(id) || id <= 0) throw badRequest("缺少參數 invoiceId");
       const [inv] = await loadInvoices(ctx.session, [id]);
-      return { invoiceId: inv.id, invoiceNumber: inv.invoice_number ?? "", merchantOrderId: inv.merchant_order_id ?? "", amount: money(inv.amount) };
+      return {
+        invoiceId: inv.id,
+        invoiceNumber: inv.invoice_number ?? "",
+        merchantOrderId: inv.merchant_order_id ?? "",
+        amount: money(inv.amount),
+        einvoiceNotice: await noticeFor(ctx.session.tenantId, "allowance", [inv.group_buy_id]),
+      };
     },
   }),
   modalFragment("/ajax/Invoice/displayIssueInvoice", { template: "accounting/modal-invoice-issueinvoice.html", method: "GET", data: issueInvoiceFragmentData }),
@@ -1005,7 +1034,7 @@ export const invoiceRoutes: RouteDef[] = [
     method: "GET",
     data: async (ctx) => {
       const o = await findOrder(ctx.session, ctx.query.get("salesOrderId"));
-      return { salesOrderId: o.id, uuid: o.uuid };
+      return { salesOrderId: o.id, uuid: o.uuid, einvoiceNotice: await noticeFor(ctx.session.tenantId, "salesOrder", [o.group_buy_id]) };
     },
   }),
 ];

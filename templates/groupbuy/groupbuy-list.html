@@ -473,6 +473,8 @@ $(document).ready(function() {
 			+ '<a target="_blank" class="btn btn-default" href="/backend/GroupBuy/shipping.do?groupBuyId='+id+'">運費設定</a>'
 			+ '<a class="btn btn-default" href="javascript: void(0)" data-toggle="modal" data-target="#myModal" onclick="openForm(\'/ajax/Influencer/displayConfirm\', \'groupBuyId='+id+'\')">設定KOL代碼</a>'
 			+ '<button class="btn btn-default" data-action="switchShortUrl" data-id="'+id+'">對調表單短網址</button>'
+			// 補D（推導入口）：原站 prepareAdminUserEditor（dataTable.min.js）；擷取頁未見呼叫處
+			+ '<a class="btn btn-default" href="javascript: void(0)" onclick="prepareAdminUserEditor('+id+')">團購管理員</a>'
 		settingButtons = '<div class="btn-toolbar btn-group btn-group-setting">' + settingButtons + '</div>'
 		if (d.render == 'ALIAS') {
 			buttons = ''

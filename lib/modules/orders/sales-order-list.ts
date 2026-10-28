@@ -8,6 +8,7 @@
 //   POST /ajax/SalesOrder/list                       列表（serverSide；回應另含 b2sTotal）
 //   GET  /ajax/SalesOrder/get?salesOrderId=|uuid=    單筆（拆單彈窗等用）
 //   POST /ajax/SalesOrder/save|update|delete         Editor 新增／修改／刪除（刪除＝階段改為已刪除，列表不再顯示）
+import { tenantPosEnabled } from "./pos-invoice-print";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, page, requireSession } from "@/lib/core/http/route-helpers";
 import { FieldErrors, HttpError, badRequest, notFound } from "@/lib/core/http/errors";
@@ -365,6 +366,7 @@ export const salesOrderListRoutes: RouteDef[] = [
         salesOrderId: /^\d+$/.test(ctx.query.get("salesOrderId") ?? "") ? ctx.query.get("salesOrderId") : "",
         itemUid: (ctx.query.get("itemUid") ?? "").replace(/['"\\<>]/g, ""),
         permissions: pagePermissions(ctx.session.permissions ?? {}),
+        posEnabled: await tenantPosEnabled(ctx.session.tenantId),
       };
       return { conf };
     },

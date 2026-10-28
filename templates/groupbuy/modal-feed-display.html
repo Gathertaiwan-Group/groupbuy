@@ -1,0 +1,34 @@
+{{!-- 推導：原站進階設定 case 'feed' → openForm('/ajax/Feed…')（路徑與彈窗內容被擷取過濾截斷，spec/SPEC.md §9 #15）。
+     本系統做成「商品 Feed」：Google Merchant Center／Meta（Facebook）商品目錄可直接抓取的 RSS 2.0（g: 命名空間）網址。 --}}
+<div class="modal-header">
+	<h5 class="modal-title">商品 Feed » {{title}}</h5>
+	<button type="button" class="close" data-dismiss="modal" aria-hidden="true">×</button>
+</div>
+<div class="modal-body modal-body-scrollable">
+	<p>將下列網址填入 Google Merchant Center（排定的擷取）或 Meta 商務管理工具（商品目錄 → 資料來源 → 排定的動態饋給），即可自動同步本團購上架中的商品。</p>
+	<div class="form-group">
+		<label for="feedUrl">Feed 網址（RSS 2.0 / XML）</label>
+		<div class="input-group">
+			<input type="text" id="feedUrl" class="form-control" readonly value="{{feedUrl}}">
+			<div class="input-group-append">
+				<button type="button" class="btn btn-default btn-sm m-0 px-3" id="btnCopyFeedUrl">複製</button>
+				<a class="btn btn-info btn-sm m-0 px-3" target="_blank" rel="noopener" href="{{feedUrl}}">預覽</a>
+			</div>
+		</div>
+	</div>
+	<ul class="small text-muted pl-3">
+		<li>只列出未下架、品項未下架、價格大於 0 的一般／規格／組合商品；贈品、運費、手續費等系統商品不列入。</li>
+		<li>原價高於售價時，原價列為 price、售價列為 sale_price；庫存（現貨＋預購）為 0 時標示缺貨。</li>
+		<li>網址含驗證碼，請勿公開張貼；Feed 內容快取 10 分鐘。</li>
+	</ul>
+</div>
+<div class="modal-footer">
+	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+</div>
+<script>
+$('#btnCopyFeedUrl').on('click', function () {
+	var el = document.getElementById('feedUrl');
+	el.select();
+	try { document.execCommand('copy'); toastr.success('已複製'); } catch (e) {}
+});
+</script>

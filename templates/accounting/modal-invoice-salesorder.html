@@ -6,7 +6,7 @@
 </div>
 <div class="modal-body">
 	<div class="modal-message"></div>
-	<div class="alert alert-warning small mb-2">【未串接】電子發票平台尚未串接：開立／作廢／折讓只會寫入系統紀錄（預約中／作廢發票／開立折讓），勾「只記錄」則直接標示完成。</div>
+	<div class="alert {{#if einvoiceNotice.warn}}alert-warning{{else}}alert-info{{/if}} small mb-2">{{einvoiceNotice.text}}</div>
 	<div id="loadingState" class="text-center py-3"><div class="spinner-border text-primary" role="status"></div><p class="mt-2">載入中...</p></div>
 	<div id="errorState" class="alert alert-danger" style="display:none"><span id="errorMessage"></span></div>
 	<div id="noInvoiceState" class="alert alert-info" style="display:none">此訂單尚無發票紀錄</div>

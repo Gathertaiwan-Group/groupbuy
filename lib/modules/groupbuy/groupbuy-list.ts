@@ -14,6 +14,8 @@
 //   POST /ajax/GroupBuy/syncFeatureTagForShipping      工具列「重新整理出完貨標籤」（actionButton）
 //   POST /ajax/GroupBuy/syncStock                      列展開「同步銷售原始庫存」
 //   POST /ajax/GroupBuy/switchShortUrl                 列展開「對調表單短網址」（DynamicEditor form：shortUrl1、shortUrl2）
+import { adminUserIdsFrom, isGroupBuyRestricted } from "./admin-groupbuys-logic";
+import { authorizedGroupBuyIds, syncAdminUserGroupBuys } from "./groupbuy-extras";
 import { getServiceClient } from "@/lib/supabase/server";
 import { groupBuy as groupBuyEntity } from "@/lib/db/entities";
 import { apiToRow, rowToApi, type Row } from "@/lib/db/mapping";
@@ -157,6 +159,8 @@ async function preFilterIds(session: AdminSession, dt: DtRequest): Promise<numbe
   const intersect = (next: number[]) => {
     ids = ids === null ? next : (ids as number[]).filter((x) => next.includes(x));
   };
+  // 團購受限帳戶（PARITY #37，推導旗標 permissions.groupBuyRestricted）：只列出有授權的團購
+  if (isGroupBuyRestricted(session.permissions)) intersect(await authorizedGroupBuyIds(session));
   const status = dt.extra.status ?? "";
   if (["unshippedAndPrepareShipping", "prepareShipping", "shippedThisMonth", "shippedLastMonth"].includes(status)) {
     const { data, error } = await db.rpc("gb_group_buy_ids_by_order_filter", { p_tenant_id: session.tenantId, p_filter: status });
@@ -438,6 +442,15 @@ async function updateGroupBuys(ctx: RequestContext, session: AdminSession, req: 
     if (Number.isFinite(lockMs) && lockMs > 0 && existing.updated_at) {
       const rowMs = new Date(String(existing.updated_at)).getTime();
       if (rowMs > lockMs + 1000) throw new HttpError(409, "此資料已被其他人修改，請重新整理頁面後再編輯");
+    }
+    // 團購管理員授權（PARITY #37）：prepareAdminUserEditor 只送 adminUserGroupBuys，不經一般欄位驗證
+    const adminIds = adminUserIdsFrom(r.values);
+    if (adminIds !== undefined) {
+      await syncAdminUserGroupBuys(session, id, adminIds);
+      const rest = Object.keys(r.values).filter((k) => !k.startsWith("adminUserGroupBuys"));
+      if (rest.length === 0) continue;
+      const vals = r.values as Record<string, unknown>;
+      for (const k of Object.keys(vals)) if (k.startsWith("adminUserGroupBuys")) delete vals[k];
     }
     const values = flattenDotted(r.values);
     const errors = validateValues(values, "edit", existing);

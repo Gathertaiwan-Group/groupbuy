@@ -257,6 +257,9 @@ function gbpEscape(s) { return $.fn.dataTable.render.text().display(s == null ? 
 				groupBuyTagGroupBuyManager.unTag();
 				groupBuyTagEditor.reloadWhenSuccess(groupBuyTagGroupBuyManager);
 				break;
+			case 'feed':
+				openForm('/ajax/Feed/display.do', 'groupBuyId=' + groupBuyId);
+				break;
 			case 'removeAll':
 				editor
 				.title('重置所有設定')
@@ -442,6 +445,8 @@ table.dataTable td {word-break:break-all}
 <!-- <button type="button" data-action="tag" class="btn btn-primary">綁定標籤</button> -->
 <!-- <button type="button" data-action="goTag" class="btn btn-info">前往設定標籤</button> -->
 <button type="button" data-action="removeAll" class="btn btn-danger">重置所有設定</button>
+{{!-- 推導：原站 switch 有 case 'feed'（openForm('/ajax/Feed…'，後段被擷取過濾截斷）；本系統做成商品 Feed 網址彈窗 --}}
+<button type="button" data-action="feed" class="btn btn-info">商品 Feed</button>
 </div>
 {{!-- 推導：本團套用標籤時隱藏列表、改顯示此說明（原站可見 .container-gbp-list／.container-gbp-list-hide-note 切換） --}}
 <div class="card-body container-gbp-list-hide-note" style="display:none"><p class="text-warning mb-0">本團已套用團購標籤，進階設定以標籤內的設定為主；如需個別設定請先解除標籤。</p></div>

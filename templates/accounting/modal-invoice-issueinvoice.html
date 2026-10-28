@@ -21,7 +21,7 @@
         <input type="checkbox" name="forceDuplicate" id="forceDuplicate" value="true" class="form-check-input"><label for="forceDuplicate" class="form-check-label pl-4">已有發票紀錄的訂單仍重新開立</label>
         </div>
     </div>
-    <p class="small text-danger">【未串接】電子發票平台尚未串接：送出後只建立「發送電子發票[預約中]」紀錄，不會實際開立發票。</p>
+    <p class="small {{#if einvoiceNotice.warn}}text-danger{{else}}text-info{{/if}}">{{einvoiceNotice.text}}</p>
     </div> <!-- modal-body -->
     <div class="progress">
         <div class="progress-bar" role="progressbar"></div>

@@ -29,7 +29,7 @@
             <input type="checkbox" name="recordOnly" id="allowanceRecordOnly" value="true" class="form-check-input"><label for="allowanceRecordOnly" class="form-check-label pl-4">只記錄（不送電子發票平台，直接標示為「折讓已開立」）</label>
             </div>
         </div>
-        <p class="small text-danger">【未串接】電子發票平台尚未串接：未勾「只記錄」時，折讓會標示為「開立折讓」，待串接後才會實際送出。</p>
+        <p class="small {{#if einvoiceNotice.warn}}text-danger{{else}}text-info{{/if}}">{{einvoiceNotice.text}}</p>
     </div>
     </div> <!-- modal-body -->
     <div class="progress">
