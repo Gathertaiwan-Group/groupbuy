@@ -23,8 +23,12 @@
 //   POST /ajax/SalesOrder/createAndMove                         精靈「重開新單」（原站卡片隱藏；同上）
 //   GET  /backend/ReturnRefund/displayReturnAndRefund?salesOrderId=   精靈「原單操作[預設]」／「開始修改訂單」／「編輯換貨單」
 //   POST /ajax/ReturnRefund/prepare|updateOrderItem|addOrderItem|applySalesRules   原單操作試算（原站前三者為 GET；寫入草稿改 POST）
+//        applySalesRules＝正式優惠引擎 evaluatePricing 重算（returns-pricing.ts；PARITY #58），送出時折扣合計與優惠條件一併寫回
 //   GET  /ajax/ReturnRefund/itemTags|itemOptions|isTypeBundleConfigable            原單操作「下拉選擇商品」（取代原站 /ajax/Item/*）
 //   POST /ajax/ReturnRefund/returnAndRefund                      原單操作送出（商品/運費/訂單金額寫回、差額新單、訂單更新信【未串接】）
+import { evaluatePricing } from "@/lib/modules/marketing/pricing-rules";
+import { loadPricingInputForOrder } from "@/lib/modules/marketing/pricing-loader";
+import { applyLineDiscounts, draftCartInputs, draftNewGrandTotal, type DraftPricing } from "./returns-pricing";
 import ExcelJS from "exceljs";
 import { salesOrderReturn } from "@/lib/db/entities";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
@@ -699,6 +703,8 @@ interface RrItem {
   parentOrderItemId: number | null;
   qtyPerBundle: number | null;
   orig: { price: number; total: number; discount: number } | null;
+  /** 贈品列（不列入優惠引擎） */
+  gift?: boolean;
 }
 interface RrDraft {
   salesOrderId: number;
@@ -710,10 +716,12 @@ interface RrDraft {
   paymentMethod: number;
   items: RrItem[];
   nextNewId: number;
+  /** 原訂單折扣合計（sales_orders.discount_amount） */
+  oriDiscount?: number;
+  /** 按過「重新計算優惠條件」後的引擎結果（PARITY #58）；手動改列折價即取消 */
+  pricing?: DraftPricing | null;
 }
 
-const round2 = (v: number) => Math.round(v * 100) / 100;
-const lineAmount = (p: { price: number; total: number; discount: number }) => round2(p.price * p.total - p.discount);
 
 function rrItemApi(i: RrItem): Row {
   return {
@@ -735,7 +743,6 @@ function rrItemApi(i: RrItem): Row {
 
 /** 原站 rr 物件：{salesOrder, oriGrandTotal, newGrandTotal, aliasId(團購 id), updatedOrderItems, salesReturnRecords} */
 function rrJson(d: RrDraft, updated: RrItem[] | null): Row {
-  const diff = d.items.reduce((s, i) => s + lineAmount(i) - (i.orig ? lineAmount(i.orig) : 0), 0);
   return {
     salesOrder: {
       salesOrderId: d.salesOrderId,
@@ -747,7 +754,9 @@ function rrJson(d: RrDraft, updated: RrItem[] | null): Row {
       sortedOrderItems: d.items.map(rrItemApi),
     },
     oriGrandTotal: d.oriGrandTotal,
-    newGrandTotal: updated === null ? null : round2(d.oriGrandTotal + diff),
+    newGrandTotal: updated === null ? null : draftNewGrandTotal(d),
+    salesRules: d.pricing ? d.pricing.rules : null,
+    pricingMessages: d.pricing ? d.pricing.messages : [],
     aliasId: d.groupBuyId,
     updatedOrderItems: (updated ?? []).map(rrItemApi),
     salesReturnRecords: d.items
@@ -802,7 +811,7 @@ async function rrPrepare(ctx: RequestContext): Promise<Response> {
   const id = await intParam(ctx, "salesOrderId", true);
   const { data, error } = await db()
     .from("sales_orders")
-    .select("id,uuid,state,group_buy_id,grand_total,shipping_amount,total_paid,payment_method,order_items(*)")
+    .select("id,uuid,state,group_buy_id,grand_total,shipping_amount,discount_amount,total_paid,payment_method,order_items(*)")
     .eq("tenant_id", session.tenantId)
     .eq("id", id)
     .maybeSingle();
@@ -821,6 +830,8 @@ async function rrPrepare(ctx: RequestContext): Promise<Response> {
     shippingAmount: num(o.shipping_amount),
     paid: num(o.total_paid) > 0,
     paymentMethod: num(o.payment_method),
+    oriDiscount: num(o.discount_amount),
+    pricing: null,
     nextNewId: -1,
     items: items.map((r) => ({
       orderItemId: Number(r.id),
@@ -837,6 +848,7 @@ async function rrPrepare(ctx: RequestContext): Promise<Response> {
       parentOrderItemId: r.parent_order_item_id == null ? null : Number(r.parent_order_item_id),
       qtyPerBundle: r.qty_per_bundle == null ? null : Number(r.qty_per_bundle),
       orig: { price: num(r.price), total: num(r.total), discount: num(r.discount) },
+      gift: !!r.gift,
     })),
   };
   // 清掉一天以前的舊草稿
@@ -866,10 +878,16 @@ async function rrUpdateItem(ctx: RequestContext): Promise<Response> {
       updated.push(c);
     }
   }
+  const manualDiscount = discount !== item.discount;
   item.total = total;
   item.price = price;
   item.discount = total === 0 ? 0 : discount;
   if (statusRaw === "BACKORDER" || statusRaw === "UNSHIPPING") item.status = statusRaw;
+  // 已套用優惠引擎：改數量／單價 → 自動重算；手動改折價 → 改回手動模式（以列折價計算）
+  if (d.pricing) {
+    if (manualDiscount) d.pricing = null;
+    else updated.push(...(await runDraftPricing(session, d)).changed.filter((c) => !updated.includes(c)));
+  }
   await saveDraft(session, d);
   return json({ data: rrJson(d, updated) });
 }
@@ -922,15 +940,38 @@ async function rrAddItem(ctx: RequestContext): Promise<Response> {
   };
   d.nextNewId -= 1;
   d.items.push(add);
+  const updatedAdd: RrItem[] = [add];
+  if (d.pricing) updatedAdd.push(...(await runDraftPricing(session, d)).changed.filter((c) => c !== add));
   await saveDraft(session, d);
-  return json({ data: rrJson(d, [add]) });
+  return json({ data: rrJson(d, updatedAdd) });
 }
 
-/** 重新計算優惠條件：本系統未串接優惠引擎（推導）→ 以目前草稿重算商品小計與訂單金額後整頁重繪 */
+/** 以正式優惠引擎（marketing evaluatePricing，同前台結帳）重算草稿：列折扣寫回、記下折扣合計與套用的優惠條件 */
+async function runDraftPricing(session: AdminSession, d: RrDraft): Promise<{ changed: RrItem[]; ok: boolean; message: string }> {
+  if (!d.groupBuyId) return { changed: [], ok: false, message: "訂單沒有所屬團購，無法套用優惠條件" };
+  const input = await loadPricingInputForOrder(session, d.salesOrderId, draftCartInputs(d.items));
+  if (!input) return { changed: [], ok: false, message: "無法讀取訂單的優惠計算資料" };
+  const res = evaluatePricing(input);
+  const changed = applyLineDiscounts(d.items, res.lines) as RrItem[];
+  const rules = res.appliedRules
+    .filter((r) => num(r.discount) > 0 || num(r.points) > 0)
+    .map((r) => ({ salesRuleId: r.salesRuleId, title: r.title, discount: Math.round(num(r.discount)), points: Math.round(num(r.points)) }));
+  const messages: string[] = [];
+  if (res.coupon && !res.coupon.applied && res.coupon.message) messages.push(`優惠卷 ${res.coupon.code}：${res.coupon.message}`);
+  if (res.gifts.length) messages.push("贈品資格需自行調整訂單商品（重新計算不會自動增刪贈品）");
+  d.pricing = { totalDiscount: Math.round(num(res.totalDiscount)), rules, messages };
+  const msg = `已重新計算優惠（折扣合計 $${d.pricing.totalDiscount}${rules.length ? `：${rules.map((r) => r.title).join("、")}` : ""}）`;
+  return { changed, ok: true, message: [msg, ...messages].join("；") };
+}
+
+/** 重新計算優惠條件（PARITY #58）：正式引擎重算後整頁重繪 */
 async function rrApplySalesRules(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const d = await loadDraft(session);
-  return json({ data: rrJson(d, []) });
+  const r = await runDraftPricing(session, d);
+  if (!r.ok) throw badRequest(r.message);
+  await saveDraft(session, d);
+  return json({ data: rrJson(d, []), message: r.message });
 }
 
 /** 下拉選擇商品：團購品項內商品的第一層名稱標籤（原站 /ajax/Item/getFirstTags 的回傳格式 [{value,label}]） */
@@ -1019,6 +1060,20 @@ async function rrSubmit(ctx: RequestContext): Promise<Response> {
   if (error) rrFail(error, "原單操作");
   const res = (data ?? {}) as { changed?: number; added?: number; removed?: number };
   const notes: string[] = [`已更新訂單 ${o.uuid}（異動 ${res.changed ?? 0}、新增 ${res.added ?? 0}、刪除 ${res.removed ?? 0} 項商品）`];
+  // 有按「重新計算優惠條件」（引擎結果）→ 訂單折扣合計與套用的優惠條件一併寫回（同訂單「重新計算優惠」）
+  const draft = await loadDraft(session).catch(() => null);
+  if (draft?.pricing && draft.salesOrderId === id) {
+    await adminUpdateOrders(session, [id], { discount_amount: draft.pricing.totalDiscount }, `加退換商品：重新計算優惠，折扣合計 ${draft.oriDiscount ?? 0}→${draft.pricing.totalDiscount}`);
+    const { error: de } = await db().from("sales_order_sales_rules").delete().eq("tenant_id", session.tenantId).eq("sales_order_id", id);
+    if (de) throw new Error(`[orders returns] ${de.message}`);
+    if (draft.pricing.rules.length) {
+      const { error: ie } = await db()
+        .from("sales_order_sales_rules")
+        .insert(draft.pricing.rules.map((r) => ({ tenant_id: session.tenantId, sales_order_id: id, sales_rule_id: r.salesRuleId, title: r.title, discount: r.discount, points: r.points || null })));
+      if (ie) throw new Error(`[orders returns] ${ie.message}`);
+    }
+    notes.push(`已寫回優惠條件（折扣合計 $${draft.pricing.totalDiscount}）`);
+  }
 
   if (await boolParam(ctx, "optionCreateSalesOrder")) {
     const toPay = numText(await strParam(ctx, "grandTotalToPay"), "新訂單支付差額金額");

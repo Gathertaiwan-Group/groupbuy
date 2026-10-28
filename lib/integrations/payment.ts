@@ -199,6 +199,22 @@ export const ECPAY_CHOOSE_PAYMENT: Record<number, string> = {
   [PM.TAIWANPAY]: "TWQR",
 };
 
+/** CreditCardPeriodAction 回應（urlencoded 或 JSON）→ 結果 */
+export function parsePeriodActionResponse(text: string): { ok: boolean; rtnCode: string; message: string } {
+  const t = String(text ?? "").trim();
+  let q: Record<string, unknown> = {};
+  if (t.startsWith("{")) {
+    try {
+      q = JSON.parse(t) as Record<string, unknown>;
+    } catch {
+      q = {};
+    }
+  } else q = parseFormString(t);
+  const code = String(q.RtnCode ?? "");
+  const msg = String(q.RtnMsg ?? "").trim() || t.slice(0, 200) || "綠界沒有回應";
+  return { ok: code === "1", rtnCode: code, message: msg };
+}
+
 /** 依綠界文件：定期定額參數檢查 */
 export function validPeriod(p: { type: string; frequency: number; execTimes: number }): boolean {
   const f = Math.trunc(p.frequency);
@@ -368,6 +384,33 @@ export class EcpayPayment implements PaymentProvider {
     }
     const q = parseFormString(text.trim());
     return { action: input.action, ok: String(q.RtnCode) === "1", rtnCode: String(q.RtnCode ?? ""), message: String(q.RtnMsg ?? text.slice(0, 200)) };
+  }
+
+  /**
+   * 信用卡定期定額訂單作業（綠界 Cashier/CreditCardPeriodAction，PARITY #66）：
+   *   ReAuth＝對授權失敗的定期定額訂單重新授權；Cancel＝停止後續扣款。回應 urlencoded：RtnCode=1 成功、RtnMsg 訊息。
+   */
+  async periodAction(merchantTradeNo: string, action: "ReAuth" | "Cancel"): Promise<{ ok: boolean; rtnCode: string; message: string }> {
+    const p: Record<string, string> = {
+      MerchantID: this.creds.merchantId,
+      MerchantTradeNo: merchantTradeNo,
+      Action: action,
+      TimeStamp: String(Math.floor(Date.now() / 1000)),
+    };
+    p.CheckMacValue = this.sign(p);
+    let text = "";
+    try {
+      const r = await this.fetcher(`${ecpayHosts(this.sandbox).payment}/Cashier/CreditCardPeriodAction`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(p).toString(),
+        signal: AbortSignal.timeout(20000),
+      });
+      text = await r.text();
+    } catch (e) {
+      return { ok: false, rtnCode: "", message: `連線失敗：${(e as Error).message}` };
+    }
+    return parsePeriodActionResponse(text);
   }
 
   /**

@@ -3,6 +3,8 @@
 //   DataTableConfig.actionButton（確認框）→ 成功 actionOk(訊息)；失敗 HTTP 4xx {error}（顯示在確認框）
 //   initAjaxForm 表單（取消訂單、設為已出貨、拆單…）→ {code:200, error:訊息, data:[…]}
 //   Editor（寄信、更新超取小白單、設為準備出貨中）→ {data:[…]}（另帶 message/notIntegrated）
+import { ecpayPayment, envSuffix } from "@/lib/modules/accounting/gateway";
+import { periodBaseTradeNo, reauthBlockReason, statusAfterAuth, type PeriodTx } from "./reauth-period-logic";
 import { queuePaymentEmail } from "@/lib/modules/core/delivery";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { fragment, get, post, requireSession } from "@/lib/core/http/route-helpers";
@@ -307,13 +309,37 @@ async function renewCvsPickup(ctx: RequestContext): Promise<Response> {
   return json({ code: 400, error: `${n.message}${missing.length ? `（找不到訂單：${missing.join("、")}）` : ""}`, notIntegrated: true });
 }
 
-/** GET /ajax/SalesOrder/reauthPeriod：信用卡定期定額重新授權（原站以 $.ajax GET 呼叫 → 不改資料；金流未串接，前端以 messagebox 顯示 error） */
+/**
+ * GET /ajax/SalesOrder/reauthPeriod?salesOrderId=：信用卡定期定額重新授權（PARITY #66；原站 $.ajax GET，前端 messagebox 顯示 error）。
+ * 綠界 Cashier/CreditCardPeriodAction Action=ReAuth（預設 Stage；GATEWAY_MODE=production 才連正式）。
+ * 以第一期授權成功的商店訂單編號送出；成功且訂單為「授權失敗」→ 改回「付款成功通知」；結果寫訂單歷程。綠界未設定 → 【未串接】。
+ */
 async function reauthPeriod(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const id = (await idsParam(ctx, "salesOrderId"))[0];
-  await fetchOrder(session, id, "id");
-  const n = notIntegrated("信用卡定期定額重新授權（金流）");
-  return actionOk(n.message, { notIntegrated: true });
+  const o = (await fetchOrder(session, id, "id,uuid,state,status,payment_method")) as Row;
+  const block = reauthBlockReason({ payment_method: Number(o.payment_method) || 0, state: String(o.state ?? "") });
+  if (block) throw badRequest(block);
+  const provider = ecpayPayment();
+  if (!provider) {
+    const n = notIntegrated("信用卡定期定額重新授權（綠界金流未設定）");
+    return actionOk(n.message, { notIntegrated: true });
+  }
+  const { data: txs, error } = await db()
+    .from("sales_order_transactions")
+    .select("provider, category, status, payment_method, merchant_trade_no, created_at")
+    .eq("tenant_id", session.tenantId)
+    .eq("sales_order_id", id);
+  if (error) throw new Error(`[orders] 讀取交易紀錄失敗：${error.message}`);
+  const mtn = periodBaseTradeNo((txs ?? []) as PeriodTx[]);
+  if (!mtn) throw badRequest("找不到此訂單第一期授權成功的定期定額交易，無法重新授權");
+  const r = await provider.periodAction(mtn, "ReAuth");
+  const note = `[金流] 定期定額重新授權${r.ok ? "成功" : `失敗：${r.message}${r.rtnCode ? `（${r.rtnCode}）` : ""}`}（${mtn}）${envSuffix()}`;
+  const next = r.ok ? statusAfterAuth(String(o.status ?? ""), true) : null;
+  if (next) await adminUpdateOrders(session, [id], { status: next }, note);
+  else await addOrderHistory(session, id, note);
+  if (!r.ok) throw badRequest(`重新授權失敗：${r.message}${envSuffix()}`);
+  return actionOk(`訂單 ${o.uuid} 已重新授權${envSuffix()}`);
 }
 
 /* ─────────────────────────── 寄信 ─────────────────────────── */

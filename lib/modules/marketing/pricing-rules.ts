@@ -1220,20 +1220,34 @@ export function evaluatePricing(input: PricingInput): PricingResult {
       const tags = parseTags(r.tag);
       const rule = String(r.settings?.packRule?.rule ?? "").toUpperCase();
       const subTotal = Math.round(toNumber(r.settings?.packRule?.subItemTotal, 0));
-      if (tags.length < 2 || rule !== "SUM_TAG" || subTotal <= 0) continue;
+      if (tags.length < 2) continue;
       const all = baseLines(r);
       const mainQty = qtyOf(all.filter((l) => l.tags.includes(tags[0])));
       if (mainQty <= 0) continue;
-      const subQty = qtyOf(all.filter((l) => hasAnyTag(l, tags.slice(1))));
-      const ok = subQty === mainQty * subTotal;
-      constraints.push({
-        salesRuleId: r.salesRuleId,
-        title: r.title,
-        category: cat,
-        satisfied: ok,
-        scope: "CHECKOUT",
-        message: ok ? "" : `「${r.title}」子商品需選擇${mainQty * subTotal}件（目前${subQty}件）`,
-      });
+      if (rule === "SUM_TAG" && subTotal > 0) {
+        // 加總數量：所有子商品標籤合計＝組合包數×子商品加總數量
+        const subQty = qtyOf(all.filter((l) => hasAnyTag(l, tags.slice(1))));
+        const ok = subQty === mainQty * subTotal;
+        constraints.push({
+          salesRuleId: r.salesRuleId,
+          title: r.title,
+          category: cat,
+          satisfied: ok,
+          scope: "CHECKOUT",
+          message: ok ? "" : `「${r.title}」子商品需選擇${mainQty * subTotal}件（目前${subQty}件）`,
+        });
+      } else if (rule === "BY_TAG") {
+        // 依標籤個別計算（推導，PARITY #48）：每個子商品標籤各需＝組合包數（每包每個標籤一件）
+        const bad = tags.slice(1).map((t) => ({ t, q: qtyOf(all.filter((l) => l.tags.includes(t))) })).filter((x) => x.q !== mainQty);
+        constraints.push({
+          salesRuleId: r.salesRuleId,
+          title: r.title,
+          category: cat,
+          satisfied: bad.length === 0,
+          scope: "CHECKOUT",
+          message: bad.length ? `「${r.title}」${bad.map((x) => `「${x.t}」需選擇${mainQty}件（目前${x.q}件）`).join("、")}` : "",
+        });
+      }
       continue;
     }
     for (const g of groupsOf(r, targetLines(r))) {

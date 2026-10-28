@@ -11,6 +11,7 @@
 //   POST /gateway/ecpay/payment/notify   ReturnURL
 //   POST /gateway/ecpay/payment/info     PaymentInfoURL（ATM 虛擬帳號／超商代碼）
 //   POST /gateway/ecpay/payment/result   OrderResultURL（瀏覽器導回；同樣驗章入帳後 303 到訂單頁）
+import { statusAfterAuth } from "@/lib/modules/orders/reauth-period-logic";
 import { queuePaymentEmail } from "@/lib/modules/core/delivery";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, post } from "@/lib/core/http/route-helpers";
@@ -306,6 +307,12 @@ async function periodNotify(ctx: RequestContext): Promise<Response> {
       actor: "SYSTEM",
       note: `[金流] 定期定額第 ${n.times} 次授權${n.success ? "成功" : `失敗：${n.message}`}（${n.amount} 元）${envSuffix()}`,
     });
+    // PARITY #66：授權失敗 → 訂單狀態「授權失敗」（訂單列出現「請求授權」重新授權按鈕）；之後授權成功 → 改回「付款成功通知」
+    const { data: cur } = await db.from("sales_orders").select("status, state").eq("tenant_id", first.tenant_id).eq("id", first.sales_order_id).maybeSingle<{ status: string; state: string }>();
+    const next = cur && !["CANCELED", "DELETED"].includes(cur.state) ? statusAfterAuth(cur.status, n.success) : null;
+    if (next) {
+      await db.from("sales_orders").update({ status: next }).eq("tenant_id", first.tenant_id).eq("id", first.sales_order_id).eq("status", cur!.status);
+    }
   }
   return ack(provider.ackOk);
 }

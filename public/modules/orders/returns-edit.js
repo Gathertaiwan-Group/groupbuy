@@ -358,12 +358,12 @@
 				});
 			}
 
-			// 4) 重新套用優惠（本系統未串接優惠引擎：依目前草稿重算小計與訂單金額後整頁重繪）
+			// 4) 重新套用優惠（PARITY #58：後端以正式優惠引擎 evaluatePricing 重算各列折價與折扣合計，整頁重繪；送出時一併寫回）
 			$form.on('click', '#rrApplySalesRules', function () {
 				call('applySalesRules', { salesOrderId: o.salesOrderId })
 					.done(function (json) {
 						applyRr(json.data, true);
-						modalShowSuccess($form, '已依目前商品重新計算小計與訂單金額（優惠條件未自動套用，請視需要調整折價）');
+						modalShowSuccess($form, $('<div>').text(json.message || '已重新計算優惠').html());
 					})
 					.fail(fail);
 			});

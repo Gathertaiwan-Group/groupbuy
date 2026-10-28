@@ -274,7 +274,11 @@ export async function syncCouponTotals(db: Db, tenantId: number, groupBuyCouponI
  * - 隨機類（POINT_RANDOM、GIFT_LOTTERY）固定 random()=0，重算結果穩定
  * 找不到訂單或訂單沒有團購時回 null。
  */
-export async function loadPricingInputForOrder(session: AdminSession, salesOrderId: number): Promise<PricingInput | null> {
+/**
+ * 訂單的引擎輸入。overrideItems：以呼叫端提供的商品明細取代資料庫的訂單商品（退換貨「原單操作」草稿試算用，
+ * 其餘條件——優惠條件、訂單優惠卷、會員、郵遞區號、下單時間——仍取自訂單）。
+ */
+export async function loadPricingInputForOrder(session: AdminSession, salesOrderId: number, overrideItems?: CartItemInput[]): Promise<PricingInput | null> {
   const db = getServiceClient();
   const tenantId = session.tenantId;
   const { data: order, error } = await db
@@ -296,7 +300,7 @@ export async function loadPricingInputForOrder(session: AdminSession, salesOrder
       .order("seq"),
     "讀取訂單商品",
   );
-  const cart: CartItemInput[] = items
+  const cart: CartItemInput[] = overrideItems ?? items
     .filter((r) => r.item_id && !r.gift && !r.bundle_child && r.state !== "CANCELLED" && num(r.total) > 0)
     .map((r) => ({
       key: Number(r.id),
