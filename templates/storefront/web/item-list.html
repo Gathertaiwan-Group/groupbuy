@@ -1,0 +1,22 @@
+{{!-- 官網商城：商品列表（全部商品 /items、品項 /itemset/{id}、系統標籤 /systag/{id}、搜尋 /search?t=；推導，見 web-shop.ts） --}}
+{{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
+<title>{{pageTitle}}</title>
+<meta property="og:title" content="{{pageTitle}}" >
+{{> storefront/partials/web-custom-css.html}}
+{{> storefront/partials/web-tracking.html}}
+</head>
+<body class="fixed-snxx gbf-web {{bodyClass}}">
+{{> storefront/partials/web-header.html}}
+{{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
+{{> storefront/partials/messagebox.html}}<div class="container gb-shop-page">
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/{{navShortUrl}}">首頁</a></li><li class="breadcrumb-item active" aria-current="page">{{listTitle}}</li></ol></nav>
+<form class="form-inline mb-3" method="get" action="/{{navShortUrl}}/search"><input type="text" class="form-control form-control-sm mr-2" name="t" value="{{searchKeyword}}" placeholder="搜尋商品" maxlength="50"><button class="btn btn-sm btn-primary m-0" type="submit"><i class="fa-light fa-search"></i></button></form>
+<h1 class="h4 mb-4">{{listTitle}}</h1>
+<div class="row">{{#each cards}}{{> storefront/partials/web-item-card.html}}{{else}}<div class="col-12 text-center text-muted py-5">{{emptyText}}</div>{{/each}}</div>
+</div>
+{{> storefront/partials/web-fixed-sections.html}}
+</main>
+{{> storefront/partials/web-footer.html}}
+{{> storefront/partials/web-foot-scripts.html}}
+</body>
+</html>

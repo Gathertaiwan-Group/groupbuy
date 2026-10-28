@@ -56,7 +56,9 @@ async function addToShoppingCart(ctx: RequestContext): Promise<Response> {
   const d = await data0(ctx);
   const itemId = int(d.itemId);
   const gbis = int(d.groupBuyItemSetId);
-  const total = Math.max(0, int(d.total));
+  let total = Math.max(0, int(d.total));
+  // 官網型頁面共用 script（web-foot-scripts.html，原站 gbfshopping.js）「加入購物袋」送 totalAdd＝在購物袋原數量上加（覆寫時才送 total）
+  const totalAdd = d.total === undefined && d.totalAdd !== undefined ? int(d.totalAdd) : null;
   const note = d.note === undefined ? null : s(d.note, 1000);
   const lineUuid = uuidOrNull(d.uuid);
   if (itemId === 0 && !lineUuid) {
@@ -65,6 +67,7 @@ async function addToShoppingCart(ctx: RequestContext): Promise<Response> {
     return respond(cc);
   }
   const cc = await loadCartContext(ctx, sc, { create: true });
+  if (totalAdd !== null) total = Math.max(0, (cc.items.find((ci) => ci.item_id === itemId && !ci.item_bundle_id)?.total ?? 0) + totalAdd);
   const errors: string[] = [];
   const blocked = checkoutBlockedReason(sc.gb);
   if (blocked && total > 0) return respond(cc, { errors: [blocked] });

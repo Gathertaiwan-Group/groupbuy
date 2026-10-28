@@ -101,7 +101,7 @@ GBF.language = {{json ui.gbfLanguage}};
 </style>
 {{#if customCss}}<style type="text/css">{{{customCss}}}</style>{{/if}}
 </head>
-<body class=" gb-theme gb-v6">
+<body class=" gb-theme gb-v6 {{renderClass}}{{#if bagMode}} gb-bag{{/if}}">
 <div id="fb-root"></div>
 {{> storefront/partials/tracking.html}}
 
@@ -151,7 +151,7 @@ style="display: none;" aria-hidden="true">
 </div>
 <div data-aos="fade-up" class="card-body text-center theme-bg-default   section-title" id="banner-0-title">
 <h4 class="card-title h4-responsive mb-0">
-<span class="groupbuy-title">{{groupBuy.title}}</span>
+<span class="groupbuy-title">{{#if bagMode}}購物袋{{else}}{{groupBuy.title}}{{/if}}</span>{{#if bagMode}}{{!-- 推導：官網型購物袋頁 /{短網址}/bag（web-shop.ts） --}}<div class="small mt-2"><a href="{{homeHref}}"><i class="fa-light fa-angle-left mr-1"></i>繼續購物（{{groupBuy.title}}）</a></div>{{/if}}
 </h4>
 </div>
 <div class="text-center countdown " id="clock"></div>
@@ -166,7 +166,7 @@ style="display: none;" aria-hidden="true">
 <div class="card-text card-text-gb ">{{{descrHtml}}}</div></div></div></div></div></div>
 </section>
 
-{{#if closedHtml}}{{!-- 推導：未開始／已結束／不可結帳時，原站以「結束敘述」或提示取代下單表單（未擷取） --}}<div class="container py-4" id="groupbuy-closed"><div class="card"><div class="card-body text-center">{{{closedHtml}}}</div></div></div>{{else}}<form name="OrderItemForm" method="post" action="{{gbfBaseUrl}}/OrderItem/confirmOrder.do" class="form-horizontal" style="" id="GroupBuyForm"><input type="hidden" name="groupBuyUUID" value="{{groupBuy.uuid}}" id="uuid">
+{{#if bagEmpty}}<div class="container py-4" id="bag-empty"><div class="card"><div class="card-body text-center"><p class="my-3">購物袋內尚無商品</p><a class="btn btn-primary" href="{{homeHref}}">繼續購物</a></div></div></div>{{else if showcase}}{{> storefront/partials/form-showcase.html}}{{else if closedHtml}}{{!-- 推導：未開始／已結束／不可結帳時，原站以「結束敘述」或提示取代下單表單（未擷取） --}}<div class="container py-4" id="groupbuy-closed"><div class="card"><div class="card-body text-center">{{{closedHtml}}}</div></div></div>{{else}}<form name="OrderItemForm" method="post" action="{{gbfBaseUrl}}/OrderItem/confirmOrder.do" class="form-horizontal" style="" id="GroupBuyForm"><input type="hidden" name="groupBuyUUID" value="{{groupBuy.uuid}}" id="uuid">
 {{> storefront/partials/form-itemsets.html}}<section class="section section-address py-4 " id="section-address">
 <div class="container">
 	<!-- 0. 訂購須知區塊 (Order Notice / Billing Descr) -->
@@ -403,5 +403,4 @@ $(document).ready(function() {
 	});
 });
 </script>
-
-
+{{#if renderCss}}{{!-- 推導：日曆樣式／套裝行程的互動、官網購物袋頁版面（public/modules/storefront/render-styles.*） --}}<link rel="stylesheet" href="/modules/storefront/render-styles.css?v={{assetVersion}}">{{/if}}{{#if renderScript}}<script src="/modules/storefront/render-styles.js?v={{assetVersion}}"></script>{{/if}}

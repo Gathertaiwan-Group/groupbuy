@@ -1,6 +1,6 @@
 # storefront 模組（消費者前台）
 
-擁有者：storefront agent。程式：`lib/modules/storefront/**`、模板：`templates/storefront/**`、靜態檔：`public/modules/storefront/**`、migration：`supabase/migrations/6000–6002_storefront_*.sql`（6000 限流表、6001 原子下單函式 `sf_place_order`、6002 購物袋暫存表）＋ `0104_points_refund_on_cancel.sql`（取消／刪除訂單回補點數）、`0106_storefront_demo_ak98i_checkout.sql`（示範團購 ak98i 付款方式與訂購須知）、`0107_storefront_help_demo_data.sql`（說明中心／公告示範資料）、`6008_storefront_points_reward.sql`（點數回饋入帳，補A）。
+擁有者：storefront agent。程式：`lib/modules/storefront/**`、模板：`templates/storefront/**`、靜態檔：`public/modules/storefront/**`、migration：`supabase/migrations/6000–6002_storefront_*.sql`（6000 限流表、6001 原子下單函式 `sf_place_order`、6002 購物袋暫存表）＋ `0104_points_refund_on_cancel.sql`（取消／刪除訂單回補點數）、`0106_storefront_demo_ak98i_checkout.sql`（示範團購 ak98i 付款方式與訂購須知）、`0107_storefront_help_demo_data.sql`（說明中心／公告示範資料）、`6008_storefront_points_reward.sql`（點數回饋入帳，補A）、`6007_storefront_post_views.sql`（文章瀏覽數 `sf_post_view`，補B）。
 對外服務（Email、簡訊、金流、超商電子地圖／物流、Facebook 登入、reCAPTCHA）**一律未串接**：介面照原站，動作只寫 DB 紀錄（`email_messages`、`conversations`），回應／畫面帶【未串接】。
 
 ## 頁面與狀態
@@ -31,6 +31,8 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 | `/{t}/p/{s}/Customer/show.do` | 會員中心：會員資料＋近 1 年訂單（推導） |
 | `/{t}/p/{s}/ajax/web/Customer/changePassword.do`、`editProfile.do` | 修改密碼／更新個人資料彈窗（推導） |
 | `/{s}/post/{id}/{標題}`、`/{s}/postcategory/{id}`、`/{s}/post/tag/{tag}`、`/{s}/posts?t=`、`/{s}/news` | 說明中心文章內頁、分類、標籤、搜尋、站內公告（推導） |
+| `/{s}/item/{商品id}/{標題}`、`/{s}/items`、`/{s}/itemset/{團購品項id}`、`/{s}/systag/{系統標籤id}`、`/{s}/search?t=`、`/{s}/page/{官網頁面id}`、`/{s}/member`、`/{s}/bag` | 官網型（render=HOME）商城頁：商品頁、全部商品、品項、系統標籤、商品搜尋、客製化網頁、會員（→會員中心）、購物袋／結帳（推導，見下方「官網商城與其他發布樣式」） |
+| `/{t}/p/{s}/ajax/web/Item/getItem`、`/{t}/p/{s}/ajax/web/Item/show?itemId=` | 官網共用 script 的規格切換 JSON、商品彈窗（推導） |
 
 ## 端點（JSON 鍵依原站前端 JS：gb_checkout_form / gb_shopping_cart / ias_v5 / ep.widget.address）
 
@@ -83,7 +85,8 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 - 超商電子地圖／門市查詢未串接（回一筆標示【未串接】的測試門市）；Facebook 快速登入只有卡片與按鈕（按下顯示【未串接】）、不載入 FB SDK；reCAPTCHA 未載入。
 - 會員註冊：同 Email 的未驗證帳號重新註冊時只重發驗證碼，不覆寫原本的姓名、電話、生日、密碼（驗證後自動登入，忘記原密碼可用忘記密碼）。
 - 輸入驗證：姓名、地址、備註之外，臉書名稱、發票抬頭、縣市、鄉鎮市區、銀行名稱、`fnote(...)` 鍵與值都擋 `<` `>`（縱深防禦；顯示處本來就跳脫）。
-- 說明中心：快訊跑馬燈、導覽列樣式 2–8 與選單樣式 2–3 的差異、深色主題、文章瀏覽數未做；示範資料的分類節點（4411 以外）目前沒有文章（見推導段 0107 說明）。
+- 說明中心：示範資料的分類節點（4411 以外）目前沒有文章（見推導段 0107 說明）。快訊、導覽列／選單樣式、色彩主題、瀏覽數已補（推導，外觀未與原站比對）。
+- 官網商城頁與其他發布樣式（TYPE1／日曆／套裝行程／開團清單／長期團）全為推導，原站無範例頁可比對；正式網址未執行送出訂單。
 - 說明中心／公告／403 等沒有團購的官網頁：購物袋小工具在沒有購物袋 uuid（無團購）時不發 `addToShoppingCart` 請求（`web-foot-scripts.html` 的 `ShoppingCart.load()`），不再出現 `/p/null/...` 404；原站此情境的行為未擷取（推導）。
 - 正式網址的「送出訂單」「會員登入／註冊」未由 agent 執行（見下方驗證紀錄），需 user 同意後再做或由 user 手動點一次。
 
@@ -110,6 +113,34 @@ DOM 相似度＝`tools/dom_compare.py`（主內容區骨架：標籤＋id＋clas
 **POS 會員點數方案**（`royalty-program.ts`＋測試）：`GET {baseUrl}/ajax/CustomerRoyaltyProgram/get.do?customerId=` → `{code:200,data:{customerId,royaltyProgramId,royaltyProgramTitle,discountRate,dateExpiredString,isExpired,activated,pointsName,points}}`（只回本租戶會員，否則 404）。
 
 **實測（本機連正式庫，測試資料前綴 `[補A]`，結束已清除）**：bundle-modal 開窗→選 2 件（$350）→加入→編輯→送出訂單；竄改（非候選商品、件數不足、超過上限）皆擋；滿額自動贈品入袋與訂單、自選贈品 x3→1、贈品與子商品庫存扣減；會員單付款／取消／改回／刪除的點數帳本；POS 勾／不勾獲得點數、作廢扣回。
+
+## 官網商城與其他發布樣式（補B，PARITY #105／#115／#118，全部推導）
+
+原站帳號沒有官網型（HOME）與 TYPE1／日曆／套裝行程等樣式的團購（spec/GAP_SPEC.md §5、spec/SPEC.md §9 #7），以下依原站官網共用 script、後台選項與相鄰頁推導；與原站外觀是否一致無法驗證。
+
+**官網商城頁（`web-shop.ts`、`shop-variants.ts`）**
+- 依據：原站官網共用 script（`templates/storefront/partials/web-foot-scripts.html`＝原站 gbfshopping.js）的 `$.ShoppingItem`／`$.ShoppingCart` 需要的 DOM（`section#productDetail-{id}`、`orderItems[0].itemId／groupBuyItemSetId／total／tagN`、`.item-title／.item-price…`、`.btn-addShoppingCart／.btn-buynow`）與 JSON（getItem 回 `{data, tagOptions, imageOptions}`，data 含 `itemSettings.carousels`、`formattedPrice`、`calculatedMaxOrderQuota`、`tab1Title…`、`publishUrl`）；「立即購買」與購物袋「Check Out」連 `/{s}/bag`（`goCheckoutPage`）。
+- 商品＝官網團購自己的品項／商品（同 TYPE3 的 group_buy_item_sets）；同一團購品項內帶 `tag` 的商品互為規格（`#` 分層，`$I圖片` 只取名稱），列表只出一張卡。getItem 依「剛選的那層」限定、再取其他層相同最多者（同分取有庫存），售完的規格值標「(已售完)」並停用。
+- 購物袋 `/{s}/bag`：沿用團購表單（form.html）同一套結帳表單與 AJAX，品項區只列購物袋內商品（數量預先選好，改數量即覆寫）、不倒數（`countdownDays=0`，原站 gbs_v6 到時會 reload）；送單失敗與靜默封鎖導回 `/{s}/bag`（order-place.ts）。其他發布樣式的 `/bag` 轉回 `/{s}`，倉儲／POS 回 404。
+- 官網 script 加入購物袋送 `totalAdd`（在原數量上加），`addToShoppingCart` 已支援（cart-api.ts）；覆寫仍送 `total`。價格與庫存一律伺服器端重算。
+- 連結類別網址（Lookbook 存檔時計算，web-content-lookbook.ts）：ITEM→`/{s}/item/{id}/{標題}`、ITEM_SET→`/{s}/itemset/{團購品項id}`、ITEM_SYS→`/{s}/systag/{id}`（系統標籤 category＝商品 `items.sys_tags` 代碼）、CUSTOM_WEB→`/{s}/page/{id}`（HomeView 類別 CUSTOM，版面同首頁）、MEMBER→`/{s}/member`（302 到會員中心）。既有 Lookbook 需重新存檔才會更新連結。
+- 導覽列搜尋 `/{s}/search?t=`：比對商品名稱／副標；網站沒有商品（說明中心）時轉 `/{s}/posts?t=`。
+
+**其他發布樣式（`render-style.ts`、`public/modules/storefront/render-styles.js|css`）**：伺服器輸出與 TYPE3 相同的品項區，只加 body class 與 section 的 data 屬性。
+- TYPE1（樣式1）：所有品項用「商品樣式1」整列（圖左、名稱價格與數量在右）。
+- CALENDAR（日曆樣式）：品項日期＝品項設定 `eventDate`／`date`（YYYY-MM-DD），否則取品項名稱中的日期（`2026/11/5`、`2026年11月5日`、`11/5`）；月曆只可點有場次的日期，只顯示該日期的品項（場次＝品項內商品），沒有日期的品項（加購）一律顯示；切換日期不清除已選數量。
+- TRAVEL（套裝行程）：品項樣式 STYLE9＝方案、TRAVEL_HOTEL＝住宿、TRAVEL_AIR_TICKET_DEPARTURE／RETURN＝去／回程、TRAVEL_ADDITIONAL＝加購（樣式選項擷取自原站品項編輯器）；分步驟顯示，方案單選（選了一個方案，其他方案自動歸零並同步購物袋），最後一步捲到訂購資料。
+- SHOWCASE（開團清單）：同租戶進行中／即將開始的團購卡片（不含官網／倉儲／POS／開團清單），不顯示下單表單。
+- LONGTERM（長期團）：TYPE3 版面、不倒數。ALIAS（替身）、DISTRIBUTOR（經銷商）、FB（臉書型前台）：TYPE3 版面。
+- 快速導覽列點到被隱藏的品項時，先切到該日期／步驟再捲動。
+
+**說明中心／官網版面（`web-site.ts` webVars、`web-theme.css|js`）**
+- 快訊：HomeView「快訊」一行一則（`內容#連結`），導覽列上方 `.nav-marquee-info`（原站版面 script 已有此 class 與 `has-marquee`），多則每 4 秒輪播；導覽列樣式6 不顯示（同後台欄位連動）。暫存 HTML 內的 `.home-view-marquee` 改由導覽列顯示而隱藏。
+- 導覽列樣式：1 與原站擷取相同；2 置中 Logo、3 主色底、4 兩列、5 快訊粉色底＋搜尋關鍵字列（後台只在樣式5 有搜尋關鍵字欄）、6 半透明、7 深色、8 底線（`gb-nav-style-N`）。原站版面 script 對 nav-4／5／6 會操作未擷取的專屬 DOM，所以這三種仍輸出 `nav-1`。「導覽列滿版」＝container-fluid。
+- 選單樣式：1 Mega（原站擷取）、2 Dropdown（直接子節點下拉）、3 三列＋2圖（葉節點分三欄，右側兩格放網站 Logo；選單節點沒有圖片欄位）。
+- 色彩主題：LIGHT（預設，不加 class）、LIGHT_NEW（淺灰底圓角卡片）、DARK、PITCH_BLACK（body class `gb-color-*`）。
+- 文章瀏覽數：文章內頁 GET 時 `sf_post_view` 原子 +1（6007），同一瀏覽器 1 天內同篇只算一次（cookie `GBPV`）；顯示在內頁日期旁。列表頁不顯示（保持與原站擷取頁結構一致）。
+- 回歸：`/jranv`、`/jranv/menu/4411/…`、公告、403 以 dom_compare `--no-text` 仍為 100%。
 
 ## 給 core 的問題
 

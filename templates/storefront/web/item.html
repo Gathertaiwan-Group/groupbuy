@@ -1,0 +1,21 @@
+{{!-- 官網商城：商品頁 /{短網址}/item/{商品id}/{標題}（推導：原站官網型團購的商城頁未擷取，見 lib/modules/storefront/web-shop.ts） --}}
+{{> storefront/partials/web-head.html}}{{> storefront/partials/web-style.html}}<base href="">
+<title>{{pageTitle}}</title>
+<meta property="og:title" content="{{pageTitle}}" >{{#if seoDescr}}<meta name="description" content="{{seoDescr}}"><meta property="og:description" content="{{seoDescr}}" >{{/if}}{{#if seoImage}}<meta property="og:image" content="{{seoImage}}" >{{/if}}
+{{> storefront/partials/web-custom-css.html}}
+{{> storefront/partials/web-tracking.html}}
+</head>
+<body class="fixed-snxx gbf-web {{bodyClass}}">
+{{> storefront/partials/web-header.html}}
+{{> storefront/partials/web-layout-scripts.html}}<main id="main" class="">
+{{> storefront/partials/messagebox.html}}<div class="container gb-shop-page">
+<nav aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="/{{navShortUrl}}">首頁</a></li>{{#if product.itemSet}}<li class="breadcrumb-item"><a href="{{product.itemSet.href}}">{{product.itemSet.title}}</a></li>{{/if}}<li class="breadcrumb-item active" aria-current="page">{{product.title}}</li></ol></nav>
+{{> storefront/partials/web-item-detail.html}}
+{{#if related.length}}<section class="mt-5"><h2 class="h5 mb-3">同系列商品</h2><div class="row">{{#each related}}{{> storefront/partials/web-item-card.html}}{{/each}}</div></section>{{/if}}
+</div>
+{{> storefront/partials/web-fixed-sections.html}}
+</main>
+{{> storefront/partials/web-footer.html}}
+{{> storefront/partials/web-foot-scripts.html}}
+</body>
+</html>

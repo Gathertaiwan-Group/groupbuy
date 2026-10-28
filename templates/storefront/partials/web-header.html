@@ -23,7 +23,7 @@
 	</div>
 	<!--/. Sidebar navigation -->
 <!-- Navbar -->
-	<nav class="navbar ep-nav {{navStyleClass}} fixed-top navbar-expand-sm navbar-light scrolling-navbar no-marquee navbar-custom"><!--Nav Container--><div class="container"><!--Bars button--><div class="float-left mr-2 d-md-none d-block"><a href="#" data-activates="slide-out" class="button-collapse"><i class="fa-regular fa-bars"></i></a></div><!--/.Bars button--><!--Brand-->
+	<nav class="navbar ep-nav {{navStyleClass}} fixed-top navbar-expand-sm navbar-light scrolling-navbar {{navMarqueeClass}} navbar-custom">{{> storefront/partials/web-marquee.html}}<!--Nav Container--><div class="{{#if navFluid}}container-fluid{{else}}container{{/if}}"><!--Bars button--><div class="float-left mr-2 d-md-none d-block"><a href="#" data-activates="slide-out" class="button-collapse"><i class="fa-regular fa-bars"></i></a></div><!--/.Bars button--><!--Brand-->
 <div class="navbar-brand mr-2 d-flex align-items-center">
 <a href="/{{navShortUrl}}"><img src="{{logoUrl}}"></a>
 </div>

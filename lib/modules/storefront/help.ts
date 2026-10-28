@@ -12,6 +12,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import type { AdminNewsItem } from "../types";
 import { sellerNotFound } from "./pages-static";
 import { readCustomerSession } from "./customer-session";
+import { isSecureRequest, readCookie } from "@/lib/core/auth/session";
 import { groupBuyByShortUrl, imageUrl, PLATFORM_TENANT_CODE, scopeFromTenantPath, tenantById, tenantByCode, type SfGroupBuy, type SfTenant } from "./site";
 import {
   categoryHref,
@@ -212,6 +213,34 @@ export async function renderHomePage(ctx: RequestContext, groupBuy: SfGroupBuy):
   });
 }
 
+/**
+ * /{短網址}/page/{id}/{標題}（web-shop.ts）：官網「客製化網頁」（HomeView 類別 CUSTOM，連結類別 CUSTOM_WEB）。
+ * 推導：原站前台網址與版面未擷取；版面同首頁，內容＝該頁的暫存 HTML（後台「更新暫存」）或即時區塊。
+ */
+export async function renderCustomWebPage(ctx: RequestContext, site: WebSite, homeViewId: number): Promise<Response> {
+  const { data, error } = await db()
+    .from("home_views")
+    .select("id, group_buy_id, category, title, tag, home_view_config, html")
+    .eq("tenant_id", site.tenant.id)
+    .eq("group_buy_id", site.groupBuy.id)
+    .eq("id", homeViewId)
+    .eq("category", "CUSTOM")
+    .maybeSingle();
+  if (error) throw new Error(`查詢客製化網頁失敗：${error.message}`);
+  const hv = data as { id: number; title: string | null; html: string | null; home_view_config: Record<string, unknown> | null } | null;
+  if (!hv) return sellerNotFound(ctx);
+  const cfg = hv.home_view_config ?? {};
+  const sections = hv.html && hv.html.trim() ? [] : await homeSections(site, hv.id);
+  return page("storefront/web/home.html", {
+    ...webVars(ctx, { tenant: site.tenant, site }),
+    pageTitle: (typeof cfg.seoTitle === "string" && cfg.seoTitle.trim()) || hv.title || site.groupBuy.title,
+    seoDescr: typeof cfg.seoDescr === "string" ? cfg.seoDescr : "",
+    seoImage: "",
+    noIndex: cfg.robots === true,
+    home: { id: hv.id, html: hv.html && hv.html.trim() ? hv.html : null, sections },
+  });
+}
+
 // ───────────────────────── 文章列表（選單／分類／標籤／搜尋） ─────────────────────────
 
 interface ListOpts {
@@ -328,7 +357,8 @@ async function postPage(ctx: RequestContext): Promise<Response> {
   if (!row) return sellerNotFound(ctx);
   const titles = await nodeTitles(site, row.web_menu_node_id !== null ? [row.web_menu_node_id] : []);
   const card = postCard(site, row, titles, "datetime");
-  return page("storefront/web/post.html", {
+  const viewed = await countPostView(ctx, site.tenant.id, row);
+  const res = page("storefront/web/post.html", {
     ...webVars(ctx, { tenant: site.tenant, site }),
     slideOutHideMd: true,
     pageTitle: row.title,
@@ -339,8 +369,29 @@ async function postPage(ctx: RequestContext): Promise<Response> {
       // 內文是網站管理員以編輯器撰寫的 HTML，與原站一樣原樣輸出
       body: (await premiumAllowed(ctx, site.tenant.id, row)) ? row.body ?? "" : premiumLockedHtml(row),
       tags: parseTags(row.tags).map((name) => ({ name, href: tagHref(site.short, name) })),
+      views: viewed.views,
     },
   });
+  if (viewed.cookie) res.headers.append("Set-Cookie", viewed.cookie);
+  return res;
+}
+
+/**
+ * 文章瀏覽數（推導：原站前台顯示位置與計算方式未擷取）。GET 文章內頁 +1（sf_post_view，migration 6007）；
+ * 同一瀏覽器 1 天內同一篇只算一次（cookie GBPV 記最近 50 篇 id）；HEAD 與後台預覽不計。
+ */
+const VIEW_COOKIE = "GBPV";
+async function countPostView(ctx: RequestContext, tenantId: number, row: PostRow): Promise<{ views: number; cookie: string | null }> {
+  const current = Number(row.views) || 0;
+  if (ctx.req.method !== "GET") return { views: current, cookie: null };
+  const raw = (readCookie(ctx.req, VIEW_COOKIE) ?? "").slice(0, 1000);
+  const seen = raw.split(".").filter((x) => /^\d{1,15}$/.test(x));
+  if (seen.includes(String(row.id))) return { views: current, cookie: null };
+  const { data, error } = await db().rpc("sf_post_view", { p_tenant: tenantId, p_post: row.id });
+  if (error) return { views: current, cookie: null }; // 瀏覽數失敗不擋文章顯示
+  const next = [String(row.id), ...seen].slice(0, 50).join(".");
+  const secure = isSecureRequest(ctx.req) ? "; Secure" : "";
+  return { views: Number(data) || current + 1, cookie: `${VIEW_COOKIE}=${next}; Path=/; Max-Age=86400; HttpOnly; SameSite=Lax${secure}` };
 }
 
 // ───────────────────────── 文章即時搜尋 JSON ─────────────────────────

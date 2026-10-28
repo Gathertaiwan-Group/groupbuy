@@ -1,0 +1,74 @@
+/* 官網型頁面：導覽列樣式 2–8、色彩主題、快訊、商城頁（推導）。
+   原站帳號沒有官網型團購，前台各樣式實際外觀未擷取；依後台選項名稱（導覽列 STYLE_1–8、選單樣式 1 Mega／2 Dropdown／3 三列+2圖、
+   colorTheme LIGHT／LIGHT_NEW／DARK／PITCH_BLACK）推導。 */
+
+/* ── 快訊 ── */
+.ep-nav .nav-marquee-info { left: 0; right: 0; z-index: 2; overflow: hidden; }
+.ep-nav .nav-marquee-info a { color: inherit; text-decoration: underline; }
+.ep-nav.has-marquee .home-view-marquee, body .home-body .home-view-marquee { display: none; } /* 暫存 HTML 內的快訊改由導覽列顯示 */
+.home-body .home-view-search-keywords { display: none; }
+.nav-search-keywords { position: relative; z-index: 1; }
+
+/* ── 導覽列樣式（gb-nav-style-N） ── */
+.gb-nav-style-2 > .container, .gb-nav-style-2 > .container-fluid { flex-wrap: wrap; justify-content: center; }
+.gb-nav-style-2 .navbar-brand { width: 100%; justify-content: center; margin: 0 0 .25rem 0 !important; }
+.gb-nav-style-2 .main-web-menu { margin: 0 auto !important; }
+.gb-nav-style-3 { background-color: var(--gb-primary, #4285f4) !important; }
+.gb-nav-style-3 .nav-link, .gb-nav-style-3.navbar-custom .navbar-nav > li > a, .gb-nav-style-3 .button-collapse { color: #fff !important; }
+.gb-nav-style-4 > .container, .gb-nav-style-4 > .container-fluid { flex-wrap: wrap; }
+.gb-nav-style-4 .navbar-brand { width: 100%; padding: .5rem 0; }
+.gb-nav-style-4 .navbar-brand img { max-height: 64px; }
+.gb-nav-style-4 .main-web-menu { border-top: 1px solid rgba(0,0,0,.08); }
+.gb-nav-style-5 .nav-marquee-info { background-color: #ffebee; color: #c62828; }
+.gb-nav-style-5 .nav-marquee-text { color: #c62828; }
+.gb-nav-style-5 .nav-search-keywords { background: #fff; border-bottom: 1px solid #f1f1f1; }
+.gb-nav-style-6 { background-color: rgba(0,0,0,.25) !important; box-shadow: none !important; }
+.gb-nav-style-6 .nav-link, .gb-nav-style-6.navbar-custom .navbar-nav > li > a, .gb-nav-style-6 .button-collapse { color: #fff !important; }
+.gb-nav-style-6.top-nav-collapse { background-color: rgba(0,0,0,.75) !important; }
+.gb-nav-style-7 { background-color: #212121 !important; }
+.gb-nav-style-7 .nav-link, .gb-nav-style-7.navbar-custom .navbar-nav > li > a, .gb-nav-style-7 .button-collapse { color: #fafafa !important; }
+.gb-nav-style-8 { border-bottom: 3px solid var(--gb-primary, #4285f4); box-shadow: none !important; }
+.gb-nav-style-8 .main-web-menu .nav-link { text-transform: uppercase; letter-spacing: .08em; font-weight: 500; }
+
+/* ── 選單樣式 ── */
+.menu-style-2 .dropdown-menu { min-width: 12rem; }
+.menu-style-3 .mega-menu .sub-menu li a { display: block; }
+
+/* ── 色彩主題 ── */
+body.gb-color-light-new { background-color: #fafafa; }
+body.gb-color-light-new .card { border-radius: .75rem; box-shadow: 0 2px 12px rgba(0,0,0,.06); }
+body.gb-color-light-new .ep-nav { box-shadow: 0 1px 0 rgba(0,0,0,.06); }
+
+body.gb-color-dark { background-color: #121212; color: #e0e0e0; }
+body.gb-color-dark .ep-nav, body.gb-color-dark .side-nav, body.gb-color-dark .dropdown-menu, body.gb-color-dark .mega-menu .card { background-color: #1c1c1c !important; color: #e0e0e0; }
+body.gb-color-dark .nav-link, body.gb-color-dark .navbar-custom .navbar-nav > li > a, body.gb-color-dark .button-collapse, body.gb-color-dark .dropdown-item,
+body.gb-color-dark .side-nav a, body.gb-color-dark .mega-menu a { color: #e0e0e0 !important; }
+body.gb-color-dark .card, body.gb-color-dark .list-group-item, body.gb-color-dark .modal-content, body.gb-color-dark .page-link, body.gb-color-dark .table { background-color: #1e1e1e; color: #e0e0e0; border-color: #333; }
+body.gb-color-dark a { color: #8ab4f8; }
+body.gb-color-dark .text-muted, body.gb-color-dark .post-summary { color: #9e9e9e !important; }
+body.gb-color-dark .form-control, body.gb-color-dark select { background-color: #2a2a2a; color: #e0e0e0; border-color: #444; }
+body.gb-color-dark .page-footer, body.gb-color-dark footer { background-color: #0d0d0d !important; color: #bdbdbd; }
+body.gb-color-dark .breadcrumb { background-color: transparent; }
+body.gb-color-dark .hv-section { background-color: transparent; }
+body.gb-color-pitch-black, body.gb-color-pitch-black .ep-nav, body.gb-color-pitch-black .side-nav, body.gb-color-pitch-black .card,
+body.gb-color-pitch-black .dropdown-menu, body.gb-color-pitch-black .modal-content { background-color: #000 !important; }
+body.gb-color-pitch-black .card { border: 1px solid #222; }
+
+/* ── 官網商城頁（web-shop.ts） ── */
+.gb-shop-page { padding-top: 1.5rem; padding-bottom: 2rem; }
+.gb-shop-card .card-img-top { aspect-ratio: 1 / 1; object-fit: contain; background: #f5f5f5; }
+.gb-shop-card .item-title-link { color: inherit; }
+.gb-shop-card .gb-shop-price { font-weight: 600; }
+.product-detail .carousel-item img { aspect-ratio: 1 / 1; object-fit: contain; width: 100%; background: #f5f5f5; }
+.product-detail .carousel-inner-indicators img { aspect-ratio: 1 / 1; object-fit: cover; cursor: pointer; }
+.product-detail .item-price { font-size: 1.5rem; font-weight: 600; }
+.product-detail .item-retailPrice { text-decoration: line-through; color: #9e9e9e; margin-left: .5rem; }
+.product-detail .tag-group-body .btn-tag { padding: .35rem .9rem; text-transform: none; }
+.product-detail .tag-group-body .btn-tag.disabled { opacity: .45; }
+.product-detail .tag-group-body .btn-tag input { position: absolute; clip: rect(0,0,0,0); pointer-events: none; }
+.product-detail .qty-select { max-width: 10rem; }
+body.gb-color-dark .product-detail .tag-group-body .btn-tag:not(.active) { background: #2a2a2a; color: #e0e0e0; border-color: #555; }
+.ep-nav.gb-nav-style-5 { flex-wrap: wrap; }
+.ep-nav.gb-nav-style-5 > .container, .ep-nav.gb-nav-style-5 > .container-fluid { order: 1; }
+.ep-nav.gb-nav-style-5 .nav-search-keywords { order: 2; flex: 0 0 100%; }
+.menu-style-3 .mega-menu .sub-menu { flex: 0 0 auto; max-width: none; min-width: 9rem; }

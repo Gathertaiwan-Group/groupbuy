@@ -31,6 +31,14 @@ export const categoryHref = (short: string, id: number, title: string | null): s
   `/${short}/postcategory/${id}/${titleSlug(title)}`;
 export const tagHref = (short: string, tag: string): string => `/${short}/post/tag/${javaUrlEncode(tag)}`;
 
+// 官網商城頁（推導：原站 HOME 商城頁未擷取，網址依「/{短網址}/類別/{id}/{標題}」與文章頁同一組法；見 web-shop.ts）
+export const itemHref = (short: string, id: number, title: string | null): string => `/${short}/item/${id}/${titleSlug(title)}`;
+export const itemSetHref = (short: string, gbisId: number, title: string | null): string => `/${short}/itemset/${gbisId}/${titleSlug(title)}`;
+export const sysTagHref = (short: string, id: number, title: string | null): string => `/${short}/systag/${id}/${titleSlug(title)}`;
+export const customWebHref = (short: string, id: number, title: string | null): string => `/${short}/page/${id}/${titleSlug(title)}`;
+export const memberHref = (short: string): string => `/${short}/member`;
+export const bagHref = (short: string): string => `/${short}/bag`;
+
 /**
  * DB 設定的連結（選單節點 url、首頁項目 link）：只接受站內路徑（/…）、錨點（#…）或 http(s)，其餘（javascript: 等）丟棄。
  * 非 ASCII 與空白做百分比編碼（原站輸出的連結都是編碼過的）。
@@ -162,6 +170,10 @@ export interface TopMenuItemView {
   title: string;
   href: string;
   links: { title: string; href: string }[];
+  /** 選單樣式2（Dropdown）：直接子節點 */
+  children: { title: string; href: string }[];
+  /** 選單樣式3（三列＋2圖）：葉節點分成三欄 */
+  columns: { title: string; href: string }[][];
 }
 
 async function loadWebMenus(tenantId: number, groupBuyId: number): Promise<WebMenuRow[]> {
@@ -224,7 +236,12 @@ export function buildMenuTree(rows: MenuNodeRow[], short: string): MenuNodeView[
 export function topMenuFrom(tree: MenuNodeView[]): TopMenuItemView[] {
   const leaves = (nodes: MenuNodeView[]): { title: string; href: string }[] =>
     nodes.flatMap((n) => (n.children.length ? leaves(n.children) : [{ title: n.title, href: n.href }]));
-  return tree.map((n) => ({ id: n.id, title: n.title, href: n.href, links: n.children.length ? leaves(n.children) : [] }));
+  return tree.map((n) => {
+    const links = n.children.length ? leaves(n.children) : [];
+    const per = Math.max(1, Math.ceil(links.length / 3));
+    const columns = [0, 1, 2].map((i) => links.slice(i * per, (i + 1) * per)).filter((c) => c.length);
+    return { id: n.id, title: n.title, href: n.href, links, children: n.children.map((c) => ({ title: c.title, href: c.href })), columns };
+  });
 }
 
 /** 取一個節點與其所有子孫的 id（文章列表「含子分類」） */
@@ -350,9 +367,11 @@ export interface PostRow {
   post_type?: string | null;
   /** 限閱會員等級（逗號分隔的會員方案 id 或名稱；空＝登入會員即可） */
   access_level?: string | null;
+  /** 瀏覽數（文章內頁 sf_post_view +1） */
+  views?: number | null;
 }
 
-const POST_COLS = "id, group_buy_id, web_menu_node_id, title, summary, image, tags, date_published, image_url, post_type, access_level";
+const POST_COLS = "id, group_buy_id, web_menu_node_id, title, summary, image, tags, date_published, image_url, post_type, access_level, views";
 
 /** 網站的文章範圍：同租戶、已發布、屬於此團購（或租戶共用 group_buy_id 為空） */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -559,6 +578,30 @@ export function paginationView(baseHref: string, page: number, totalPages: numbe
 
 // ───────────────────────── 版面變數 ─────────────────────────
 
+/**
+ * 色彩主題（後台 HomeView colorTheme：LIGHT／LIGHT_NEW／DARK／PITCH_BLACK，選項擷取自原站 homeview-list runtime）。
+ * 推導：原站前台各主題的實際配色未擷取（原站帳號無官網型團購），以 body class 套 public/modules/storefront/web-theme.css。
+ */
+const COLOR_THEMES: Record<string, string> = { LIGHT: "", LIGHT_NEW: "gb-color-light-new", DARK: "gb-color-dark", PITCH_BLACK: "gb-color-dark gb-color-pitch-black" };
+
+/** 「內容#連結」格式（快訊、搜尋關鍵字；同 groupbuy/homeview.ts 暫存 HTML 的解析） */
+export function linkEntries(text: unknown, separators: RegExp): { label: string; href: string | null }[] {
+  return String(text ?? "")
+    .split(separators)
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => {
+      const i = x.lastIndexOf("#");
+      if (i > 0 && i < x.length - 1) {
+        const href = x.slice(i + 1).trim();
+        // 「#錨點」以外的連結需是站內路徑或 http(s)
+        return { label: x.slice(0, i).trim().slice(0, 200), href: safeHref(/^[a-z0-9_-]+$/i.test(href) ? `#${href}` : href) };
+      }
+      return { label: x.slice(0, 200), href: null };
+    })
+    .filter((e) => e.label);
+}
+
 export interface WebVarsOpts {
   tenant: SfTenant;
   /** 網站（有團購情境）；null＝系統公告 /News/list、403 這類沒有網站導覽列的頁 */
@@ -577,11 +620,28 @@ export function webVars(ctx: RequestContext, o: WebVarsOpts): Record<string, unk
   });
   const cfg = o.site?.config ?? {};
   const navStyle = /^STYLE_([1-8])$/.exec(String(cfg.navStyle ?? "STYLE_1"));
+  const navNo = navStyle ? navStyle[1] : "1";
+  const menuStyle = /^STYLE_([1-3])$/.exec(String(cfg.navMenuStyle ?? "STYLE_1"));
+  // 快訊：後台 HomeView「快訊」（格式：快訊內容#連結，一行一則）。導覽列樣式6 不顯示（同後台 Editor 的欄位連動）
+  const marquee = navNo === "6" ? [] : linkEntries(cfg.marquee, /\r?\n/).slice(0, 10);
+  const keywords = navNo === "5" ? linkEntries(cfg.searchKeywords, /[,，\r\n]+/).slice(0, 20) : [];
+  const theme = COLOR_THEMES[String(cfg.colorTheme ?? "LIGHT")] ?? "";
   return {
     ...base,
     webNav: !!o.site,
     slideOutHideMd: false,
-    navStyleClass: `nav-${navStyle ? navStyle[1] : "1"}`,
+    // 原站版面 script 對 nav-4／nav-5／nav-6 會操作該樣式專屬的 DOM（未擷取，無法還原）→ 這三種樣式維持 nav-1 的行為，
+    // 外觀改由 gb-nav-style-N（web-theme.css，推導）呈現；其餘樣式照原站 class nav-N。
+    navStyleClass: navNo === "1" ? "nav-1" : `nav-${["4", "5", "6"].includes(navNo) ? "1" : navNo} gb-nav-style-${navNo}`,
+    navNo,
+    navMenuStyle: menuStyle ? Number(menuStyle[1]) : 1,
+    navFluid: cfg.fluidNav === true || cfg.fluidNav === 1 || cfg.fluidNav === "1" || cfg.fluidNav === "true",
+    marquee,
+    navMarqueeClass: marquee.length ? "has-marquee" : "no-marquee",
+    marqueeRotate: marquee.length > 1,
+    searchKeywords: keywords,
+    colorThemeClass: theme,
+    bagHref: o.site ? bagHref(o.site.short) : "",
     sideMenu: o.site?.sideMenu ?? [],
     topMenu: o.site?.topMenu ?? [],
     customCss: cleanCss(gb?.group_buy_settings?.customCss),
@@ -589,7 +649,7 @@ export function webVars(ctx: RequestContext, o: WebVarsOpts): Record<string, unk
     footerDefault: !!o.site,
     contactFab: false,
     shoppingCartUuid: gb?.uuid ?? "",
-    bodyClass: cfg.customStyle === "EDM" ? "gb-theme-edm" : "",
+    bodyClass: [cfg.customStyle === "EDM" ? "gb-theme-edm" : "", theme].filter(Boolean).join(" "),
     newsBeautifyPath: `/${o.site?.short ?? "null"}/news`,
   };
 }

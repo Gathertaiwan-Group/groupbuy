@@ -1,0 +1,36 @@
+{{!-- 官網商城：商品區（推導，見 lib/modules/storefront/web-shop.ts）。DOM 依原站官網共用 script（web-foot-scripts.html 的 $.ShoppingItem）：
+     section#productDetail-{商品id}、orderItems[0].itemId／groupBuyItemSetId／total／tagN、.item-title／.item-price／.item-retailPrice／
+     .item-priceTagForDisplay／.item-shortDescr1／.item-uid、#carousel…、.tabs-wrapper＋.tab-content、.btn-addShoppingCart／.btn-buynow。 --}}
+<section id="productDetail-{{product.itemId}}" class="product-detail" data-item-id="{{product.itemId}}">
+<input type="hidden" name="orderItems[0].itemId" value="{{product.itemId}}">
+<input type="hidden" name="orderItems[0].groupBuyItemSetId" value="{{product.groupBuyItemSetId}}">
+<input type="hidden" name="orderItems[0].price" value="{{product.price}}">
+<input type="hidden" name="orderItems[0].discount" value="0">
+<select name="orderItems[0].status" class="d-none"><option value="0" selected>0</option></select>
+<div class="row">
+<div class="col-md-6 mb-4">
+<div id="carousel-{{product.itemId}}" class="carousel slide carousel-fade" data-ride="carousel" data-interval="false">
+<div class="carousel-inner">{{#each product.images}}<div class="carousel-item{{#if active}} active{{/if}}"><div class="view"><img class="d-block img-fluid center-block" src="{{url}}" alt=""></div></div>{{/each}}</div>
+{{#if product.multiImage}}<a class="carousel-control-prev" href="#carousel-{{product.itemId}}" role="button" data-slide="prev"><span class="carousel-control-prev-icon" aria-hidden="true"></span><span class="sr-only">上一張</span></a><a class="carousel-control-next" href="#carousel-{{product.itemId}}" role="button" data-slide="next"><span class="carousel-control-next-icon" aria-hidden="true"></span><span class="sr-only">下一張</span></a>{{/if}}
+<div class="carousel-inner-indicators row mx-0 mt-2">{{#if product.multiImage}}{{#each product.images}}<div data-target="#carousel-{{../product.itemId}}" data-slide-to="{{idx}}" class="col-3 p-1"><img class="d-block w-100" src="{{url}}" alt=""></div>{{/each}}{{/if}}</div>
+</div>
+</div>
+<div class="col-md-6">
+<h1 class="h3 item-title mb-1">{{product.title}}</h1>
+<div class="item-subtitle text-muted mb-2">{{product.subtitle}}</div>
+<div class="small text-muted mb-2{{#unless product.uid}} d-none{{/unless}}">商品代碼：<span class="item-uid">{{product.uid}}</span></div>
+<div class="mb-2"><span class="item-price text-danger">{{product.priceText}}</span><span class="item-retailPrice">{{product.retailPriceText}}</span></div>
+<div class="item-priceTagForDisplay small mb-2">{{{product.priceTagForDisplay}}}</div>
+<div class="item-shortDescr1 mb-3">{{{product.shortDescr1}}}</div>
+{{#each product.tagGroups}}<div class="tag-group mb-2"><label class="small text-muted mb-1 d-block">{{label}}</label><select name="{{name}}" class="d-none">{{#each options}}<option value="{{value}}"{{#if selected}} selected{{/if}}{{#if disabled}} disabled{{/if}}>{{name}}</option>{{/each}}</select><div class="tag-group-body btn-group-toggle d-flex flex-wrap" data-toggle="buttons">{{#each options}}<button type="button" class="btn btn-tag{{#if selected}} active{{/if}}{{#if disabled}} disabled{{/if}} waves-effect waves-light"><input class="form-check-input" type="radio" name="{{../name}}" value="{{value}}" autocomplete="off"{{#if selected}} checked{{/if}}><span>{{name}}</span></button>{{/each}}</div></div>{{/each}}
+<div class="form-group mb-3"><label class="small text-muted mb-1 d-block{{#if product.soldOut}} d-none{{/if}}">{{#if product.backOrder}}＊預購{{else}}選擇{{/if}}</label><span class="badge badge-secondary"{{#unless product.soldOut}} style="display:none"{{/unless}}>已售完</span>
+<div><select name="orderItems[0].total" class="form-control qty-select {{product.itemId}}{{#if product.soldOut}} d-none{{/if}}">{{#if product.soldOut}}<option value="0">訂購數量</option><option disabled>缺貨中</option>{{else}}{{#each product.qtyOptions}}<option value="{{this}}">{{this}}</option>{{/each}}{{/if}}</select></div></div>
+<div class="help-block text-danger small mb-2"></div>
+{{#if product.checkoutable}}<div class="d-flex flex-wrap"><button type="button" class="btn btn-outline-primary btn-addShoppingCart ml-0 mr-2"{{#if product.soldOut}} disabled{{/if}}><i class="fa-light fa-cart-plus mr-1"></i>加入購物袋</button><button type="button" class="btn btn-buynow mx-0"{{#if product.soldOut}} disabled{{/if}}><i class="fa-light fa-bolt mr-1"></i>立即購買</button></div>{{else}}<div class="alert alert-warning small">目前暫停結帳</div>{{/if}}
+</div>
+</div>
+<div class="row mt-4"><div class="col-12">
+<div class="tabs-wrapper"><ul class="nav nav-tabs" role="tablist">{{#each product.tabs}}<li class="nav-item"><a class="nav-link waves-light px-1 w-100{{#if active}} active{{/if}}" data-toggle="tab" href="#{{id}}" role="tab">{{title}}</a></li>{{/each}}</ul></div>
+<div class="tab-content pt-3">{{#each product.tabs}}<div class="tab-pane fade in show{{#if active}} active{{/if}}" id="{{id}}" role="tabpanel">{{{descr}}}</div>{{/each}}</div>
+</div></div>
+</section>

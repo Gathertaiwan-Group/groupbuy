@@ -1,0 +1,9 @@
+{{!-- 官網商城：商品彈窗（openShoppingItemModal → /ajax/web/Item/show.do?itemId=，載入 #myModalContent；推導） --}}
+<div class="modal-body">
+<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+{{> storefront/partials/web-item-detail.html}}
+<div class="text-right"><a class="small" href="{{productHref}}">查看完整商品頁 <i class="fa-light fa-angle-right"></i></a></div>
+</div>
+<script>
+if (typeof shoppingCart !== 'undefined' && shoppingCart && typeof shoppingCart.reloadShoppingItems === 'function') shoppingCart.reloadShoppingItems();
+</script>

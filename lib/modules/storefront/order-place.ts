@@ -54,7 +54,8 @@ async function readForm(ctx: RequestContext): Promise<Form> {
 
 function backToForm(tenant: SfTenant, gb: SfGroupBuy): Response {
   void tenant;
-  return redirect(`/${gb.short_url}#section-address`, 303);
+  // 官網型（render=HOME）的結帳表單在購物袋頁 /{短網址}/bag（web-shop.ts）
+  return redirect(`/${gb.short_url}${gb.render === "HOME" ? "/bag" : ""}#section-address`, 303);
 }
 
 async function fail(cc: CartContext, message: string): Promise<Response> {
@@ -494,7 +495,7 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     // 假下單：清空購物袋、顯示已送出，但不建立訂單
     await getServiceClient().from("shopping_cart_items").delete().eq("shopping_cart_id", cc.cart!.id).eq("tenant_id", tenant.id);
     await saveCheckout(cc.cart!, { flashErrors: [] });
-    return redirect(`/${gb.short_url}?ordered=1`, 303);
+    return redirect(`/${gb.short_url}${gb.render === "HOME" ? "/bag" : ""}?ordered=1`, 303);
   }
 
   // 4) 組訂單

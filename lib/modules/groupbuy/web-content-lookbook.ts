@@ -16,7 +16,7 @@ import { editorEntity, listEntity, type WriteSpec } from "@/lib/core/entity/crud
 import { editorResponse, flattenDotted, parseEditorRequest } from "@/lib/core/editor/protocol";
 import { sanitizeLike } from "@/lib/core/datatables/query";
 import { select2Params } from "@/lib/core/select2";
-import { menuHref, postHref } from "@/lib/modules/storefront/web-site";
+import { customWebHref, itemHref, itemSetHref, memberHref, menuHref, postHref, sysTagHref } from "@/lib/modules/storefront/web-site";
 import { assertOwned, guarded } from "./web-content-menu";
 import {
   boolOf, db, dbFail, fmtTs, groupBuyFromCtx, has, intOr, ownGroupBuy, prefixed, settingsOf, str, tsOf, type Row, type WcGroupBuy,
@@ -218,6 +218,12 @@ function computeLink(gb: WcGroupBuy, linkCategory: string, linkUrl: string, refe
     case "ALL_POSTS": return `/${short}/posts`;
     case "POST": return ref > 0 ? postHref(short, ref, refText) : linkUrl || null;
     case "MENU_BIND": return ref > 0 ? menuHref(short, ref, refText) : linkUrl || null;
+    // 官網商城頁（storefront/web-shop.ts，推導）
+    case "MEMBER": return memberHref(short);
+    case "ITEM": return ref > 0 ? itemHref(short, ref, refText) : linkUrl || null;
+    case "ITEM_SET": return ref > 0 ? itemSetHref(short, ref, refText) : linkUrl || null;
+    case "ITEM_SYS": return ref > 0 ? sysTagHref(short, ref, refText) : linkUrl || null;
+    case "CUSTOM_WEB": return ref > 0 ? customWebHref(short, ref, refText) : linkUrl || null;
     default: return linkUrl || null;
   }
 }
