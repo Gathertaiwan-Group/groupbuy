@@ -87,7 +87,7 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 
 ## 已知缺口
 
-- 調撥的「調撥中」是在轉移庫存時同時完成出庫與入庫（沒有在途庫存）；收貨只改狀態。
+- 調撥有在途庫存（補D，migration 4504）：轉移只扣調出倉、收貨才加調入倉；見下方。
 - 盤點「盤點所選倉庫」只歸檔非預購（`back_order=false`）的已出貨商品；預購訂單商品不在歸檔範圍（預購數量以「盤點預購數量」直接調整）。
 - 倉庫刪除有庫存時拒絕（原站行為未知）。
 - 預購數量（商品層級）只能在主倉列調整。
@@ -103,3 +103,12 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 
 - `node lib/modules/warehouse/tools/e2e-stock-flow.mjs <BASE>`：入庫 → 調撥 → 盤點調整完整流程（每步列出庫存前後數字、驗證異動帳與不變式），加上列表篩選、匯出、權限/方法/租戶檢查、盤點/部分轉移重送被拒、逆向/啟用只能一次、盤點所選倉庫（不足拒絕＋同步＋已盤點）、未盤點訂單、HTML 跳脫；測完刪除全部 `[測試-warehouse]` 資料並確認種子庫存未變。需 `GB_ACC/GB_PW`（`scripts/dev/creds.sh`）與 `SUPABASE_ACCESS_TOKEN/SUPABASE_PROJECT_REF`。
 - `node lib/modules/warehouse/tools/dom-compare.mjs <spec html> <本系統 html>`：主內容區 DOM 骨架相似度。
+
+## 補D（2026-10-29）：調撥在途庫存（PARITY #83）
+
+- migration `4504_wms_requisition_in_transit.sql`：`warehouse_requisition_items.received_quantity`（既有資料回填＝已調撥）、`warehouse_requisitions.date_received`、異動類型加 `TRANSFER_CANCEL`。
+- `wms_transfer_requisition`：只扣調出倉（TRANSFER_OUT），數量成為在途（已調撥−已收貨）。
+- `wms_receive_requisition`（收貨）：在途數量加入調入倉（TRANSFER_IN），可分批；全數調撥且全數收貨 → 已收到（RECEIVED），否則維持調撥中。
+- `wms_cancel_requisition`（取消）：新申請／審核中／已批准／已駁回直接取消；調撥中且尚無收貨 → 在途退回調出倉（TRANSFER_CANCEL）後取消；已有收貨 → 拒絕（改用逆向調撥）。
+- 商品原始庫存（items.stock）不受調撥影響（在途仍屬公司庫存）。
+- 畫面：列表調撥商品顯示「在途 N」徽章、部分調出時同時有「轉移庫存」「收貨」；彈窗加「已收貨／在途」欄、轉移與收貨彈窗可取消。旗標邏輯 `in-transit.ts`，測試 `tests/in-transit.test.mjs`；`tools/e2e-stock-flow.mjs` 已改為在途語意。

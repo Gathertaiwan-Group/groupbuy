@@ -100,3 +100,10 @@
 - `dtQuery` 的 `or` 篩選與全域搜尋並用時依賴 PostgREST 允許重複 `or` 參數（已實測可用）；排序未附加 id 作為次序，同值列跨頁順序可能不穩定。
 - `public/compat/editor-shim.css` 缺 `.DTE_Field.block` 整列樣式（進階設定頁先自補）。
 - Editor shim 的 select2 initialValue 以 `JSON.stringify` 送值，字串值會帶引號（未實證；`lookupGroupBuy` 以 Number 解析可能得 NaN）。
+
+## 補D（2026-10-29）（`groupbuy-extras.ts`）
+
+- **XLS 表頭解析**（PARITY #124，推導）：`POST /ajax/XLSHeaderParser/parse`（ImportExcelEditorManager 的 Editor upload）：.xls／.xlsx／.csv（orders/spreadsheet.ts），回 `{upload:{id}, data:[{label:表頭或「第N欄」, value:欄位索引}]}`（前端依 value＝索引預選）；列資料（≤5000 列、≤100 欄）暫存 `xls_header_uploads` 24 小時（migration 1021），匯入端以 `loadXlsHeaderUpload(session, id)` 取回、`xls-header-logic.ts pickColumns` 依 name<N>Col 取值。原站使用頁面與最終送出端點不明。
+- **團購管理員授權**（PARITY #37）：`GET /ajax/GroupBuy/adminUserGroupBuys?groupBuyId=` → `{data:{groupBuyId, adminUserGroupBuys:[{adminUserId}]}, options:{"adminUserGroupBuys[].adminUserId":[…]}}`；原站 prepareAdminUserEditor 以 `/ajax/GroupBuy/update` 送 `adminUserGroupBuys`（groupbuy-list.ts 攔下後同步 `admin_user_group_buys`，不經一般欄位驗證）。入口（推導）：團購列表設定按鈕列「團購管理員」。受限帳戶（推導旗標 `admin_users.permissions.groupBuyRestricted`）只在「所有團購」列表看到被授權的團購；其他頁面仍只做租戶隔離。
+- **商品 Feed**（PARITY #23，推導）：進階設定頁「商品 Feed」按鈕（原站 switch case 'feed' → openForm('/ajax/Feed…') 被截斷）→ `GET /ajax/Feed/display?groupBuyId=` 彈窗顯示網址；公開 `GET /feed/{團購id}-{HMAC 24 碼}`（SESSION_SECRET 簽章、錯誤 404、快取 10 分鐘）輸出 RSS 2.0＋g: 命名空間（Google Merchant Center／Meta 商品目錄）：未下架、品項未下架、價格>0 的一般／規格／組合等商品；原價>售價時 price＝原價、sale_price＝售價；現貨＋預購為 0 標缺貨；規格子商品帶 item_group_id；官網型（HOME）連到商品頁，其他連團購頁。`feed-logic.ts`。
+- 測試：`xls-header.test.ts`、`admin-groupbuys.test.ts`、`feed.test.ts`。

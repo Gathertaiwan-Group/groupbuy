@@ -106,3 +106,9 @@ Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock
 - 組合商品：新增（選類型、群組、搜尋候選商品、加入、儲存上架 → 成功彈窗）、列表 → 編輯 → 載入既有設定 → 儲存；template／getBundle／previewSyncNames／previewSyncContent／updateItemTag／updateBatchItemTags 端點。
 - 驗收：正式站於示範團購 405167 新增品項＋2 個商品（含圖片）→ DB 正確、前台 `/ak98i` 頁面出現品項與商品（含圖片）、圖片網址 200 → 刪除後 DB 與前台都消失。
 - 未登入：各頁回登入頁（AJAX 請求回 401 JSON）。
+
+## 補D（2026-10-29）（`item-extras.ts`、純邏輯 `item-extras-logic.ts`，測試 `item-extras.test.ts`）
+
+- **商品關鍵字標籤**（PARITY #47）：`POST /ajax/ItemKeywordTag/save?groupBuyId=`（原站 itemKeywordManager）；關鍵字可用半形／全形逗點、頓號、換行分隔，去重、每個 ≤50 字、一次 ≤30 個；權重整數（migration 1101 `item_keyword_tags.weight`），同商品同關鍵字再設定＝更新權重。入口（推導）：品項頁工具列「新增關鍵字」（選取商品）。原站說明的搜尋規則（起始文字相符、權重大者在前）實作於 `rankByKeyword`，前台搜尋尚未接（storefront）。
+- **會員方案商品綁定**（PARITY #46）：`GET /ajax/ItemRoyaltyProgram/get?itemId=|royaltyProgramId=`（無綁定 data:null）、`POST save|update|delete`；只接受商品類型「會員方案（RP）」，一個 RP 商品綁一個會員方案＋可選會員卡（migration 1101 `item_royalty_programs.loyalty_card_id`）。`GET /ajax/LoyaltyCard/lookup` 會員卡 select2。入口（推導）：RP 商品列展開「綁定會員方案」。
+- **客製化備註同步**（PARITY #26）：`POST /ajax/Item/syncAttrTo?itemId=`（itemSetIds[]）把來源商品的 attribute_note、attribute_note_default、item_settings.attributeNote 複製到所選品項的所有商品（其他 item_settings 保留）。入口（推導）：商品列展開「複製客製化備註」。

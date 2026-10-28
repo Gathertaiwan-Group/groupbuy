@@ -21,7 +21,7 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 |---|---|---|
 | `/ajax/GroupBuy/listBankTransactions?groupBuyId=` | GET/POST | 匯款明細（serverSide=false）；鍵：`DT_RowId`、`datePaidStr`、`account`、`amount`、`salesOrderUUID`、`status`… options：`bankProvider`（42 種） |
 | `/ajax/GroupBuy/importBankTransaction?groupBuyId=` | POST | Editor create：`status`（文字框）、`note`（上傳 id）、`bankProvider`；回 `{data:[新明細], message:'匯入 N 筆：符合 a、多筆候選 b…'}` |
-| `/ajax/GroupBuy/uploadBankTransactionCSV?groupBuyId=` | POST | Editor upload：回 `{upload:{id:'<16hex>_<檔名>'}, files:{…}}`；CSV/TXT（UTF-8／Big5／UTF-16）上限 4MB；Excel 請另存 CSV |
+| `/ajax/GroupBuy/uploadBankTransactionCSV?groupBuyId=` | POST | Editor upload：回 `{upload:{id:'<16hex>_<檔名>'}, files:{…}}`；CSV/TXT（UTF-8／Big5／UTF-16）上限 4MB；.xls／.xlsx 讀第一張工作表轉 CSV（補D） |
 | `/ajax/GroupBuy/confirmBankTransactions?groupBuyId=` | POST | `bankTransactionId=1,2`；逐筆呼叫 DB 函式 `accounting_confirm_bank_transaction` |
 | `/ajax/GroupBuy/revertBankTransactions?groupBuyId=` | POST | 取消入帳，DB 函式 `accounting_revert_bank_transaction` |
 | `/ajax/GroupBuy/deleteBankTransaction?groupBuyId=` | POST | Editor remove：只能刪「未入帳且沒有入帳紀錄」的明細 |
@@ -81,9 +81,9 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 - 單元測試已納入 CI（Unit tests 步驟）；本機 `node --test lib/modules/accounting/tests/*.test.mjs`。
 
 - 金流對帳列表依賴 orders 模組的 `/ajax/SalesOrder/list`（需支援 `groupBuyId`、`month`、`rowId=salesOrderId` 用的 `salesOrderId` 鍵）；orders 未上線前列表為空／錯誤。
-- 銀行對帳檔只支援 CSV/TXT；`.xls/.xlsx` 會提示另存 CSV。
+- 銀行對帳檔支援 CSV/TXT 與 `.xls/.xlsx`（第一張工作表轉 CSV 後解析，補D）；`.ods` 提示另存。
 - 電子發票、金流、信用卡退刷、Email 全部未串接（只寫紀錄）。
-- `/ajax/pos/Invoice/print`（POS 列印發票）未實作（訂單頁 POS 功能，原站需 posEnabled）。
+- `/ajax/pos/Invoice/print`（訂單頁 POS 列印發票）由 orders 模組提供（補D：轉到 POS 收據）。
 
 ## 給 core 的問題
 
@@ -92,3 +92,9 @@ DOM 骨架自查：`node lib/modules/accounting/tools/dom-compare.mjs --groupBuy
 - Editor shim：`editor.field('select欄').val(x)` 不會觸發 change，所以 `dependent()` 不會跟著執行（原版 Editor 1.9 的 select/checkbox/radio `set` 會觸發 change）。使用者在畫面上操作時正常，只影響以 API 設值的程式。
 
 - `lib/core/entity/crud.ts` 的 `dtQuery` 在有欄位篩選時另跑一次 `select('*', {head:true})` 計算 recordsTotal，且 `where` 會套到這個查詢上 → 模組若在 `where` 用嵌入資源篩選（`sales_orders.uuid`）會失敗；本模組改為先查出訂單 id 再 `in()`。建議文件註明 `where` 不可使用嵌入資源欄位。
+
+## 補D（2026-10-29）
+
+- 匯款對帳上傳 `.xls/.xlsx`（PARITY #100）：`orders/spreadsheet.ts` 讀第一張工作表 → `rowsToCsv` → 原本的 42 種銀行格式解析；上傳紀錄 `encoding` 記為 `xls`／`xlsx`。測試 `tests/bank-xls.test.mjs`（xlwt 產生的 fixture `tests/fixtures/bank.xls`）。
+- 電子發票彈窗提示字（PARITY #99，`einvoice-notice.ts`）：開立／作廢／折讓／訂單發票彈窗依所屬團購是否啟用綠界電子發票（進階設定 EINVOICE_PROVIDER＝ECPAY／TEST 且金鑰已設定）顯示「已串接綠界…（綠界測試環境）」或紅字「電子發票未啟用…只寫紀錄」，混合時分別列出筆數。測試 `tests/einvoice-notice.test.mjs`。
+- 定期定額授權通知（`payment-gateway.ts periodNotify`）：授權失敗 → 訂單狀態「授權失敗 AUTH_FAILED」（訂單列出現「請求授權」）；之後授權成功且原為授權失敗 → 「付款成功通知」（推導）。

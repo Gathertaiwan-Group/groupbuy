@@ -158,3 +158,10 @@ storefront 結帳試算範例見 `pricing-loader.ts` 檔頭註解（loadSalesRul
 - 正式網址（https://groupbuy-delta.vercel.app，部署 57fb838 起）：14 個頁面／片段（10 個原站頁＋查看優惠卷、綁定、標籤的商品×2）登入後皆 200，未登入皆回原站登入頁（200＋登入表單）；runtime 比對與 DOM 覆蓋率同本機；動作實測全部通過（黑名單表尾搜尋因正式站延遲一次讀到舊資料，已改為等到篩選結果再判斷）；匯出 `lottery.xlsx`、`優惠卷-*.xlsx` 實際下載成功；換租戶前綴打 AJAX 回 403；正式站測試資料已全部刪除，示範獎項已還原、示範短網址瀏覽數已還原。
 - 自查：`.from()` 查詢 129 處皆以 tenant_id 過濾或寫入 tenant_id（`/s/:code` 以全站唯一代碼查詢為設計例外）；無商業授權檔、金鑰、帳密；模板無寫死 `/guest_ep`。
 - 贈品／折扣次數拆開實測（本機 2026-10-26，pos01 示範團購，規則 `[修贈品] 滿1000送1(不限)`＝GIFT_MINIMUM_PRICE_MEET_TOTAL_PAID maxApplyTimes=-1、`[修贈品] 滿300折50`＝MINIMUM_PRICE_MEET -1）：前台購物袋 商品1×10＋商品2×2＝2400 → 折扣 -50、合計 2350、贈品提示「可選贈品 2 件」；POS 收銀 同 12 件 2400 → 套用兩條規則、-50、結帳 2350（POS 介面不顯示贈品件數，以同一草稿明細跑引擎＝贈品 2）。測後已刪規則、POS 草稿 2 筆、購物袋 1 筆；商品庫存前後皆 100。
+
+## 補D（2026-10-29）：29 類逐類對照（PARITY #48）
+
+- `category-coverage.test.ts`：29 類每類至少一組「達標／未達標」案例，依原站精靈各 `sr('<類別>')` 的欄位語意（minimum 單位元／件、dollarOrPercentage 選項組、discount、repeatable→maxApplyTimes、tag1/tag2 主商品／贈品或加購標籤、autoOrManual 自動／自選）斷言；最後一案確認 29 類都有覆蓋。
+- 對照後修正：組合包 ITEM_PACKAGE「依標籤個別計算 BY_TAG」原本不檢查 → 每個子商品標籤的件數需＝組合包數（推導；SUM_TAG 維持「子商品合計＝包數×子商品加總數量」）。其他 28 類引擎行為與精靈欄位語意一致，未改。
+- `pricing-loader.ts loadPricingInputForOrder(session, id, overrideItems?)`：新增第三參數，供 orders 加退換商品草稿試算。
+- 仍屬推導：原站伺服器計算不可見，未能用原站同一購物車實測對照。

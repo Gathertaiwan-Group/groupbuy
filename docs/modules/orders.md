@@ -44,11 +44,11 @@ DOM 骨架自查：`node lib/modules/orders/tools/dom-compare.mjs --spec spec/ht
 | `/ajax/SalesOrder/bindCustomer` | POST | 綁定顧客（Email → 電話比對會員） |
 | `/backend/SalesOrder/editShippingRule` → `/ajax/SalesOrder/updateShippingRule` | GET → POST | 更改配送方式（推導彈窗） |
 | `/ajax/Customer/displaySimpleInfo` | GET | 顧客資訊（推導彈窗） |
-| `/ajax/SalesOrder/reauthPeriod` | GET | 定期定額重新授權（原站以 GET 呼叫 → 不寫資料，回【未串接】） |
+| `/ajax/SalesOrder/reauthPeriod` | GET | 定期定額重新授權（綠界 CreditCardPeriodAction ReAuth，補D） |
 | `/backend/SalesOrderExport/batchAction`、`/backend/SalesOrder/batchAction` | GET/POST | 匯出（EXPORT_CSV／EXPORT_ORDER_ITEM／EXPORT_EINVOICE_CSV／EXPORT_ERP～ERP6，下載帶 fileDownload cookie）；列印（PRINT_ORDER／PRINT_ORDER_PIECE／PRINT_C2C_ORDER_INFO／PRINT_ORDER_BARCODE） |
 | `/backend/SalesOrder/printOrder｜printOrderQuotation｜printC2COrderInfo` | GET | 列印單筆 |
 | `/ajax/SystemPreference/salesOrderPrintSettings` | GET/POST | 列印設定（POST 才寫入） |
-| `/ajax/SalesOrder/getImportSalesOrderPreference`、`uploadSalesOrders`、`importSalesOrders` | GET/POST | 匯入外部訂單（xlsx/csv；預覽→實際匯入） |
+| `/ajax/SalesOrder/getImportSalesOrderPreference`、`uploadSalesOrders`、`importSalesOrders` | GET/POST | 匯入外部訂單（xlsx/xls/csv；預覽→實際匯入） |
 | `/backend/SalesOrder/pickup`、`/ajax/SalesOrder/pickup` | GET / POST | 自取訂單 |
 | `/backend/SalesOrder/show` | GET | 訂單明細彈窗（推導） |
 
@@ -113,10 +113,17 @@ DB 函式（migration）：
 ## 已知缺口
 
 - 訂單列「加入黑名單」呼叫 `/backend/Blacklist/add`：黑名單屬 marketing（blacklist-list），目前尚無模組實作 → 404。
-- 原站 POS／TPL 功能（`posEnabled`/`tplEnabled` 為 false）未實作：`/ajax/pos/Invoice/print`、`/ajax/Tpl/createShipment`。
+- 原站 TPL 功能（`tplEnabled` 為 false）未實作：`/ajax/Tpl/createShipment`。POS 列印發票已補（補D）。
 - Email／簡訊／金流（虛擬帳號重新產生、信用卡重新授權）／物流（綠界取號、小白單、超商取貨條）／電子發票：未串接，只寫紀錄。
-- 匯入外部訂單不支援舊版 `.xls`（提示另存 .xlsx/.csv）。
+- 匯入外部訂單 `.xls` 加密檔或 Excel 95 以前格式不支援（提示另存 .xlsx/.csv）。
 
 ## 給 core 的問題
 
 （見最終回報；目前無阻擋性問題。）
+
+## 補D（2026-10-29）
+
+- **加退換商品重算優惠**（PARITY #58，`returns-pricing.ts`）：原單操作「重新計算優惠條件」改用 marketing `evaluatePricing`（`loadPricingInputForOrder(session, id, 草稿商品)`；優惠條件、訂單優惠卷、會員、郵遞區號、下單時間取自訂單）。列折扣寫回草稿；訂單金額＝原金額＋Σ(新單價×數量−原)−(引擎折扣合計−原折扣合計)。套用後改數量／單價自動重算；手動改折價即回到手動模式（以列折價計算）。送出時一併寫回 `discount_amount`、`sales_order_sales_rules`（同訂單「重新計算優惠」）。贈品資格不自動增刪（訊息提示）。測試 `returns-pricing.test.ts`。
+- **訂單頁 POS 列印發票**（PARITY #68，`pos-invoice-print.ts`）：`GET /ajax/pos/Invoice/print?salesOrderId=` 轉址到 `/pos/ajax/{租戶}/{團購短網址}/Invoice/print`（POS 收據）；`conf.posEnabled`＝租戶有 POS 型團購（render=POS）。
+- **匯入外部訂單 .xls**（PARITY #65）：`spreadsheet.ts`（.xlsx exceljs、.xls 自寫 BIFF8 讀取器 `xls-biff8.ts`、.csv papaparse）；`xls-biff8.ts` 也供 accounting 匯款對帳、groupbuy XLS 表頭解析、shipping 匯入使用。不支援：加密（FILEPASS）、Excel 95 以前。測試 `xls-biff8.test.ts`（`fixtures/*.xls` 由 Python xlwt 產生）。
+- **定期定額重新授權**（PARITY #66，`reauth-period-logic.ts`）：`reauthPeriod` 檢查付款方式為定期定額（128）、非取消；取第一期授權成功的 ECPAY 交易編號 → `EcpayPayment.periodAction(mtn, "ReAuth")`（lib/integrations/payment.ts，`Cashier/CreditCardPeriodAction`，預設 Stage）；成功且狀態為授權失敗 → 付款成功通知；結果寫歷程。綠界未設定 → 【未串接】。`reauthCreditCardPeriod2`（salesOrder.js）原站無 UI，未做。
