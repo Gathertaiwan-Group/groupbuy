@@ -112,7 +112,8 @@ var reverseEditor;
 					render: function ( data, type, row ) {
 						var html = '<div class="small" style="min-width:240px">';
 						row.warehouseRequisitionItems.forEach((o,i)=>{
-								html += '<span>'+$('<div>').text(o.title).html() + ':' + o.totalRequired + '</span><br>'
+								html += '<span>'+$('<div>').text(o.title).html() + ':' + o.totalRequired
+									+ (o.inTransitQuantity > 0 ? ' <span class="badge badge-warning">在途 ' + o.inTransitQuantity + '</span>' : '') + '</span><br>'
 							});
 						html += '</div>';
 						return html;
@@ -129,10 +130,10 @@ var reverseEditor;
 								+ '<button class="btn btn-secondary btn-sm px-2" data-action="edit">編輯</button>'
 						} else if (row.requisitionStatus == 'PENDING') {
 							html += '<button class="btn btn-success btn-sm px-2" data-action="review">審核</button>'
-						} else if (row.transferable) {
-							html += '<button class="btn btn-warning btn-sm px-2" data-action="transfer">轉移庫存</button>'
-						} else if (row.receivable) {
-							html += '<button class="btn btn-primary btn-sm px-2" data-action="received">收貨</button>'
+						} else if (row.transferable || row.receivable) {
+							// 在途（PARITY #83）：部分調出時可同時再轉移與收貨
+							if (row.transferable) html += '<button class="btn btn-warning btn-sm px-2" data-action="transfer">轉移庫存</button>'
+							if (row.receivable) html += '<button class="btn btn-primary btn-sm px-2" data-action="received">收貨</button>'
 						} else {
 							html += '<button class="btn btn-default btn-sm px-2" data-action="view">檢視</button>'
 						}

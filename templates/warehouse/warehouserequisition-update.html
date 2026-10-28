@@ -60,7 +60,7 @@
 	</div>
 	{{/if}}
 	{{#if isTransfer}}
-	<div class="blue-grey lighten-5 small p-2 mb-2">輸入本次轉移數量後按下[確認轉移庫存]，系統會從來源倉扣除並加入目標倉（同一交易完成）。</div>
+	<div class="blue-grey lighten-5 small p-2 mb-2">輸入本次轉移數量後按下[確認轉移庫存]，系統會從來源倉扣除，數量列為「在途」；目的倉收到貨後按[收貨]才加入目標倉。取消調撥單時，尚未收貨的在途數量退回來源倉。</div>
 	{{/if}}
 	<table id="warehouseRequisitionItemTable" class="table table-striped display nowrap" width="100%">
 		<thead>
@@ -71,6 +71,8 @@
 				<th>目標倉庫存</th>
 				<th>調撥數量</th>
 				<th>已調撥數量</th>
+				<th>已收貨</th>
+				<th>在途</th>
 				<th>成本</th>
 				<th></th>
 			</tr>
@@ -87,10 +89,12 @@
 	<button type="button" class="btn btn-success" data-wr-action="approve">批准</button>
 	{{/if}}
 	{{#if isTransfer}}
+	{{#if req.cancellable}}<button type="button" class="btn btn-danger" data-wr-action="cancel">取消調撥單</button>{{/if}}
 	<button type="button" class="btn btn-warning" data-wr-action="transfer">確認轉移庫存</button>
 	{{/if}}
 	{{#if isReceived}}
-	<button type="button" class="btn btn-primary" data-wr-action="received">確認收貨</button>
+	{{#if req.cancellable}}<button type="button" class="btn btn-danger" data-wr-action="cancel">取消調撥單</button>{{/if}}
+	<button type="button" class="btn btn-primary" data-wr-action="received">確認收貨（在途 {{req.inTransitQuantity}} 件）</button>
 	{{/if}}
 	<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
 </div>
@@ -129,6 +133,8 @@
 		DataTableConfig.data_input('toStock'),
 		DataTableConfig.data_input('quantity', editable),
 		DataTableConfig.data_input('transferredQuantity'),
+		DataTableConfig.data_input('receivedQuantity'),
+		DataTableConfig.data_input('inTransitQuantity'),
 		DataTableConfig.data_input('cost', editable),
 		{
 			data:null,

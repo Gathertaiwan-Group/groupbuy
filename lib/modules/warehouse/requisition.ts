@@ -1,4 +1,6 @@
 // 調撥單據（/backend/WarehouseRequisition/list）：建立 → 調整商品 → 送出審核 → 審核(批准/駁回) → 轉移庫存 → 收貨；已收到可逆向調撥。
+// 在途（migration 4504，PARITY #83）：轉移只扣調出倉（在途＝已調撥−已收貨）；收貨才加入調入倉（可分批）；
+// 取消時尚未收貨的在途數量退回調出倉（已有收貨的單不可取消，改用逆向調撥）。旗標見 in-transit.ts。
 // 原站：spec/html/warehouserequisition-list.html、spec/runtime/warehouserequisition-list.records.txt。
 // 庫存移轉在 DB 端交易函式 groupbuy.wms_transfer_requisition（migration 4500）原子完成並寫入庫存異動帳。
 //   POST /ajax/wms/WarehouseRequisition/list|save|update|delete
@@ -34,6 +36,7 @@ import {
   type WarehouseRow,
   wmsList,
 } from "./shared";
+import { inTransitOf, requisitionFlags } from "./in-transit";
 
 const ST = "WarehouseRequisition.requisitionStatus";
 const TS = "WarehouseRequisition.transferStatus";
@@ -66,6 +69,7 @@ async function loadReq(session: AdminSession, id: number | null): Promise<ReqRow
 function itemJson(i: AnyRow): AnyRow {
   const quantity = Number(i.quantity ?? 0);
   const transferred = Number(i.transferred_quantity ?? 0);
+  const received = Number(i.received_quantity ?? 0);
   return {
     warehouseRequisitionItemId: Number(i.id),
     warehouseRequisitionId: Number(i.warehouse_requisition_id),
@@ -74,6 +78,8 @@ function itemJson(i: AnyRow): AnyRow {
     title: i.title ?? "",
     quantity,
     transferredQuantity: transferred,
+    receivedQuantity: received,
+    inTransitQuantity: inTransitOf({ quantity, transferredQuantity: transferred, receivedQuantity: received }),
     remainingQuantity: Math.max(quantity - transferred, 0),
     totalRequired: quantity,
     totalTransferred: transferred,
@@ -86,6 +92,7 @@ function reqJson(r: ReqRow, whs: Map<number, WarehouseRow>): AnyRow {
   const items = ((r.warehouse_requisition_items ?? []) as AnyRow[]).sort((a, b) => Number(a.id) - Number(b.id)).map(itemJson);
   const st = r.requisition_status;
   const ts = r.transfer_status;
+  const flags = requisitionFlags(st, ts, items as { quantity: number; transferredQuantity: number; receivedQuantity: number }[]);
   return {
     warehouseRequisitionId: Number(r.id),
     fromWarehouseId: r.from_warehouse_id == null ? null : Number(r.from_warehouse_id),
@@ -95,6 +102,7 @@ function reqJson(r: ReqRow, whs: Map<number, WarehouseRow>): AnyRow {
     dateRequiredString: dateOnly(r.date_required),
     dateConfirmedString: dateOnly(r.date_confirmed),
     dateTransferredString: dateOnly(r.date_transferred),
+    dateReceivedString: dateOnly(r.date_received),
     type: r.type,
     totalAmount: Number(r.total_amount ?? 0),
     totalCost: Number(r.total_cost ?? 0),
@@ -112,8 +120,10 @@ function reqJson(r: ReqRow, whs: Map<number, WarehouseRow>): AnyRow {
     requester: r.requester ?? "",
     adminUserId: r.admin_user_id ?? null,
     warehouseRequisitionItems: items,
-    transferable: (st === "APPROVED" || st === "TRANSFERRING") && ts !== "COMPLETED",
-    receivable: st === "TRANSFERRING" && ts === "COMPLETED",
+    transferable: flags.transferable,
+    receivable: flags.receivable,
+    cancellable: flags.cancellable,
+    inTransitQuantity: flags.inTransit,
     sourceRequisitionId: r.source_requisition_id == null ? null : Number(r.source_requisition_id),
     dateCreated: new Date(String(r.created_at)).getTime(),
     dateModified: new Date(String(r.updated_at)).getTime(),
@@ -359,9 +369,15 @@ function actionHandler(action: string) {
         await setStatus(session, reqId, ["PENDING"], { requisition_status: "REJECTED", approver: session.account, date_confirmed: new Date().toISOString() }, "只有審核中的調撥單可以駁回");
         return actionOk("已駁回");
       case "cancel": {
-        if (items.some((i) => Number(i.transferred_quantity) > 0)) throw badRequest("已轉移庫存的調撥單不可取消");
-        await setStatus(session, reqId, ["OPEN", "PENDING", "APPROVED", "REJECTED"], { requisition_status: "CANCELLED" }, "此調撥單目前狀態不可取消");
-        return actionOk("已取消調撥單");
+        // DB 鎖定單據後判斷：未收貨的在途數量退回調出倉（TRANSFER_CANCEL）；已有收貨 → 拒絕
+        const res = await rpc<AnyRow>("wms_cancel_requisition", {
+          p_tenant_id: session.tenantId,
+          p_requisition_id: reqId,
+          p_admin_user_id: session.adminUserId,
+          p_actor: session.account,
+        });
+        const back = Number(res?.returned ?? 0);
+        return actionOk(back > 0 ? `已取消調撥單，在途 ${back} 件已退回來源倉` : "已取消調撥單", { data: res });
       }
       case "transfer": {
         const body = await ctx.body();
@@ -388,13 +404,20 @@ function actionHandler(action: string) {
         });
         const label = await enumLabel(TS, String(res?.transferStatus ?? ""));
         // 全數轉移後單據為「調撥中／已完成」，待目的倉按「收貨」才結案為「已收到」（貨品在途）；訊息提示下一步
-        const next = String(res?.transferStatus ?? "") === "COMPLETED" ? "，單據狀態為「調撥中」，目的倉收到貨後請按「收貨」結案" : "";
+        const next = "；已從來源倉扣除、目前為在途，目的倉收到貨後請按「收貨」加入目標倉";
         return actionOk(`已轉移庫存 ${res?.moved ?? 0} 件（${label}）${next}`, { data: res });
       }
-      case "received":
-        // 條件式更新（同一敘述）：只有「調撥中＋已完成調撥」可以收貨
-        await setStatus(session, reqId, ["TRANSFERRING"], { requisition_status: "RECEIVED" }, "調撥尚未完成，無法收貨", "COMPLETED");
-        return actionOk("已收貨");
+      case "received": {
+        // DB 鎖定單據：在途數量加入目標倉；全數調撥且全數收貨 → 已收到
+        const res = await rpc<AnyRow>("wms_receive_requisition", {
+          p_tenant_id: session.tenantId,
+          p_requisition_id: reqId,
+          p_admin_user_id: session.adminUserId,
+          p_actor: session.account,
+        });
+        const done = String(res?.requisitionStatus ?? "") === "RECEIVED";
+        return actionOk(`已收貨 ${res?.received ?? 0} 件${done ? "，調撥單已結案" : "（尚有未調撥數量，單據維持調撥中）"}`, { data: res });
+      }
       default:
         throw badRequest("不支援的動作");
     }
