@@ -19,7 +19,8 @@ import { badRequest, notFound, notIntegrated } from "@/lib/core/http/errors";
 import { json } from "@/lib/core/http/responses";
 import { enumLabel } from "@/lib/core/enums";
 import { verifyResultText, verifySummary, type VerifyTx } from "./transaction-verify";
-import { ecpayPayment } from "./gateway";
+import { ecpayPayment, pchomePay } from "./gateway";
+import type { PchomePayPayment } from "@/lib/integrations/pchomepay";
 import type { PaymentProvider } from "@/lib/integrations/payment";
 import { refundableOf, refundOrderPayment } from "./payment-gateway";
 import { envSuffix } from "./gateway";
@@ -50,7 +51,7 @@ async function verify(ctx: RequestContext): Promise<Response> {
   const summary = verifySummary(rows, Number(order.total_paid), (c) => labels.get(c) ?? c);
   // fix21：綠界的付款交易向綠界查詢（QueryTradeInfo）比對狀態與金額
   const provider = ecpayPayment();
-  const gw = await gatewayCheck(provider, rows as (VerifyTx & { provider: string })[]);
+  const gw = await gatewayCheck(provider, rows as (VerifyTx & { provider: string })[], pchomePay());
   if (rows.length) {
     const text = [verifyResultText(summary), ...gw.lines].join("；").slice(0, 1000);
     const { error: uerr } = await db
@@ -64,32 +65,50 @@ async function verify(ctx: RequestContext): Promise<Response> {
   return json({ code: 200, data: [{ salesOrderId: order.id, uuid: order.uuid, ...summary, gatewayLines: gw.lines, gatewayMismatch: gw.mismatch }], ...ni });
 }
 
-/** 綠界交易逐筆查詢：本系統「成功」須綠界已付款且金額相同；本系統「處理中／失敗」而綠界已付款＝漏入帳 */
+/** 綠界／PChomePay 交易逐筆查詢：本系統「成功」須金流商已付款且金額相同；本系統「處理中／失敗」而金流商已付款＝漏入帳 */
 export async function gatewayCheck(
   provider: PaymentProvider | null,
   rows: (VerifyTx & { provider: string })[],
+  pchome: PchomePayPayment | null = null,
 ): Promise<{ checked: boolean; mismatch: boolean; lines: string[] }> {
-  const targets = rows.filter((r) => r.provider === "ECPAY" && r.category === "PAYMENT" && r.merchant_trade_no);
-  if (!provider || !targets.length) return { checked: false, mismatch: false, lines: [] };
+  const targets = rows.filter((r) => ((r.provider === "ECPAY" && provider) || (r.provider === "PCHOMEPAY" && pchome)) && r.category === "PAYMENT" && r.merchant_trade_no);
+  if (!targets.length) return { checked: false, mismatch: false, lines: [] };
   const lines: string[] = [];
   let mismatch = false;
+  let sandbox = false;
   for (const t of targets.slice(-5)) {
-    const q = await provider.queryTrade(String(t.merchant_trade_no));
+    const name = t.provider === "PCHOMEPAY" ? "PChomePay" : "綠界";
+    let st: "PAID" | "UNPAID" | "UNKNOWN";
+    let amount: number | null;
+    let msg: string;
+    if (t.provider === "PCHOMEPAY") {
+      const q = await pchome!.queryPayment(String(t.merchant_trade_no));
+      sandbox ||= pchome!.sandbox;
+      st = q.result === "PAID" ? "PAID" : q.result === "ERROR" ? "UNKNOWN" : "UNPAID";
+      amount = q.amount;
+      msg = q.message;
+    } else {
+      const q = await provider!.queryTrade(String(t.merchant_trade_no));
+      sandbox ||= provider!.sandbox;
+      st = q.status;
+      amount = q.amount;
+      msg = q.message;
+    }
     const local = t.status;
     let ok: boolean;
-    if (q.status === "UNKNOWN") {
+    if (st === "UNKNOWN") {
       ok = false;
-      lines.push(`綠界 ${t.merchant_trade_no}：查詢失敗（${q.message}）`);
-    } else if (q.status === "PAID") {
-      ok = local === "SUCCESS" && Number(q.amount) === Number(t.amount);
-      lines.push(`綠界 ${t.merchant_trade_no}：已付款 ${q.amount}${ok ? "（相符）" : local === "SUCCESS" ? `（金額不符，本系統 ${t.amount}）` : "（本系統未入帳）"}`);
+      lines.push(`${name} ${t.merchant_trade_no}：查詢失敗（${msg}）`);
+    } else if (st === "PAID") {
+      ok = local === "SUCCESS" && Number(amount) === Number(t.amount);
+      lines.push(`${name} ${t.merchant_trade_no}：已付款 ${amount}${ok ? "（相符）" : local === "SUCCESS" ? `（金額不符，本系統 ${t.amount}）` : "（本系統未入帳）"}`);
     } else {
       ok = local !== "SUCCESS";
-      lines.push(`綠界 ${t.merchant_trade_no}：未付款${ok ? "" : "（本系統卻記為成功）"}`);
+      lines.push(`${name} ${t.merchant_trade_no}：未付款${ok ? "" : "（本系統卻記為成功）"}`);
     }
     if (!ok) mismatch = true;
   }
-  if (provider.sandbox) lines.push("（綠界測試環境）");
+  if (sandbox) lines.push("（金流測試環境）");
   return { checked: true, mismatch, lines };
 }
 
@@ -109,7 +128,7 @@ async function refundInfo(ctx: RequestContext): Promise<Response> {
   if (!Number.isSafeInteger(id) || id <= 0) throw badRequest("缺少參數 salesOrderId");
   const o = await orderOf(session.tenantId, id);
   const r = await refundableOf(session.tenantId, id);
-  if (!r) throw badRequest(`訂單 ${o.uuid} 沒有可退款的線上付款（綠界信用卡／LINE Pay）`);
+  if (!r) throw badRequest(`訂單 ${o.uuid} 沒有可退款的線上付款（PChomePay／綠界信用卡／LINE Pay）`);
   return json({ code: 200, data: { salesOrderId: id, uuid: o.uuid, ...r, sandbox: !!envSuffix() } });
 }
 

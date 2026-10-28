@@ -33,7 +33,7 @@
 				if (r.cardNumber) lines.push('卡號 ' + esc(r.cardNumber));
 				{{!-- fix21：綠界 QueryTradeInfo 比對結果 --}}
 				$.each(r.gatewayLines || [], function(i, l) { lines.push((r.gatewayMismatch ? '<span class="text-danger">' : '<span class="text-success">') + esc(l) + '</span>'); });
-				if (r.gatewayMismatch) badge = '<span class="badge badge-danger">綠界不符</span>';
+				if (r.gatewayMismatch) badge = '<span class="badge badge-danger">金流商不符</span>';
 				return badge + '<div class="small">' + lines.join('<br>') + '</div>';
 			},
 			fill: function(dt) {
@@ -100,7 +100,7 @@
 					if (!d) { displayAlertWarning('讀取可退金額失敗'); return; }
 					if (d.pending) { displayAlertWarning('訂單 ' + d.uuid + ' 有退款處理中，請稍後再試'); return; }
 					if (!(d.remain > 0)) { displayAlertWarning('訂單 ' + d.uuid + ' 的線上付款已全額退款'); return; }
-					var amt = window.prompt('訂單 ' + d.uuid + (d.sandbox ? '（綠界測試環境）' : '') + '\n已付 ' + d.paid + ' 元、已退 ' + d.refunded + ' 元，最多可退 ' + d.remain + ' 元\n\n請輸入退刷金額（預設為全部可退金額）。\n注意：綠界只有「已關帳」的信用卡交易可部分退刷；未關帳只能全額放棄授權。', String(d.remain));
+					var amt = window.prompt('訂單 ' + d.uuid + (d.sandbox ? '（測試環境）' : '') + '\n已付 ' + d.paid + ' 元、已退 ' + d.refunded + ' 元，最多可退 ' + d.remain + ' 元\n\n請輸入退刷金額（預設為全部可退金額）。\n注意：綠界只有「已關帳」的信用卡交易可部分退刷，未關帳只能全額放棄授權；PChomePay 信用卡分期、超商代碼只能全額退款，ATM 退款 PChomePay 收手續費 15 元。', String(d.remain));
 					if (amt === null) return;
 					amt = $.trim(String(amt)).replace(/,/g, '');
 					if (!/^[1-9][0-9]*$/.test(amt) || Number(amt) > d.remain) { displayAlertWarning('退刷金額必須是 1～' + d.remain + ' 的整數'); return; }

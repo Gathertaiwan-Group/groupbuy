@@ -2,7 +2,9 @@
 //
 // 服務商選擇（依原站設定鍵）：
 //   信用卡等線上付款：團購 groupBuySettings.ccp → 進階設定 CREDITCARD_PROVIDER（本團 → 標籤 → 系統設定）；
-//     NONE（使用系統設定／未提供）時用平台預設＝環境變數已設定的綠界；設為其他服務商（藍新、玉山…）→ 未串接。
+//     NONE（使用系統設定／未提供）時用平台預設：PAYMENT_DEFAULT_PROVIDER（預設 PCHOMEPAY）→ 已設金鑰的 PChomePay 支付連；
+//     平台預設不支援的付款方式（定期定額、銀聯、台灣 Pay…）或 PChomePay 未設定 → 綠界。
+//     設為 PCHOMEPAY／ECPAY 只用該服務商；設為其他服務商（藍新、玉山…）→ 未串接。
 //   電子發票：進階設定 EINVOICE_PROVIDER 為 ECPAY 或 TEST（測試用）才開立；NONE（未提供）＝不開立。
 //   物流（超商取貨）：環境變數已設定綠界物流即啟用（原站無服務商設定鍵）。
 // 沙盒（GATEWAY_MODE≠production）：一律連綠界 Stage，畫面標示「測試模式」。
@@ -13,6 +15,7 @@ import { EcpayPayment, type PaymentProvider } from "@/lib/integrations/payment";
 import { EcpayLogistics, type LogisticsProvider } from "@/lib/integrations/logistics";
 import { EcpayEinvoice, type EinvoiceProvider } from "@/lib/integrations/einvoice";
 import { LinePayPayment, readLinePayConfig } from "@/lib/integrations/linepay";
+import { PchomePayPayment, readPchomePayConfig } from "@/lib/integrations/pchomepay";
 import { groupBuyPreferences, type SfGroupBuy } from "@/lib/modules/storefront/site";
 
 export const SANDBOX_LABEL = "測試模式";
@@ -41,6 +44,20 @@ export function linePay(): LinePayPayment | null {
   return c ? new LinePayPayment(c, gatewayConfig().sandbox) : null;
 }
 
+let pchomeCache: { key: string; p: PchomePayPayment } | null = null;
+/** PChomePay 支付連（PCHOMEPAY_APP_ID／PCHOMEPAY_SECRET；沙盒＝sandbox-api，正式需 GATEWAY_MODE=production 且 PCHOMEPAY_SANDBOX=false） */
+export function pchomePay(): PchomePayPayment | null {
+  const c = readPchomePayConfig(process.env);
+  if (!c) return null;
+  // 同一組設定共用 instance（token 快取）
+  const key = `${c.creds.appId}|${c.sandbox}|${[...c.payTypes].join(",")}`;
+  if (pchomeCache?.key !== key) pchomeCache = { key, p: new PchomePayPayment(c) };
+  return pchomeCache.p;
+}
+
+/** 前台／付款流程用的線上付款服務商（綠界 AIO 或 PChomePay） */
+export type OnlineProvider = PaymentProvider | PchomePayPayment;
+
 export function ecpayLogistics(): EcpayLogistics | null {
   const c = gatewayConfig();
   return c.logistics ? new EcpayLogistics(c.logistics, c.logistics.type, c.sandbox) : null;
@@ -53,13 +70,21 @@ export function ecpayEinvoice(): EcpayEinvoice | null {
 
 const prefValue = (v: string | null | undefined) => String(v ?? "").trim().toUpperCase();
 
-/** 這個團購的線上付款 provider（不支援／未設定金鑰 → null） */
-export async function paymentProviderFor(tenantId: number, gb: Pick<SfGroupBuy, "id" | "group_buy_settings">): Promise<PaymentProvider | null> {
-  const p = ecpayPayment();
-  if (!p) return null;
+/** 這個團購（及付款方式 pm）的線上付款 provider（不支援／未設定金鑰 → null） */
+export async function paymentProviderFor(tenantId: number, gb: Pick<SfGroupBuy, "id" | "group_buy_settings">, pm?: number): Promise<OnlineProvider | null> {
+  const ec = ecpayPayment();
+  const pc = pchomePay();
   let code = prefValue(String((gb.group_buy_settings ?? {}).ccp ?? ""));
   if (!code || code === "NONE") code = prefValue((await groupBuyPreferences(tenantId, gb.id)).CREDITCARD_PROVIDER?.value);
-  if (!code || code === "NONE" || code === "ECPAY" || code === "TEST") return p;
+  const ok = (p: OnlineProvider | null) => (p && (pm == null || p.supports(pm)) ? p : null);
+  if (code === "PCHOMEPAY") return ok(pc);
+  if (code === "ECPAY") return ok(ec);
+  if (!code || code === "NONE" || code === "TEST") {
+    const preferEcpay = prefValue(process.env.PAYMENT_DEFAULT_PROVIDER) === "ECPAY";
+    const order: (OnlineProvider | null)[] = preferEcpay ? [ec, pc] : [pc, ec];
+    for (const p of order) if (ok(p)) return p;
+    return pm == null ? (order.find(Boolean) ?? null) : null;
+  }
   return null;
 }
 

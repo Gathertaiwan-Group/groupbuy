@@ -15,7 +15,8 @@ import { hasOrderViewGrant } from "./order-grant";
 import { clean, ipOf, rateLimit } from "./guard";
 import { PM_LABEL } from "./cart-data";
 import { linePay, paymentProviderFor } from "@/lib/modules/accounting/gateway";
-import { startLinePay, startPayment } from "@/lib/modules/accounting/payment-gateway";
+import { startLinePay, startPayment, startPchomePay } from "@/lib/modules/accounting/payment-gateway";
+import { PchomePayPayment } from "@/lib/integrations/pchomepay";
 import { validPeriod } from "@/lib/integrations/payment";
 
 const ONLINE_PAYMENTS = new Set([4, 128, 1024, 4096, 8192, 16384]);
@@ -122,19 +123,20 @@ export async function renderOrderDetail(
   let paymentNotice = "";
   let canReportBankAccount = false;
   const open = ["NEW", "PROCESSING"].includes(o.state);
-  // 線上付款（綠界）：信用卡、ATM 虛擬帳號、超商代碼
-  const provider = !blocked && !paid && open ? await paymentProviderFor(tenant.id, gb) : null;
+  // 線上付款（PChomePay 支付連／綠界）：信用卡、ATM 虛擬帳號、超商代碼（綠界另有定期定額等）
+  const provider = !blocked && !paid && open ? await paymentProviderFor(tenant.id, gb, pm) : null;
   const gt = n(o.grand_total);
   const lp = pm === 1024 && !blocked && !paid && open ? linePay() : null;
   const canPayOnline = ((!!provider && provider.supports(pm)) || !!lp) && gt > 0 && Number.isInteger(gt);
   const vAccount = String(o.virtual_bank_account ?? "");
   const storeCode = String(o.store_payment_code ?? "");
-  let payOnline: { label: string; sandbox: boolean; auto: boolean } | null = null;
+  let payOnline: { label: string; sandbox: boolean; auto: boolean; providerName: string } | null = null;
   if (canPayOnline) {
     const hasCode = (pm === 2 && !!vAccount) || (pm === 32 && !!storeCode);
     payOnline = {
       label: pm === 2 ? (vAccount ? "重新取得 ATM 虛擬帳號" : "取得 ATM 虛擬帳號") : pm === 32 ? (storeCode ? "重新取得超商繳費代碼" : "取得超商繳費代碼") : "前往付款",
       sandbox: (provider ?? lp)!.sandbox,
+      providerName: lp ? "LINE Pay " : provider instanceof PchomePayPayment ? " PChomePay 支付連" : "綠界",
       auto: ctx.query.get("placed") === "1" && !hasCode,
     };
   }
@@ -310,7 +312,7 @@ function periodOf(gb: SfGroupBuy): { type: "D" | "M" | "Y"; frequency: number; e
   return validPeriod(p) ? p : { type: "M", frequency: 1, execTimes: 12 };
 }
 
-/** 前往線上付款（綠界）：只有查詢授權或會員本人、訂單處理中且未付款、付款方式支援時 */
+/** 前往線上付款（PChomePay／綠界）：只有查詢授權或會員本人、訂單處理中且未付款、付款方式支援時 */
 async function payOnline(ctx: RequestContext): Promise<Response> {
   const { tenant, gb, order } = await authorizedOrder(ctx);
   await rateLimit(`payonline:${ipOf(ctx)}`, 600, 20);
@@ -326,8 +328,9 @@ async function payOnline(ctx: RequestContext): Promise<Response> {
   const pm = n(o.payment_method);
   const opts = { tenantCode: tenant.code, shortUrl: gb.short_url ?? "", gbTitle: gb.title };
   if (pm === 1024 && linePay()) return startLinePay(ctx, o, opts);
-  const provider = await paymentProviderFor(tenant.id, gb);
+  const provider = await paymentProviderFor(tenant.id, gb, pm);
   if (!provider || !provider.supports(pm)) throw badRequest("此訂單的付款方式不支援線上付款");
+  if (provider instanceof PchomePayPayment) return startPchomePay(ctx, provider, o, opts);
   return startPayment(ctx, provider, o, { ...opts, period: pm === 128 ? periodOf(gb) : undefined });
 }
 
