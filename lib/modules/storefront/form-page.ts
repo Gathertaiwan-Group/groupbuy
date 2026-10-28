@@ -83,7 +83,8 @@ export async function renderFormPage(ctx: RequestContext, gb: SfGroupBuy): Promi
         : catalog.items
             .filter((it) => it.itemSetId === s.itemSetId)
             .filter((it) => {
-              const soldOut = it.calculatedMaxOrderQuota <= 0;
+              // 組合商品（BUNDLE_V2）的庫存由子商品決定，選購視窗內顯示是否售完（#107）
+              const soldOut = it.calculatedMaxOrderQuota <= 0 && it.itemType !== "BUNDLE_V2";
               if (!soldOut) return true;
               return !(outStock === "HIDDEN" || it.optionOfflineWhenSoldOut || s.optionOfflineWhenSoldOut);
             })
@@ -110,6 +111,7 @@ export async function renderFormPage(ctx: RequestContext, gb: SfGroupBuy): Promi
                 selectClass: it.stockAvailable <= 0 && it.stockBackOrderAvailable > 0 ? "backorder" : "normal",
                 cardExtraClass: "null null null",
                 discountLabelHtml: "",
+                isBundle: it.itemType === "BUNDLE_V2",
               };
               return vm;
             });

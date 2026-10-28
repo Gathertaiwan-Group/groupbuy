@@ -9,9 +9,10 @@ import { orderDetailRoutes } from "./order-detail";
 import { orderQueryRoutes } from "./order-query";
 import { formPageRoutes } from "./pages-form";
 import { cartRoutes } from "./cart-api";
+import { bundleRoutes } from "./bundle";
 import { orderPlaceRoutes } from "./order-place";
 import { helpRoutes } from "./help";
 import { posRoutes } from "./pos/routes";
 import { cvsMapRoutes } from "./cvs-map";
 
-export const routes: RouteDef[] = [...staticPageRoutes, ...onlineHelpRoutes, ...customerRoutes, ...customerExtraRoutes, ...orderDetailRoutes, ...orderQueryRoutes, ...cartRoutes, ...cvsMapRoutes, ...orderPlaceRoutes, ...formPageRoutes, ...helpRoutes, ...posRoutes];
+export const routes: RouteDef[] = [...staticPageRoutes, ...onlineHelpRoutes, ...customerRoutes, ...customerExtraRoutes, ...orderDetailRoutes, ...orderQueryRoutes, ...cartRoutes, ...bundleRoutes, ...cvsMapRoutes, ...orderPlaceRoutes, ...formPageRoutes, ...helpRoutes, ...posRoutes];

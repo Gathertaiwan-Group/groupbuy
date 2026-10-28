@@ -4,7 +4,8 @@ import { getServiceClient } from "@/lib/supabase/server";
 import { evaluatePricing, resolveGifts, ruleAvailability, validateCoupon, type PricingCoupon, type PricingCustomer } from "@/lib/modules/marketing/pricing-rules";
 import { couponRejectionOf } from "@/lib/modules/marketing/usage-release";
 import { findCouponByCode, loadCartLines, loadGiftCandidates, loadSalesRulesForGroupBuy } from "@/lib/modules/marketing/pricing-loader";
-import type { AppliedCoupon, AppliedSalesRule, PricingRulesProvider } from "./pricing";
+import type { AppliedCoupon, AppliedSalesRule, GiftEntitlements, PricingRulesProvider } from "./pricing";
+import { seededRandom } from "./gift-logic";
 
 async function loadCustomer(tenantId: number, customerId: number | null): Promise<PricingCustomer | null> {
   if (!customerId) return null;
@@ -70,11 +71,13 @@ export const marketingPricingRules: PricingRulesProvider = {
       customer,
       postcode: postcode || null,
       groupBuyId: groupBuy.id,
+      // 隨機贈品／隨機點數：以購物袋內容為種子，購物袋顯示與送出訂單結果一致（#116、#117）
+      random: seededRandom(`${tenantId}:${groupBuy.id}:${code}:${paid.map((l) => `${l.itemId}x${l.qty}${l.backOrder ? "b" : ""}`).sort().join(",")}`),
     });
 
     for (const l of r.lines) if (l.discount > 0) lineDiscounts.set(String(l.key), l.discount);
     for (const a of r.appliedRules) {
-      salesRules.push({ salesRuleId: a.salesRuleId, title: a.title, discount: a.discount, category: a.category });
+      salesRules.push({ salesRuleId: a.salesRuleId, title: a.title, discount: a.discount, category: a.category, points: Math.max(0, Math.round(a.points || 0)) });
     }
     if (r.coupon && coupon) {
       if (r.coupon.applied) {
@@ -85,18 +88,19 @@ export const marketingPricingRules: PricingRulesProvider = {
           title: coupon.title ?? r.coupon.code,
           category: coupon.category,
           discount: r.coupon.discount,
+          points: Math.max(0, Math.round(r.coupon.points || 0)),
         });
       } else if (r.coupon.message) {
         couponNotes.push(r.coupon.message);
       }
     }
 
-    // 贈品：解析出自動贈品／可選贈品；購物袋尚未支援把贈品加成明細，先以提示呈現（記入已知缺口）
-    const giftNotes: string[] = [];
+    // 贈品：解析出自動贈品／自選贈品；購物袋明細、庫存與訂單寫入由 cart-data／order-place 處理（#116）
+    const gifts: GiftEntitlements = { auto: [], pick: [] };
     if (r.gifts.length) {
       const g = resolveGifts(r.gifts, await loadGiftCandidates(db, tenantId, groupBuy.id, r.gifts.map((x) => x.giftTag)));
-      for (const a of g.auto) giftNotes.push(`符合贈品：${a.title} x ${a.quantity}`);
-      for (const p of g.pick) giftNotes.push(`可選贈品 ${p.quantity} 件（${p.giftTag ?? ""}）`);
+      gifts.auto = g.auto;
+      gifts.pick = g.pick;
     }
 
     return {
@@ -107,7 +111,7 @@ export const marketingPricingRules: PricingRulesProvider = {
       couponRejection,
       freeShipping: r.freeShipping,
       blockers: r.checkoutAllowed ? [] : r.messages.length ? r.messages : ["未符合本團購的購買條件，暫時無法結帳"],
-      giftNotes,
+      gifts,
     };
   },
 };

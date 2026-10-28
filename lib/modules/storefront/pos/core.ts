@@ -3,6 +3,7 @@
 // - 只接受後台登入者（auth:'admin'）；團購必須屬於登入者租戶；/pos/ajax/{租戶}/{短網址} 的租戶段必須等於登入者租戶。
 // - 金額一律由伺服器端重算（storefront priceCart → marketing 優惠引擎），前端送來的金額只用來比對。
 // - 草稿不扣庫存；結帳時由 DB 函式 groupbuy.pos_checkout 在單一交易內鎖草稿、檢查並扣庫存（migration 6003）。
+import { rewardPointsOf } from "../points";
 import type { AdminSession, RequestContext } from "@/lib/core/http/types";
 import { requireSession } from "@/lib/core/http/route-helpers";
 import { badRequest, forbidden, notFound } from "@/lib/core/http/errors";
@@ -132,8 +133,10 @@ export async function saveDraftState(scope: PosScope, salesOrderId: number, patc
 export interface Repriced {
   subtotal: number;
   itemDiscounts: Map<number, number>;
-  salesRules: { salesRuleId: number; title: string; discount: number }[];
-  coupons: { groupBuyCouponId: number; couponCodeId: number | null; code: string; title: string; category: string; discount: number }[];
+  salesRules: { salesRuleId: number; title: string; discount: number; points?: number }[];
+  coupons: { groupBuyCouponId: number; couponCodeId: number | null; code: string; title: string; category: string; discount: number; points?: number }[];
+  /** 本筆可獲得的會員點數回饋（#117；ptEnabled 且已綁會員） */
+  rewardPoints: number;
   totalDiscount: number;
   pointsUsed: number;
   pointsDiscount: number;
@@ -175,7 +178,7 @@ export async function computePricing(scope: PosScope, d: Draft): Promise<Reprice
   if (d.state.auto_apply) {
     for (const i of live) itemDiscounts.set(num(i.id), Math.min(num(i.price) * num(i.total), Math.max(0, Math.round(r.lineDiscounts.get(String(i.id)) ?? 0))));
     totalDiscount = r.totalDiscount;
-    salesRules = r.salesRules.map((s) => ({ salesRuleId: s.salesRuleId, title: s.title, discount: s.discount }));
+    salesRules = r.salesRules.map((s) => ({ salesRuleId: s.salesRuleId, title: s.title, discount: s.discount, points: s.points ?? 0 }));
   } else {
     // 手動折扣：每項折價由店員輸入（上限＝單價×數量），不套優惠條件；折扣碼仍照引擎計算（整筆折抵）
     let manual = 0;
@@ -209,6 +212,7 @@ export async function computePricing(scope: PosScope, d: Draft): Promise<Reprice
     grandTotalWithoutShipping: gws,
     grandTotal: gws + tax,
     couponNotes: r.couponNotes,
+    rewardPoints: rewardPointsOf({ enabled: pointsEnabled(gb), isMember: !!d.customer, rules: salesRules, coupons: r.coupons }),
   };
 }
 

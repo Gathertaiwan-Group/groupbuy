@@ -11,6 +11,7 @@ import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext
 import { saveCheckout, setCartItem, type AddressDraft, type CvsMapInfo } from "./cart-store";
 import { clean, ipOf, rateLimit } from "./guard";
 import { checkPointsRequest } from "./points";
+import { parseStoredSelection } from "./bundle-logic";
 import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 import { pointsEnabled } from "./pricing";
 import { enumOptions } from "@/lib/core/enums";
@@ -74,15 +75,28 @@ async function addToShoppingCart(ctx: RequestContext): Promise<Response> {
     const ok = cc.catalog.itemSets.some((x) => x.groupBuyItemSetId === gbis && x.itemSetId === it.itemSetId);
     if (!ok) return respond(cc, { errors: ["找不到商品或商品已下架"] });
   }
+  // 組合商品（BUNDLE_V2）只能從組合選購視窗（addBundle）加入或修改；這裡只允許移除（#107）
+  if (it && it.itemType === "BUNDLE_V2" && total > 0) return respond(cc, { errors: [`「${it.shortNameDisplay || it.title}」請點「選擇組合」選購`] });
   let qty = total;
   let item: { itemId: number; outOfStock?: boolean } | null = it ? { itemId: it.itemId, outOfStock: false } : null;
   if (it && qty > 0) {
-    // 同庫存擁有者在購物袋其他明細已占用的數量
-    const others = cc.items
-      .filter((ci) => ci.uuid !== lineUuid && !(ci.item_id === it.itemId && !ci.item_bundle_id && !lineUuid))
-      .map((ci) => ({ ci, other: cc.catalog.byId.get(ci.item_id) }))
-      .filter((x) => x.other && x.other.stockOwnerId === it.stockOwnerId)
-      .reduce((sum, x) => sum + x.ci.total, 0);
+    // 同庫存擁有者在購物袋其他明細已占用的數量（組合明細依子商品展開）
+    const others =
+      cc.items
+        .filter((ci) => !ci.item_bundle_id && ci.uuid !== lineUuid && !(ci.item_id === it.itemId && !lineUuid))
+        .map((ci) => ({ ci, other: cc.catalog.byId.get(ci.item_id) }))
+        .filter((x) => x.other && x.other.stockOwnerId === it.stockOwnerId)
+        .reduce((sum, x) => sum + x.ci.total, 0) +
+      cc.items
+        .filter((ci) => ci.item_bundle_id)
+        .reduce(
+          (sum, ci) =>
+            sum +
+            parseStoredSelection(ci.bundle_selection)
+              .filter((ch) => (cc.bundleItems.get(ch.itemId) ?? cc.catalog.byId.get(ch.itemId))?.stockOwnerId === it.stockOwnerId)
+              .reduce((s2, ch) => s2 + ch.qty * ci.total, 0),
+          0,
+        );
     const room = Math.max(0, Math.min(it.maxOrderQuota, it.stockAvailable + it.stockBackOrderAvailable - others));
     if (room <= 0) {
       item = { itemId: it.itemId, outOfStock: true };

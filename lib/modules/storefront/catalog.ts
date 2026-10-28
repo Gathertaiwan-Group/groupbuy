@@ -66,6 +66,8 @@ export interface Catalog {
   itemSets: CatalogItemSet[];
   items: CatalogItem[];
   byId: Map<number, CatalogItem>;
+  /** item_sets.id → 本團購的 group_buy_item_sets.id */
+  gbisByItemSet: Map<number, number>;
 }
 
 const num = (v: unknown, d = 0): number => {
@@ -79,6 +81,85 @@ function tabsOf(r: Record<string, unknown>): { n: number; title: string; descr: 
     const t = r[`tab${n}_title`];
     if (typeof t === "string" && t.trim()) out.push({ n, title: t, descr: String(r[`tab${n}_descr`] ?? "") });
   }
+  return out;
+}
+
+const ITEM_COLUMNS =
+  "id, item_set_id, parent_item_id, share_stock, seq, uid, title, short_name, short_name_display, tag, price, retail_price, cprice, stock_available, stock_back_order_available, max_order_quota, offline, option_offline_when_sold_out, item_type, image, image_popup, tab1_title, tab1_descr, tab2_title, tab2_descr, tab3_title, tab3_descr, item_settings, theme, shipping_tag, flat_rate_shipping_tag, exclude_shipping_rule, shipping_price, commission_rate, commission_dollar, attribute_note, attribute_note_default";
+
+/** 共用庫存：讀主商品的庫存（庫存以主商品為準） */
+async function loadStockParents(tenantId: number, list: Record<string, unknown>[]): Promise<Map<number, { a: number; b: number }>> {
+  const parentIds = [...new Set(list.filter((r) => r.share_stock && r.parent_item_id).map((r) => num(r.parent_item_id)))];
+  const parents = new Map<number, { a: number; b: number }>();
+  if (parentIds.length) {
+    const { data: ps, error: e3 } = await getServiceClient()
+      .from("items")
+      .select("id, stock_available, stock_back_order_available")
+      .eq("tenant_id", tenantId)
+      .in("id", parentIds);
+    if (e3) throw new Error(`讀取主商品庫存失敗：${e3.message}`);
+    for (const p of (ps ?? []) as Record<string, unknown>[]) parents.set(num(p.id), { a: num(p.stock_available), b: num(p.stock_back_order_available) });
+  }
+  return parents;
+}
+
+function toCatalogItem(r: Record<string, unknown>, parents: Map<number, { a: number; b: number }>, groupBuyItemSetId: number): CatalogItem {
+  const shared = !!r.share_stock && r.parent_item_id != null && parents.has(num(r.parent_item_id));
+  const owner = shared ? num(r.parent_item_id) : num(r.id);
+  const st = shared ? parents.get(owner)! : { a: num(r.stock_available), b: num(r.stock_back_order_available) };
+  const maxQ = num(r.max_order_quota, 10);
+  return {
+    itemId: num(r.id),
+    itemSetId: num(r.item_set_id),
+    groupBuyItemSetId,
+    parentItemId: r.parent_item_id == null ? null : num(r.parent_item_id),
+    shareStock: !!r.share_stock,
+    seq: num(r.seq),
+    uid: (r.uid as string) ?? null,
+    title: String(r.title ?? ""),
+    shortName: (r.short_name as string) ?? null,
+    shortNameDisplay: (r.short_name_display as string) ?? null,
+    tag: (r.tag as string) ?? null,
+    price: num(r.price),
+    retailPrice: r.retail_price == null ? null : num(r.retail_price),
+    cprice: num(r.cprice),
+    maxOrderQuota: maxQ,
+    stockOwnerId: owner,
+    stockAvailable: Math.max(0, st.a),
+    stockBackOrderAvailable: Math.max(0, st.b),
+    calculatedMaxOrderQuota: Math.max(0, Math.min(maxQ, Math.max(0, st.a) + Math.max(0, st.b))),
+    offline: !!r.offline,
+    optionOfflineWhenSoldOut: !!r.option_offline_when_sold_out,
+    itemType: String(r.item_type ?? "NORMAL"),
+    image: (r.image as string) ?? null,
+    imagePopup: (r.image_popup as string) ?? null,
+    tabs: tabsOf(r),
+    itemSettings: (r.item_settings as Record<string, unknown>) ?? {},
+    theme: (r.theme as Record<string, unknown>) ?? {},
+    shippingTag: String(r.shipping_tag ?? ""),
+    flatRateShippingTag: String(r.flat_rate_shipping_tag ?? ""),
+    excludeShippingRule: !!r.exclude_shipping_rule,
+    shippingPrice: r.shipping_price == null ? null : num(r.shipping_price),
+    commissionRate: num(r.commission_rate),
+    commissionDollar: num(r.commission_dollar),
+    attributeNote: !!r.attribute_note,
+    attributeNoteDefault: (r.attribute_note_default as string) ?? null,
+  };
+}
+
+/**
+ * 依商品 id 讀商品（組合商品的子商品可能不在本團購的品項內）；含下架商品（offline 欄位由呼叫端判斷）。
+ * groupBuyItemSetId：子商品所屬品項若在本團購內，帶本團購的團購品項 id，否則 0。
+ */
+export async function loadItemsByIds(tenantId: number, ids: number[], gbisByItemSet: Map<number, number> = new Map()): Promise<Map<number, CatalogItem>> {
+  const want = [...new Set(ids.filter((n) => Number.isSafeInteger(n) && n > 0))];
+  const out = new Map<number, CatalogItem>();
+  if (!want.length) return out;
+  const { data, error } = await getServiceClient().from("items").select(ITEM_COLUMNS).eq("tenant_id", tenantId).in("id", want);
+  if (error) throw new Error(`讀取商品失敗：${error.message}`);
+  const list = (data ?? []) as Record<string, unknown>[];
+  const parents = await loadStockParents(tenantId, list);
+  for (const r of list) out.set(num(r.id), toCatalogItem(r, parents, gbisByItemSet.get(num(r.item_set_id)) ?? 0));
   return out;
 }
 
@@ -126,78 +207,25 @@ export async function loadCatalog(tenantId: number, groupBuyId: number, opts: { 
   const itemSetIds = [...gbisByItemSet.keys()];
   const items: CatalogItem[] = [];
   const byId = new Map<number, CatalogItem>();
-  if (itemSetIds.length === 0) return { itemSets, items, byId };
+  if (itemSetIds.length === 0) return { itemSets, items, byId, gbisByItemSet };
 
   const { data: rows, error: e2 } = await db
     .from("items")
-    .select(
-      "id, item_set_id, parent_item_id, share_stock, seq, uid, title, short_name, short_name_display, tag, price, retail_price, cprice, stock_available, stock_back_order_available, max_order_quota, offline, option_offline_when_sold_out, item_type, image, image_popup, tab1_title, tab1_descr, tab2_title, tab2_descr, tab3_title, tab3_descr, item_settings, theme, shipping_tag, flat_rate_shipping_tag, exclude_shipping_rule, shipping_price, commission_rate, commission_dollar, attribute_note, attribute_note_default",
-    )
+    .select(ITEM_COLUMNS)
     .eq("tenant_id", tenantId)
     .in("item_set_id", itemSetIds)
     .order("seq", { ascending: true })
     .order("id", { ascending: true });
   if (e2) throw new Error(`讀取商品失敗：${e2.message}`);
   const list = (rows ?? []) as Record<string, unknown>[];
-  // 共用庫存：庫存以主商品為準
-  const parentIds = [...new Set(list.filter((r) => r.share_stock && r.parent_item_id).map((r) => num(r.parent_item_id)))];
-  const parents = new Map<number, { a: number; b: number }>();
-  if (parentIds.length) {
-    const { data: ps, error: e3 } = await db
-      .from("items")
-      .select("id, stock_available, stock_back_order_available")
-      .eq("tenant_id", tenantId)
-      .in("id", parentIds);
-    if (e3) throw new Error(`讀取主商品庫存失敗：${e3.message}`);
-    for (const p of (ps ?? []) as Record<string, unknown>[]) parents.set(num(p.id), { a: num(p.stock_available), b: num(p.stock_back_order_available) });
-  }
+  const parents = await loadStockParents(tenantId, list);
   for (const r of list) {
     if (r.offline && !opts.includeOffline) continue;
-    const shared = !!r.share_stock && r.parent_item_id != null && parents.has(num(r.parent_item_id));
-    const owner = shared ? num(r.parent_item_id) : num(r.id);
-    const st = shared ? parents.get(owner)! : { a: num(r.stock_available), b: num(r.stock_back_order_available) };
-    const maxQ = num(r.max_order_quota, 10);
-    const it: CatalogItem = {
-      itemId: num(r.id),
-      itemSetId: num(r.item_set_id),
-      groupBuyItemSetId: gbisByItemSet.get(num(r.item_set_id)) ?? 0,
-      parentItemId: r.parent_item_id == null ? null : num(r.parent_item_id),
-      shareStock: !!r.share_stock,
-      seq: num(r.seq),
-      uid: (r.uid as string) ?? null,
-      title: String(r.title ?? ""),
-      shortName: (r.short_name as string) ?? null,
-      shortNameDisplay: (r.short_name_display as string) ?? null,
-      tag: (r.tag as string) ?? null,
-      price: num(r.price),
-      retailPrice: r.retail_price == null ? null : num(r.retail_price),
-      cprice: num(r.cprice),
-      maxOrderQuota: maxQ,
-      stockOwnerId: owner,
-      stockAvailable: Math.max(0, st.a),
-      stockBackOrderAvailable: Math.max(0, st.b),
-      calculatedMaxOrderQuota: Math.max(0, Math.min(maxQ, Math.max(0, st.a) + Math.max(0, st.b))),
-      offline: !!r.offline,
-      optionOfflineWhenSoldOut: !!r.option_offline_when_sold_out,
-      itemType: String(r.item_type ?? "NORMAL"),
-      image: (r.image as string) ?? null,
-      imagePopup: (r.image_popup as string) ?? null,
-      tabs: tabsOf(r),
-      itemSettings: (r.item_settings as Record<string, unknown>) ?? {},
-      theme: (r.theme as Record<string, unknown>) ?? {},
-      shippingTag: String(r.shipping_tag ?? ""),
-      flatRateShippingTag: String(r.flat_rate_shipping_tag ?? ""),
-      excludeShippingRule: !!r.exclude_shipping_rule,
-      shippingPrice: r.shipping_price == null ? null : num(r.shipping_price),
-      commissionRate: num(r.commission_rate),
-      commissionDollar: num(r.commission_dollar),
-      attributeNote: !!r.attribute_note,
-      attributeNoteDefault: (r.attribute_note_default as string) ?? null,
-    };
+    const it = toCatalogItem(r, parents, gbisByItemSet.get(num(r.item_set_id)) ?? 0);
     items.push(it);
     byId.set(it.itemId, it);
   }
-  return { itemSets, items, byId };
+  return { itemSets, items, byId, gbisByItemSet };
 }
 
 /** 價格顯示：NT$1,200（原站 formattedPrice） */

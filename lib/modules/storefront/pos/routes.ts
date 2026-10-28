@@ -65,6 +65,7 @@ export const posRoutes: RouteDef[] = [
 
   // 會員
   get(`${P}/Customer/get`, api.getCustomer, A),
+  get(`${B}/ajax/CustomerRoyaltyProgram/get`, api.customerRoyaltyProgram, A), // #121 會員點數方案
   post(`${P}/Customer/register`, api.registerCustomer, A),
   get(`${P}/Customer/registerQrCode`, api.registerQrCode, A),
   get(`${P}/Customer/showLoginModal`, pages.customerRegisterForm, A),

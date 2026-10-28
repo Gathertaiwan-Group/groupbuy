@@ -53,3 +53,15 @@ describe("checkPointsRequest", () => {
     assert.equal(checkPointsRequest({ ...base, requested: 200 }), null);
   });
 });
+
+describe("rewardPointsOf（點數回饋 #117）", () => {
+  const { rewardPointsOf } = P;
+  test("加總優惠條件與優惠卷的點數", () => {
+    assert.equal(rewardPointsOf({ enabled: true, isMember: true, rules: [{ points: 30 }, { points: 0 }], coupons: [{ points: 5 }] }), 35);
+  });
+  test("未開啟點數功能或非會員 → 0；負數／小數不計", () => {
+    assert.equal(rewardPointsOf({ enabled: false, isMember: true, rules: [{ points: 30 }], coupons: [] }), 0);
+    assert.equal(rewardPointsOf({ enabled: true, isMember: false, rules: [{ points: 30 }], coupons: [] }), 0);
+    assert.equal(rewardPointsOf({ enabled: true, isMember: true, rules: [{ points: -3 }, { points: 2.7 }], coupons: [{}] }), 2);
+  });
+});

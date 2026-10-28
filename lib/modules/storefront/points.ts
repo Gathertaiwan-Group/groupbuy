@@ -64,3 +64,17 @@ export function checkPointsRequest(i: PointsInput): string | null {
   if (want > max) return `本筆訂單最多可使用 ${max} 點`;
   return null;
 }
+
+// ───────────────────────── 點數回饋（獲點，#117） ─────────────────────────
+// 來源：marketing 引擎的「會員點數累積」——優惠條件 dollarOrPercentage=POINT（appliedRules[].points）、
+//       優惠卷 POINT／POINT_RANDOM（coupon.points）。只有團購開啟 ptEnabled 且已登入會員才回饋。
+// 下單時把每個優惠的點數寫進 sales_order_sales_rules.points／sales_order_coupons.points（訂單成立當下的承諾點數）；
+// 實際入帳由 DB（migration 6007 sf_sync_order_reward_points）依訂單狀態決定：
+//   付款完成（已付金額 ≥ 訂單金額）或訂單完成 → 入帳 ADD_POINT；取消／刪除／退貨完成 → 扣回 RETURN_POINT（冪等）。
+
+/** 本筆訂單可獲得的回饋點數（未開啟點數功能或非會員時為 0） */
+export function rewardPointsOf(i: { enabled: boolean; isMember: boolean; rules: { points?: number }[]; coupons: { points?: number }[] }): number {
+  if (!i.enabled || !i.isMember) return 0;
+  const sum = [...i.rules, ...i.coupons].reduce((s, x) => s + toInt(x.points), 0);
+  return sum;
+}

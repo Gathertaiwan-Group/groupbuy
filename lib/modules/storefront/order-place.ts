@@ -12,7 +12,7 @@ import { redirect } from "@/lib/core/http/responses";
 import { deliveryNotice } from "@/lib/modules/core/delivery";
 import { getServiceClient } from "@/lib/supabase/server";
 import { scopeFromTenantPath, gbSetting, type SfGroupBuy, type SfTenant } from "./site";
-import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext, type CartLine } from "./cart-data";
+import { buildCartData, checkoutBlockedReason, loadCartContext, type CartContext, type CartLine, type GiftLine } from "./cart-data";
 import { saveCheckout, type AddressDraft } from "./cart-store";
 import { ipOf, isEmail, isPhone, rateLimit } from "./guard";
 import { grantOrderView } from "./order-grant";
@@ -263,11 +263,74 @@ async function logBlacklist(tenantId: number, hit: BlacklistHit, line: string): 
   await appendBlacklistLog(getServiceClient(), tenantId, hit.id, line);
 }
 
-function orderItemsOf(gb: SfGroupBuy, lines: CartLine[], lineDiscounts: Map<string, number>) {
+function orderItemsOf(gb: SfGroupBuy, lines: CartLine[], lineDiscounts: Map<string, number>, giftLines: GiftLine[] = []) {
   const rows: Record<string, unknown>[] = [];
   let seq = 0;
+  let ref = 0;
   for (const l of lines) {
     const totalDiscount = lineDiscounts.get(l.uuid) ?? 0;
+    if (l.bundle) {
+      // 組合商品（#107）：主商品一列（價格歸屬主商品）＋子商品（單價 0、qty_per_bundle、parent_order_item_id 由 sf_place_order 以 _ref/_parentRef 對應）
+      const it = l.item;
+      const r = `b${ref++}`;
+      rows.push({
+        _ref: r,
+        group_buy_id: gb.id,
+        group_buy_item_set_id: l.groupBuyItemSetId || null,
+        item_set_id: l.itemSetId,
+        item_id: l.itemId,
+        seq: seq++,
+        title: it.title,
+        short_name: it.shortName,
+        uid: it.uid,
+        price: l.price,
+        retail_price: it.retailPrice,
+        cprice: it.cprice,
+        total: l.qty,
+        discount: totalDiscount,
+        amount: l.price * l.qty - totalDiscount,
+        commission_rate: it.commissionRate,
+        commission_dollar: it.commissionDollar,
+        back_order: l.backOrder,
+        gift: false,
+        bundle_root: true,
+        shipping_tag: it.shippingTag || "",
+        state: "UNSHIPPING",
+        attribute_note: l.note || null,
+      });
+      for (const c of l.bundle.children) {
+        for (const p of [
+          { qty: c.inStockQty, backOrder: false },
+          { qty: c.backOrderQty, backOrder: true },
+        ].filter((x) => x.qty > 0)) {
+          rows.push({
+            _parentRef: r,
+            group_buy_id: gb.id,
+            group_buy_item_set_id: c.item.groupBuyItemSetId || null,
+            item_set_id: c.item.itemSetId,
+            item_id: c.item.itemId,
+            seq: seq++,
+            title: c.item.title,
+            short_name: c.item.shortName,
+            uid: c.item.uid,
+            price: 0,
+            retail_price: c.item.retailPrice,
+            cprice: c.item.cprice,
+            total: p.qty,
+            qty_per_bundle: c.qtyPer,
+            discount: 0,
+            amount: 0,
+            back_order: p.backOrder,
+            gift: false,
+            bundle_child: true,
+            shipping_tag: c.item.shippingTag || "",
+            state: "UNSHIPPING",
+            attribute_note: c.note || null,
+          });
+        }
+      }
+      continue;
+    }
     const parts = [
       { qty: l.inStockQty, backOrder: false },
       { qty: l.backOrderQty, backOrder: true },
@@ -296,13 +359,61 @@ function orderItemsOf(gb: SfGroupBuy, lines: CartLine[], lineDiscounts: Map<stri
         commission_dollar: it.commissionDollar,
         back_order: p.backOrder,
         gift: !!l.gift,
+        ...(l.gift && l.salesRuleId ? { sales_rule_id: l.salesRuleId } : {}),
         shipping_tag: it.shippingTag || "",
         state: "UNSHIPPING",
         attribute_note: l.note || null,
       });
     });
   }
+  // 自動贈品（#116）：單價 0、標示贈品與來源優惠條件，依庫存分現貨／預購
+  for (const g of giftLines) {
+    const it = g.item;
+    for (const p of [
+      { qty: g.inStockQty, backOrder: false },
+      { qty: g.backOrderQty, backOrder: true },
+    ].filter((x) => x.qty > 0)) {
+      rows.push({
+        group_buy_id: gb.id,
+        group_buy_item_set_id: it.groupBuyItemSetId || null,
+        item_set_id: it.itemSetId,
+        item_id: it.itemId,
+        sales_rule_id: g.salesRuleId,
+        seq: seq++,
+        title: it.title,
+        short_name: it.shortName,
+        uid: it.uid,
+        price: 0,
+        retail_price: it.retailPrice,
+        cprice: it.cprice,
+        total: p.qty,
+        discount: 0,
+        amount: 0,
+        back_order: p.backOrder,
+        gift: true,
+        shipping_tag: it.shippingTag || "",
+        state: "UNSHIPPING",
+      });
+    }
+  }
   return rows;
+}
+
+/** 下單扣庫存：依庫存擁有者彙總（組合只扣子商品；含自動贈品） */
+export function stockOf(lines: CartLine[], giftLines: GiftLine[]): { itemId: number; qty: number; backOrderQty: number }[] {
+  const stock = new Map<number, { itemId: number; qty: number; backOrderQty: number }>();
+  const add = (owner: number, a: number, b: number) => {
+    const e = stock.get(owner) ?? { itemId: owner, qty: 0, backOrderQty: 0 };
+    e.qty += a;
+    e.backOrderQty += b;
+    stock.set(owner, e);
+  };
+  for (const l of lines) {
+    if (l.bundle) for (const c of l.bundle.children) add(c.item.stockOwnerId, c.inStockQty, c.backOrderQty);
+    else add(l.item.stockOwnerId, l.inStockQty, l.backOrderQty);
+  }
+  for (const g of giftLines) add(g.item.stockOwnerId, g.inStockQty, g.backOrderQty);
+  return [...stock.values()].filter((s) => s.qty > 0 || s.backOrderQty > 0);
 }
 
 async function confirmOrder(ctx: RequestContext): Promise<Response> {
@@ -460,25 +571,21 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     preferred_delivery_dates: shipping.preferredDeliveryDates || null,
     blacklist_note: hit && hit.type === "BLOCK_PAYMENT" ? "黑名單（可下單但無法付款）" : null,
   };
-  const stock = new Map<number, { itemId: number; qty: number; backOrderQty: number }>();
-  for (const l of lines) {
-    const e = stock.get(l.item.stockOwnerId) ?? { itemId: l.item.stockOwnerId, qty: 0, backOrderQty: 0 };
-    e.qty += l.inStockQty;
-    e.backOrderQty += l.backOrderQty;
-    stock.set(l.item.stockOwnerId, e);
-  }
   const usedCoupons = p.coupons;
+  // 會員點數回饋（#117）：每個優惠的點數記在 sales_order_sales_rules.points／sales_order_coupons.points；
+  // 入帳由 DB 依訂單付款／完成狀態決定（migration 6007）。未開啟點數功能或非會員時一律 0。
+  const earn = p.rewardPoints > 0;
   const payload = {
     tenantId: tenant.id,
     cartId: cc.cart!.id,
     order,
-    items: orderItemsOf(gb, lines, p.lineDiscounts),
-    stock: [...stock.values()],
+    items: orderItemsOf(gb, lines, p.lineDiscounts, built.giftLines),
+    stock: stockOf(lines, built.giftLines),
     couponCodeIds: usedCoupons.map((c) => c.couponCodeId).filter((x): x is number => !!x),
     groupBuyCouponIds: usedCoupons.map((c) => c.groupBuyCouponId),
     salesRuleIds: p.salesRules.map((r) => r.salesRuleId),
-    coupons: usedCoupons.map((c) => ({ group_buy_coupon_id: c.groupBuyCouponId, coupon_code_id: c.couponCodeId, coupon: c.code, discount: c.discount })),
-    salesRules: p.salesRules.map((r) => ({ sales_rule_id: r.salesRuleId, title: r.title, discount: r.discount })),
+    coupons: usedCoupons.map((c) => ({ group_buy_coupon_id: c.groupBuyCouponId, coupon_code_id: c.couponCodeId, coupon: c.code, discount: c.discount, points: earn ? c.points ?? 0 : 0 })),
+    salesRules: p.salesRules.map((r) => ({ sales_rule_id: r.salesRuleId, title: r.title, discount: r.discount, points: earn ? r.points ?? 0 : 0 })),
     // 會員點數折抵：sf_place_order 在同一交易內扣點（餘額不足整筆回滾）並寫 point_transactions(USE_POINT)
     ...(p.pointsUsed > 0 && cc.customer ? { points: { customerId: cc.customer.customer.id, points: p.pointsUsed } } : {}),
   };
@@ -490,8 +597,9 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
     console.warn("[storefront] 下單失敗", msg);
     const m = /SF_OUT_OF_STOCK:(\d+)/.exec(msg);
     if (m) {
-      const it = lines.find((l) => l.item.stockOwnerId === Number(m[1]));
-      return fail(cc, `「${it ? it.item.shortNameDisplay || it.title : "商品"}」庫存不足，請重新確認購買數量`);
+      const owner = Number(m[1]);
+      const named = [...lines.flatMap((l) => (l.bundle ? l.bundle.children.map((c) => c.item) : [l.item])), ...built.giftLines.map((g) => g.item)].find((x) => x.stockOwnerId === owner);
+      return fail(cc, `「${named ? named.shortNameDisplay || named.title : "商品"}」庫存不足，請重新確認購買數量`);
     }
     // DB 在折扣碼／優惠卷停用或用滿時都回這兩個代碼（結帳前檢查與送出之間被改掉的競態）
     if (/SF_COUPON_USED_UP|SF_GROUP_BUY_COUPON_USED_UP/.test(msg)) return fail(cc, "優惠碼已失效或已達使用上限，請移除後再結帳");

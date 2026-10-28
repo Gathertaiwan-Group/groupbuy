@@ -9,9 +9,10 @@
 {{else}}<a href="#" class="lightbox-img" data-toggle="modal" data-target="#lightbox" data-img="{{lightboxImg}}" ><img class="hm-zoom img-fluid center-block lazyload rounded item-img" data-src="{{imageUrl}}"></a>
 {{/if}}</div><div class="card-body px-1 px-sm-2 py-1 null"><div class="card-title my-0 text-center item-title null null"><span class="item-inner-title">{{title}}</span><span class="item-inner-subtitle ">{{subtitle}}</span></div></div><!--card-body--><div class="card-footer card-foot-price-s4 null"><div class="container"><div class="row justify-content-center"><div class="px-0"><span class=" mr-1 item-price text-warning"><span class="item-price-label">{{priceLabel}}</span><span class="item-price-price">{{priceText}}</span></span></div>{{#if retailPriceText}}<div class="px-0"><span class="small item-retail-price-label text-muted"><span class="item-retail-price-label-text">{{retailLabel}}</span><span class="item-price-retailPrice">{{retailPriceText}}</span></span></div>{{/if}}</div></div></div><!--card-body--><div class="card-footer px-1 px-sm-2 text-center "><input type="hidden" name="orderItems[{{idx}}].groupBuyItemSetId" value="{{groupBuyItemSetId}}" >
 <input type="hidden" name="orderItems[{{idx}}].itemId"  value="{{itemId}}" >
-<select data-itemSetId="{{itemSetId}}" data-itemId="{{itemId}}" class="form-control-v4 my-0 {{selectClass}} null null input-number-total " name="orderItems[{{idx}}].total"{{#if soldOut}} disabled{{/if}}>
+{{#if isBundle}}{{!-- 推導：組合商品（新版）以選購視窗選擇內容（bundle-modal.min.js 監聽 .btn-bundle-select；原站此按鈕 HTML 未擷取） --}}<a href="javascript:void(0);" class="btn btn-sm btn-primary btn-block my-0 btn-bundle-select" data-item-id="{{itemId}}" data-set-id="{{groupBuyItemSetId}}">選擇組合</a>
+{{else}}<select data-itemSetId="{{itemSetId}}" data-itemId="{{itemId}}" class="form-control-v4 my-0 {{selectClass}} null null input-number-total " name="orderItems[{{idx}}].total"{{#if soldOut}} disabled{{/if}}>
 {{#if soldOut}}<option value="0">{{soldOutLabel}}</option>
 {{else}}<option value="0">選擇</option>
 {{#each options}}<option value="{{this}}">{{this}}</option>
 {{/each}}{{/if}}</select>
-</div><!--card-footer--></div></div>{{/each}}</div><div class="help-block {{itemSetId}}"></div>{{/if}}</div><!--col-12--></div><!--row--></div><!--container--></section>{{/each}}
+{{/if}}</div><!--card-footer--></div></div>{{/each}}</div><div class="help-block {{itemSetId}}"></div>{{/if}}</div><!--col-12--></div><!--row--></div><!--container--></section>{{/each}}

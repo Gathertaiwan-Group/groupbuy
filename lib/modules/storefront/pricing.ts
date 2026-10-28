@@ -14,6 +14,8 @@ import { PM_CODE_BY_BIT } from "./payment-codes";
 import { applyPoints } from "./points";
 import type { SfGroupBuy } from "./site";
 import { couponCodeHasQuota, type CouponRejection } from "@/lib/modules/marketing/usage-release";
+import { rewardPointsOf } from "./points";
+import type { AutoGift, PickGift } from "./gift-logic";
 
 // ───────────────────────── 型別 ─────────────────────────
 
@@ -62,6 +64,8 @@ export interface AppliedSalesRule {
   title: string;
   discount: number;
   category: string;
+  /** 會員點數累積（dollarOrPercentage=POINT）可獲得的點數 */
+  points?: number;
 }
 
 export interface AppliedCoupon {
@@ -71,6 +75,14 @@ export interface AppliedCoupon {
   title: string;
   category: string;
   discount: number;
+  /** POINT／POINT_RANDOM 優惠卷可獲得的點數 */
+  points?: number;
+}
+
+/** 贈品資格（marketing resolveGifts 的結果；購物袋明細與庫存由 cart-data 配置） */
+export interface GiftEntitlements {
+  auto: AutoGift[];
+  pick: PickGift[];
 }
 
 export interface FlatRateShippingRow {
@@ -137,6 +149,10 @@ export interface PricingResult {
   pointsDiscount: number;
   /** 本筆最多可使用的點數 */
   pointsMax: number;
+  /** 本筆訂單完成付款後可獲得的回饋點數（ptEnabled 且會員；#117） */
+  rewardPoints: number;
+  /** 贈品資格（#116） */
+  gifts: GiftEntitlements;
   totalPieces: number;
   /** 優惠卷未成立的原因（例如未達門檻） */
   couponNotes: string[];
@@ -181,8 +197,8 @@ export interface PricingRulesProvider {
     freeShipping?: boolean;
     /** 限制類優惠（例如未達最低購買條件）不允許結帳時的原因 */
     blockers?: string[];
-    /** 符合的贈品（目前僅顯示提示，尚未自動加入購物袋） */
-    giftNotes?: string[];
+    /** 符合的贈品（自動贈品／自選贈品；購物袋與訂單明細由 cart-data／order-place 處理） */
+    gifts?: GiftEntitlements;
   }>;
 }
 
@@ -578,8 +594,10 @@ export async function priceCart(input: PricingInput, preloaded?: { rules?: FlatR
     pointsUsed: pts.points,
     pointsDiscount: pts.discount,
     pointsMax: pts.max,
+    rewardPoints: rewardPointsOf({ enabled: pointsEnabled(input.groupBuy), isMember: input.customerId != null, rules: applied.salesRules, coupons: applied.coupons }),
+    gifts: applied.gifts ?? { auto: [], pick: [] },
     totalPieces,
-    couponNotes: [...applied.couponNotes, ...(applied.giftNotes ?? [])],
+    couponNotes: [...applied.couponNotes],
     couponRejection: applied.couponRejection ?? null,
     errors: [...(applied.blockers ?? []), ...(shipping.errors ?? [])],
   };

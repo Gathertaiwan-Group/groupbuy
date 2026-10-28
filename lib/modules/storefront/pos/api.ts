@@ -10,6 +10,7 @@ import { imageUrl, gbSetting } from "../site";
 import { formatPrice } from "../catalog";
 import { validVatId } from "../order-place";
 import { pointsEnabled } from "../pricing";
+import { customerRoyaltyProgramJson, type RoyaltyCustomerRow, type RoyaltyProgramRow } from "../royalty-program";
 import { couponCodeHasQuota } from "@/lib/modules/marketing/usage-release";
 import { posVoidOrders, posVoidResponse } from "@/lib/modules/orders/pos-void";
 import {
@@ -541,7 +542,7 @@ async function crpJson(scope: PosScope, id: number) {
   const so = await salesOrderJson(scope, draft, pricing);
   return {
     data: {
-      crp: { pointsName: "點數", points: num(draft.customer.points), possibleRewards: 0, possibleDiscount: pricing.pointsMax },
+      crp: { pointsName: "點數", points: num(draft.customer.points), possibleRewards: pricing.rewardPoints, possibleDiscount: pricing.pointsMax },
       salesOrder: so,
     },
   };
@@ -574,6 +575,28 @@ export async function usePoints(ctx: RequestContext): Promise<Response> {
 }
 
 /* ───────────────────────── 會員 ───────────────────────── */
+
+/**
+ * GET {baseUrl}/ajax/CustomerRoyaltyProgram/get.do?customerId=（#121）：POS 會員的會員方案與點數。
+ * 只回本租戶會員；格式見 ../royalty-program.ts。
+ */
+export async function customerRoyaltyProgram(ctx: RequestContext): Promise<Response> {
+  const scope = await posScope(ctx);
+  const tenantId = scope.session.tenantId;
+  const customerId = Math.trunc(num(await ctx.param("customerId")));
+  if (!(customerId > 0)) throw badRequest("缺少會員");
+  const [c] = await q(
+    db().from("customers").select("id, points, is_activated, royalty_program_id, date_royalty_program_expires").eq("tenant_id", tenantId).eq("id", customerId).limit(1),
+    "讀取會員",
+  );
+  if (!c) return jsonError(404, "找不到會員");
+  let program: RoyaltyProgramRow | null = null;
+  if (c.royalty_program_id != null) {
+    const [p] = await q(db().from("royalty_programs").select("id, title, discount_rate, point_rate, is_active").eq("tenant_id", tenantId).eq("id", num(c.royalty_program_id)).limit(1), "讀取會員方案");
+    program = p ? (p as unknown as RoyaltyProgramRow) : null;
+  }
+  return json({ code: 200, data: customerRoyaltyProgramJson(c as unknown as RoyaltyCustomerRow, program) });
+}
 
 export async function getCustomer(ctx: RequestContext): Promise<Response> {
   const scope = await posScope(ctx);
@@ -768,6 +791,19 @@ export async function checkout(ctx: RequestContext): Promise<Response> {
     throw new Error(`結帳失敗：${error.message}`);
   }
   const res = data as { salesOrderId: number; uuid: string };
+  // 會員點數回饋（#117）：結帳確認「獲得點數」(isRewardPoints) 勾選時，把各優惠的點數寫回訂單優惠明細；
+  // 入帳由 DB 觸發器依付款／取貨狀態處理（migration 6008，已付款或已取貨完成即入帳，作廢／取消扣回）。
+  const reward = str(await ctx.param("isRewardPoints")) !== "false" && !!d.customer && p.rewardPoints > 0;
+  if (reward) {
+    for (const r of p.salesRules.filter((x) => (x.points ?? 0) > 0)) {
+      const u = await db().from("sales_order_sales_rules").update({ points: r.points }).eq("tenant_id", session.tenantId).eq("sales_order_id", res.salesOrderId).eq("sales_rule_id", r.salesRuleId);
+      if (u.error) console.warn(`[pos] 寫入回饋點數失敗 ${res.uuid}：${u.error.message}`);
+    }
+    for (const c of p.coupons.filter((x) => (x.points ?? 0) > 0)) {
+      const u = await db().from("sales_order_coupons").update({ points: c.points }).eq("tenant_id", session.tenantId).eq("sales_order_id", res.salesOrderId).eq("group_buy_coupon_id", c.groupBuyCouponId);
+      if (u.error) console.warn(`[pos] 寫入回饋點數失敗 ${res.uuid}：${u.error.message}`);
+    }
+  }
   setCurrentSalesOrder(ctx, null);
   const msg = `結帳完成！訂單編號：${res.uuid}${paid ? "" : "（未付款）"}`;
   console.info(`[pos] checkout ${res.uuid} by ${session.account}: ${payLog || "未付款"}；${notIntegrated("POS 刷卡機／金流／發票機").message}`);

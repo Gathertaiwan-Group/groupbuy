@@ -10,6 +10,10 @@ import { loadGroupBuyShippingRules, loadShippingPreload, priceCart, shippingAvai
 import { isIslandPostcode } from "@/lib/modules/shipping/shipping-fee";
 import { groupBuyState } from "./form-page";
 import { cvsMapAvailable } from "./cvs-map";
+import { createHash } from "node:crypto";
+import { loadCartBundles, childStockMap, type LoadedBundle } from "./bundle-data";
+import { maxBundles, parseStoredSelection, verifyStoredSelection } from "./bundle-logic";
+import { allocateAutoGifts, checkPickGifts, giftLineUuid, type GiftStockInfo } from "./gift-logic";
 
 import { PM_CODES } from "./payment-codes";
 import { PM_LABEL_EN, uiLang, type UiLang } from "./i18n";
@@ -47,6 +51,9 @@ export interface CartContext extends CartScope {
   items: CartItemRow[];
   catalog: Catalog;
   rules: FlatRateShippingRow[];
+  /** 購物袋內的組合商品設定（item_bundles.id → 設定）與其子商品（可能不在本團購品項內） */
+  bundles: Map<number, LoadedBundle>;
+  bundleItems: Map<number, CatalogItem>;
 }
 
 export async function loadCartContext(ctx: RequestContext, scope: CartScope, opts: { create?: boolean } = {}): Promise<CartContext> {
@@ -63,7 +70,20 @@ export async function loadCartContext(ctx: RequestContext, scope: CartScope, opt
     loadCatalog(scope.tenant.id, scope.gb.id),
     loadGroupBuyShippingRules(scope.tenant.id, scope.gb.id),
   ]);
-  return { ...scope, ctx, customer, cart, items, catalog, rules };
+  const bundleIds = items.filter((i) => i.item_bundle_id).map((i) => i.item_bundle_id as number);
+  const { bundles, items: bundleItems } = bundleIds.length
+    ? await loadCartBundles(scope.tenant.id, bundleIds, catalog.gbisByItemSet)
+    : { bundles: new Map<number, LoadedBundle>(), items: new Map<number, CatalogItem>() };
+  return { ...scope, ctx, customer, cart, items, catalog, rules, bundles, bundleItems };
+}
+
+export interface BundleChildLine {
+  item: CatalogItem;
+  /** 每組數量 */
+  qtyPer: number;
+  note: string | null;
+  inStockQty: number;
+  backOrderQty: number;
 }
 
 export interface CartLine extends PricingLine {
@@ -72,10 +92,26 @@ export interface CartLine extends PricingLine {
   note: string | null;
   inStockQty: number;
   backOrderQty: number;
+  /** 組合商品（主商品明細；子商品由 children 展開，價格歸屬主商品） */
+  bundle?: { bundleId: number; configable: boolean; children: BundleChildLine[] };
+  /** 自選贈品對應的優惠條件（#116） */
+  salesRuleId?: number | null;
+}
+
+/** 自動贈品明細（#116；不存購物袋，依目前購物袋內容重算） */
+export interface GiftLine {
+  uuid: string;
+  item: CatalogItem;
+  salesRuleId: number;
+  qty: number;
+  inStockQty: number;
+  backOrderQty: number;
 }
 
 /** 依目前庫存驗證購物袋明細：下架移除、超量調整（會寫回購物袋），回傳可計價的明細與提示 */
-export async function reconcileLines(cc: CartContext): Promise<{ lines: CartLine[]; issues: string[]; outOfStock: Set<number> }> {
+export async function reconcileLines(
+  cc: CartContext,
+): Promise<{ lines: CartLine[]; issues: string[]; outOfStock: Set<number>; used: { inStock: Map<number, number>; backOrder: Map<number, number> } }> {
   const issues: string[] = [];
   const outOfStock = new Set<number>();
   const lines: CartLine[] = [];
@@ -89,7 +125,68 @@ export async function reconcileLines(cc: CartContext): Promise<{ lines: CartLine
       issues.push("購物袋中有商品已下架，已自動移除");
       continue;
     }
-    if (ci.item_bundle_id) continue; // 組合商品另行處理（bundle.ts）
+    if (ci.item_bundle_id) {
+      // 組合商品（#107）：重新驗證組合內容、依子商品庫存調整組數，子商品依庫存擁有者占用現貨／預購
+      const b = cc.bundles.get(ci.item_bundle_id);
+      const name = it.shortNameDisplay || it.title;
+      if (!b || b.status !== "ACTIVE" || b.norm.itemId !== ci.item_id || it.itemType !== "BUNDLE_V2" || (b.groupBuyId != null && b.groupBuyId !== cc.gb.id)) {
+        if (cc.cart) await deleteCartLine(cc.cart, ci.id);
+        issues.push(`組合「${name}」已下架，已自動移除`);
+        continue;
+      }
+      const stock = childStockMap(b.norm, cc.bundleItems, usedInStock, usedBackOrder);
+      const v = verifyStoredSelection(b.norm, parseStoredSelection(ci.bundle_selection), stock);
+      if (!v.ok) {
+        if (cc.cart) await deleteCartLine(cc.cart, ci.id);
+        issues.push(`組合「${name}」：${v.error}，已從購物袋移除`);
+        continue;
+      }
+      const maxB = Math.min(it.maxOrderQuota, maxBundles(v.children, (id) => stock.get(id)?.available ?? 0));
+      let bq = ci.total;
+      if (bq > maxB) {
+        if (maxB <= 0) {
+          outOfStock.add(it.itemId);
+          issues.push(`組合「${name}」內的商品已售完，已從購物袋移除`);
+          if (cc.cart) await deleteCartLine(cc.cart, ci.id);
+          continue;
+        }
+        bq = maxB;
+        issues.push(`組合「${name}」庫存不足，已調整為 ${maxB} 組`);
+      }
+      const children: BundleChildLine[] = [];
+      for (const ch of v.children) {
+        const cit = cc.bundleItems.get(ch.itemId)!;
+        const need = ch.qty * bq;
+        const a = Math.max(0, cit.stockAvailable - (usedInStock.get(cit.stockOwnerId) ?? 0));
+        const ins = Math.min(need, a);
+        usedInStock.set(cit.stockOwnerId, (usedInStock.get(cit.stockOwnerId) ?? 0) + ins);
+        usedBackOrder.set(cit.stockOwnerId, (usedBackOrder.get(cit.stockOwnerId) ?? 0) + (need - ins));
+        children.push({ item: cit, qtyPer: ch.qty, note: ch.attributeNote, inStockQty: ins, backOrderQty: need - ins });
+      }
+      const backOrder = children.some((c) => c.backOrderQty > 0);
+      if (cc.cart && (bq !== ci.total || backOrder !== ci.back_order)) await updateCartLine(cc.cart, ci.id, { total: bq, back_order: backOrder });
+      lines.push({
+        cartItemId: ci.id,
+        uuid: ci.uuid,
+        item: it,
+        itemId: it.itemId,
+        groupBuyItemSetId: ci.group_buy_item_set_id || it.groupBuyItemSetId,
+        itemSetId: it.itemSetId,
+        title: it.title,
+        price: v.unitPrice,
+        qty: bq,
+        backOrder,
+        gift: false,
+        flatRateShippingTag: it.flatRateShippingTag,
+        excludeShippingRule: it.excludeShippingRule,
+        weight: Number(it.itemSettings?.weight) || 0,
+        note: ci.attribute_note,
+        inStockQty: bq,
+        backOrderQty: 0,
+        bundle: { bundleId: b.id, configable: b.norm.selectable, children },
+      });
+      continue;
+    }
     const ownerA = it.stockAvailable - (usedInStock.get(it.stockOwnerId) ?? 0);
     const ownerB = it.stockBackOrderAvailable - (usedBackOrder.get(it.stockOwnerId) ?? 0);
     const max = Math.max(0, Math.min(it.maxOrderQuota, ownerA + ownerB));
@@ -130,7 +227,65 @@ export async function reconcileLines(cc: CartContext): Promise<{ lines: CartLine
       backOrderQty: bo,
     });
   }
-  return { lines, issues, outOfStock };
+  return { lines, issues, outOfStock, used: { inStock: usedInStock, backOrder: usedBackOrder } };
+}
+
+const sha = (x: string) => createHash("sha256").update(x).digest("hex");
+
+/**
+ * 贈品（#116）：自選贈品明細依資格調整（超量／不符資格移除、必選未選擋結帳），
+ * 自動贈品依庫存配置成明細（不存購物袋）。會改 lines（移除或調整自選贈品）並寫回購物袋。
+ */
+async function applyGifts(
+  cc: CartContext,
+  lines: CartLine[],
+  pricing: PricingResult,
+  used: { inStock: Map<number, number>; backOrder: Map<number, number> },
+): Promise<{ giftLines: GiftLine[]; issues: string[]; blockers: string[]; notes: string[] }> {
+  const issues: string[] = [];
+  const pickLines = lines.filter((l) => l.gift);
+  const pc = checkPickGifts(
+    pricing.gifts.pick,
+    pickLines.map((l) => ({ key: l.uuid, itemId: l.itemId, qty: l.qty, title: l.item.shortNameDisplay || l.title })),
+  );
+  for (const l of pickLines) {
+    const keep = pc.allowed.get(l.uuid) ?? 0;
+    l.salesRuleId = pc.ruleOf.get(l.uuid) ?? null;
+    if (keep >= l.qty) continue;
+    // 釋放超出的占用量（先退預購再退現貨）
+    const drop = l.qty - keep;
+    const dropBo = Math.min(drop, l.backOrderQty);
+    const dropIn = drop - dropBo;
+    const owner = l.item.stockOwnerId;
+    used.backOrder.set(owner, Math.max(0, (used.backOrder.get(owner) ?? 0) - dropBo));
+    used.inStock.set(owner, Math.max(0, (used.inStock.get(owner) ?? 0) - dropIn));
+    if (keep <= 0) {
+      if (cc.cart) await deleteCartLine(cc.cart, l.cartItemId);
+      lines.splice(lines.indexOf(l), 1);
+    } else {
+      l.qty = keep;
+      l.backOrderQty -= dropBo;
+      l.inStockQty -= dropIn;
+      l.backOrder = l.backOrderQty > 0;
+      if (cc.cart) await updateCartLine(cc.cart, l.cartItemId, { total: keep, back_order: l.backOrder });
+    }
+  }
+  issues.push(...pc.issues);
+  const stock = new Map<number, GiftStockInfo>();
+  for (const g of pricing.gifts.auto) {
+    const it = cc.catalog.byId.get(g.itemId);
+    if (it) stock.set(g.itemId, { ownerId: it.stockOwnerId, inStock: it.stockAvailable, backOrder: it.stockBackOrderAvailable, title: it.shortNameDisplay || it.title });
+  }
+  const alloc = allocateAutoGifts(pricing.gifts.auto, stock, used);
+  const giftLines: GiftLine[] = alloc.gifts.map((g) => ({
+    uuid: giftLineUuid(g.salesRuleId, g.itemId, sha),
+    item: cc.catalog.byId.get(g.itemId)!,
+    salesRuleId: g.salesRuleId,
+    qty: g.qty,
+    inStockQty: g.inStockQty,
+    backOrderQty: g.backOrderQty,
+  }));
+  return { giftLines, issues, blockers: pc.blockers, notes: [...alloc.notes, ...pc.notes] };
 }
 
 interface ShippingOptionOut {
@@ -260,6 +415,8 @@ export interface BuiltCart {
   rule: FlatRateShippingRow | null;
   paymentMethod: number;
   errors: string[];
+  /** 自動贈品明細（#116） */
+  giftLines: GiftLine[];
 }
 
 /** 團購目前不可下單的原因（未開始/已結束/暫停結帳） */
@@ -275,7 +432,7 @@ export async function buildCartData(
   cc: CartContext,
   extra: { item?: { itemId: number; outOfStock?: boolean } | null; errors?: string[]; itemSetId?: number | null; consumeFlash?: boolean } = {},
 ): Promise<BuiltCart> {
-  const { lines, issues, outOfStock } = await reconcileLines(cc);
+  const { lines, issues, outOfStock, used } = await reconcileLines(cc);
   const checkout = cc.cart?.checkout ?? {};
   const shipDraft = checkout.shipping ?? {};
   const shipAddr = { country: shipDraft.country, postcode: NA(shipDraft.postcode), city: NA(shipDraft.city), district: NA(shipDraft.district) };
@@ -304,7 +461,8 @@ export async function buildCartData(
     },
     { rules: cc.rules, shipping: shipPre },
   );
-  const errors = [...(extra.errors ?? []), ...issues, ...pricing.errors];
+  const gifts = await applyGifts(cc, lines, pricing, used);
+  const errors = [...(extra.errors ?? []), ...issues, ...gifts.issues, ...pricing.errors, ...gifts.blockers];
   if (extra.consumeFlash !== false && checkout.flashErrors?.length && cc.cart) {
     errors.unshift(...checkout.flashErrors);
     await saveCheckout(cc.cart, { flashErrors: [] });
@@ -327,23 +485,68 @@ export async function buildCartData(
     salesOrderBillingAddress: billingDefaults(cc, checkout.billing),
     salesOrderShippingAddress: shippingDefaults(cc, checkout.shipping),
     totalPieces: pricing.totalPieces,
-    sortedOrderItems: lines.map((l) => ({
-      uuid: l.uuid,
-      itemId: l.itemId,
-      groupBuyItemSetId: l.groupBuyItemSetId,
-      itemSetId: l.itemSetId,
-      title: l.title,
-      shortNameDisplay: l.item.shortNameDisplay || l.item.title,
-      tag: l.item.tag || null,
-      total: l.qty,
-      price: l.price,
-      totalPrice: l.price * l.qty,
-      gift: !!l.gift,
-      backOrder: l.backOrder,
-      note: l.note ?? "",
-      bundleRoot: false,
-      bundleChild: false,
-    })),
+    sortedOrderItems: [
+      ...lines.flatMap((l) => [
+        {
+          uuid: l.uuid,
+          itemId: l.itemId,
+          groupBuyItemSetId: l.groupBuyItemSetId,
+          itemSetId: l.itemSetId,
+          title: l.title,
+          shortNameDisplay: l.item.shortNameDisplay || l.item.title,
+          tag: l.item.tag || null,
+          total: l.qty,
+          price: l.price,
+          totalPrice: l.price * l.qty,
+          gift: !!l.gift,
+          backOrder: l.backOrder,
+          note: l.note ?? "",
+          bundleRoot: !!l.bundle,
+          bundleChild: false,
+          ...(l.bundle ? { bundleConfigable: l.bundle.configable, itemBundleId: l.bundle.bundleId } : {}),
+        },
+        // 組合子商品（bundle-modal bundleChildrenMap：bundleChild＋parentUuid＋visibleInCart；購物袋以「名稱 x 每組數量」列在主商品下）
+        ...(l.bundle?.children ?? []).map((c, i) => ({
+          uuid: sha(`${l.uuid}:${i}`).slice(0, 32),
+          itemId: c.item.itemId,
+          groupBuyItemSetId: c.item.groupBuyItemSetId || null,
+          itemSetId: c.item.itemSetId,
+          title: c.item.shortNameDisplay || c.item.title,
+          shortNameDisplay: c.item.shortNameDisplay || c.item.title,
+          tag: null,
+          total: c.qtyPer * l.qty,
+          qtyPerBundle: c.qtyPer,
+          price: 0,
+          totalPrice: 0,
+          gift: false,
+          backOrder: c.backOrderQty > 0,
+          note: c.note ?? "",
+          bundleRoot: false,
+          bundleChild: true,
+          parentUuid: l.uuid,
+          visibleInCart: true,
+        })),
+      ]),
+      // 自動贈品（單價 0；原站購物袋 JS 對 gift && price==0 顯示贈品徽章）
+      ...gifts.giftLines.map((g) => ({
+        uuid: g.uuid,
+        itemId: g.item.itemId,
+        groupBuyItemSetId: g.item.groupBuyItemSetId,
+        itemSetId: g.item.itemSetId,
+        title: g.item.title,
+        shortNameDisplay: g.item.shortNameDisplay || g.item.title,
+        tag: null,
+        total: g.qty,
+        price: 0,
+        totalPrice: 0,
+        gift: true,
+        autoGift: true,
+        backOrder: g.backOrderQty > 0,
+        note: "",
+        bundleRoot: false,
+        bundleChild: false,
+      })),
+    ],
     salesOrderCoupons: pricing.coupons.map((c) => ({ coupon: { code: c.code, title: c.title, category: c.category }, discount: c.discount })),
     shippingAmount: pricing.shipping.shippingAmount + pricing.shipping.codFee,
     grandTotal: pricing.grandTotal,
@@ -355,6 +558,8 @@ export async function buildCartData(
     pointsDiscount: pricing.pointsDiscount,
     pointsMax: pricing.pointsMax,
     tax: pricing.tax,
+    // 會員點數回饋（#117；付款完成後入帳）
+    rewardPoints: pricing.rewardPoints,
     subscriptionSetting: null,
   };
   const mapOn = cvsMapAvailable(sel?.cvsType ? String(sel.cvsType) : null);
@@ -372,7 +577,11 @@ export async function buildCartData(
       htmlNote: blocked ? blocked : "",
       targetItemSetId: 0,
       disableCheckout: !!blocked,
-      note: pricing.couponNotes.join("<br>"),
+      note: [
+        ...pricing.couponNotes,
+        ...gifts.notes,
+        ...(pricing.rewardPoints > 0 ? [`完成付款後可獲得 ${pricing.rewardPoints} 點會員點數`] : []),
+      ].join("<br>"),
     },
     gbfrss: opts,
     paymentMethods: pm.available,
@@ -401,5 +610,5 @@ export async function buildCartData(
     if (cc.cart) await saveCheckout(cc.cart, { paymentMethodChangeNotice: null });
   }
   if (outOfStock.size && !data.item) data.item = { itemId: [...outOfStock][0], outOfStock: true };
-  return { data, pricing, lines, rule, paymentMethod, errors };
+  return { data, pricing, lines, rule, paymentMethod, errors, giftLines: gifts.giftLines };
 }
