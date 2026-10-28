@@ -49,6 +49,60 @@ export interface PeriodNotify {
   raw: Record<string, string>;
 }
 
+/** 定期定額查詢（Cashier/QueryCreditCardPeriodInfo，JSON）：FOUND／NOT_FOUND（10200047 查無）／ERROR（連線或格式錯誤，結果不明） */
+export interface PeriodQuery {
+  result: "FOUND" | "NOT_FOUND" | "ERROR";
+  message: string;
+  merchantTradeNo: string | null;
+  totalSuccessTimes: number;
+  execLog: { rtnCode: string; amount: number; gwsr: string; processDate: string | null; authCode: string | null }[];
+  raw: Record<string, unknown>;
+}
+
+/** 解析定期定額查詢回應（純函式） */
+export function parsePeriodQuery(text: string): PeriodQuery {
+  const base = { merchantTradeNo: null, totalSuccessTimes: 0, execLog: [], raw: {} };
+  let j: Record<string, unknown>;
+  try {
+    j = JSON.parse(String(text ?? ""));
+  } catch {
+    return { ...base, result: "ERROR", message: `查詢回應格式錯誤：${String(text ?? "").slice(0, 100)}` };
+  }
+  if (!j || typeof j !== "object") return { ...base, result: "ERROR", message: "查詢回應格式錯誤" };
+  if (String(j.RtnCode) === "10200047" || !j.MerchantTradeNo) return { ...base, raw: j, result: "NOT_FOUND", message: `查無定期定額訂單（RtnCode=${String(j.RtnCode ?? "")}）` };
+  const logs = Array.isArray(j.ExecLog) ? (j.ExecLog as Record<string, unknown>[]) : [];
+  return {
+    result: "FOUND",
+    message: `TotalSuccessTimes=${String(j.TotalSuccessTimes ?? "")}`,
+    merchantTradeNo: String(j.MerchantTradeNo),
+    totalSuccessTimes: Number(j.TotalSuccessTimes ?? 0) || 0,
+    execLog: logs.map((l) => ({
+      rtnCode: String(l.RtnCode ?? ""),
+      amount: Number(l.amount ?? NaN),
+      gwsr: String(l.gwsr ?? ""),
+      processDate: l.process_date == null ? null : String(l.process_date),
+      authCode: l.auth_code == null ? null : String(l.auth_code),
+    })),
+    raw: j,
+  };
+}
+
+/**
+ * 定期定額授權通知的回查比對（fix24）：查詢結果中要有同一筆授權（gwsr 相同）、結果一致（成功＝RtnCode 1）、金額相同；
+ * 成功通知另需「累計成功次數」≥ 通知的次數。
+ */
+export function checkPeriodNotify(n: Pick<PeriodNotify, "merchantTradeNo" | "success" | "amount" | "times" | "gwsr">, q: PeriodQuery): { ok: true } | { ok: false; reason: string } {
+  if (q.result !== "FOUND") return { ok: false, reason: q.result === "NOT_FOUND" ? "綠界查無此定期定額訂單" : `查詢失敗：${q.message}` };
+  if (q.merchantTradeNo !== n.merchantTradeNo) return { ok: false, reason: "商店訂單編號不符" };
+  if (!n.gwsr) return { ok: false, reason: "通知缺少授權交易單號（Gwsr）" };
+  const log = q.execLog.find((l) => l.gwsr === String(n.gwsr));
+  if (!log) return { ok: false, reason: `查無授權交易單號 ${n.gwsr}` };
+  if ((log.rtnCode === "1") !== n.success) return { ok: false, reason: `授權結果不符（通知 ${n.success ? "成功" : "失敗"}／查詢 RtnCode=${log.rtnCode}）` };
+  if (n.success && Math.round(log.amount) !== Math.round(n.amount)) return { ok: false, reason: `金額不符（通知 ${n.amount}／查詢 ${log.amount}）` };
+  if (n.success && q.totalSuccessTimes < n.times) return { ok: false, reason: `成功次數不符（通知第 ${n.times} 次／查詢累計 ${q.totalSuccessTimes} 次）` };
+  return { ok: true };
+}
+
 /** 請退款（DoAction）一個步驟的結果 */
 export interface DoActionResult {
   action: "C" | "R" | "E" | "N";
@@ -339,6 +393,27 @@ export class EcpayPayment implements PaymentProvider {
     }
     if ((await run("R")).ok) return { ok: true, message: "已退刷", steps };
     return { ok: false, message: steps.map((s) => `${s.action}:${s.message}`).join("；"), steps };
+  }
+
+  /** 定期定額查詢（第二期起授權通知的回查） */
+  async queryPeriod(merchantTradeNo: string): Promise<PeriodQuery> {
+    const p: Record<string, string> = {
+      MerchantID: this.creds.merchantId,
+      MerchantTradeNo: merchantTradeNo,
+      TimeStamp: String(Math.floor(Date.now() / 1000)),
+    };
+    p.CheckMacValue = this.sign(p);
+    try {
+      const r = await this.fetcher(`${ecpayHosts(this.sandbox).payment}/Cashier/QueryCreditCardPeriodInfo`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(p).toString(),
+        signal: AbortSignal.timeout(15000),
+      });
+      return parsePeriodQuery(await r.text());
+    } catch (e) {
+      return { result: "ERROR", message: `查詢失敗：${(e as Error).message}`, merchantTradeNo: null, totalSuccessTimes: 0, execLog: [], raw: {} };
+    }
   }
 
   /** 向綠界查詢訂單（付款結果的伺服器端回查，用來確認金額與狀態） */

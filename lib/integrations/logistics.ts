@@ -81,6 +81,8 @@ export interface ShipmentResult {
   subType: string;
   rtnCode: string;
   raw: Record<string, string>;
+  /** 結果不明（連線失敗／逾時／非綠界格式回應）：綠界可能已建單，須以商店訂單編號查詢確認 */
+  uncertain?: boolean;
 }
 
 export interface LogisticsNotify {
@@ -92,6 +94,43 @@ export interface LogisticsNotify {
   validationNo: string | null;
   updatedAt: string;
   raw: Record<string, string>;
+}
+
+/** 物流訂單查詢（QueryLogisticsTradeInfo/V5）：FOUND＝綠界有此托運單；NOT_FOUND＝綠界明確回「找不到訂單」；ERROR＝連線失敗／驗章失敗／其他錯誤（結果不明） */
+export interface LogisticsTradeQuery {
+  result: "FOUND" | "NOT_FOUND" | "ERROR";
+  message: string;
+  merchantTradeNo: string | null;
+  logisticsId: string | null;
+  /** LogisticsStatus（同物流狀態通知的 RtnCode） */
+  status: string | null;
+  collectionAmount: number | null;
+  goodsAmount: number | null;
+  shipmentNo: string | null;
+  validationNo: string | null;
+  bookingNote: string | null;
+  /** LogisticsType，例：CVS_FAMIC2C、HOME_TCAT */
+  logisticsType: string | null;
+  raw: Record<string, string>;
+}
+
+/**
+ * 物流狀態通知的回查比對（fix24）：通知只驗簽章不足以入帳／改狀態——
+ * 物流編號（通知＝托運單＝查詢）、商店訂單編號、狀態代碼、代收金額（托運單有代收時）都一致才採用。
+ */
+export function checkLogisticsNotify(
+  n: Pick<LogisticsNotify, "merchantTradeNo" | "logisticsId" | "rtnCode">,
+  q: LogisticsTradeQuery,
+  trace: { logisticsId: string | null; merchantTradeNo: string; collectionAmount: number },
+): { ok: true } | { ok: false; reason: string } {
+  if (q.result !== "FOUND") return { ok: false, reason: q.result === "NOT_FOUND" ? "綠界查無此托運單" : `查詢失敗：${q.message}` };
+  if (q.merchantTradeNo !== trace.merchantTradeNo || n.merchantTradeNo !== trace.merchantTradeNo) return { ok: false, reason: "商店訂單編號不符" };
+  if (!n.logisticsId || q.logisticsId !== n.logisticsId) return { ok: false, reason: `物流編號不符（通知 ${n.logisticsId || "-"}／查詢 ${q.logisticsId ?? "-"}）` };
+  if (trace.logisticsId && trace.logisticsId !== n.logisticsId) return { ok: false, reason: `物流編號與托運單不符（${trace.logisticsId}）` };
+  if (String(q.status ?? "") !== String(n.rtnCode)) return { ok: false, reason: `狀態不符（通知 ${n.rtnCode}／查詢 ${q.status ?? "-"}）` };
+  const want = Math.round(Number(trace.collectionAmount) || 0);
+  if (want > 0 && Math.round(Number(q.collectionAmount)) !== want) return { ok: false, reason: `代收金額不符（托運單 ${want}／查詢 ${q.collectionAmount ?? "-"}）` };
+  return { ok: true };
 }
 
 export interface LogisticsProvider {
@@ -107,6 +146,8 @@ export interface LogisticsProvider {
   parseNotify(form: Record<string, string>): LogisticsNotify | null;
   cancelShipment(input: { cvsType: string; logisticsId: string; shipmentNo: string; validationNo: string }): Promise<{ ok: boolean; message: string }>;
   printForm(input: { cvsType: string; logisticsId: string; shipmentNo: string; validationNo: string }): { action: string; fields: Record<string, string> } | null;
+  /** 查詢物流訂單：有物流編號用物流編號，否則用商店訂單編號（取號逾時的佔位確認） */
+  queryShipment(input: { logisticsId?: string | null; merchantTradeNo?: string | null }): Promise<LogisticsTradeQuery>;
 }
 
 /** 宅配距離：寄件／收件縣市相同＝00、不同＝01、離島＝02 */
@@ -267,10 +308,14 @@ export class EcpayLogistics implements LogisticsProvider {
     const bar = t.indexOf("|");
     const head = bar < 0 ? t : t.slice(0, bar);
     const body = bar < 0 ? "" : t.slice(bar + 1);
-    if (head !== "1") return { ok: false, message: body || t || "綠界物流建立失敗", logisticsId: null, shipmentNo: null, validationNo: null, subType: sub, rtnCode: "", raw: {} };
+    if (head !== "1") {
+      // 綠界明確拒絕＝"0|訊息"；其他（HTML 錯誤頁、空回應）＝結果不明
+      const definite = head === "0";
+      return { ok: false, uncertain: !definite, message: (definite ? body : "") || t.slice(0, 200) || "綠界物流建立失敗（無回應內容）", logisticsId: null, shipmentNo: null, validationNo: null, subType: sub, rtnCode: "", raw: {} };
+    }
     const r = parseFormString(body);
     if (!verifyCheckMacValue(r, this.creds.hashKey, this.creds.hashIV, "md5")) {
-      return { ok: false, message: "綠界物流回應驗章失敗", logisticsId: null, shipmentNo: null, validationNo: null, subType: sub, rtnCode: String(r.RtnCode ?? ""), raw: r };
+      return { ok: false, uncertain: true, message: "綠界物流回應驗章失敗", logisticsId: null, shipmentNo: null, validationNo: null, subType: sub, rtnCode: String(r.RtnCode ?? ""), raw: r };
     }
     return {
       ok: !!r.AllPayLogisticsID,
@@ -335,7 +380,7 @@ export class EcpayLogistics implements LogisticsProvider {
       });
       text = await r.text();
     } catch (e) {
-      return { ok: false, message: `連線綠界物流失敗：${(e as Error).message}`, logisticsId: null, shipmentNo: null, validationNo: null, subType: p.LogisticsSubType, rtnCode: "", raw: {} };
+      return { ok: false, uncertain: true, message: `連線綠界物流失敗：${(e as Error).message}`, logisticsId: null, shipmentNo: null, validationNo: null, subType: p.LogisticsSubType, rtnCode: "", raw: {} };
     }
     return this.parseCreateResponse(text, p.LogisticsSubType);
   }
@@ -352,7 +397,7 @@ export class EcpayLogistics implements LogisticsProvider {
       });
       text = await r.text();
     } catch (e) {
-      return { ok: false, message: `連線綠界物流失敗：${(e as Error).message}`, logisticsId: null, shipmentNo: null, validationNo: null, subType: p.LogisticsSubType, rtnCode: "", raw: {} };
+      return { ok: false, uncertain: true, message: `連線綠界物流失敗：${(e as Error).message}`, logisticsId: null, shipmentNo: null, validationNo: null, subType: p.LogisticsSubType, rtnCode: "", raw: {} };
     }
     return this.parseCreateResponse(text, p.LogisticsSubType);
   }
@@ -394,6 +439,60 @@ export class EcpayLogistics implements LogisticsProvider {
       return t.startsWith("1|") ? { ok: true, message: "已取消寄貨" } : { ok: false, message: t.replace(/^0\|/, "") || "取消失敗" };
     } catch (e) {
       return { ok: false, message: `連線綠界物流失敗：${(e as Error).message}` };
+    }
+  }
+
+  queryParams(input: { logisticsId?: string | null; merchantTradeNo?: string | null }, now = Date.now()): Record<string, string> {
+    const p: Record<string, string> = { MerchantID: this.creds.merchantId };
+    if (input.logisticsId) p.AllPayLogisticsID = String(input.logisticsId);
+    else if (input.merchantTradeNo) p.MerchantTradeNo = String(input.merchantTradeNo);
+    else throw new Error("查詢物流訂單需要物流編號或商店訂單編號");
+    p.TimeStamp = String(Math.floor(now / 1000));
+    p.CheckMacValue = this.sign(p);
+    return p;
+  }
+
+  /** 解析 QueryLogisticsTradeInfo/V5 回應："k=v&…&CheckMacValue=…"（成功，驗章）或 "0|訊息" */
+  parseQueryResponse(text: string): LogisticsTradeQuery {
+    const t = String(text ?? "").trim();
+    const empty = { merchantTradeNo: null, logisticsId: null, status: null, collectionAmount: null, goodsAmount: null, shipmentNo: null, validationNo: null, bookingNote: null, logisticsType: null, raw: {} };
+    if (/^0\|/.test(t)) {
+      const msg = t.slice(2);
+      return { ...empty, result: /找不到|查無|不存在/.test(msg) ? "NOT_FOUND" : "ERROR", message: msg || "查詢失敗" };
+    }
+    const r = parseFormString(t);
+    if (!r.CheckMacValue || !verifyCheckMacValue(r, this.creds.hashKey, this.creds.hashIV, "md5")) return { ...empty, result: "ERROR", message: "查詢結果驗章失敗" };
+    if (r.MerchantID !== this.creds.merchantId || !r.AllPayLogisticsID) return { ...empty, result: "ERROR", message: "查詢結果特店或物流編號不符" };
+    const num = (v: string | undefined) => (v == null || v === "" || v === "null" || !Number.isFinite(Number(v)) ? null : Number(v));
+    const str = (v: string | undefined) => (v == null || v === "" || v === "null" ? null : String(v));
+    return {
+      result: "FOUND",
+      message: `LogisticsStatus=${r.LogisticsStatus ?? ""}`,
+      merchantTradeNo: str(r.MerchantTradeNo),
+      logisticsId: str(r.AllPayLogisticsID),
+      status: str(r.LogisticsStatus),
+      collectionAmount: num(r.CollectionAmount),
+      goodsAmount: num(r.GoodsAmount),
+      shipmentNo: str(r.CVSPaymentNo) ?? str(r.ShipmentNo),
+      validationNo: str(r.CVSValidationNo),
+      bookingNote: str(r.BookingNote),
+      logisticsType: str(r.LogisticsType),
+      raw: r,
+    };
+  }
+
+  async queryShipment(input: { logisticsId?: string | null; merchantTradeNo?: string | null }): Promise<LogisticsTradeQuery> {
+    const p = this.queryParams(input);
+    try {
+      const r = await this.fetcher(`${this.host()}/Helper/QueryLogisticsTradeInfo/V5`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(p).toString(),
+        signal: AbortSignal.timeout(15000),
+      });
+      return this.parseQueryResponse(await r.text());
+    } catch (e) {
+      return { result: "ERROR", message: `連線綠界物流失敗：${(e as Error).message}`, merchantTradeNo: null, logisticsId: null, status: null, collectionAmount: null, goodsAmount: null, shipmentNo: null, validationNo: null, bookingNote: null, logisticsType: null, raw: {} };
     }
   }
 

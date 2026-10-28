@@ -17,7 +17,7 @@ import { get, post } from "@/lib/core/http/route-helpers";
 import { redirect } from "@/lib/core/http/responses";
 import { badRequest } from "@/lib/core/http/errors";
 import { getServiceClient } from "@/lib/supabase/server";
-import { newMerchantTradeNo, paymentDeadline, PM, type PaymentNotify, type PaymentProvider } from "@/lib/integrations/payment";
+import { checkPeriodNotify, newMerchantTradeNo, paymentDeadline, PM, type PaymentNotify, type PaymentProvider } from "@/lib/integrations/payment";
 import { ack, autoPostPage, callbackBase, ecpayPayment, envSuffix, formOf, linePay } from "./gateway";
 import { allowanceForRefund, autoIssueInvoiceOnPaid, voidInvoicesForOrders } from "./invoices";
 
@@ -250,7 +250,22 @@ async function periodNotify(ctx: RequestContext): Promise<Response> {
     .eq("merchant_trade_no", n.merchantTradeNo)
     .maybeSingle<{ tenant_id: number; sales_order_id: number; payment_method: number }>();
   if (!first) return ack("0|order not found");
-  const mtn = `${n.merchantTradeNo}P${n.times || "X"}`;
+  // fix24：入帳前向綠界查詢定期定額執行紀錄（同一授權交易單號、結果、金額、累計次數一致才記錄）
+  const q = await provider.queryPeriod(n.merchantTradeNo);
+  if (q.result === "ERROR") return ack("0|query failed"); // 結果不明 → 綠界稍後重送
+  const chk = checkPeriodNotify(n, q);
+  if (!chk.ok) {
+    console.warn("[gateway] 定期定額通知與綠界查詢不符", n.merchantTradeNo, chk.reason);
+    await db.from("sales_order_histories").insert({
+      tenant_id: first.tenant_id,
+      sales_order_id: first.sales_order_id,
+      actor: "SYSTEM",
+      note: `[金流] 定期定額通知與綠界查詢不符，未記錄：${chk.reason}（第 ${n.times} 次、${Number.isFinite(n.amount) ? n.amount : "-"} 元）${envSuffix()}`.slice(0, 1000),
+    });
+    return ack(provider.ackOk);
+  }
+  // 成功＝P<累計成功次數>；失敗不增加次數 → 以授權交易單號區分，避免佔用下一期成功的編號
+  const mtn = n.success ? `${n.merchantTradeNo}P${n.times || "X"}` : `${n.merchantTradeNo}F${n.gwsr}`;
   const { error } = await db.from("sales_order_transactions").insert({
     tenant_id: first.tenant_id,
     sales_order_id: first.sales_order_id,
@@ -592,6 +607,10 @@ export async function refundOrderPayment(
     fullyRefunded: fully,
     message: `已${partial ? "部分" : "全額"}退款 ${amt} 元（${message}）${envSuffix()}${fully ? "" : `；尚可退 ${Number(b.remain) - amt} 元`}`,
   };
+  // fix24：全部退完 → DB 已撤回同一入帳事件未寄出的付款成功信；已寄出／寄送中則提示人工通知
+  const mw = (fin as { mailWithdraw?: string | null } | null)?.mailWithdraw ?? null;
+  const mwNote = refundMailNote(mw);
+  if (mwNote) out.message += `；${mwNote}`;
   if (opt.invoice !== false) {
     try {
       const msgs = fully
@@ -603,6 +622,22 @@ export async function refundOrderPayment(
     }
   }
   return out;
+}
+
+/** 全額退刷後付款成功信的處理結果（gateway_refund_finish 的 mailWithdraw）→ 給管理員的說明 */
+export function refundMailNote(mw: string | null | undefined): string {
+  switch (mw) {
+    case "WITHDRAWN":
+      return "付款成功通知信已撤回（未寄出）";
+    case "SENT":
+      return "付款成功通知信已寄出，無法撤回，請另行通知顧客";
+    case "SENDING":
+      return "付款成功通知信寄送中，無法撤回，請確認寄送結果後另行通知顧客";
+    case "UNKNOWN":
+      return "付款成功通知信寄送結果不明，請確認後另行通知顧客";
+    default:
+      return "";
+  }
 }
 
 export const paymentGatewayRoutes: RouteDef[] = [

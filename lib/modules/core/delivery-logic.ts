@@ -162,11 +162,16 @@ export function afterFailure(attempts: number, retryable: boolean, nowMs: number
 export function smtpRetryable(e: { code?: string; command?: string; responseCode?: number }): boolean {
   const code = String(e.code ?? "");
   const cmd = String(e.command ?? "").toUpperCase();
-  if (code === "EDNS") return true;
-  if (code === "ECONNECTION") return cmd === "CONN"; // DATA 之後斷線也會是 ECONNECTION → 可能已寄出，不重試
-  if (code === "ETIMEDOUT") return cmd === "CONN";
   const rc = Number(e.responseCode ?? 0);
-  const early = cmd === "CONN" || cmd === "EHLO" || cmd === "HELO" || cmd === "STARTTLS" || cmd.startsWith("AUTH") || cmd === "MAIL FROM" || cmd === "RCPT TO";
+  const early = cmd === "CONN" || cmd === "EHLO" || cmd === "HELO" || cmd === "LHLO" || cmd === "STARTTLS" || cmd.startsWith("AUTH") || cmd === "MAIL FROM" || cmd === "RCPT TO";
+  if (code === "EDNS") return true;
+  // nodemailer 10 實測：ECONNREFUSED → { code: "ESOCKET", command: "CONN" }；DNS 失敗 → EDNS/CONN；連線逾時 → ETIMEDOUT/CONN。
+  // 連線／交握階段（MAIL FROM 之前、或 RCPT TO 前）的網路錯誤 → 信件內容尚未交出 → 可重試。
+  // DATA 之後（或不知道階段）斷線 → 可能已寄出，不重試。
+  const handshake = cmd === "CONN" || cmd === "EHLO" || cmd === "HELO" || cmd === "LHLO" || cmd === "STARTTLS" || cmd.startsWith("AUTH");
+  if (code === "ESOCKET" || code === "ECONNECTION" || code === "ETIMEDOUT" || code === "ETLS" || code === "EPROTOCOL") {
+    if (handshake && !rc) return true;
+  }
   return early && rc >= 400 && rc < 500;
 }
 

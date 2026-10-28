@@ -82,6 +82,13 @@ describe("重試與錯誤分類", () => {
     assert.equal(L.smtpRetryable({ code: "EENVELOPE", command: "RCPT TO", responseCode: 451 }), true);
     assert.equal(L.smtpRetryable({ code: "EENVELOPE", command: "RCPT TO", responseCode: 550 }), false);
     assert.equal(L.smtpRetryable({ code: "EAUTH", command: "AUTH PLAIN", responseCode: 535 }), false);
+    // nodemailer 10 實際錯誤形狀（本機實測）：連線被拒 / DNS 失敗 / 交握中斷
+    assert.equal(L.smtpRetryable({ code: "ESOCKET", command: "CONN", errno: -61, syscall: "connect" } as never), true);
+    assert.equal(L.smtpRetryable({ code: "EDNS", command: "CONN" }), true);
+    assert.equal(L.smtpRetryable({ code: "ESOCKET", command: "EHLO" }), true);
+    assert.equal(L.smtpRetryable({ code: "ETLS", command: "STARTTLS" }), true);
+    assert.equal(L.smtpRetryable({ code: "ESOCKET", command: "DATA" }), false);
+    assert.equal(L.smtpRetryable({ code: "ESOCKET" }), false);
     assert.equal(L.smtpRetryable({ code: "EMESSAGE", command: "DATA", responseCode: 451 }), false);
   });
   test("HTTP：網路錯誤／429／5xx 可重試", () => {

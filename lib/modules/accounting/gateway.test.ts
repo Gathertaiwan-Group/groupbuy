@@ -476,3 +476,100 @@ describe("fix22：部分退刷、付款期限、查詢回應", () => {
     assert.equal(none.status, "UNPAID");
   });
 });
+
+describe("fix24：物流通知回查、取號逾時、定期定額回查（mock 綠界）", () => {
+  const creds = { merchantId: LOG.merchant, hashKey: LOG.key, hashIV: LOG.iv };
+  const signed = (r: Record<string, string>) => {
+    const x = { ...r };
+    x.CheckMacValue = core.checkMacValue(x, LOG.key, LOG.iv, "md5");
+    return new URLSearchParams(x).toString();
+  };
+  const found = { MerchantID: LOG.merchant, MerchantTradeNo: "GBS9T1", AllPayLogisticsID: "3715191", LogisticsStatus: "3022", CollectionAmount: "300", GoodsAmount: "300", CVSPaymentNo: "16000584070", CVSValidationNo: "", BookingNote: "", LogisticsType: "CVS_FAMIC2C" };
+  const withFetch = (body: string | Error, seen?: URLSearchParams[]) =>
+    new lg.EcpayLogistics(creds, "C2C", true, (async (_u: string, init: RequestInit) => {
+      seen?.push(new URLSearchParams(String(init.body)));
+      if (body instanceof Error) throw body;
+      return new Response(body);
+    }) as unknown as typeof fetch);
+  const trace = { logisticsId: "3715191", merchantTradeNo: "GBS9T1", collectionAmount: 300 };
+  const n = { merchantTradeNo: "GBS9T1", logisticsId: "3715191", rtnCode: "3022" };
+
+  test("查詢：驗章成功＝FOUND；0|找不到訂單＝NOT_FOUND；驗章失敗／連線失敗＝ERROR", async () => {
+    const seen: URLSearchParams[] = [];
+    const q = await withFetch(signed(found), seen).queryShipment({ logisticsId: "3715191" });
+    assert.equal(q.result, "FOUND");
+    assert.equal(q.status, "3022");
+    assert.equal(q.collectionAmount, 300);
+    assert.equal(seen[0].get("AllPayLogisticsID"), "3715191");
+    assert.equal(core.verifyCheckMacValue(Object.fromEntries(seen[0]), LOG.key, LOG.iv, "md5"), true);
+    const seen2: URLSearchParams[] = [];
+    assert.equal((await withFetch("0|找不到訂單", seen2).queryShipment({ merchantTradeNo: "GBS9T1" })).result, "NOT_FOUND");
+    assert.equal(seen2[0].get("MerchantTradeNo"), "GBS9T1");
+    assert.equal(seen2[0].get("AllPayLogisticsID"), null);
+    assert.equal((await withFetch(new URLSearchParams({ ...found, CheckMacValue: "BAD" }).toString()).queryShipment({ logisticsId: "1" })).result, "ERROR");
+    assert.equal((await withFetch(new Error("timeout")).queryShipment({ logisticsId: "1" })).result, "ERROR");
+    assert.equal((await withFetch("0|系統忙碌").queryShipment({ logisticsId: "1" })).result, "ERROR");
+  });
+
+  test("通知回查比對：一致才採用；物流編號／狀態／代收金額不符、查無 → 不採用", async () => {
+    const q = await withFetch(signed(found)).queryShipment({ logisticsId: "3715191" });
+    assert.deepEqual(lg.checkLogisticsNotify(n, q, trace), { ok: true });
+    assert.equal(lg.checkLogisticsNotify({ ...n, logisticsId: "999" }, q, trace).ok, false);
+    assert.equal(lg.checkLogisticsNotify({ ...n, rtnCode: "3018" }, q, trace).ok, false);
+    const q2 = await withFetch(signed({ ...found, CollectionAmount: "1" })).queryShipment({ logisticsId: "3715191" });
+    const r2 = lg.checkLogisticsNotify(n, q2, trace);
+    assert.equal(r2.ok, false);
+    assert.match((r2 as { reason: string }).reason, /代收金額不符/);
+    const nf = await withFetch("0|找不到訂單").queryShipment({ logisticsId: "3715191" });
+    assert.equal(lg.checkLogisticsNotify(n, nf, trace).ok, false);
+    // 托運單沒有代收 → 不比代收金額
+    const q3 = await withFetch(signed({ ...found, CollectionAmount: "0" })).queryShipment({ logisticsId: "3715191" });
+    assert.equal(lg.checkLogisticsNotify(n, q3, { ...trace, collectionAmount: 0 }).ok, true);
+  });
+
+  const input = { merchantTradeNo: "GBS9T1", cvsType: "FAMI" as const, storeId: "006598", goodsAmount: 300, collectionAmount: 0, goodsName: "x", senderName: "測試寄件", senderCellPhone: "0912345678", receiverName: "王小明", receiverCellPhone: "0911222333", serverReplyUrl: "https://e.com/n" };
+  test("取號：逾時／連線失敗／非綠界格式／驗章失敗＝結果不明（uncertain）；0|訊息＝確定失敗", async () => {
+    assert.equal((await withFetch(new Error("The operation was aborted due to timeout")).createCvsShipment(input)).uncertain, true);
+    assert.equal((await withFetch("<html>502</html>").createCvsShipment(input)).uncertain, true);
+    assert.equal((await withFetch(`1|${new URLSearchParams({ ...found, CheckMacValue: "BAD" })}`).createCvsShipment(input)).uncertain, true);
+    const bad = await withFetch("0|門市不存在").createCvsShipment(input);
+    assert.equal(bad.ok, false);
+    assert.equal(!!bad.uncertain, false);
+    assert.equal(bad.message, "門市不存在");
+  });
+
+  test("定期定額查詢解析與比對", () => {
+    const body = JSON.stringify({ MerchantID: AIO.merchant, MerchantTradeNo: "GB7T1", RtnCode: 1, TotalSuccessTimes: 2, ExecLog: [
+      { RtnCode: 1, amount: 500, gwsr: 111, process_date: "2026/09/01 10:00:00", auth_code: "777777" },
+      { RtnCode: 1, amount: 500, gwsr: 222, process_date: "2026/10/01 10:00:00", auth_code: "777777" },
+      { RtnCode: 10100248, amount: 500, gwsr: 333, process_date: "2026/10/02 10:00:00", auth_code: null },
+    ] });
+    const q = pay.parsePeriodQuery(body);
+    assert.equal(q.result, "FOUND");
+    const ok = { merchantTradeNo: "GB7T1", success: true, amount: 500, times: 2, gwsr: "222" };
+    assert.deepEqual(pay.checkPeriodNotify(ok, q), { ok: true });
+    assert.equal(pay.checkPeriodNotify({ ...ok, amount: 1 }, q).ok, false);
+    assert.equal(pay.checkPeriodNotify({ ...ok, gwsr: "999" }, q).ok, false);
+    assert.equal(pay.checkPeriodNotify({ ...ok, times: 3 }, q).ok, false);
+    assert.equal(pay.checkPeriodNotify({ ...ok, gwsr: null }, q).ok, false);
+    assert.equal(pay.checkPeriodNotify({ ...ok, success: false, gwsr: "333" }, q).ok, true);
+    assert.equal(pay.checkPeriodNotify({ ...ok, gwsr: "333" }, q).ok, false); // 查詢顯示失敗卻通知成功
+    const nf = pay.parsePeriodQuery(JSON.stringify({ MerchantID: "0", MerchantTradeNo: null, RtnCode: 10200047, ExecLog: null }));
+    assert.equal(nf.result, "NOT_FOUND");
+    assert.equal(pay.checkPeriodNotify(ok, nf).ok, false);
+    assert.equal(pay.parsePeriodQuery("<html>").result, "ERROR");
+  });
+
+  test("定期定額查詢 adapter 帶簽章、連線失敗＝ERROR", async () => {
+    const seen: URLSearchParams[] = [];
+    const p = new pay.EcpayPayment({ merchantId: AIO.merchant, hashKey: AIO.key, hashIV: AIO.iv }, true, (async (u: string, init: RequestInit) => {
+      assert.match(u, /QueryCreditCardPeriodInfo$/);
+      seen.push(new URLSearchParams(String(init.body)));
+      return new Response(JSON.stringify({ MerchantTradeNo: "GB7T1", RtnCode: 1, TotalSuccessTimes: 1, ExecLog: [] }));
+    }) as unknown as typeof fetch);
+    assert.equal((await p.queryPeriod("GB7T1")).result, "FOUND");
+    assert.equal(core.verifyCheckMacValue(Object.fromEntries(seen[0]), AIO.key, AIO.iv, "sha256"), true);
+    const p2 = new pay.EcpayPayment({ merchantId: AIO.merchant, hashKey: AIO.key, hashIV: AIO.iv }, true, (async () => { throw new Error("ECONNRESET"); }) as unknown as typeof fetch);
+    assert.equal((await p2.queryPeriod("GB7T1")).result, "ERROR");
+  });
+});
