@@ -104,6 +104,10 @@ export function royaltyExpiry(input: unknown, durationDays: number | null | unde
   if (s) {
     const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
     if (!m) return { error: "日期格式為 YYYY-MM-DD" };
+    // 不存在的日期（2026-02-31 會被 Date 進位成 3 月 3 日）視為格式錯誤
+    const [y, mo, da] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const check = new Date(Date.UTC(y, mo - 1, da));
+    if (y < 1970 || check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== da) return { error: "日期格式為 YYYY-MM-DD" };
     const d = new Date(`${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}T23:59:59+08:00`);
     if (Number.isNaN(d.getTime())) return { error: "日期格式為 YYYY-MM-DD" };
     return d.toISOString();

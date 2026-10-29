@@ -260,3 +260,13 @@ export function buildXlsx(sheets: SheetInput[]): Buffer {
 }
 
 export const XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/** CSV 一格（每月消費統計 CSV 下載用）：防公式注入＋必要時加引號 */
+export function csvCell(v: CellInput): string {
+  const s = v == null ? "" : typeof v === "object" ? String(v.v ?? "") : String(v);
+  // 避免 Excel 把 = + - @（及 Tab、CR）開頭的文字當公式；數字不處理。
+  // 文字含包成物件的文字欄（{v, t:"s"}，例：電話、會員ID）——電話可為 + 開頭，原本漏掉
+  const isText = typeof v === "string" || (v != null && typeof v === "object" && typeof v.v === "string");
+  const safe = isText && /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}

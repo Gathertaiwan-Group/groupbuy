@@ -8,6 +8,7 @@
 //   GET  /backend/AdminUser/loginLog                     登入日誌頁
 //   POST /ajax/AdminUser/loginLog                        登入日誌列表（serverSide；表尾搜尋帳號/IP；結果篩選）
 // 防呆：只能變更自己擁有的權限旗標；不能停用自己、不能拿掉自己的 adminUser；帳號全域唯一。
+// 不能修改／停用／重設密碼／列為可切換帳號：權限比自己多（或未受限，當自己是受限帳戶時）的帳號（canManageAdmin）；受限帳戶建立的帳號一律受限。
 import { getServiceClient } from "@/lib/supabase/server";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { page, post, requireSession, route } from "@/lib/core/http/route-helpers";
@@ -23,6 +24,7 @@ import {
   PERMISSIONS,
   RESTRICTIONS,
   accountError,
+  canManageAdmin,
   loginResultLabel,
   mergePermissions,
   parseSwitchAccounts,
@@ -86,15 +88,23 @@ async function listAdmins(ctx: RequestContext): Promise<Response> {
   return dtResponse(dt, { rows, options: {} }, started);
 }
 
-/** 「可切換帳號」只能是同租戶既有帳號 */
-async function checkSwitchAccounts(tenantId: number, list: string[]): Promise<string | null> {
+/** 「可切換帳號」只能是同租戶既有帳號，且權限不可多於操作者（否則切換過去即越權） */
+async function checkSwitchAccounts(tenantId: number, list: string[], actor: Record<string, unknown> | null | undefined): Promise<string | null> {
   if (list.length === 0) return null;
   if (list.length > 50) return "最多 50 個帳號";
-  const { data, error } = await getServiceClient().from("admin_users").select("account").eq("tenant_id", tenantId).in("account", list);
+  const { data, error } = await getServiceClient().from("admin_users").select("account, permissions").eq("tenant_id", tenantId).in("account", list);
   if (error) throw new Error(`[AdminUser] 讀取失敗：${error.message}`);
-  const found = new Set(((data ?? []) as { account: string }[]).map((r) => r.account));
+  const rows = (data ?? []) as { account: string; permissions: Record<string, unknown> | null }[];
+  const found = new Set(rows.map((r) => r.account));
   const missing = list.filter((a) => !found.has(a));
-  return missing.length ? `找不到本帳號下的管理員：${missing.join("、")}` : null;
+  if (missing.length) return `找不到本帳號下的管理員：${missing.join("、")}`;
+  const over = rows.filter((r) => !canManageAdmin(actor, r.permissions)).map((r) => r.account);
+  return over.length ? `不能設定權限比自己多（或未受限）的帳號：${over.join("、")}` : null;
+}
+
+/** 修改／停用／重設密碼：目標權限不可多於操作者 */
+function assertCanManage(s: { permissions: Record<string, unknown> | null | undefined }, target: AdminRow): void {
+  if (!canManageAdmin(s.permissions, target.permissions)) throw new HttpError(403, "不能變更權限比自己多（或未受限）的管理員帳號");
 }
 
 function requestedPerms(v: Record<string, unknown>): Record<string, unknown> {
@@ -118,7 +128,7 @@ async function saveAdmin(ctx: RequestContext): Promise<Response> {
   if (pErr) errors.push({ name: "password", status: pErr });
   else if (confirm !== password) errors.push({ name: "confirmPassword", status: "確認密碼與密碼不一致" });
   const sw = parseSwitchAccounts(v.switchAccounts, account);
-  const swErr = await checkSwitchAccounts(s.tenantId, sw);
+  const swErr = await checkSwitchAccounts(s.tenantId, sw, s.permissions);
   if (swErr) errors.push({ name: "switchAccounts", status: swErr });
   if (errors.length) throw new FieldErrors(errors);
 
@@ -128,7 +138,8 @@ async function saveAdmin(ctx: RequestContext): Promise<Response> {
   if (dup) throw new FieldErrors([{ name: "account", status: "此帳號已被使用" }]);
 
   const permissions = mergePermissions(s.permissions, {}, requestedPerms(v));
-  for (const { key } of RESTRICTIONS) if (permOn(v[`permissions.${key}`])) permissions[key] = true;
+  // 受限帳戶建立的帳號一律受限（否則可建立未受限帳號後登入繞過限制）
+  for (const { key } of RESTRICTIONS) if (permOn(v[`permissions.${key}`]) || permOn(s.permissions?.[key])) permissions[key] = true;
   if (sw.length) permissions.switchAccounts = sw;
   const { data, error } = await db
     .from("admin_users")
@@ -169,6 +180,7 @@ async function updateAdmin(ctx: RequestContext): Promise<Response> {
     const v = flattenDotted(row?.values ?? {});
     const target = await loadTarget(s.tenantId, id);
     const isSelf = target.id === s.adminUserId;
+    if (!isSelf) assertCanManage(s, target);
     const patch: Record<string, unknown> = {};
     const errors: { name: string; status: string }[] = [];
     if (v.displayName !== undefined) patch.display_name = String(v.displayName).trim() || target.account;
@@ -185,13 +197,14 @@ async function updateAdmin(ctx: RequestContext): Promise<Response> {
         const on = permOn(raw);
         if (on === permOn(target.permissions?.[key])) continue;
         if (isSelf) errors.push({ name: `permissions.${key}`, status: `不能變更自己的「${label}」` });
+        else if (!on && permOn(s.permissions?.[key])) errors.push({ name: `permissions.${key}`, status: `受限帳戶不能取消他人的「${label}」` });
         else if (on) perms[key] = true;
         else delete perms[key];
       }
       if (isSelf && !permOn(perms.adminUser)) errors.push({ name: "permissions.adminUser", status: "不能拿掉自己的管理員帳號權限" });
       if (v.switchAccounts !== undefined) {
         const sw = parseSwitchAccounts(v.switchAccounts, target.account);
-        const swErr = await checkSwitchAccounts(s.tenantId, sw);
+        const swErr = await checkSwitchAccounts(s.tenantId, sw, s.permissions);
         if (swErr) errors.push({ name: "switchAccounts", status: swErr });
         if (sw.length) perms.switchAccounts = sw;
         else delete perms.switchAccounts;
@@ -226,6 +239,7 @@ async function resetPassword(ctx: RequestContext): Promise<Response> {
   if (confirm !== password) throw new FieldErrors([{ name: "confirmPassword", status: "確認密碼與密碼不一致" }]);
   const target = await loadTarget(s.tenantId, ids[0]);
   if (target.id === s.adminUserId) throw new HttpError(400, "請使用頂列「修改密碼」變更自己的密碼");
+  assertCanManage(s, target);
   const { error } = await getServiceClient()
     .from("admin_users")
     .update({ password_hash: await hashPassword(password) })

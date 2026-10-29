@@ -72,6 +72,8 @@ test("會員匯入：標頭對應、標籤合併、點數、列號範圍", () =>
 test("會員方案到期日：填日期／空白＝方案天數或一年", () => {
   assert.equal(C.royaltyExpiry("2026-12-31", 30), "2026-12-31T15:59:59.000Z");
   assert.ok(typeof C.royaltyExpiry("31/12/2026", 30) === "object");
+  assert.ok(typeof C.royaltyExpiry("2026-02-31", 30) === "object", "不存在的日期不可進位成下個月");
+  assert.equal(C.royaltyExpiry("2028/2/29", 30), "2028-02-29T15:59:59.000Z");
   const now = new Date("2026-10-29T02:00:00Z"); // 台灣 10/29 10:00
   assert.equal(C.royaltyExpiry("", 30, now), "2026-11-28T15:59:59.000Z");
   assert.equal(C.royaltyExpiry("", null, now), "2027-10-29T15:59:59.000Z");
@@ -104,4 +106,16 @@ test("csv 編輯器：樣板新增／覆蓋／上限", () => {
   const full = Array.from({ length: E.MAX_TEMPLATES }, (_, i) => ({ name: `t${i}`, format: "a", dateModified: 0 }));
   assert.ok("error" in (E.upsertTemplate(full, "new", "a") as { error: string }));
   assert.ok(Array.isArray(E.upsertTemplate(full, "t3", "b")), "覆蓋既有不受上限影響");
+});
+
+test("管理員：不能管理權限比自己多（或未受限）的帳號（重設密碼／停用／可切換帳號越權）", () => {
+  const actor = { adminUser: true, customer: true };
+  assert.equal(A.canManageAdmin(actor, { adminUser: true }), true);
+  assert.equal(A.canManageAdmin(actor, { customer: true, switchAccounts: ["x"] }), true);
+  assert.equal(A.canManageAdmin(actor, { adminUser: true, systemPreference: true }), false, "目標有操作者沒有的旗標");
+  assert.equal(A.canManageAdmin(actor, { refundRequisition: "1" }), false);
+  assert.equal(A.canManageAdmin({ ...actor, groupBuyRestricted: true }, { customer: true }), false, "受限操作者不能管理未受限帳號");
+  assert.equal(A.canManageAdmin({ ...actor, groupBuyRestricted: true }, { customer: true, groupBuyRestricted: 1 }), true);
+  assert.equal(A.canManageAdmin(actor, { groupBuyRestricted: true }), true, "未受限操作者可管理受限帳號");
+  assert.equal(A.canManageAdmin(null, {}), true);
 });

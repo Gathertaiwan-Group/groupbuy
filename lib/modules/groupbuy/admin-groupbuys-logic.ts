@@ -49,3 +49,28 @@ export function restrictedGroupBuyDenied(raw: string | null | undefined, allowed
   if (!Number.isFinite(n)) return false;
   return !(Number.isSafeInteger(n) && n > 0 && allowed.includes(n));
 }
+
+/** 團購 Editor 端點：列 id（data[<id>][…]）就是團購 id（editorIds 以列 id 優先，不看網址的 groupBuyId） */
+const GROUP_BUY_EDITOR_PATHS = new Set(["/ajax/GroupBuy/update", "/ajax/GroupBuy/delete"]);
+
+/**
+ * 受限帳戶要檢查的團購 id 原始值（交給 restrictedGroupBuyDenied 逐一判斷）：
+ *  - 參數 groupBuyId（可多個）、groupBuyIds（逗點／換行分隔）；
+ *  - Editor 欄位 data[*][groupBuyId]／data[*][groupBuyIds]（例：標籤為已結案 markAsClosed 的 data[0][groupBuyIds]）；
+ *  - 團購 Editor（/ajax/GroupBuy/update|delete）的列 id：只帶 data[405163][…]、不帶網址 groupBuyId 時，
+ *    端點仍會修改該團購（含「編輯團購管理員」把自己加進授權清單）→ 必須一併檢查。
+ */
+export function restrictedGroupBuyRefs(routePath: string, groupBuyId: string[], groupBuyIds: string[], flat: Map<string, string[]>): string[] {
+  const out: string[] = [...groupBuyId];
+  const splitIds = (v: string) => String(v ?? "").split(/[\s,，]+/);
+  for (const v of groupBuyIds) out.push(...splitIds(v));
+  const editor = GROUP_BUY_EDITOR_PATHS.has(routePath);
+  for (const [key, values] of flat) {
+    const m = /^data\[([^\]]*)\](?:\[([^\]]*)\])?/.exec(key);
+    if (!m) continue;
+    if (m[2] === "groupBuyId") out.push(...values);
+    else if (m[2] === "groupBuyIds") for (const v of values) out.push(...splitIds(v));
+    if (editor) out.push(m[1]);
+  }
+  return [...new Set(out.map((v) => String(v ?? "").trim()).filter((v) => v !== ""))];
+}

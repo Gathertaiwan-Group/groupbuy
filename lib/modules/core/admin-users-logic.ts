@@ -53,6 +53,17 @@ export function mergePermissions(
   return out;
 }
 
+/**
+ * 操作者能否管理（修改、停用、重設密碼、列為可切換帳號）目標帳號：
+ * 目標擁有的每個權限旗標操作者都要有；操作者是受限帳戶時，目標也必須是受限帳戶。
+ * 否則操作者可以重設權限較多帳號的密碼、或把它加進自己的「可切換帳號」再切換過去，取得自己沒有的權限。
+ */
+export function canManageAdmin(actor: Record<string, unknown> | null | undefined, target: Record<string, unknown> | null | undefined): boolean {
+  for (const { key } of PERMISSIONS) if (permOn(target?.[key]) && !permOn(actor?.[key])) return false;
+  for (const { key } of RESTRICTIONS) if (permOn(actor?.[key]) && !permOn(target?.[key])) return false;
+  return true;
+}
+
 /** 「可切換帳號」：逗號／空白／換行分隔 → 去重、去掉自己 */
 export function parseSwitchAccounts(v: unknown, self: string): string[] {
   const list = Array.isArray(v) ? v.map(String) : String(v ?? "").split(/[,，\s]+/);

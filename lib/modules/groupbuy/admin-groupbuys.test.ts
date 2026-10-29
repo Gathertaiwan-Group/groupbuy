@@ -36,3 +36,17 @@ test("restrictedGroupBuyDenied：受限帳戶只能帶授權的 groupBuyId（補
   assert.equal(m.restrictedGroupBuyDenied("0", [405167]), true);
   assert.equal(m.restrictedGroupBuyDenied(" 405167 ", [405167]), false);
 });
+
+test("受限帳戶：要檢查的團購 id 含 groupBuyIds、Editor 欄位與團購 Editor 列 id", () => {
+  const flat = (o: Record<string, string[]>) => new Map(Object.entries(o));
+  // 團購 Editor：只帶 data[405163][…]（不帶網址 groupBuyId）也要檢查列 id
+  assert.deepEqual(m.restrictedGroupBuyRefs("/ajax/GroupBuy/update", [], [], flat({ action: ["edit"], "data[405163][adminUserGroupBuys][0][adminUserId]": ["1"] })), ["405163"]);
+  assert.deepEqual(m.restrictedGroupBuyRefs("/ajax/GroupBuy/delete", ["7"], [], flat({ "data[8][title]": ["x"] })), ["7", "8"]);
+  // 其他 Editor：列 id 不是團購 id，只看 groupBuyId 欄位
+  assert.deepEqual(m.restrictedGroupBuyRefs("/ajax/Item/update", [], [], flat({ "data[55][title]": ["x"], "data[55][groupBuyId]": ["9"] })), ["9"]);
+  // markAsClosed：data[0][groupBuyIds] 換行分隔、參數 groupBuyIds 逗點分隔
+  assert.deepEqual(m.restrictedGroupBuyRefs("/ajax/GroupBuy/markAsClosed", [], ["3,4"], flat({ "data[0][groupBuyIds]": ["5\n6"] })), ["3", "4", "5", "6"]);
+  assert.deepEqual(m.restrictedGroupBuyRefs("/ajax/X", [" "], [""], flat({})), []);
+  // 搭配 restrictedGroupBuyDenied：未授權的列 id 被拒
+  assert.equal(m.restrictedGroupBuyRefs("/ajax/GroupBuy/update", [], [], flat({ "data[405163][title]": ["x"] })).some((v) => m.restrictedGroupBuyDenied(v, [1])), true);
+});

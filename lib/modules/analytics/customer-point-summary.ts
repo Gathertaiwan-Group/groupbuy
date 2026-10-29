@@ -9,7 +9,7 @@ import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { post, requireSession } from "@/lib/core/http/route-helpers";
 import { download } from "@/lib/core/http/responses";
 import { sanitizeLike } from "@/lib/core/datatables/query";
-import { buildXlsx, XLSX_CONTENT_TYPE, type CellInput } from "./xlsx";
+import { buildXlsx, csvCell, XLSX_CONTENT_TYPE, type CellInput } from "./xlsx";
 import { type AnyRow, ensureFresh, fetchAll, int, num, parseMonth, yyyymm } from "./util";
 
 const HEADERS = ["月份", "姓名", "電子信箱", "電話", "消費總金額", "單筆最高金額", "訂單數量", "會員ID", "目前點數", "當月獲得點數", "當月使用點數"];
@@ -28,12 +28,6 @@ function tpeMonthOf(iso: unknown): string {
   return `${new Date(d.getTime() + 8 * 3600_000).toISOString().slice(0, 7)}-01`;
 }
 
-function csvCell(v: CellInput): string {
-  const s = v == null ? "" : typeof v === "object" ? String(v.v ?? "") : String(v);
-  // 避免 Excel 把 = + - @ 開頭的文字當公式（數字不處理）
-  const safe = typeof v === "string" && /^[=+\-@]/.test(s) ? `'${s}` : s;
-  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
-}
 
 export async function customerPointSummaryRows(tenantId: number, p: Record<string, unknown>): Promise<CellInput[][]> {
   await ensureFresh(tenantId);

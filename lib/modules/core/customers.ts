@@ -297,27 +297,53 @@ async function importSheetSettings(ctx: RequestContext): Promise<Response> {
 async function fetchSheetCsv(url: string): Promise<string> {
   const csvUrl = sheetCsvUrl(url);
   if (!csvUrl) throw badRequest("Google Sheet 網址格式不正確");
-  let res: Response;
-  try {
-    res = await fetch(csvUrl, { redirect: "follow", signal: AbortSignal.timeout(15000), headers: { Accept: "text/csv" } });
-  } catch {
-    throw badRequest("無法連線到 Google Sheet，請稍後再試");
-  }
-  const finalHost = (() => {
+  const notReadable = () =>
+    badRequest("無法讀取 Google Sheet：請將試算表設為「知道連結的任何人都可以檢視」（或發布到網路為 CSV），並確認網址正確");
+  // 轉址自己跟（redirect: "manual"）：每一跳送出前先確認是 https 且為 Google 的主機，
+  // 不讓伺服器對其他主機（內網、雲端中繼資料位址等）發出請求（SSRF）。Google 匯出通常 307 一次到 googleusercontent.com。
+  let res: Response | null = null;
+  let next = csvUrl;
+  for (let hop = 0; hop <= 5; hop++) {
+    let u: URL;
     try {
-      return new URL(res.url || csvUrl).hostname;
+      u = new URL(next);
     } catch {
-      return "";
+      throw notReadable();
     }
-  })();
-  const type = res.headers.get("content-type") ?? "";
-  // 未公開的試算表會被導到 Google 登入頁（accounts.google.com）或回 HTML
-  if (!allowedSheetHost(finalHost) || !res.ok || type.includes("text/html")) {
-    throw badRequest("無法讀取 Google Sheet：請將試算表設為「知道連結的任何人都可以檢視」（或發布到網路為 CSV），並確認網址正確");
+    if (u.protocol !== "https:" || !allowedSheetHost(u.hostname)) throw notReadable();
+    try {
+      res = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(15000), headers: { Accept: "text/csv" } });
+    } catch {
+      throw badRequest("無法連線到 Google Sheet，請稍後再試");
+    }
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) {
+      next = new URL(loc, u).toString();
+      res = null;
+      continue;
+    }
+    break;
   }
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > MAX_CSV_BYTES) throw badRequest("試算表超過 2MB，請分批匯入");
-  return buf.toString("utf8");
+  const type = res?.headers.get("content-type") ?? "";
+  // 未公開的試算表會被導到 Google 登入頁（accounts.google.com，不在允許清單）或回 HTML
+  if (!res || !res.ok || type.includes("text/html")) throw notReadable();
+  // 邊讀邊算大小，超過上限立即中止（不先把整個回應讀進記憶體）
+  const reader = res.body?.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  if (reader) {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_CSV_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw badRequest("試算表超過 2MB，請分批匯入");
+      }
+      chunks.push(value);
+    }
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 function decodeCsv(buf: Buffer): string {

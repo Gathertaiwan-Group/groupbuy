@@ -33,7 +33,8 @@
 			if (!use.length) return '';
 			return use.map(function(c) { return clean(c.header); }).join(',') + '\n' + use.map(function(c) { return clean(c.token).replace(/，/g, ''); }).join(',');
 		}
-		function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+		// 也用在 value="…" 屬性內：引號必須轉義（jQuery .text().html() 不轉引號 → 標頭含 " 可注入事件屬性）
+		function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 		function render() {
 			var $tb = $('#csvColumns tbody').empty();
 			$.each(cols, function(i, c) {
