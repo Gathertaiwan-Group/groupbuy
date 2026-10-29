@@ -33,7 +33,7 @@
 			table: tableName,
 			idSrc: 'customerId',
 			fields: [
-				DataTableConfig.field_input('調整點數', 'adjustPoints', '', '例：100 或 -50', '正數＝加點、負數＝扣點；調整後點數不可小於 0'),
+				DataTableConfig.field_input('調整點數', 'adjustPoints', '', '例：100 或 -50', '正數＝加點、負數＝扣點；單次最多 ±1,000,000 點；扣點後不可小於 0'),
 				DataTableConfig.field_input('調整原因', 'adjustNote', '', '必填，會記錄在點數紀錄'),
 			],
 			formOptions: DataTableConfig.formOptions,
@@ -41,6 +41,16 @@
 		} ).on('initEdit', function() {
 			pointEditor.field('adjustPoints').val('');
 			pointEditor.field('adjustNote').val('');
+			$(pointEditor.field('adjustPoints').input()).attr('maxlength', 9);
+		}).on('preSubmit', function(e, data, action) {
+			// 補F：前端先擋格式與上限（後端 parsePoints／customer_points_adjust 同一規則）
+			if (action !== 'edit') return true;
+			var raw = String(pointEditor.field('adjustPoints').val() || '').replace(/,/g, '').trim();
+			if (!/^[+-]?\d{1,7}$/.test(raw) || Number(raw) === 0 || Math.abs(Number(raw)) > 1000000) {
+				pointEditor.field('adjustPoints').error('請輸入不為 0 的整數（負數＝扣點；單次最多 ±1,000,000 點）');
+				return false;
+			}
+			return true;
 		}).on('submitComplete', function(e, json) {
 			if (json && json.message) displayAlertWarning(json.message);
 			else if (json && json.data) displayAlertSuccess('點數已調整');

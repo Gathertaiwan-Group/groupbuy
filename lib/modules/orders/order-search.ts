@@ -1,5 +1,6 @@
 // 所有訂單列表的查詢條件：DataTables legacy 參數＋頁面 #queryForm 篩選 → DB 函式 groupbuy.orders_search（migration 3001）。
 // 也供匯出報表、批次更新貨運標籤共用（同一組篩選條件）。
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import type { AdminSession } from "@/lib/core/http/types";
 import type { DtRequest } from "@/lib/core/datatables/request";
 import { db, taipeiDateStart, taipeiStartOfDay } from "./common";
@@ -94,6 +95,9 @@ export async function buildSearchParams(session: AdminSession, input: SearchInpu
   const p: Record<string, unknown> = {};
   const groupBuyId = intOrNull(x.groupBuyId);
   if (groupBuyId && groupBuyId > 0) p.group_buy_id = groupBuyId;
+  // 團購受限帳戶（PARITY #37，補F）：所有訂單列表／匯出／批次改貨運標籤只看授權團購（orders_search group_buy_ids，migration 8104）
+  const allowed = await restrictedGroupBuyIds(session);
+  if (allowed) p.group_buy_ids = allowed;
   const customerId = intOrNull(x.customerId);
   if (customerId && customerId > 0) p.customer_id = customerId;
   const salesOrderId = intOrNull(x.salesOrderId);
@@ -248,5 +252,7 @@ export async function searchOrders(session: AdminSession, p: Record<string, unkn
 export async function countAllOrders(session: AdminSession, groupBuyId?: number | null): Promise<number> {
   const p: Record<string, unknown> = { limit: 0 };
   if (groupBuyId) p.group_buy_id = groupBuyId;
+  const allowed = await restrictedGroupBuyIds(session);
+  if (allowed) p.group_buy_ids = allowed;
   return (await searchOrders(session, p)).total;
 }

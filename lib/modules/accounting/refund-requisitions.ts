@@ -103,6 +103,7 @@ async function listRefunds(ctx: RequestContext): Promise<Response> {
     search: ["reason", "requester", "approver", "accountName", "note"],
     like: ["reason", "requester", "approver"],
     defaultOrder: [{ key: "dateCreatedString", ascending: false }],
+    restrictGroupBuy: "group_buy_id", // 團購受限帳戶（PARITY #37，補F）
     where: (q, d) => {
       let qq = q;
       const st = String(d.extra.status ?? "").trim();

@@ -20,6 +20,7 @@
 //   轉銷售 ：訂單 → PROCESSING/ORDER_EMAIL_SENT（＝一般訂單；同 resetSalesOrder），關聯 is_done=true。
 //   釋放保留：訂單 → CANCELED/RESERVATION_CANCELED（date_canceled），關聯 is_done=true，訂單商品可售庫存補回。
 //   狀態異動一律走 adminUpdateOrders（觸發器寫歷程 actor=ADMIN）。
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { any, get, page, post, requireSession } from "@/lib/core/http/route-helpers";
 import { FieldErrors, badRequest, notFound } from "@/lib/core/http/errors";
@@ -114,6 +115,11 @@ async function orderIdsByUid(session: AdminSession, uid: string | undefined): Pr
   return [...new Set(((data ?? []) as { sales_order_id: number }[]).map((r) => Number(r.sales_order_id)))];
 }
 
+/** 團購受限帳戶（PARITY #37，補F）：只看授權團購；allowed＝null 不限 */
+function restrictGb(q: AnyQuery, allowed: number[] | null): AnyQuery {
+  return allowed ? q.in("group_buy_id", allowed.length ? allowed : [-1]) : q;
+}
+
 function applyResFilters(q: AnyQuery, f: ResFilters, uidOrderIds: number[] | null, salesOrderIds: number[] = []): AnyQuery {
   // 只顯示進行中訂單（checkbox → "true"/"false"）
   const hideDone = str(f.hideDone).toLowerCase();
@@ -135,14 +141,20 @@ function applyResFilters(q: AnyQuery, f: ResFilters, uidOrderIds: number[] | nul
   return q;
 }
 
-function resQuerySpec(session: AdminSession, f: ResFilters, uidOrderIds: number[] | null, salesOrderIds: number[] = []): DtQuerySpec {
+function resQuerySpec(
+  session: AdminSession,
+  f: ResFilters,
+  uidOrderIds: number[] | null,
+  salesOrderIds: number[] = [],
+  allowed: number[] | null = null,
+): DtQuerySpec {
   return {
     table: RES_VIEW,
     select: "*",
     tenantId: session.tenantId,
     columnMap: salesOrderReservation.fields,
     likeColumns: ["uuid", "sales_name", "target_name"],
-    where: (q) => applyResFilters(q, f, uidOrderIds, salesOrderIds),
+    where: (q) => restrictGb(applyResFilters(q, f, uidOrderIds, salesOrderIds), allowed),
     defaultOrder: [{ column: "created_at", ascending: false }],
     tieBreaker: "relation_id",
   };
@@ -183,7 +195,7 @@ async function listReservations(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const dt = await parseDtRequest(ctx);
   const uidIds = await orderIdsByUid(session, dt.extra.uid);
-  const result = await dtQuery<Row>(db(), dt, resQuerySpec(session, dt.extra, uidIds));
+  const result = await dtQuery<Row>(db(), dt, resQuerySpec(session, dt.extra, uidIds, [], await restrictedGroupBuyIds(session)));
   const rows = await toReservationApi(session, result.rows);
   return dtResponse(
     dt,
@@ -198,13 +210,14 @@ async function listReservationItems(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const dt = await parseDtRequest(ctx);
   const uid = sanitizeLike(str(dt.extra.uid));
+  const allowed = await restrictedGroupBuyIds(session);
   const result = await dtQuery<Row>(db(), dt, {
     table: ITEM_VIEW,
     select: "*",
     tenantId: session.tenantId,
     columnMap: salesOrderReservationItem.fields,
     likeColumns: ["title", "uid", "sales_name"],
-    where: (q) => (uid ? q.ilike("uid", `%${uid}%`) : q),
+    where: (q) => restrictGb(uid ? q.ilike("uid", `%${uid}%`) : q, allowed),
     defaultOrder: [{ column: "sales_name", ascending: false }],
     tieBreaker: "order_item_id",
   });
@@ -561,7 +574,7 @@ async function batchAction(ctx: RequestContext): Promise<Response> {
   const dt = await dtFromQueryJson(str(await ctx.param("query")));
   const selected = parseIds(str(await ctx.param("salesOrderIds")));
   const uidIds = await orderIdsByUid(session, dt.extra.uid);
-  const spec = resQuerySpec(session, dt.extra, uidIds, selected);
+  const spec = resQuerySpec(session, dt.extra, uidIds, selected, await restrictedGroupBuyIds(session));
   const want = Math.min(4000, dt.length > 0 ? dt.length : 4000);
   const rows: Row[] = [];
   for (let off = 0; off < want; off += 1000) {

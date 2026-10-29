@@ -8,6 +8,7 @@
 //   POST /ajax/SalesOrder/list                       列表（serverSide；回應另含 b2sTotal）
 //   GET  /ajax/SalesOrder/get?salesOrderId=|uuid=    單筆（拆單彈窗等用）
 //   POST /ajax/SalesOrder/save|update|delete         Editor 新增／修改／刪除（刪除＝階段改為已刪除，列表不再顯示）
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import { tenantPosEnabled } from "./pos-invoice-print";
 import type { RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, page, requireSession } from "@/lib/core/http/route-helpers";
@@ -75,12 +76,11 @@ async function listSalesOrders(ctx: RequestContext): Promise<Response> {
 /** GET /ajax/GroupBuy/jsonOptions：所有訂單頁的「團購」下拉（value 為數字，原站 indexOf 比對） */
 async function groupBuyJsonOptions(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
-  const { data, error } = await db()
-    .from("group_buys")
-    .select("id,title")
-    .eq("tenant_id", session.tenantId)
-    .order("id", { ascending: false })
-    .limit(1000);
+  let q = db().from("group_buys").select("id,title").eq("tenant_id", session.tenantId);
+  // 團購受限帳戶（PARITY #37，補F）：只列授權團購
+  const allowed = await restrictedGroupBuyIds(session);
+  if (allowed) q = q.in("id", allowed.length ? allowed : [-1]);
+  const { data, error } = await q.order("id", { ascending: false }).limit(1000);
   if (error) throw new Error(`[orders] 讀取團購失敗：${error.message}`);
   return json(((data ?? []) as { id: number; title: string }[]).map((g) => ({ value: g.id, label: g.title })));
 }

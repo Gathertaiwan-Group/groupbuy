@@ -160,7 +160,8 @@ export async function computePricing(scope: PosScope, d: Draft): Promise<Reprice
     qty: num(i.total),
     backOrder: !!i.back_order,
   }));
-  const balance = num(d.customer?.points);
+  // 補F：回饋點數扣回可能讓餘額為負（migration 8103）→ 可折抵點數以 0 為下限（負數會變成「加收」）
+  const balance = Math.max(0, num(d.customer?.points));
   const r = await priceCart({
     tenantId: session.tenantId,
     groupBuy: gb,

@@ -60,6 +60,12 @@ test("會員匯入：標頭對應、標籤合併、點數、列號範圍", () =>
   assert.equal(C.parsePoints("-50"), -50);
   assert.equal(C.parsePoints("1,000"), 1000);
   assert.ok(Number.isNaN(C.parsePoints("1.5")));
+  // 補F：單次上限 ±1,000,000（9 位數以上原本會讓 DB 整數溢位 → 500）
+  assert.equal(C.parsePoints("1000000"), 1000000);
+  assert.equal(C.parsePoints("-1,000,000"), -1000000);
+  assert.ok(Number.isNaN(C.parsePoints("1000001")));
+  assert.ok(Number.isNaN(C.parsePoints("999999999")));
+  assert.ok(Number.isNaN(C.parsePoints("-2147483648")));
   assert.deepEqual(C.rowRange("1", "2", 10), { from: 2, to: 2 }, "起始列 1＝標頭 → 從第 2 列");
   assert.deepEqual(C.rowRange("", "", 5), { from: 2, to: 5 });
   assert.deepEqual(C.rowRange("3", "99", 5), { from: 3, to: 5 });

@@ -11,8 +11,7 @@ import { isSecureRequest, readSession } from "@/lib/core/auth/session";
 import { CSRF_FIELD, CSRF_HEADER, csrfCookieIfNeeded, csrfTokenMatches, expectedCsrfToken, injectCsrfScript } from "./csrf";
 import { allRoutes } from "@/lib/modules";
 import { renderLoginPage } from "@/lib/modules/core/auth-pages";
-import { isGroupBuyRestricted, restrictedGroupBuyDenied, restrictedGroupBuyRefs } from "@/lib/modules/groupbuy/admin-groupbuys-logic";
-import { authorizedGroupBuyIds } from "@/lib/modules/groupbuy/groupbuy-extras";
+import { restrictedGuard } from "@/lib/modules/groupbuy/restricted-scope";
 import { renderBackendPage, renderNoPermission } from "@/lib/core/render/layout";
 
 let router: Router | null = null;
@@ -226,14 +225,13 @@ export async function dispatch(req: Request): Promise<Response> {
     if (route.permission && !hasPermission(ctx.session, route.permission)) {
       return ctx.isAjax || method !== "GET" ? jsonError(403, "無權限") : renderNoPermission(ctx);
     }
-    // 團購受限帳戶（PARITY #37，補E；推導旗標 permissions.groupBuyRestricted）：帶 groupBuyId 的請求只能是授權的團購
-    if (isGroupBuyRestricted(ctx.session.permissions)) {
-      // 同名參數全部檢查（query＋body；匯出等端點會收多個 groupBuyId）＋groupBuyIds＋Editor 欄位／團購 Editor 列 id（見 restrictedGroupBuyRefs）
-      const raws = restrictedGroupBuyRefs(route.path, await ctx.params_all("groupBuyId"), await ctx.params_all("groupBuyIds"), (await ctx.body()).flat);
-      const allowed = raws.length ? await authorizedGroupBuyIds(ctx.session) : [];
-      if (raws.some((v) => restrictedGroupBuyDenied(v, allowed))) {
-        return ctx.isAjax || method !== "GET" ? jsonError(403, "無權限（受限帳戶只能管理授權的團購）") : renderNoPermission(ctx);
-      }
+    // 團購受限帳戶（PARITY #37；補E 帶 groupBuyId 的請求、補F 擴大為全部後台請求，推導旗標 permissions.groupBuyRestricted）：
+    // 團購參照（任何 *groupBuyId(s) 參數、Editor 欄位、JSON 內同名鍵）與資源參照（訂單、商品、短網址、出貨紀錄…反查所屬團購）
+    // 都必須在授權清單內；路由依政策 neutral／filtered（列表自行過濾）／deny／scoped（預設：至少要有一個授權參照）。
+    // 見 lib/modules/groupbuy/restricted-scope-logic.ts
+    const denied = await restrictedGuard(ctx, route.path);
+    if (denied) {
+      return ctx.isAjax || method !== "GET" ? jsonError(403, `無權限（${denied}）`) : renderNoPermission(ctx);
     }
   }
 

@@ -208,7 +208,8 @@ async function rpcAdjust(tenantId: number, customerId: number, points: number, n
     p_note: note,
   });
   if (error) {
-    if (error.message.includes("POINTS_NEGATIVE")) return { error: "點數不足（調整後不可小於 0）" };
+    if (error.message.includes("POINTS_NEGATIVE")) return { error: "點數不足（扣點後不可小於 0）" };
+    if (error.message.includes("POINTS_TOO_LARGE")) return { error: "點數超過上限（單次調整最多 1,000,000 點）" };
     if (error.message.includes("CUSTOMER_NOT_FOUND")) return { error: "找不到會員" };
     if (error.message.includes("POINTS_ZERO")) return { error: "調整點數不可為 0" };
     throw new Error(`[Customer] 點數調整失敗：${error.message}`);
@@ -225,7 +226,7 @@ async function adjustPoints(ctx: RequestContext): Promise<Response> {
   await loadCustomers(s.tenantId, ids);
   const v0 = rowValues(req, ids[0]);
   const points = parsePoints(v0.adjustPoints);
-  if (!Number.isFinite(points) || points === 0) throw new FieldErrors([{ name: "adjustPoints", status: "請輸入不為 0 的整數（負數＝扣點）" }]);
+  if (!Number.isFinite(points) || points === 0) throw new FieldErrors([{ name: "adjustPoints", status: "請輸入不為 0 的整數（負數＝扣點；單次最多 ±1,000,000 點）" }]);
   const note = String(v0.adjustNote ?? "").trim();
   if (!note) throw new FieldErrors([{ name: "adjustNote", status: "請填寫調整原因" }]);
   const fullNote = `${note}（${s.account}）`;
@@ -441,7 +442,7 @@ export async function importCustomerRows(session: AdminSession, csvText: string,
       if (patch.note !== undefined) res.noted++;
     }
     const pts = parsePoints(cell(r, cols.points));
-    if (Number.isNaN(pts)) res.errors.push(`第 ${n} 列：點數需為整數`);
+    if (Number.isNaN(pts)) res.errors.push(`第 ${n} 列：點數需為整數（單次最多 ±1,000,000 點）`);
     else if (pts !== 0) {
       const a = await rpcAdjust(session.tenantId, c.id, pts, `${source}匯入第 ${n} 列（${session.account}）`);
       if ("error" in a) res.errors.push(`第 ${n} 列：${a.error}`);

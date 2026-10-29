@@ -142,6 +142,8 @@ async function listRecords(ctx: RequestContext): Promise<Response> {
       return out;
     },
     defaultOrder: [{ key: "dateExportedString", ascending: false }],
+    // 團購受限帳戶（PARITY #37，補F）：只列授權團購的出貨紀錄；多團匯出（group_buy_id 為空）不列
+    restrictGroupBuy: "group_buy_id",
     mapRow: (api, row) => recordRow(api, row),
     options: () => enumOptionsFor({ backOrder: { key: "ShippingRecord.backOrder", useInt: true }, shippingType: "ShippingType" }),
   });

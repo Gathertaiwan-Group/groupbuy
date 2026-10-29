@@ -75,12 +75,16 @@ export function mergeTags(existing: unknown, add: unknown): string | null {
   return next.join(",").slice(0, 2000);
 }
 
-/** 點數欄：整數（可負）；空白＝0；非整數 → NaN */
+/** 單次點數調整上限（加點／扣點各 1,000,000；DB customer_points_adjust 同一上限，migration 8104） */
+export const MAX_POINTS_ADJUST = 1_000_000;
+
+/** 點數欄：整數（可負，絕對值 ≤ MAX_POINTS_ADJUST）；空白＝0；非整數或超過上限 → NaN */
 export function parsePoints(v: unknown): number {
   const s = String(v ?? "").replace(/,/g, "").trim();
   if (!s) return 0;
-  if (!/^[+-]?\d{1,9}$/.test(s)) return NaN;
-  return Number(s);
+  if (!/^[+-]?\d{1,7}$/.test(s)) return NaN;
+  const n = Number(s);
+  return Math.abs(n) > MAX_POINTS_ADJUST ? NaN : n;
 }
 
 /**

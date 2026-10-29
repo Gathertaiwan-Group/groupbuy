@@ -21,6 +21,7 @@
 //   GET  /ajax/Invoice/previewInvoice?salesOrderId=    預覽開立明細
 //   GET  /ajax/Invoice/displayIssueInvalid|displayIssueInvoice|displaySalesOrderInvoices  彈窗（路徑見 SPEC；內容推導）
 //   GET  /ajax/Invoice/displayAllowance?invoiceId=     開立折讓彈窗（本系統自訂路徑）
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import { getServiceClient } from "@/lib/supabase/server";
 import { invoice } from "@/lib/db/entities";
 import { rowToApi, type Row } from "@/lib/db/mapping";
@@ -128,6 +129,7 @@ async function listInvoices(ctx: RequestContext): Promise<Response> {
     },
     mapRow: (_api, row) => invoiceApi(row as InvRow),
     options: () => enumOptionsFor({ invoiceStatus: STATUS_ENUM }),
+    restrictGroupBuy: "group_buy_id", // 團購受限帳戶（PARITY #37，補F）
   };
   return listEntity(ctx, invoice, spec);
 }
@@ -625,7 +627,11 @@ async function invoiceStatusSummary(ctx: RequestContext): Promise<Response> {
   const session = requireSession(ctx);
   const db = getServiceClient();
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const base = () => db.from("invoices").select("id", { count: "exact", head: true }).eq("tenant_id", session.tenantId);
+  const allowed = await restrictedGroupBuyIds(session); // 團購受限帳戶：只算授權團購
+  const base = () => {
+    const q = db.from("invoices").select("id", { count: "exact", head: true }).eq("tenant_id", session.tenantId);
+    return allowed ? q.in("group_buy_id", allowed.length ? allowed : [-1]) : q;
+  };
   const count = async (build: (q: ReturnType<typeof base>) => ReturnType<typeof base>) => {
     const { count: c, error } = await build(base());
     if (error) throw new Error(`[accounting] ${error.message}`);
@@ -1041,11 +1047,14 @@ export const invoiceRoutes: RouteDef[] = [
 
 /** 側欄「電子發票」紅色數字：發送失敗筆數 */
 export async function failedInvoiceCount(session: AdminSession): Promise<number> {
-  const { count } = await getServiceClient()
+  let q = getServiceClient()
     .from("invoices")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", session.tenantId)
     .eq("invoice_status", "EINVOICE_FAILED");
+  const allowed = await restrictedGroupBuyIds(session); // 團購受限帳戶：只算授權團購
+  if (allowed) q = q.in("group_buy_id", allowed.length ? allowed : [-1]);
+  const { count } = await q;
   return count ?? 0;
 }
 

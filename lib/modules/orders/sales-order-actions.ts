@@ -3,6 +3,7 @@
 //   DataTableConfig.actionButton（確認框）→ 成功 actionOk(訊息)；失敗 HTTP 4xx {error}（顯示在確認框）
 //   initAjaxForm 表單（取消訂單、設為已出貨、拆單…）→ {code:200, error:訊息, data:[…]}
 //   Editor（寄信、更新超取小白單、設為準備出貨中）→ {data:[…]}（另帶 message/notIntegrated）
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import { ecpayPayment, envSuffix } from "@/lib/modules/accounting/gateway";
 import { periodBaseTradeNo, reauthBlockReason, statusAfterAuth, type PeriodTx } from "./reauth-period-logic";
 import { queuePaymentEmail } from "@/lib/modules/core/delivery";
@@ -775,11 +776,15 @@ async function shippingRecordLookup(ctx: RequestContext): Promise<Response> {
   const client = db();
   const label = (r: { id: number; file_name: string | null; created_at: string; order_count: number }) =>
     `#${r.id} ${r.file_name ?? ""} ${taipeiDateTime(r.created_at)}（${r.order_count ?? 0} 筆）`.replace(/\s+/g, " ").trim();
+  // 團購受限帳戶（PARITY #37，補F）：只列授權團購的出貨紀錄（多團匯出的不列）
+  const allowed = await restrictedGroupBuyIds(session);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const scope = (q: any): any => (allowed ? q.in("group_buy_id", allowed.length ? allowed : [-1]) : q);
   if (p.initialValue) {
-    const { data } = await client.from("shipping_records").select("id,file_name,created_at,order_count").eq("tenant_id", session.tenantId).in("id", p.ids.length ? p.ids : [0]);
+    const { data } = await scope(client.from("shipping_records").select("id,file_name,created_at,order_count").eq("tenant_id", session.tenantId).in("id", p.ids.length ? p.ids : [0]));
     return select2Initial(((data ?? []) as { id: number; file_name: string | null; created_at: string; order_count: number }[]).map((r) => ({ id: r.id, text: label(r) })));
   }
-  let q = client.from("shipping_records").select("id,file_name,created_at,order_count").eq("tenant_id", session.tenantId);
+  let q = scope(client.from("shipping_records").select("id,file_name,created_at,order_count").eq("tenant_id", session.tenantId));
   const term = p.term.replace(/[,()"\\*%]/g, " ").trim();
   if (term) q = /^\d+$/.test(term) ? q.eq("id", Number(term)) : q.ilike("file_name", `%${term}%`);
   const { data } = await q.order("id", { ascending: false }).range((p.page - 1) * 30, p.page * 30);

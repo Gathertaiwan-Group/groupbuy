@@ -18,6 +18,7 @@
 //        之後由 core/delivery 排程寄送（MESSAGE_DELIVERY_MODE 白名單／未設定服務商時不寄出，見 ARCHITECTURE §12）
 //
 // 推導（原站未擷取到資料，records=0）：各列表的篩選條件、已收貨／已完成對訂單的影響、未取退貨率公式 —— 見 docs/modules/shipping.md。
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { get, page, post, requireSession } from "@/lib/core/http/route-helpers";
 import { actionOk, json } from "@/lib/core/http/responses";
@@ -103,7 +104,10 @@ function unshippedWhere(q: AnyQuery): AnyQuery {
 }
 
 async function countWhere(table: string, session: AdminSession, where: (q: AnyQuery) => AnyQuery): Promise<number> {
-  const q = db().from(table).select("*", { count: "exact", head: true }).eq("tenant_id", session.tenantId) as unknown as AnyQuery;
+  let q = db().from(table).select("*", { count: "exact", head: true }).eq("tenant_id", session.tenantId) as unknown as AnyQuery;
+  // 團購受限帳戶（PARITY #37，補F）：徽章只算授權團購
+  const allowed = await restrictedGroupBuyIds(session);
+  if (allowed) q = q.in("group_buy_id", allowed.length ? allowed : [-1]);
   const { count, error } = (await where(q)) as unknown as { count: number | null; error: { message: string } | null };
   if (error) throw new Error(`[shipping] 計數失敗：${error.message}`);
   return count ?? 0;
@@ -155,6 +159,7 @@ function listCvs(ctx: RequestContext): Promise<Response> {
     search: ["uuid", "trackingNumber"],
     where: (q, dt) => cvsWhere(q, str(dt.extra.shippingStatus).toUpperCase() || "ARRIVED", truthy(dt.extra.ignoreNotified)),
     defaultOrder: [{ key: "dateArrivedString", ascending: true }],
+    restrictGroupBuy: "group_buy_id",
     options: () => enumOptionsFor({ status: "SalesOrderCVSTrace.status" }),
     extra: attachItems,
   });
@@ -170,6 +175,7 @@ function listPickup(ctx: RequestContext): Promise<Response> {
     search: ["uuid", "customerFirstname", "customerTelephone"],
     where: (q) => pickupWhere(q),
     defaultOrder: [{ key: "dateCreatedString", ascending: true }],
+    restrictGroupBuy: "group_buy_id",
     mapRow: (api) => orderRow(api),
     options: orderOptions,
     extra: attachItems,
@@ -181,6 +187,7 @@ function listUnshipped(ctx: RequestContext): Promise<Response> {
     search: ["uuid", "customerFirstname", "customerTelephone"],
     where: (q) => unshippedWhere(q),
     defaultOrder: [{ key: "dateCreatedString", ascending: true }],
+    restrictGroupBuy: "group_buy_id",
     mapRow: (api) => orderRow(api),
     options: orderOptions,
     extra: attachItems,

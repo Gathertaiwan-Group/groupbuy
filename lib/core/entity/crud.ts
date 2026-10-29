@@ -41,6 +41,11 @@ export interface ListSpec {
   extra?: (ctx: EntityCtx, rows: Row[]) => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** 非 serverSide 時最多回傳筆數（預設 10000） */
   maxRows?: number;
+  /**
+   * 團購受限帳戶（PARITY #37，補F）：表上的團購欄位（例 'group_buy_id'）。設定後受限帳戶只列授權團購的資料
+   * （跨團購列表必填；restricted-scope-logic.ts 的 filtered 路由靠它過濾）。
+   */
+  restrictGroupBuy?: string;
 }
 
 function dbColumnOf(entity: EntityDef, key: string): string | undefined {
@@ -57,6 +62,19 @@ function defaultSearchColumns(entity: EntityDef): string[] {
   return [...cols];
 }
 
+/** 受限帳戶：在原本條件外加「團購欄位 ∈ 授權團購」（空清單＝0 筆） */
+function restrictWhere(
+  where: ((q: AnyQuery, dt: DtRequest) => AnyQuery) | undefined,
+  column: string | undefined,
+  allowed: number[] | null,
+): ((q: AnyQuery, dt: DtRequest) => AnyQuery) | undefined {
+  if (!column || allowed === null) return where;
+  return (q, dt) => {
+    const base = where ? where(q, dt) : q;
+    return base.in(column, allowed.length ? allowed : [-1]);
+  };
+}
+
 export async function listEntity(ctx: RequestContext, entity: EntityDef, spec: ListSpec = {}): Promise<Response> {
   const started = Date.now();
   const session = requireSession(ctx);
@@ -65,6 +83,9 @@ export async function listEntity(ctx: RequestContext, entity: EntityDef, spec: L
   const searchColumns = spec.search
     ? spec.search.map((k) => dbColumnOf(entity, k)).filter((c): c is string => !!c)
     : defaultSearchColumns(entity);
+  const allowedGroupBuys = spec.restrictGroupBuy
+    ? await (await import("@/lib/modules/groupbuy/restricted-scope")).restrictedGroupBuyIds(session)
+    : null;
   const result = await dtQuery<Row>(getServiceClient(), dt, {
     table: entity.table,
     select: spec.select ?? "*",
@@ -73,7 +94,7 @@ export async function listEntity(ctx: RequestContext, entity: EntityDef, spec: L
     columnMap: entity.fields,
     searchColumns,
     likeColumns: (spec.like ?? []).map((k) => dbColumnOf(entity, k)).filter((c): c is string => !!c),
-    where: spec.where ? (q, d) => spec.where!(q, d, ectx) : undefined,
+    where: restrictWhere(spec.where ? (q, d) => spec.where!(q, d, ectx) : undefined, spec.restrictGroupBuy, allowedGroupBuys),
     defaultOrder: (spec.defaultOrder ?? [{ key: entity.idColumn, ascending: true }]).map((o) => ({
       column: dbColumnOf(entity, o.key) ?? o.key,
       ascending: o.ascending ?? true,

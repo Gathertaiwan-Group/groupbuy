@@ -10,6 +10,7 @@
 //   GET  /backend/ShippingCSV/importShippingCSV?groupBuyId=   匯入彈窗（片段，需指定團購）
 //   POST /ajax/ShippingCSV/importShippingCSV                  上傳物流商回傳檔 → 寫入貨運編號／出貨日／已出貨
 //   GET  /ajax/ShippingTag/getByTag?tag=                      貨運標籤設定（帶入匯入檔標頭名稱）
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { fragment, get, post, requireSession } from "@/lib/core/http/route-helpers";
 import { actionOk, json } from "@/lib/core/http/responses";
@@ -71,6 +72,8 @@ interface ExportParams {
   fileFormat: "XLS" | "CSV";
   oneShippingRecord: boolean;
   limit: number;
+  /** 團購受限帳戶（PARITY #37，補F）：未指定團購時只選授權團購的訂單；null＝不限 */
+  allowedGroupBuys: number[] | null;
 }
 
 async function readParams(ctx: RequestContext, session: AdminSession): Promise<ExportParams> {
@@ -96,6 +99,7 @@ async function readParams(ctx: RequestContext, session: AdminSession): Promise<E
     fileFormat: (await p("fileFormat")).toUpperCase() === "CSV" ? "CSV" : "XLS",
     oneShippingRecord: on(await p("oneShippingRecord")),
     limit: Number.isSafeInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, MAX_EXPORT) : MAX_EXPORT,
+    allowedGroupBuys: await restrictedGroupBuyIds(session),
   };
 }
 
@@ -122,6 +126,7 @@ async function selectOrders(session: AdminSession, x: ExportParams): Promise<Can
       .eq("tenant_id", session.tenantId)
       .neq("shipping_type", "NOD");
     if (x.groupBuyIds.length) q = q.in("group_buy_id", x.groupBuyIds);
+    if (x.allowedGroupBuys) q = q.in("group_buy_id", x.allowedGroupBuys.length ? x.allowedGroupBuys : [-1]);
     if (x.orderFilter === "UNSHIPPED") {
       q = q.in("state", ["NEW", "PROCESSING"]).is("date_shipped", null).not("status", "in", `(${SHIPPED_STATUSES.join(",")})`);
     } else {

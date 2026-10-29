@@ -110,5 +110,37 @@
 
 ## 補E（2026-10-29）
 
-- **團購受限帳戶**（PARITY #37，推導）：`lib/core/http/dispatch.ts` 在權限檢查後，對 `admin_users.permissions.groupBuyRestricted` 的帳號統一檢查請求的全部 `groupBuyId`（網址參數＋表單欄位的同名多值都檢查；解析方式同端點，`12.0`／`0xc`／`1e1`／千分位逗點都不能繞過）：不在「編輯團購管理員」授權清單 → 頁面顯示無權限、AJAX 回 403「無權限（受限帳戶只能管理授權的團購）」（`admin-groupbuys-logic.ts` `restrictedGroupBuyDenied`，`admin-groupbuys.test.ts`）。涵蓋單一團購的頁面與 AJAX（品項、單一團購訂單、進階設定、報表…）；跨團購的列表（所有訂單、出貨紀錄等不帶 groupBuyId 的頁）仍只以租戶隔離。
+- **團購受限帳戶**（PARITY #37，推導）：`lib/core/http/dispatch.ts` 在權限檢查後，對 `admin_users.permissions.groupBuyRestricted` 的帳號統一檢查請求的全部 `groupBuyId`（網址參數＋表單欄位的同名多值都檢查；解析方式同端點，`12.0`／`0xc`／`1e1`／千分位逗點都不能繞過）：不在「編輯團購管理員」授權清單 → 頁面顯示無權限、AJAX 回 403「無權限（受限帳戶只能管理授權的團購）」（`admin-groupbuys-logic.ts` `restrictedGroupBuyDenied`，`admin-groupbuys.test.ts`）。涵蓋單一團購的頁面與 AJAX（品項、單一團購訂單、進階設定、報表…）；跨團購的列表（所有訂單、出貨紀錄等不帶 groupBuyId 的頁）仍只以租戶隔離。→ 補F 已擴及全部後台請求與跨團購列表（見下方「補F」）。
 - 本機實測（暫時把測試帳號設為受限、只授權 405167，測完還原）：`/backend/SalesOrder/list?groupBuyId=405167` 正常、`=405163` 顯示無權限；`POST /ajax/GroupBuyItemSet/list` 帶 405163 → 403、帶 405167 → 200。
+
+## 補F（2026-10-29）：團購受限帳戶擴及全部後台請求（PARITY #37，推導）
+
+原站受限帳戶在跨團購頁面的行為未擷取；以下全部為推導，原則是「看不到未授權團購的任何資料，寧可多擋」。
+
+- **統一檢查**：`lib/core/http/dispatch.ts` → `lib/modules/groupbuy/restricted-scope.ts` `restrictedGuard`（純邏輯 `restricted-scope-logic.ts`，`restricted-scope.test.ts`）。對 `permissions.groupBuyRestricted` 的帳號，每個後台請求：
+  1. **團購參照**：任何名稱以 `groupBuyId`／`groupBuyIds` 結尾的參數（含 `groupBuyId[]`、`data[n][groupBuyId]`、`toGroupBuyId`、`fromGroupBuyId`、`bGroupBuyId`、`excludedGroupBuyId`）、JSON 字串參數內的同名鍵（`json`、`query`、`targets[].groupBuyId`、`rows[]`…）、團購 Editor 的列 id、排程的 `foreignId`。值取出**所有連續數字**逐一檢查（`4,05`、`12 34`、`1e1` 都會拆開；`0`＝所有訂單頁，不算參照）。
+  2. **資源參照**（反查所屬團購）：`salesOrderId(s)`、`uuid(s)`／`toUuid`／`salesOrderUUID`（訂單；客服對話路由的 `uuid`＝對話 id）、`orderItemId`、`relationId`、`groupBuyItemSetId`、`itemId`／`parentItemId`（商品 → 商品組 → 團購，共用商品組只要有一個授權團購即可）、`itemSetId`、`itemBundleId`、`salesRuleId`、`groupBuyCouponId`、`couponCodeId`、`lotteryId`、`invoiceId`、`conversationId`、`refundRequisitionId`、`shippingRecordId`（多團匯出的紀錄看紀錄內全部訂單）、`bankTransactionId`、官網型內容（homeView／section／item、webMenu／node、news、lookbook、post、postCategory）、`groupBuyPreferenceId`、`fbGroupId`、`facebookAuthGroupBuyId`、團購運費綁定、通路團購、團購標籤、`schedulerId`、`shortUrl`／`shortUrl1`／`shortUrl2`；以及 Editor 的 `data[<列 id>]`（依路由前綴對應資料表，例 `/ajax/SalesOrder/*`→訂單、`/ajax/GroupBuyItemSet/*`→團購品項；action=create 的 `data[0]` 不算）。
+  3. **路由政策**：
+     - `neutral`（不含各團資料，放行）：改密碼、通知、上傳、系統設定／管理員帳號（各自權限旗標控管）、租戶共用設定（貨運標籤、自取門市、優惠卷樣板、短網址）與其 lookup（運費規則、門市、會員方案、會員卡、標籤字典）、團購運費頁內嵌的單一運費規則讀取 `FlatRateShipping/dList`。
+     - `filtered`（處理函式依授權團購過濾；帶參照時仍須授權）：見下表。
+     - `deny`（一律拒絕）：會員／點數紀錄／每月消費統計下載、黑名單列表與維護、倉儲全部、銷售通路、月結單、銷售一覽與各彙總報表（每日商品銷售、團購銷售月統計、訂單月統計、ERP 銷售報表、月報表匯出、即時統計、ROAS 上傳）、團購標籤字典與跨團標籤（列出套用的所有團購、依標題批次貼標）、運費規則管理（列出各團使用情況、解除舊團綁定、改共用規則）、會改到其他團購的同步／批次（同步同名品項、子商品、組合名稱與內容、依 uuid 匯入貨運單、重算已出貨、批次同步特色標籤）、外部訂單匯入設定、簡訊發送、`/backend/dev/*`。
+     - `scoped`（其餘全部，預設）：至少要有一個團購／資源參照，且全部在授權清單內；Editor 列 id 對不到資料表 → 拒絕；參照找不到資料 → 拒絕。商品列表 `uidAll`／`parentItemId` 模式（撈全租戶同代碼商品）另外拒絕。
+  4. 拒絕：頁面顯示原站「無權限」、AJAX／POST 回 403 `無權限（…）`。
+- **跨團購列表的過濾**（不帶 groupBuyId 時只列授權團購；授權 0 團＝0 筆）：
+
+  | 功能 | 端點（AJAX／下載） | 過濾位置 |
+  |---|---|---|
+  | 所有訂單（列表、總數、可轉現貨數、匯出 batchAction、依列表批次改貨運標籤） | `/ajax/SalesOrder/list`、`/backend/SalesOrderExport/batchAction`、`/backend/SalesOrder/batchAction`、`/ajax/SalesOrder/updateShippingTag` | `orders/order-search.ts` `buildSearchParams`／`countAllOrders` → `orders_search` 的 `group_buy_ids`（migration 8104）；`orders/b2s.ts` |
+  | 團購下拉／lookup | `/ajax/GroupBuy/jsonOptions`、`/ajax/Lookup/groupBuy`（含 initialValue） | sales-order-list.ts、core/lookup.ts |
+  | 退換貨（列表、匯出、貨運清單） | `/ajax/SalesOrderReturn/list`、`/backend/SalesOrderReturn/batchAction` | returns.ts `applyFilters`、listSpec |
+  | 保留單（列表、保留商品、匯出） | `/ajax/SalesOrderReservation/list`、`listItem`、`/backend/SalesOrderReservation/batchAction` | reservations.ts `resQuerySpec` |
+  | 客服對話（列表、狀態計數、徽章） | `/ajax/helpdesk/Conversation/list`、`status` | helpdesk.ts |
+  | 出貨紀錄（匯出／月份紀錄列表、lookup） | `/ajax/ShippingRecord/list`、`/ajax/ShippingRecord/lookup` | shipping-record.ts、sales-order-actions.ts（多團匯出的紀錄不列） |
+  | 匯出出貨（未指定團購＝日期區間） | `/ajax/ShippingCSV/countOrders`、`exportOrders` | shipping-csv.ts `selectOrders` |
+  | 超商未取／自取未取／超時出貨（列表、徽章） | `/ajax/SalesOrderCVSTrace/list`、`listPickup`、`listUnshipped` | cvs-trace.ts |
+  | 電子發票（列表、狀態計數、徽章）、退款單據 | `/ajax/Invoice/list`、`status`、`/ajax/RefundRequisition/list` | invoices.ts、refund-requisitions.ts |
+  | 側欄徽章 | `/ajax/AdminUser/info` | 各模組 badges（報表授權、發票、客服、超商／自取／超時） |
+  | 團購列表 | `/ajax/GroupBuy/list` | 補D preFilterIds（不變） |
+
+  共用：`lib/core/entity/crud.ts` `ListSpec.restrictGroupBuy`（列表與總數都套用）；`restrictedGroupBuyIds(session)`（同一請求只查一次）。
+- **本機實測**（dev server 連正式庫；`lib/modules/groupbuy/tools/restricted-e2e.mjs run`：建 `[補F]` 未授權團購 B＋訂單／出貨紀錄／客服對話／發票，暫時把 guest1_a 設為受限、只授權 405167，測完還原權限與授權、刪除測試資料、比對不變量）：見 PARITY_AUDIT #37。

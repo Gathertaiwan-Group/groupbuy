@@ -1,6 +1,7 @@
 // select2 查詢端點（原站 {GBF.baseUrl}/ajax/Lookup/*）。
 // select2 預設送 term（與 q）、_type、page；回應 { results:[{id,text}], pagination:{more} }。
 // Editor select2 欄位帶初始值時，shim 會送 initialValue=true&value=<id>，回應 { id, text }。
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import { getServiceClient } from "@/lib/supabase/server";
 import type { RequestContext } from "@/lib/core/http/types";
 import { json } from "@/lib/core/http/responses";
@@ -18,19 +19,22 @@ export async function lookupGroupBuy(ctx: RequestContext): Promise<Response> {
   const db = getServiceClient();
   const p = await select2Params(ctx);
 
+  // 團購受限帳戶（PARITY #37，補F）：只列授權團購
+  const allowed = await restrictedGroupBuyIds(session);
   if (p.initialValue) {
     const ids = p.value
       .split(",")
       .map((x) => Number(x))
       .filter((n) => Number.isSafeInteger(n) && n > 0);
     if (ids.length === 0) return json({});
-    const { data } = await db.from("group_buys").select("id, title").eq("tenant_id", session.tenantId).in("id", ids);
+    const { data } = await db.from("group_buys").select("id, title").eq("tenant_id", session.tenantId).in("id", allowed ? ids.filter((x) => allowed.includes(x)) : ids);
     const rows = (data ?? []) as { id: number; title: string }[];
     if (ids.length === 1) return json(rows[0] ? { id: rows[0].id, text: rows[0].title } : {});
     return json(rows.map((r) => ({ id: r.id, text: r.title })));
   }
 
   let q = db.from("group_buys").select("id, title, short_url").eq("tenant_id", session.tenantId);
+  if (allowed) q = q.in("id", allowed.length ? allowed : [-1]);
   const months = Number((await ctx.param("months")) ?? "");
   if (Number.isFinite(months) && months > 0) {
     const since = new Date();

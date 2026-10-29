@@ -12,6 +12,7 @@
 //   POST /ajax/FacebookAuthGroupBuy/action?facebookAuthGroupBuyId=1     列上按鈕：editor._action → batchAction
 //        （approve 允許授權／reject 拒絕授權／markAsKOL 標註為KOL/團主），以 Editor remove 格式送出，回 Editor 格式 { data:[列…] }
 // 臉書登入申請（/ajax/FacebookAuthGroupBuy/auth，/rp/ 報表頁 ias_v5 fbAuth）與通知未串接。
+import { restrictedGroupBuyIds } from "./restricted-scope";
 import { getServiceClient } from "@/lib/supabase/server";
 import { facebookAuth, facebookAuthGroupBuy } from "@/lib/db/entities";
 import { rowToApi, type Row } from "@/lib/db/mapping";
@@ -153,11 +154,15 @@ async function actionHandler(ctx: RequestContext): Promise<Response> {
 
 /** 側欄「報表授權」紅色徽章：等待授權（PENDING）數量 */
 export async function pendingFacebookAuthCount(session: AdminSession): Promise<number> {
-  const { count, error } = await getServiceClient()
+  let q = getServiceClient()
     .from(TABLE)
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", session.tenantId)
     .eq("status", "PENDING");
+  // 團購受限帳戶（PARITY #37，補F）：只算授權團購
+  const allowed = await restrictedGroupBuyIds(session);
+  if (allowed) q = q.in("group_buy_id", allowed.length ? allowed : [-1]);
+  const { count, error } = await q;
   if (error) {
     console.error("[badge facebookAuthGroupBuy]", error.message);
     return 0;

@@ -26,6 +26,7 @@
 //        applySalesRules＝正式優惠引擎 evaluatePricing 重算（returns-pricing.ts；PARITY #58），送出時折扣合計與優惠條件一併寫回
 //   GET  /ajax/ReturnRefund/itemTags|itemOptions|isTypeBundleConfigable            原單操作「下拉選擇商品」（取代原站 /ajax/Item/*）
 //   POST /ajax/ReturnRefund/returnAndRefund                      原單操作送出（商品/運費/訂單金額寫回、差額新單、訂單更新信【未串接】）
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import { evaluatePricing } from "@/lib/modules/marketing/pricing-rules";
 import { loadPricingInputForOrder } from "@/lib/modules/marketing/pricing-loader";
 import { applyLineDiscounts, draftCartInputs, draftNewGrandTotal, type DraftPricing } from "./returns-pricing";
@@ -141,6 +142,8 @@ interface RrFilters {
   days: string;
   dateCreatedBegin: string;
   dateCreatedEnd: string;
+  /** 團購受限帳戶（PARITY #37，補F）：只看這些團購；null／未設＝不限 */
+  allowedGroupBuys?: number[] | null;
 }
 
 const truthy = (v: unknown) => ["true", "1", "on", "yes"].includes(String(v ?? "").trim().toLowerCase());
@@ -187,6 +190,7 @@ function applyFilters(q: AnyQuery, f: RrFilters): AnyQuery {
   const r = dateRange(f);
   if (r.from) q = q.gte("created_at", r.from.toISOString());
   if (r.to) q = q.lt("created_at", r.to.toISOString());
+  if (f.allowedGroupBuys) q = q.in("group_buy_id", f.allowedGroupBuys.length ? f.allowedGroupBuys : [-1]);
   return q;
 }
 
@@ -209,6 +213,7 @@ const listSpec: ListSpec = {
   defaultOrder: [{ key: "dateCreated", ascending: false }],
   where: (q, dt) => applyFilters(q, filtersFrom((k) => dt.extra[k])),
   options: () => rrOptions(),
+  restrictGroupBuy: "group_buy_id", // 團購受限帳戶（PARITY #37，補F）
 };
 
 /* ─────────────────────────── 列操作／工具列 ─────────────────────────── */
@@ -527,6 +532,7 @@ async function batchAction(ctx: RequestContext): Promise<Response> {
   }
   const f = filtersFrom((k) => (k in formVals ? formVals[k] : query[k]));
   if (!("hideDone" in formVals) && truthy(query.hideDone)) f.hideDone = true;
+  f.allowedGroupBuys = await restrictedGroupBuyIds(session);
   const L = await labelMaps();
 
   if (action === "EXPORT_SHIPPING_CSV") {
@@ -538,6 +544,7 @@ async function batchAction(ctx: RequestContext): Promise<Response> {
       .in("relation", ["REPLACE", "RESHIPMENT"])
       .in("status", ["INQUIRED_REPLACE", "INQUIRED_RESHIPMENT"])
       .not("state", "in", "(CANCELED,COMPLETE,DELETED)");
+    if (f.allowedGroupBuys) q = q.in("group_buy_id", f.allowedGroupBuys.length ? f.allowedGroupBuys : [-1]);
     if (ids.length) q = q.in("sales_order_id", ids.slice(0, 2000));
     else {
       if (f.hideDone) q = q.eq("is_done", false);

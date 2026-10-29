@@ -2,6 +2,7 @@
 // 定義：訂單階段 NEW/PROCESSING，且有「預購（back_order=true）、未出貨（state=UNSHIPPING）」的訂單商品，
 //       而該商品（共用庫存時取主商品）的保留現貨 stock_cache 或可售現貨 stock_available ≥ 該訂單商品數量
 //       （與 migration 3040 orders_preorder_convert 的扣庫存規則一致：保留現貨夠先扣保留現貨，否則扣可售現貨）。
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import type { AdminSession } from "@/lib/core/http/types";
 import { db } from "./common";
 
@@ -15,6 +16,8 @@ type Oi = {
 /** 回傳可轉現貨的訂單 id（可限定團購） */
 export async function b2sEligibleOrderIds(session: AdminSession, groupBuyId?: number | null): Promise<number[]> {
   const client = db();
+  // 團購受限帳戶（PARITY #37，補F）：只看授權團購
+  const allowed = await restrictedGroupBuyIds(session);
   const rows: Oi[] = [];
   for (let from = 0; ; from += 1000) {
     let q = client
@@ -25,6 +28,7 @@ export async function b2sEligibleOrderIds(session: AdminSession, groupBuyId?: nu
       .eq("state", "UNSHIPPING")
       .in("sales_orders.state", ["NEW", "PROCESSING"]);
     if (groupBuyId) q = q.eq("sales_orders.group_buy_id", groupBuyId);
+    if (allowed) q = q.in("sales_orders.group_buy_id", allowed.length ? allowed : [-1]);
     const { data, error } = await q.order("id").range(from, from + 999);
     if (error) throw new Error(`[orders b2s] ${error.message}`);
     rows.push(...((data ?? []) as unknown as Oi[]));

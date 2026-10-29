@@ -16,6 +16,7 @@
 //   POST /ajax/helpdesk/Conversation/read                      明細頁開啟後以 POST 將顧客訊息標為已讀（{ updated }）
 //   POST /ajax/helpdesk/Conversation/reply                     回覆：寫 conversation_messages（ADMIN）、狀態→REPLIED、
 //                                                              寄信通知顧客【未串接】（email_messages 紀錄）
+import { restrictedGroupBuyIds } from "@/lib/modules/groupbuy/restricted-scope";
 import type { AdminSession, RequestContext, RouteDef } from "@/lib/core/http/types";
 import { fragment, get, page, post, requireSession } from "@/lib/core/http/route-helpers";
 import { FieldErrors, badRequest, notFound } from "@/lib/core/http/errors";
@@ -48,11 +49,15 @@ const str = (v: unknown): string => {
 /* ─────────────────────────── 徽章／統計 ─────────────────────────── */
 
 async function countByStatus(session: AdminSession, status: ConvStatus): Promise<number> {
-  const { count, error } = await db()
+  let q = db()
     .from("conversations")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", session.tenantId)
     .eq("status", status);
+  // 團購受限帳戶（PARITY #37，補F）：只算授權團購的對話
+  const allowed = await restrictedGroupBuyIds(session);
+  if (allowed) q = q.in("group_buy_id", allowed.length ? allowed : [-1]);
+  const { count, error } = await q;
   if (error) throw new Error(`[helpdesk] 計算客服對話數失敗：${error.message}`);
   return count ?? 0;
 }
@@ -106,6 +111,7 @@ async function listConversations(ctx: RequestContext): Promise<Response> {
   const raw = dt.columns.find((c) => c.data === "merchantUserId")?.search ?? "";
   const endsWith = raw.startsWith("?");
   const term = sanitizeLike(endsWith ? raw.slice(1) : raw);
+  const allowed = await restrictedGroupBuyIds(session);
   const result = await dtQuery<Row>(db(), dt, {
     table: "conversations",
     select: LIST_SELECT,
@@ -119,6 +125,7 @@ async function listConversations(ctx: RequestContext): Promise<Response> {
     },
     where: (q) => {
       if (isStatus(status)) q = q.eq("status", status);
+      if (allowed) q = q.in("group_buy_id", allowed.length ? allowed : [-1]);
       if (term) {
         const pat = endsWith ? `*${term}` : `*${term}*`;
         q = q.or(`merchant_user_id.ilike.${pat},title.ilike.${pat}`);

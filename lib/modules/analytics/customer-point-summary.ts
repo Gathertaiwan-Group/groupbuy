@@ -121,4 +121,5 @@ async function downloadSummary(ctx: RequestContext): Promise<Response> {
   return download(new Uint8Array(buf), `${base}.xlsx`, XLSX_CONTENT_TYPE);
 }
 
-export const customerPointSummaryRoutes: RouteDef[] = [post("/backend/CustomerPointSummary/download", downloadSummary)];
+// 補F：含會員個資與點數 → 需「會員」權限（與後台會員管理 /backend/Customer/list 相同旗標 permissions.customer）
+export const customerPointSummaryRoutes: RouteDef[] = [post("/backend/CustomerPointSummary/download", downloadSummary, { permission: "customer" })];
