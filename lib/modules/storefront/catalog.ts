@@ -164,6 +164,25 @@ export async function loadItemsByIds(tenantId: number, ids: number[], gbisByItem
 }
 
 /** 讀團購的上架品項與商品（不含下架品項/商品） */
+/** 商品關鍵字（PARITY #47；item_keyword_tags.tag／weight）——前台搜尋比對用（search-logic.ts searchItems） */
+export async function loadKeywordTags(tenantId: number, itemIds: number[]): Promise<{ itemId: number; tag: string; weight: number }[]> {
+  const ids = [...new Set(itemIds.filter((x) => Number.isSafeInteger(x) && x > 0))];
+  if (!ids.length) return [];
+  const out: { itemId: number; tag: string; weight: number }[] = [];
+  for (let i = 0; i < ids.length; i += 500) {
+    const { data, error } = await getServiceClient()
+      .from("item_keyword_tags")
+      .select("item_id, tag, weight")
+      .eq("tenant_id", tenantId)
+      .in("item_id", ids.slice(i, i + 500));
+    if (error) throw new Error(`讀取商品關鍵字失敗：${error.message}`);
+    for (const r of (data ?? []) as { item_id: number; tag: string; weight: number | null }[]) {
+      out.push({ itemId: Number(r.item_id), tag: String(r.tag ?? ""), weight: Number(r.weight ?? 0) || 0 });
+    }
+  }
+  return out;
+}
+
 export async function loadCatalog(tenantId: number, groupBuyId: number, opts: { includeOffline?: boolean } = {}): Promise<Catalog> {
   await runDueSchedulersSafe(tenantId); // items 排程：前台讀品項前先惰性執行到期的上下架／變價排程
   const db = getServiceClient();

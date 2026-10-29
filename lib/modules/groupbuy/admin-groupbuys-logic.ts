@@ -35,3 +35,17 @@ export function isGroupBuyRestricted(permissions: Record<string, unknown> | null
 export function diffAdminIds(current: number[], next: number[]): { add: number[]; remove: number[] } {
   return { add: next.filter((x) => !current.includes(x)), remove: current.filter((x) => !next.includes(x)) };
 }
+
+/**
+ * 補E：受限帳戶的請求帶了 groupBuyId（網址參數或表單欄位）→ 該團購必須在授權清單內（dispatch 統一檢查，
+ * 涵蓋單一團購的頁面與 AJAX：品項、單一團購訂單、進階設定、報表…）。回傳 true＝拒絕。
+ * 解析方式與端點相同（items/common.ts nOrNull：去千分位逗點、Number()）：凡是能解析成數字的值都必須是授權清單內的正整數
+ * （12.0、0xc、1e1、405,167 這類寫法不能繞過）；空白、null、undefined、非數字由端點自己的驗證處理。
+ */
+export function restrictedGroupBuyDenied(raw: string | null | undefined, allowed: number[]): boolean {
+  const s = String(raw ?? "").trim();
+  if (s === "" || s === "null" || s === "undefined") return false;
+  const n = Number(s.replace(/,/g, "").trim());
+  if (!Number.isFinite(n)) return false;
+  return !(Number.isSafeInteger(n) && n > 0 && allowed.includes(n));
+}

@@ -600,6 +600,8 @@ $(document).ready(function() {
 		if (d.shareStock && !d.shareStockParent) btns.push({ className: 'btn btn-sm btn-warning btn-action', text: '解除共用庫存', action: 'unbind' });
 		// 補D（推導入口）：原站 itemAttrNoteSyncManager／itemRoyaltyProgramManager（dataTable.api.min.js）的觸發處未擷取
 		btns.push({ className: 'btn btn-sm btn-default btn-action', text: '複製客製化備註', action: 'attrSync' });
+		// 補E（推導）：商品關鍵字檢視／刪除（原站介面未擷取）
+		btns.push({ className: 'btn btn-sm btn-default btn-action', text: '關鍵字', action: 'kw' });
 		if (d.itemType == 'RP') btns.push({ className: 'btn btn-sm btn-info btn-action', text: '綁定會員方案', action: 'rp' });
 		var funcExtra = createButtonGroupHTML(d.itemId, btns);
 		return '<div class="item-details">' + info
@@ -778,6 +780,9 @@ $(document).ready(function() {
 				break;
 			case 'rp':
 				itemRoyaltyProgramManager.setItemId(id).setRoyaltyProgramId(null).get();
+				break;
+			case 'kw':
+				openFormL('/backend/ItemKeywordTag/list', { itemId: id });
 				break;
 			case 'cacheToStock':
 				showCacheToStock($(row.node()).find('td.data-stock').get(0) || row.node(), data);

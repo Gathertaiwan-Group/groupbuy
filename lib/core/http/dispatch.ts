@@ -11,6 +11,8 @@ import { isSecureRequest, readSession } from "@/lib/core/auth/session";
 import { CSRF_FIELD, CSRF_HEADER, csrfCookieIfNeeded, csrfTokenMatches, expectedCsrfToken, injectCsrfScript } from "./csrf";
 import { allRoutes } from "@/lib/modules";
 import { renderLoginPage } from "@/lib/modules/core/auth-pages";
+import { isGroupBuyRestricted, restrictedGroupBuyDenied } from "@/lib/modules/groupbuy/admin-groupbuys-logic";
+import { authorizedGroupBuyIds } from "@/lib/modules/groupbuy/groupbuy-extras";
 import { renderBackendPage, renderNoPermission } from "@/lib/core/render/layout";
 
 let router: Router | null = null;
@@ -223,6 +225,15 @@ export async function dispatch(req: Request): Promise<Response> {
     }
     if (route.permission && !hasPermission(ctx.session, route.permission)) {
       return ctx.isAjax || method !== "GET" ? jsonError(403, "無權限") : renderNoPermission(ctx);
+    }
+    // 團購受限帳戶（PARITY #37，補E；推導旗標 permissions.groupBuyRestricted）：帶 groupBuyId 的請求只能是授權的團購
+    if (isGroupBuyRestricted(ctx.session.permissions)) {
+      // 同名參數全部檢查（query＋body；匯出等端點會收多個 groupBuyId）
+      const raws = (await ctx.params_all("groupBuyId")).filter((v) => String(v ?? "").trim() !== "");
+      const allowed = raws.length ? await authorizedGroupBuyIds(ctx.session) : [];
+      if (raws.some((v) => restrictedGroupBuyDenied(v, allowed))) {
+        return ctx.isAjax || method !== "GET" ? jsonError(403, "無權限（受限帳戶只能管理授權的團購）") : renderNoPermission(ctx);
+      }
     }
   }
 

@@ -127,3 +127,11 @@ DB 函式（migration）：
 - **訂單頁 POS 列印發票**（PARITY #68，`pos-invoice-print.ts`）：`GET /ajax/pos/Invoice/print?salesOrderId=` 轉址到 `/pos/ajax/{租戶}/{團購短網址}/Invoice/print`（POS 收據）；`conf.posEnabled`＝租戶有 POS 型團購（render=POS）。
 - **匯入外部訂單 .xls**（PARITY #65）：`spreadsheet.ts`（.xlsx exceljs、.xls 自寫 BIFF8 讀取器 `xls-biff8.ts`、.csv papaparse）；`xls-biff8.ts` 也供 accounting 匯款對帳、groupbuy XLS 表頭解析、shipping 匯入使用。不支援：加密（FILEPASS）、Excel 95 以前。測試 `xls-biff8.test.ts`（`fixtures/*.xls` 由 Python xlwt 產生）。
 - **定期定額重新授權**（PARITY #66，`reauth-period-logic.ts`）：`reauthPeriod` 檢查付款方式為定期定額（128）、非取消；取第一期授權成功的 ECPAY 交易編號 → `EcpayPayment.periodAction(mtn, "ReAuth")`（lib/integrations/payment.ts，`Cashier/CreditCardPeriodAction`，預設 Stage）；成功且狀態為授權失敗 → 付款成功通知；結果寫歷程。綠界未設定 → 【未串接】。`reauthCreditCardPeriod2`（salesOrder.js）原站無 UI，未做。
+
+## 補E（2026-10-29）
+
+- **會員方案自動加入／撤銷**（migration 8102，規則見 storefront.md 補E）：後台改階段（取消、刪除、還原、完成）、改已付金額、改綁會員、加退換商品改 RP 明細數量、退貨完成、合併／拆單都會經觸發器同步會員方案；訂單歷程出現 `[會員方案] 已加入…`／`[會員方案] 撤銷…`。
+- **鎖序調整**：`orders_admin_update` 改到 state／total_paid／grand_total／customer_id 時開頭依 id 升冪鎖會員（原本只在取消／刪除）；改到 state 時另在會員之前以 KEY SHARE 鎖這些訂單的商品列（含共用庫存母商品；與統計觸發器外鍵檢查同強度，提前取得）。`orders_join_orders` 鎖完訂單後先鎖會員再鎖名額列。函式回傳型別不變。
+- **備註歷程修正**：`orders_admin_update` 帶備註（p_note）時，「沒有狀態變動就補一筆只有備註的歷程」原本只要有任何新歷程就不補，會被會員方案觸發器自己寫的歷程擋掉 → 改成只看有沒有「帶這次備註」的新歷程。
+- **退貨／換貨／補寄**：退貨申請中、補寄中的 RP 明細仍算主訂單的、取消退貨不變、退貨完成才扣天數；退換貨子單本身不加入會員方案。
+- **拆單（split.ts）**：補E 改成先建 SPLIT 關聯、再複製明細（會員方案觸發器要能找到來源訂單沿用參考時間）。

@@ -340,7 +340,7 @@ export const routes = [
 
 ### 8.1 DataTables Editor 相容 shim（`public/compat/editor-shim.js`）
 
-照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，65 項全部 ✔ 才算正常；測試函式回傳 `true`／不回傳才算通過，回傳字串＝失敗細節（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
+照原站寫法用 `new $.fn.dataTable.Editor({...})` 即可。自我測試頁 **`/backend/dev/editorShimTest`**（登入後開，67 項全部 ✔ 才算正常；測試函式回傳 `true`／不回傳才算通過，回傳字串＝失敗細節（含相容層燈箱 3 項，需能連 cdnjs；視窗寬 ≥ 992px）；改到 shim 相關行為時自己也可以跑）。
 
 原站實際用量（盤點自 `spec/runtime` 627 個 Editor 欄位＋64 頁 inline script＋原站自家 JS 41 個建構點）與實作位置：
 
@@ -375,6 +375,7 @@ export const routes = [
 | 設值與 dependent | `field.val(x)`／`set()` 以 API 設值時，select/checkbox/radio/select2/text 都會在 `setTimeout 0` 後 trigger `change`（同原版 `_triggerChange`），`dependent()` 隨之執行——**是非同步的**，設值後要讀 dependent 的結果請等下一個 tick；新增表單時每個欄位會觸發兩次（multiSet＋set，同原版）。開表單（create/edit）時這些 change 在 `open` 事件之後才送出，所以 dependent 會依表單目前值執行、且在 open 事件內的「全部顯示」（`DataTableHelper.showHideAllColumns`）之後，頁面不必自己再 trigger change。`undependent(name)` 可移除 |
 | 顯示／隱藏動畫 | 欄位 `show()/hide()` 先 `stop(true, true)` 結束進行中與排隊中的動畫：後呼叫者為準（例：動畫隱藏中呼叫 `show()` 全部再 `hide(x, false)`，x 不會閃現或被重新顯示） |
 | 欄位版面 | 欄位 `className: 'block'`：標籤在上、輸入佔整列（同原版 bootstrap4 的 `div.DTE_Field.block`，shim CSS 已內建，頁面不必自補） |
+| select2 聚焦（補E） | 欄位不可見時（多列編輯「多個數值」把輸入區藏起來、欄位 hide、表單尚未顯示）`focus()` 不展開下拉，任何途徑在不可見時展開也立即收起——select2 以不可見的容器定位會跑到畫面左上角（會員管理多選「啟用」重現）；點「多個數值」後輸入區顯示才展開在欄位正下方 |
 
 ### 8.2 其他相容層
 

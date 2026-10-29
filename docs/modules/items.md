@@ -109,6 +109,13 @@ Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock
 
 ## 補D（2026-10-29）（`item-extras.ts`、純邏輯 `item-extras-logic.ts`，測試 `item-extras.test.ts`）
 
-- **商品關鍵字標籤**（PARITY #47）：`POST /ajax/ItemKeywordTag/save?groupBuyId=`（原站 itemKeywordManager）；關鍵字可用半形／全形逗點、頓號、換行分隔，去重、每個 ≤50 字、一次 ≤30 個；權重整數（migration 1101 `item_keyword_tags.weight`），同商品同關鍵字再設定＝更新權重。入口（推導）：品項頁工具列「新增關鍵字」（選取商品）。原站說明的搜尋規則（起始文字相符、權重大者在前）實作於 `rankByKeyword`，前台搜尋尚未接（storefront）。
+- **商品關鍵字標籤**（PARITY #47）：`POST /ajax/ItemKeywordTag/save?groupBuyId=`（原站 itemKeywordManager）；關鍵字可用半形／全形逗點、頓號、換行分隔，去重、每個 ≤50 字、一次 ≤30 個；權重整數（migration 1101 `item_keyword_tags.weight`），同商品同關鍵字再設定＝更新權重。入口（推導）：品項頁工具列「新增關鍵字」（選取商品）。原站說明的搜尋規則（起始文字相符、權重大者在前）實作於 `rankByKeyword`；前台搜尋補E 已接（storefront `search-logic.ts`）。
 - **會員方案商品綁定**（PARITY #46）：`GET /ajax/ItemRoyaltyProgram/get?itemId=|royaltyProgramId=`（無綁定 data:null）、`POST save|update|delete`；只接受商品類型「會員方案（RP）」，一個 RP 商品綁一個會員方案＋可選會員卡（migration 1101 `item_royalty_programs.loyalty_card_id`）。`GET /ajax/LoyaltyCard/lookup` 會員卡 select2。入口（推導）：RP 商品列展開「綁定會員方案」。
 - **客製化備註同步**（PARITY #26）：`POST /ajax/Item/syncAttrTo?itemId=`（itemSetIds[]）把來源商品的 attribute_note、attribute_note_default、item_settings.attributeNote 複製到所選品項的所有商品（其他 item_settings 保留）。入口（推導）：商品列展開「複製客製化備註」。
+
+## 補E（2026-10-29）
+
+- **商品關鍵字檢視／刪除**（PARITY #47，推導；原站只擷取到新增編輯器）：商品列展開「關鍵字」→ `GET /backend/ItemKeywordTag/list?itemId=`（`templates/items/modal-itemkeywordtag-list.html`，依權重大→小列出、說明比對規則）；每列「刪除」→ `POST /ajax/ItemKeywordTag/delete?itemKeywordTagId=`（租戶過濾，回 `{code:200,message}`）。
+- **前台搜尋使用關鍵字**：官網型商城 `/{短網址}/search` 與 POS 商品搜尋都比對「名稱包含」＋「關鍵字起始文字」，關鍵字命中依權重排前（見 storefront.md 補E）。
+- **會員方案商品（RP）**：綁定的會員方案在訂單付款完成後自動加入（migration 8102，見 storefront.md 補E）。只認 `items.item_type = 'RP'`；`item_royalty_programs` 綁在一般商品上的舊資料（會員價）不會觸發加入。
+- 本機實測：關鍵字彈窗列出 2 筆、刪除 1 筆後表格與 DB 同步；`[補E]` 測試關鍵字已刪。

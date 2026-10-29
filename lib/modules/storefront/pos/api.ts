@@ -7,7 +7,8 @@ import { badRequest, notIntegrated } from "@/lib/core/http/errors";
 import { taipeiDateTime } from "@/lib/core/time";
 import { destroySession, buildClearCookie, isSecureRequest } from "@/lib/core/auth/session";
 import { imageUrl, gbSetting } from "../site";
-import { formatPrice } from "../catalog";
+import { formatPrice, loadKeywordTags } from "../catalog";
+import { searchItems } from "../search-logic";
 import { validVatId } from "../order-place";
 import { pointsEnabled } from "../pricing";
 import { customerRoyaltyProgramJson, type RoyaltyCustomerRow, type RoyaltyProgramRow } from "../royalty-program";
@@ -155,7 +156,9 @@ export async function itemList(ctx: RequestContext): Promise<Response> {
     for (const r of rows) extra.set(num(r.id), { upc: str(r.upc), sys: Array.isArray(r.sys_tags) ? (r.sys_tags as string[]) : [], created: str(r.created_at) });
   }
   if (t) {
-    items = items.filter((i) => `${i.title} ${str(i.shortNameDisplay)} ${str(i.shortName)}`.toLowerCase().includes(t));
+    // 名稱包含＋商品關鍵字起始文字（#47）；之後仍依所選排序
+    const tags = await loadKeywordTags(scope.session.tenantId, items.map((i) => i.itemId));
+    items = searchItems(items, t, (i) => `${i.title} ${str(i.shortNameDisplay)} ${str(i.shortName)}`, tags);
   } else if (uid) {
     items = items.filter((i) => str(i.uid) === uid || extra.get(i.itemId)?.upc === uid || String(i.itemId) === uid);
   } else {

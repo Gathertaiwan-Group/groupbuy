@@ -107,3 +107,8 @@
 - **團購管理員授權**（PARITY #37）：`GET /ajax/GroupBuy/adminUserGroupBuys?groupBuyId=` → `{data:{groupBuyId, adminUserGroupBuys:[{adminUserId}]}, options:{"adminUserGroupBuys[].adminUserId":[…]}}`；原站 prepareAdminUserEditor 以 `/ajax/GroupBuy/update` 送 `adminUserGroupBuys`（groupbuy-list.ts 攔下後同步 `admin_user_group_buys`，不經一般欄位驗證）。入口（推導）：團購列表設定按鈕列「團購管理員」。受限帳戶（推導旗標 `admin_users.permissions.groupBuyRestricted`）只在「所有團購」列表看到被授權的團購；其他頁面仍只做租戶隔離。
 - **商品 Feed**（PARITY #23，推導）：進階設定頁「商品 Feed」按鈕（原站 switch case 'feed' → openForm('/ajax/Feed…') 被截斷）→ `GET /ajax/Feed/display?groupBuyId=` 彈窗顯示網址；公開 `GET /feed/{團購id}-{HMAC 24 碼}`（SESSION_SECRET 簽章、錯誤 404、快取 10 分鐘）輸出 RSS 2.0＋g: 命名空間（Google Merchant Center／Meta 商品目錄）：未下架、品項未下架、價格>0 的一般／規格／組合等商品；原價>售價時 price＝原價、sale_price＝售價；現貨＋預購為 0 標缺貨；規格子商品帶 item_group_id；官網型（HOME）連到商品頁，其他連團購頁。`feed-logic.ts`。
 - 測試：`xls-header.test.ts`、`admin-groupbuys.test.ts`、`feed.test.ts`。
+
+## 補E（2026-10-29）
+
+- **團購受限帳戶**（PARITY #37，推導）：`lib/core/http/dispatch.ts` 在權限檢查後，對 `admin_users.permissions.groupBuyRestricted` 的帳號統一檢查請求的全部 `groupBuyId`（網址參數＋表單欄位的同名多值都檢查；解析方式同端點，`12.0`／`0xc`／`1e1`／千分位逗點都不能繞過）：不在「編輯團購管理員」授權清單 → 頁面顯示無權限、AJAX 回 403「無權限（受限帳戶只能管理授權的團購）」（`admin-groupbuys-logic.ts` `restrictedGroupBuyDenied`，`admin-groupbuys.test.ts`）。涵蓋單一團購的頁面與 AJAX（品項、單一團購訂單、進階設定、報表…）；跨團購的列表（所有訂單、出貨紀錄等不帶 groupBuyId 的頁）仍只以租戶隔離。
+- 本機實測（暫時把測試帳號設為受限、只授權 405167，測完還原）：`/backend/SalesOrder/list?groupBuyId=405167` 正常、`=405163` 顯示無權限；`POST /ajax/GroupBuyItemSet/list` 帶 405163 → 403、帶 405167 → 200。

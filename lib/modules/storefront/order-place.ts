@@ -21,6 +21,7 @@ import { checkoutCouponError, checkoutCouponQuotaError } from "@/lib/modules/mar
 import { storefrontFormattedNotes } from "@/lib/modules/groupbuy/preference-pages";
 import { deliveryFlatpickrOptions } from "./cart-api";
 import { taipeiDate } from "@/lib/core/time";
+import { membershipCheckoutError } from "./membership-logic";
 
 const NA = (v: string | undefined) => {
   const t = String(v ?? "").trim();
@@ -455,6 +456,9 @@ async function confirmOrder(ctx: RequestContext): Promise<Response> {
   // 重算會把它丟掉，不可默默以原價成立訂單 → 擋下並請客人移除
   const couponErr = checkoutCouponError(built.pricing.couponRejection) ?? checkoutCouponQuotaError(built.pricing.couponNotes);
   if (couponErr) return fail(cc, couponErr);
+  // 補E：會員方案商品（RP）付款完成後自動加入會員方案（migration 8102），需登入會員
+  const memberErr = membershipCheckoutError(built.lines, !!cc.customer);
+  if (memberErr) return fail(cc, memberErr);
   const rule = built.rule;
   if (!rule) return fail(cc, "目前無可用配送方式，請確認商品配送限制");
   if (gbfrsId && rule.groupBuyFlatRateShippingId !== gbfrsId) return fail(cc, "所選的配送方式無法使用，請重新選擇");

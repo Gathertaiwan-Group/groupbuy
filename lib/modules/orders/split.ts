@@ -244,6 +244,8 @@ async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOpti
       .update({ actor: "ADMIN", admin_user_id: session.adminUserId, note: `拆單自 ${o.uuid}` })
       .eq("tenant_id", session.tenantId)
       .eq("sales_order_id", child.id);
+    // 補E：拆單關聯先建（複製 RP 明細時，會員方案觸發器〔migration 8102〕要能找到來源訂單沿用參考時間）
+    await client.from("sales_order_relations").insert({ tenant_id: session.tenantId, parent_sales_order_id: o.id, sales_order_id: child.id, relation: "SPLIT" });
     // 複製商品（先母項再子項，重建 parent_order_item_id）
     const idMap = new Map<number, number>();
     const ordered = [...groups[gi]].sort((a, b) => Number(!!a.bundle_child) - Number(!!b.bundle_child) || num(a.seq) - num(b.seq));
@@ -258,7 +260,6 @@ async function splitOne(session: AdminSession, o: OrderWithItems, opt: SplitOpti
       if (e2) throw new Error(`[orders split] 複製訂單商品失敗：${e2.message}`);
       idMap.set(Number(it.id), Number((ins as { id: number }).id));
     }
-    await client.from("sales_order_relations").insert({ tenant_id: session.tenantId, parent_sales_order_id: o.id, sales_order_id: child.id, relation: "SPLIT" });
     if (opt.uniqueAddress) await addOrderHistory(session, child.id, "訂單地址不共用");
   }
   const byLabel: Record<string, string> = { BACKORDER: "現貨/預購", SHIPPING_TAG: "倉儲標籤", WEIGHT: "材積", TAX: "應稅/免稅" };

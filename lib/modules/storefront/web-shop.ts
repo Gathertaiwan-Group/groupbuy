@@ -17,7 +17,8 @@ import { renderTemplate } from "@/lib/core/render/template";
 import { getServiceClient } from "@/lib/supabase/server";
 import { sellerNotFound } from "./pages-static";
 import { groupBuyByShortUrl, imageUrl, scopeFromTenantPath, tenantById, type SfGroupBuy } from "./site";
-import { loadCatalog, formatPrice, type Catalog, type CatalogItem } from "./catalog";
+import { loadCatalog, loadKeywordTags, formatPrice, type Catalog, type CatalogItem } from "./catalog";
+import { searchItems } from "./search-logic";
 import { renderFormPage } from "./form-page";
 import {
   cleanKeyword,
@@ -279,17 +280,16 @@ async function sysTagPage(ctx: RequestContext): Promise<Response> {
   });
 }
 
-/** /{短網址}/search?t=：導覽列搜尋（商品名稱；網站沒有商品時轉文章搜尋） */
+/** /{短網址}/search?t=：導覽列搜尋（商品名稱包含＋商品關鍵字起始文字〔#47，權重大者在前〕；網站沒有商品時轉文章搜尋） */
 async function searchPage(ctx: RequestContext): Promise<Response> {
   const site = await homeSite(ctx.params.shortUrl);
   if (!site) return sellerNotFound(ctx);
   const keyword = cleanKeyword(ctx.query.get("t") ?? ctx.query.get("keyword"));
   const catalog = await loadCatalog(site.tenant.id, site.groupBuy.id);
   if (!catalog.items.length) return redirect(`/${site.short}/posts${keyword ? `?t=${encodeURIComponent(keyword)}` : ""}`, 302);
-  const kw = keyword.toLowerCase();
-  const items = kw
-    ? catalog.items.filter((x) => !x.offline && `${x.title} ${x.shortNameDisplay ?? ""} ${x.itemSettings?.subtitle ?? ""}`.toLowerCase().includes(kw))
-    : catalog.items.filter((x) => !x.offline);
+  const online = catalog.items.filter((x) => !x.offline);
+  const tags = keyword ? await loadKeywordTags(site.tenant.id, online.map((x) => x.itemId)) : [];
+  const items = searchItems(online, keyword, (x) => `${x.title} ${x.shortNameDisplay ?? ""} ${x.itemSettings?.subtitle ?? ""}`, tags);
   return renderItemList(ctx, site, {
     title: keyword ? `「${keyword}」的搜尋結果` : "全部商品",
     items,

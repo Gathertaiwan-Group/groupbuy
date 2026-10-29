@@ -1345,6 +1345,13 @@
         }
       });
       conf._input.on('select2:open', function () {
+        // 補E：任何途徑在容器不可見時展開（定位會落在左上角）→ 立即收起
+        var s2 = conf._input.data('select2');
+        var $c = s2 && s2.$container;
+        if ($c && $c.length && !$c.is(':visible')) {
+          conf._input.select2('close');
+          return;
+        }
         // 讓下拉選單在 bootstrap modal 內可輸入
         $('.select2-search__field').trigger('focus');
       });
@@ -1416,8 +1423,17 @@
       $(conf._input).val(val).trigger('change', { editor: true });
     },
     focus: function (conf) {
-      if (conf._input.data('select2')) conf._input.select2('open');
-      else conf._input.trigger('focus');
+      var s2 = conf._input.data('select2');
+      if (!s2) {
+        conf._input.trigger('focus');
+        return;
+      }
+      // 補E：欄位不可見時（多列編輯「多個數值」把輸入區藏起來、欄位被 hide、表單尚未顯示）不展開下拉——
+      // select2 以不可見的容器定位，下拉會跑到畫面左上角（會員管理多選「啟用」重現）。不可見時什麼都不做；
+      // 之後點「多個數值」會走 set('') → 顯示輸入區 → focus()，那時容器可見才展開。
+      var $c = s2.$container || conf._input.next('.select2-container');
+      if (!$c || !$c.length || !$c.is(':visible')) return;
+      conf._input.select2('open');
     },
     owns: function (conf, node) {
       return $(node).closest('.select2-container').length > 0 || $(node).closest('.select2').length > 0 || $(node).hasClass('select2-selection__choice__remove');

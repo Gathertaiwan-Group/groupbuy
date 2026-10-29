@@ -28,14 +28,15 @@
 | 狀態 | 項數 |
 |---|---|
 | 完整 | 67 |
-| 部分 | 24 |
+| 部分 | 23 |
 | 缺 | 5 |
-| 推導 | 32 |
+| 推導 | 33 |
 | **合計** | **128** |
 
 另有 7 個原站已註解停用的入口不計入（§5）。
 
 （補C 2026-10-29：#10、#11、#91、#123 由「缺」改「推導」，上表已反映。）
+（補E 2026-10-29：#47 由「部分」改「推導」；#37、#46、#117、#123 補充內容但狀態不變；其餘「部分」逐項盤點結果見 §7「補E 盤點」。上表已反映。）
 
 ## 2. 對照表
 
@@ -86,7 +87,7 @@
 | 34 | groupbuy | Footer Editor V1 `/backend/WebEditor/footer` | 完整 | web-editor.ts:260；spec/GAP_SPEC.md §1.7 | — |
 | 35 | groupbuy | 臉書社團 `/backend/FbGroup/show`、`/ajax/FbGroup\|FbFeed\|FbPage\|FbComment/*` | 部分 | lib/modules/groupbuy/fb-group.ts:3（Graph API 一律【未串接】，本地綁定與貼文模板可用）；spec/GAP_SPEC.md §2 | Facebook App＋社團權限；L（外部帳號） |
 | 36 | groupbuy | 上傳影片 `/backend/Upload/uploadVideo` | 完整 | lib/modules/groupbuy/upload-video.ts:168；spec/html/upload-uploadvideo.html | — |
-|  37 | groupbuy | 編輯團購管理員（`prepareAdminUserEditor`，`/ajax/GroupBuy/adminUserGroupBuys`） | 部分 | groupbuy/groupbuy-extras.ts `GET /ajax/GroupBuy/adminUserGroupBuys`＋groupbuy-list.ts（`/ajax/GroupBuy/update` 收 adminUserGroupBuys → admin_user_group_buys，migration 1021）；團購列表「團購管理員」按鈕；受限帳戶（admin_users.permissions.groupBuyRestricted）只列授權團購（preFilterIds）；admin-groupbuys.test.ts；補D 本機實測（補D） | 受限旗標與入口為推導（原站角色設定、呼叫處未擷取）；目前只限制團購列表，其他頁面仍以租戶隔離；後台管理員帳號頁（#10）完成後可設定受限旗標；S |
+|  37 | groupbuy | 編輯團購管理員（`prepareAdminUserEditor`，`/ajax/GroupBuy/adminUserGroupBuys`） | 部分 | groupbuy/groupbuy-extras.ts `GET /ajax/GroupBuy/adminUserGroupBuys`＋groupbuy-list.ts（`/ajax/GroupBuy/update` 收 adminUserGroupBuys → admin_user_group_buys，migration 1021）；團購列表「團購管理員」按鈕；受限帳戶（admin_users.permissions.groupBuyRestricted）只列授權團購（preFilterIds）；admin-groupbuys.test.ts；補D 本機實測（補D）。補E：lib/core/http/dispatch.ts 對受限帳戶統一檢查——請求帶的任一個 `groupBuyId`（網址參數與表單欄位的同名多值）不在授權清單 → 頁面顯示無權限、AJAX 403（admin-groupbuys-logic.ts restrictedGroupBuyDenied，admin-groupbuys.test.ts）；本機實測：授權團購的單一團購訂單頁 200、未授權團購頁面「無權限」、未授權 `POST /ajax/GroupBuyItemSet/list` 403、授權者 200 | 受限旗標與入口為推導（原站角色設定、呼叫處未擷取）；跨團購的列表（所有訂單、出貨紀錄、報表彙總等不帶 groupBuyId 的頁面）仍以租戶隔離、未依授權過濾（要逐頁改查詢，原站受限帳戶在這些頁的行為未知）；S〔推導〕 |
 
 ### 2.3 items（品項、商品、組合、排程）
 
@@ -100,8 +101,8 @@
 | 43 | items | 批次改名、綁定主庫存、盤點（商品）彈窗 | 完整 | items/pages.ts:189、:215；items/item-modals.ts:193（`/ajax/Item/getWarehouseItems` 實測 200）；補C 已更新 docs/modules/items.md | — |
 | 44 | items | 新增商品精靈「從網站新增」`/ajax/Item/uploadFromUrl` | 部分 | lib/modules/items/item-modals.ts:182（回 501【未串接】） | 抓取外部商品頁有法律/穩定性風險，建議維持；—（不建議補） |
 | 45 | items | 排程 `/backend/Scheduler/list` | 完整 | lib/modules/items/scheduler.ts:491；spec/GAP_SPEC.md §6（scheduler.js 逐位元相同） | — |
-|  46 | items | 商品點數方案 `/ajax/ItemRoyaltyProgram/get\|save\|update\|delete`、會員卡 `/ajax/LoyaltyCard/lookup` | 推導 | items/item-extras.ts：`/ajax/ItemRoyaltyProgram/get|save|update|delete`（會員方案商品 item_type=RP ↔ 會員方案＋會員卡，item_royalty_programs.loyalty_card_id，migration 1101）、`/ajax/LoyaltyCard/lookup`；入口：RP 商品列展開「綁定會員方案」；item-extras.test.ts；補D 本機實測（補D） | 推導依據：原站 itemRoyaltyProgramManager（dataTable.api.min.js）欄位與 Lookup/item?itemType=RP；入口頁未擷取。前台購買 RP 商品後自動加入會員方案不在本項（storefront／會員後台 #123） |
-|  47 | items | 商品關鍵字標籤 `/ajax/ItemKeywordTag/save` | 部分 | items/item-extras.ts `/ajax/ItemKeywordTag/save`（逗點多筆、權重，item_keyword_tags.weight，migration 1101）；入口：品項頁工具列「新增關鍵字」（itemKeywordManager）；item-extras.test.ts（含原站說明的起始文字比對規則）；補D 本機實測（補D） | 前台搜尋尚未使用關鍵字（storefront 範圍，可用 item-extras-logic.ts rankByKeyword）；關鍵字檢視／刪除介面原站未擷取；S |
+|  46 | items | 商品點數方案 `/ajax/ItemRoyaltyProgram/get\|save\|update\|delete`、會員卡 `/ajax/LoyaltyCard/lookup` | 推導 | items/item-extras.ts：`/ajax/ItemRoyaltyProgram/get|save|update|delete`（會員方案商品 item_type=RP ↔ 會員方案＋會員卡，item_royalty_programs.loyalty_card_id，migration 1101）、`/ajax/LoyaltyCard/lookup`；入口：RP 商品列展開「綁定會員方案」；item-extras.test.ts；補D 本機實測（補D） | 推導依據：原站 itemRoyaltyProgramManager（dataTable.api.min.js）欄位與 Lookup/item?itemType=RP；入口頁未擷取。前台購買 RP 商品後自動加入會員方案：補E 已補（migration 8102，見 #123） |
+|  47 | items | 商品關鍵字標籤 `/ajax/ItemKeywordTag/save` | 推導 | items/item-extras.ts `/ajax/ItemKeywordTag/save`（逗點多筆、權重，item_keyword_tags.weight，migration 1101）；入口：品項頁工具列「新增關鍵字」（itemKeywordManager）；item-extras.test.ts（補D）。補E：前台搜尋比對關鍵字——官網型商城 `/{短網址}/search`（storefront/web-shop.ts）與 POS 商品搜尋 `Item/itemList?t=`（storefront/pos/api.ts）都改用 storefront/search-logic.ts searchItems：名稱「包含」＋關鍵字「搜尋文字＝關鍵字起始文字」，關鍵字命中者依權重大者在前（POS 之後仍依所選排序）；search-logic.test.ts；檢視／刪除：商品明細「關鍵字」按鈕 → `GET /backend/ItemKeywordTag/list?itemId=` 彈窗（templates/items/modal-itemkeywordtag-list.html）＋`POST /ajax/ItemKeywordTag/delete`。本機實測：官網 gbhme 搜「[補E]環保」→ 權重 5 的保溫瓶在權重 1 的帆布袋前、搜「環保」（非起始文字）0 筆、搜「保溫」名稱仍命中；POS 搜「[補E]收銀」命中、搜「收銀」0 筆；彈窗列出 2 個關鍵字並刪除 1 個（DB 確認刪除）；測試關鍵字已刪 | 比對規則來自原站編輯器說明；排序（關鍵字命中排在名稱命中之前）、檢視／刪除介面為推導（原站未擷取）；團購表單型下單頁原站沒有商品搜尋框 |
 
 ### 2.4 marketing（優惠、標籤、黑名單、短網址、抽獎）
 
@@ -206,7 +207,7 @@
 | 114 | storefront | 隱私權政策／服務條款／賣家頁 404／預覽 403 | 完整 | storefront/pages-static.ts:23–26；spec/html/fe-privacy.html、fe-terms.html、fe-seller-page.html、fe-error-403.html | — |
 | 115 | storefront | 說明中心（官網型 HOME）`/jranv`、`/menu/…`、文章、分類、標籤、搜尋、news/faq；系統公告 `/groupbuyforms/News/list` | 推導 | storefront/help.ts（擷取頁結構 100%）；補B（推導）：快訊 templates/storefront/partials/web-marquee.html＋web-site.ts:626、導覽列樣式 2–8 與色彩主題 web-site.ts:585、:635＋public/modules/storefront/web-theme.css、選單樣式 2（Dropdown）／3（三列＋2圖）templates/storefront/partials/web-menu-top.html、文章瀏覽數 help.ts:384＋migration 6007。依據：後台 HomeView 選項（spec/runtime/homeview-list.records.txt）與原站版面 script 既有的 .nav-marquee-info／has-marquee；原站前台各樣式未擷取 | 取得原站各樣式範例頁後比對外觀 |
 | 116 | storefront | 贈品加入購物袋與訂單明細 | 推導 | 補A：pricing-marketing.ts:102（auto/pick）；cart-data.ts:239 applyGifts（自動贈品依庫存入袋、自選贈品限量／必選擋結帳）；gift-logic.ts（單元測試 gift-logic.test.ts）；order-place.ts:369（gift、sales_rule_id）、:403（扣庫存）。本機實測：滿額自動贈品入袋與訂單、自選贈品 x3 調整為 1、贈品庫存各 −1 | 自選贈品的挑選介面原站未擷取：沿用下單頁 GIFT 商品選單，0 元 GIFT 商品不符資格時移除 |
-| 117 | storefront | 會員點數回饋入帳（獲點） | 推導 | 補A：order-place.ts:577（各優惠點數寫入 sales_order_sales_rules／sales_order_coupons.points）；supabase/migrations/6008_storefront_points_reward.sql（付款完成或已完成入帳 ADD_POINT、取消／刪除／退貨扣回 RETURN_POINT，帳本 source=ORDER_REWARD 冪等）；POS 結帳 pos/api.ts:796。本機實測：前台會員單 未付→部分付款 0 點→付清 +30→重複更新不變→取消 −30→改回 +30→刪除 −30→再刪不變；POS 勾「獲得點數」+20、不勾 0、作廢扣回（餘額不足只扣到 0） | 原站入帳時機設定未擷取（推導：付款完成或訂單完成）；會員方案 point_rate 未納入（示範資料皆 0） |
+| 117 | storefront | 會員點數回饋入帳（獲點） | 推導 | 補A：order-place.ts:577（各優惠點數寫入 sales_order_sales_rules／sales_order_coupons.points）；supabase/migrations/6008_storefront_points_reward.sql（付款完成或已完成入帳 ADD_POINT、取消／刪除／退貨扣回 RETURN_POINT，帳本 source=ORDER_REWARD 冪等）；POS 結帳 pos/api.ts:796。本機實測：前台會員單 未付→部分付款 0 點→付清 +30→重複更新不變→取消 −30→改回 +30→刪除 −30→再刪不變；POS 勾「獲得點數」+20、不勾 0、作廢扣回（餘額不足只扣到 0） | 原站入帳時機設定未擷取（推導：付款完成或訂單完成）；會員方案 point_rate 未納入（示範資料皆 0；原站 point_rate 的計算方式未擷取，維持不做） |
 | 118 | storefront | 官網型商城頁：購物袋 `/{shortUrl}/bag`、商品頁 `/ajax/web/Item/show`、`/ajax/web/Item/getItem`、會員頁、連結類別 ITEM／ITEM_SET／ITEM_SYS／CUSTOM_WEB／MEMBER | 推導 | 補B（推導）：lib/modules/storefront/web-shop.ts:183（商品頁 `/{s}/item/{id}`）、:225／:233／:248／:283（全部商品／品項／系統標籤／搜尋）、:302（客製化網頁）、:311（會員→會員中心）、:321（購物袋＝團購表單結帳只列購物袋商品）、:346（getItem 規格切換）、:371（Item/show 彈窗）；shop-variants.ts（規格）；cart-api.ts:60（totalAdd）；web-content-lookbook.ts:222（連結類別網址）。依據：原站官網共用 script（web-foot-scripts.html 的 $.ShoppingItem／$.ShoppingCart）需要的 DOM 與 JSON 鍵；原站 HOME 商城頁未擷取（spec/SPEC.md §9 #7） | 取得原站官網型團購範例頁後比對 |
 | 119 | storefront | POS 門市收銀 `/{shortUrl}/pos`（商品、草稿、會員、優惠、結帳、日結、調撥） | 推導 | storefront/pos/routes.ts:19；spec/POS_SPEC.md §0（HTML/CSS 被擋，行為約 90% 依 pos-main.js） | — |
 | 120 | storefront | POS 刷卡機／發票機／電子發票開立 `Invoice/issueInvoice` | 部分 | storefront/pos/api.ts:687、:799；templates/storefront/pos/receipt.html:60（收據非統一發票） | 硬體與發票服務商；L（外部帳號） |
@@ -217,7 +218,7 @@
 
 | # | 模組 | 原站功能/端點 | 狀態 | 證據 | 補齊建議/工作量 |
 |---|---|---|---|---|---|
-| 123 | orders/storefront | 後台會員管理：啟用/停用 `/ajax/Customer/activate\|deactivate`、Google Sheet 匯入貼標籤 `/ajax/Customer/importFromGoogleSheet`、會員點數方案（`customerRoyaltyProgramManager`） | 推導 | 補C：lib/modules/core/customers.ts、customers-logic.ts、templates/core/customer-list.html、modal-customer-pointtransactions.html、migration 0110（`customer_points_adjust`）；需 `permissions.customer`，側欄「設定 > 會員」。〔推導〕依據：原站 dataTable.api.min.js 的 `#customerTable`、啟動會員方案 Editor（方案／到期日「留空白則為當前開始算一年」／「將激活中帳號設為已啟用」→ activate；remove → deactivate）、貼標籤 Editor（rowStart/rowEnd）；頁面本身、Sheet 欄位格式未擷取 → 第 1 列標頭，依會員ID→Email→電話比對，匯入標籤（附加）／點數（加減）／備註；Sheet 用公開分享網址轉 CSV 匯出（不需 API 金鑰），另可上傳 CSV（UTF-8／Big5）。實測：啟用（空白到期日＝方案天數，VIP→2027-10-29）、停用、編輯標籤、點數調整（不可扣成負數、5 筆並行 -30 對餘額 100 恰 3 筆成功）、點數紀錄彈窗、CSV 匯入（找不到列、非整數點數逐列回報）、公開 Sheet 實際下載解析、未公開 Sheet 回明確提示 | 停用為「取消會員方案」（customers 無停權欄位，前台登入屬 storefront）；原站畫面未擷取 |
+| 123 | orders/storefront | 後台會員管理：啟用/停用 `/ajax/Customer/activate\|deactivate`、Google Sheet 匯入貼標籤 `/ajax/Customer/importFromGoogleSheet`、會員點數方案（`customerRoyaltyProgramManager`） | 推導 | 補C：lib/modules/core/customers.ts、customers-logic.ts、templates/core/customer-list.html、modal-customer-pointtransactions.html、migration 0110（`customer_points_adjust`）；需 `permissions.customer`，側欄「設定 > 會員」。〔推導〕依據：原站 dataTable.api.min.js 的 `#customerTable`、啟動會員方案 Editor（方案／到期日「留空白則為當前開始算一年」／「將激活中帳號設為已啟用」→ activate；remove → deactivate）、貼標籤 Editor（rowStart/rowEnd）；頁面本身、Sheet 欄位格式未擷取 → 第 1 列標頭，依會員ID→Email→電話比對，匯入標籤（附加）／點數（加減）／備註；Sheet 用公開分享網址轉 CSV 匯出（不需 API 金鑰），另可上傳 CSV（UTF-8／Big5）。實測：啟用（空白到期日＝方案天數，VIP→2027-10-29）、停用、編輯標籤、點數調整（不可扣成負數、5 筆並行 -30 對餘額 100 恰 3 筆成功）、點數紀錄彈窗、CSV 匯入（找不到列、非整數點數逐列回報）、公開 Sheet 實際下載解析、未公開 Sheet 回明確提示。補E：購買會員方案商品自動加入會員方案——supabase/migrations/8102_bue_membership_purchase.sql（帳本 customer_royalty_grants；訂單付款完成／已完成且有會員 → 加入，同方案未到期從原到期日延長「天數×數量」、否則從參考時間〔第一次加入〕起算並改成此方案；取消／刪除／退貨完成／退款後未付清／改綁會員 → 撤銷並依帳本鏈重算，數量改變補扣差額，追加金額與退貨申請中不撤銷；0 元暫時狀態與上線前舊單不加入；重複 callback 不重複延長；訂單歷程寫 [會員方案]）；前台訪客購物袋含 RP 商品結帳前擋下請先登入（storefront/membership-logic.ts）；本機暫時 Postgres 測試 supabase/tests/bue_membership_test.sh（59 項斷言＋6 連線 20 秒壓力 0 死鎖）；正式庫 localhost 實測見 storefront.md「補E」 | 停用為「取消會員方案」（customers 無停權欄位，前台登入屬 storefront）；原站畫面未擷取；購買後自動加入的時點與延長／撤銷規則為推導（原站送出訂單後流程未擷取） |
 |  124 | groupbuy | 匯入欄位對應 `/ajax/XLSHeaderParser/parse`（XLS 表頭解析） | 推導 | groupbuy/groupbuy-extras.ts `POST /ajax/XLSHeaderParser/parse`（Editor upload，.xls／.xlsx／.csv → 表頭選項 value＝欄位索引，ImportExcelEditorManager 依此預選；列資料暫存 xls_header_uploads 24 小時，loadXlsHeaderUpload() 供匯入端讀取，migration 1021）；xls-header.test.ts；補D 本機實測（補D） | 推導依據：原站 ImportExcelEditorManager 只有前端（dataTable.api.min.js），使用頁面未擷取，最終送出端點不明 |
 | 125 | core | Google reCAPTCHA（後台登入、前台） | 缺 | auth-api.ts:292、templates/storefront/partials/recaptcha-stub.html:1 | Google reCAPTCHA 金鑰；S（外部帳號） |
 | 126 | core | 原站樣板文字：系統信樣板、通知信實際文字、進階設定完整鍵目錄 | 推導 | spec/SPEC.md §9 #9；migration 0103 寫通用文字（ARCHITECTURE.md §7） | 取得原站樣板後替換；S（推導） |
@@ -286,13 +287,13 @@
 
 **groupbuy**
 - ~~#26 自定義備註同步到商品~~、~~#23 進階設定 feed 動作（商品 Feed）~~、~~#124 XLS 表頭解析~~ — 補D 已補（推導，見 §2）
-- #37 編輯團購管理員 — 補D 已補授權資料與編輯器；受限帳戶旗標 `groupBuyRestricted` 補C 已可在管理員頁設定；目前只限制團購列表 — S〔推導〕
+- #37 編輯團購管理員 — 補D 已補授權資料與編輯器；受限帳戶旗標 `groupBuyRestricted` 補C 已可在管理員頁設定；補E 帶 groupBuyId 的頁面／AJAX 統一擋未授權團購；跨團購列表仍未依授權過濾 — S〔推導〕
 - #17／#35 臉書授權、臉書社團 Graph API — L〔外部〕
 - #20 發送簡訊 — S〔外部〕；#21 KOL 平台 — 〔外部，原站私有服務，不能補〕
 
 **items**
 - ~~#46 會員方案商品綁定＋會員卡 lookup~~ — 補D 已補（推導）
-- #47 商品關鍵字標籤 — 補D 已補儲存；前台搜尋使用關鍵字待 storefront — S
+- ~~#47 商品關鍵字標籤~~ — 補D 已補儲存；補E 已補前台搜尋（官網型＋POS）與檢視／刪除彈窗（推導）
 - ~~#43 更新 items.md（getWarehouseItems 已正常）~~ — 補C 已更新
 
 **marketing**
@@ -330,6 +331,25 @@
 
 **跨模組**
 - ~~#123 後台會員管理（啟停用、Google Sheet 匯入、點數）~~ — 補C 已補（推導，見 §2）
+- ~~購買會員方案商品後自動加入會員方案~~ — 補E 已補（migration 8102，推導，見 #123）
+- 會員管理多選「啟用」時會員方案下拉跑到左上角（Editor shim select2 在「多個數值」隱藏狀態下被自動聚焦展開）— 補E 已修（public/compat/editor-shim.js；自我測試頁新增 2 項，67/67）
+
+**補E 盤點（其餘「部分」項目，2026-10-29）**
+
+| # | 結論 | 原因 |
+|---|---|---|
+| 2、125 | 不能補 | reCAPTCHA／Facebook 登入需外部 App 與金鑰 |
+| 3、12、111 | 不能補（設定） | 需 Email 轉 `live`（會寄白名單外信件，須 user 決定）或簡訊商帳號 |
+| 17、35、122 | 不能補 | Facebook App＋社團權限 |
+| 20、77、78 | 不能補 | 簡訊服務商帳號 |
+| 21、55 | 不能補 | 原站私有服務（kol.gbf.tw、uuo.io） |
+| 22 | 不能補 | 25 處推導段需原站資料（被擷取過濾擋下的 inline script），不可繞過擷取過濾 |
+| 37 | 部分補 | 見上；跨團購列表的受限行為原站未知 |
+| 44 | 不建議補 | 抓取外部商品頁有法律／穩定性風險 |
+| 56、80、108 | 不能補 | 綠界正式物流特店（目前沙盒）；寄信／簡訊隨 #12 |
+| 66 | 不能補 | 正式特店；`reauthCreditCardPeriod2` 原站沒有 UI 呼叫 |
+| 73 | 不能補 | Google Geocoding 金鑰 |
+| 99、101、103、120 | 不能補 | 正式金流／發票特店、其他金流服務商、POS 硬體 |
 
 ### 不能補（或補了無法對齊原站）的項目
 

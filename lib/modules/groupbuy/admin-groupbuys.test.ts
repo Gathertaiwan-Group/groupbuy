@@ -18,3 +18,21 @@ test("受限旗標與差異", () => {
   assert.equal(m.isGroupBuyRestricted(null), false);
   assert.deepEqual(m.diffAdminIds([1, 2, 3], [2, 4]), { add: [4], remove: [1, 3] });
 });
+
+test("restrictedGroupBuyDenied：受限帳戶只能帶授權的 groupBuyId（補E）", () => {
+  assert.equal(m.restrictedGroupBuyDenied("405167", [405167, 405169]), false);
+  assert.equal(m.restrictedGroupBuyDenied("405163", [405167]), true);
+  assert.equal(m.restrictedGroupBuyDenied("405163", []), true);
+  assert.equal(m.restrictedGroupBuyDenied(undefined, [405167]), false);
+  assert.equal(m.restrictedGroupBuyDenied("", [405167]), false);
+  assert.equal(m.restrictedGroupBuyDenied("abc", [405167]), false);
+  assert.equal(m.restrictedGroupBuyDenied("undefined", [405167]), false);
+  // 端點以 Number()／nOrNull 解析的其他寫法不能繞過
+  assert.equal(m.restrictedGroupBuyDenied("12.0", [405167]), true);
+  assert.equal(m.restrictedGroupBuyDenied("0xc", [405167]), true);
+  assert.equal(m.restrictedGroupBuyDenied("1e1", [405167]), true);
+  assert.equal(m.restrictedGroupBuyDenied("405,163", [405167]), true);
+  assert.equal(m.restrictedGroupBuyDenied("405,167", [405167]), false);
+  assert.equal(m.restrictedGroupBuyDenied("0", [405167]), true);
+  assert.equal(m.restrictedGroupBuyDenied(" 405167 ", [405167]), false);
+});

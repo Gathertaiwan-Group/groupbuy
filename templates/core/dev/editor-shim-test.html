@@ -515,6 +515,36 @@ $(document).ready(async function () {
 	ted.undependent('cat');
 	ted.show('qty', false);
 
+	// 補E：多列編輯「多個數值」時 select2 欄位被藏起來 → 開表單的自動聚焦不可展開下拉（原本會以不可見容器定位，跑到左上角）；
+	// 點「多個數值」後輸入區顯示 → 下拉展開在欄位正下方（會員管理多選「啟用」的重現情境）
+	var s2Ed = new E({
+		table: '#shimTable',
+		idSrc: 'rid',
+		fields: [{ label: '類別', name: 'cat', type: 'select2', options: [{ label: 'A', value: 'A' }, { label: 'B', value: 'B' }] }],
+		formOptions: DataTableConfig.formOptions,
+		i18n: DataTableConfig.i18n
+	});
+	var s2Rows = table.rows(function (idx, d) { return d.cat === 'A' || d.cat === 'B'; }).indexes().toArray();
+	s2Ed.edit(s2Rows);
+	await wait(900);
+	var s2Cont = $(s2Ed.field('cat').node()).find('.select2-container');
+	T('select2 多列「多個數值」：開表單不展開下拉', function () {
+		return (s2Rows.length > 1 && $('.select2-container--open .select2-dropdown').length === 0 && !s2Cont.is(':visible')) ||
+			('rows=' + s2Rows.length + ' open=' + $('.select2-container--open .select2-dropdown').length + ' visible=' + s2Cont.is(':visible'));
+	});
+	$(s2Ed.field('cat').node()).find('[data-dte-e="multi-value"]').trigger('click');
+	await wait(400);
+	T('select2 多列：點「多個數值」後下拉展開在欄位下方（非左上角）', function () {
+		var dd = $('.select2-container--open .select2-dropdown');
+		if (!dd.length) return 'dropdown 未展開';
+		var a = dd[0].getBoundingClientRect(), b = s2Cont[0].getBoundingClientRect();
+		return (Math.abs(a.left - b.left) < 2 && Math.abs(a.top - b.bottom) < 4) || ('dd=' + a.left + ',' + a.top + ' field=' + b.left + ',' + b.bottom);
+	});
+	s2Ed.field('cat').inst('close');
+	s2Ed.close();
+	await wait(600);
+	s2Ed.destroy();
+
 	// 相容層（mdb-pro-compat.js）：MDB PRO 燈箱 initPhotoSwipeFromDOM（原站 ias_v5 的 $.fn.toLightbox 會呼叫）
 	T('相容層：initPhotoSwipeFromDOM 已定義', function () { return typeof window.initPhotoSwipeFromDOM === 'function'; });
 	var lbFig = '<figure class="image"><img src="/upload/images/unsort/logo.png"></figure>';

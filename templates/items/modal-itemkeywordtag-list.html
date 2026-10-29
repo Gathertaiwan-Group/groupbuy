@@ -1,0 +1,55 @@
+{{!-- 商品關鍵字（補E，推導）：GET /backend/ItemKeywordTag/list?itemId=；data：itemId、itemTitle、tags[{id,tag,weight}]、hasTags。
+     原站只擷取到「新增關鍵字」編輯器（itemKeywordManager），檢視／刪除介面未擷取 → 以商品明細「關鍵字」按鈕開這個彈窗，
+     列出該商品的關鍵字（權重大者在前）並可逐一刪除（POST /ajax/ItemKeywordTag/delete?itemKeywordTagId=）。
+     前台搜尋（官網型商城 /{短網址}/search、POS 商品搜尋）以「搜尋文字＝關鍵字起始文字」比對，權重大者排前面。 --}}
+<div id="ItemKeywordTagForm">
+	<div class="modal-header">
+		<h5 class="modal-title">商品關鍵字：{{itemTitle}}</h5>
+		<button type="button" class="close" data-dismiss="modal" aria-hidden="true"><i class="fa-light fa-xmark"></i></button>
+	</div>
+	<div class="modal-body">
+		<div class="blue-grey lighten-5 small p-2 mb-3">
+			搜尋時輸入的文字須符合關鍵字起始文字（例：關鍵字「紅色外套」→ 搜「紅色」找得到、搜「外套」找不到）。<br>
+			兩個商品關鍵字相同時，權重大者出現在前面。新增關鍵字請在商品列表勾選商品後按「新增關鍵字」。
+		</div>
+		<table class="table table-sm table-striped mb-0" id="itemKeywordTagTable">
+			<thead><tr><th>關鍵字</th><th class="text-right">權重</th><th></th></tr></thead>
+			<tbody>
+				{{#each tags}}
+				<tr data-id="{{id}}">
+					<td>{{tag}}</td>
+					<td class="text-right">{{weight}}</td>
+					<td class="text-right"><button type="button" class="btn btn-sm btn-outline-danger m-0 btn-del-keyword" data-id="{{id}}">刪除</button></td>
+				</tr>
+				{{/each}}
+				<tr class="empty-row"{{#if hasTags}} style="display:none"{{/if}}><td colspan="3" class="text-muted">此商品尚無關鍵字</td></tr>
+			</tbody>
+		</table>
+	</div>
+	<div class="modal-footer">
+		<button type="button" class="btn btn-default" data-dismiss="modal">關閉</button>
+	</div>
+</div>
+<script>
+$('#itemKeywordTagTable').off('click', '.btn-del-keyword').on('click', '.btn-del-keyword', function () {
+	var $tr = $(this).closest('tr');
+	var id = Number($(this).data('id'));
+	if (!id || !confirm('確定刪除關鍵字「' + $tr.children('td').first().text() + '」？')) return;
+	var $b = $(this).prop('disabled', true);
+	$.ajax({ type: 'POST', url: '/ajax/ItemKeywordTag/delete', data: { itemKeywordTagId: id }, dataType: 'json' })
+		.done(function (j) {
+			if (j && j.code == 200) {
+				$tr.remove();
+				if (!$('#itemKeywordTagTable tbody tr[data-id]').length) $('#itemKeywordTagTable .empty-row').show();
+				if (typeof displayAlertSuccess === 'function') displayAlertSuccess(j.message || '已刪除');
+			} else {
+				$b.prop('disabled', false);
+				alert((j && (j.message || j.error)) || '刪除失敗');
+			}
+		})
+		.fail(function (x) {
+			$b.prop('disabled', false);
+			alert((x.responseJSON && (x.responseJSON.message || x.responseJSON.error)) || '刪除失敗');
+		});
+});
+</script>
