@@ -143,4 +143,11 @@
   | 團購列表 | `/ajax/GroupBuy/list` | 補D preFilterIds（不變） |
 
   共用：`lib/core/entity/crud.ts` `ListSpec.restrictGroupBuy`（列表與總數都套用）；`restrictedGroupBuyIds(session)`（同一請求只查一次）。
-- **本機實測**（dev server 連正式庫；`lib/modules/groupbuy/tools/restricted-e2e.mjs run`：建 `[補F]` 未授權團購 B＋訂單／出貨紀錄／客服對話／發票，暫時把 guest1_a 設為受限、只授權 405167，測完還原權限與授權、刪除測試資料、比對不變量）：見 PARITY_AUDIT #37。
+- **本機實測**（dev server 連正式庫；`lib/modules/groupbuy/tools/restricted-e2e.mjs run`：建 `[補F]` 未授權團購 B＋訂單／出貨紀錄／客服對話／發票，暫時把 guest1_a 設為受限、只授權 405167，測完還原權限與授權、刪除測試資料、比對不變量），CI 套用 8103／8104 後 48/48 通過：
+  - 對照組（未受限）讀得到 B 的訂單、團購 lookup 與自取未取列表看得到 B。
+  - 詳情 id 直取：`/ajax/SalesOrder/get`（salesOrderId、uuid）B → 403、A → 200；`/backend/SalesOrder/show`、`printOrder`（混 A＋B）、自取訂單頁 uuid=B 都不含 B；`switchShortUrl`（含 B 短網址）403 且 B 短網址未變；出貨紀錄 B 下載／訂單、發票 B、客服對話 B、Editor `data[B 訂單]` 都拒絕；單一團購頁 B 無權限、A 正常、A 的品項列表 200。
+  - 跨團購：所有訂單 26 筆＝A 的訂單數（recordsTotal 也是 26，原本 59）、匯出不含 B；團購下拉只有 A、lookup（含 initialValue=B）不含 B；出貨紀錄、超商／自取未取、超時出貨、退換貨、保留單、客服、發票列表與 lookup、客服狀態計數、側欄徽章都不含 B；退款單據列表因帳號本來沒有 refundRequisition 權限回 403。
+  - 拒絕：會員、銷售一覽、倉儲、通路、標籤字典、每日商品銷售 403；每日銷售不帶團購只給關鍵字 403；匯出出貨 `groupBuyId=A,B` 403、`groupBuyId[]=B` 403；未指定團購的匯出出貨可用且不含 B。
+  - 授權 0 團：帶 A 的 salesOrderId 403、所有訂單 0 筆。
+  - headless 檢查（暫時受限時）：單一團購的訂單、品項、運費、優惠、進階設定頁與所有訂單、出貨紀錄、團購列表都沒有 4xx 請求（運費頁內嵌的 `FlatRateShipping/dList` 改為 neutral 後）。
+  - 還原：權限與授權（原本 0 筆）一致、殘留 `[補F]` 團購 0、訂單 59／系統設定 29／會員 12／庫存與券次數雜湊與測試前相同。
