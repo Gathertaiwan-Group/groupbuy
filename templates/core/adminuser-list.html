@@ -1,0 +1,112 @@
+{{!-- 管理員帳號 /backend/AdminUser/list（推導頁：原站「系統設定 > 管理員」本帳號無權限、未擷取；spec/SPEC.md §9 #1）。
+     版型沿用黑名單／貨運標籤列表（card + DataTables + Editor shim）；權限勾選只列出目前登入者擁有的旗標。 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var tableName = '#adminUserTable';
+		var permFields = {{json permissionFields}};
+		var fields = [
+			DataTableConfig.field_input('帳號', 'account', '', '', '登入用，3～40 字元，建立後不可修改'),
+			DataTableConfig.field_input('顯示名稱', 'displayName'),
+			{ type: 'password', label: '密碼', name: 'password', fieldInfo: '6～20 字元' },
+			{ type: 'password', label: '確認密碼', name: 'confirmPassword' },
+			DataTableConfig.field_checkbox_bool('啟用', 'active', 1),
+		];
+		$.each(permFields, function(i, p) {
+			fields.push(DataTableConfig.field_checkbox_bool(p.label, 'permissions.' + p.key, 0));
+		});
+		fields.push(DataTableConfig.field_input('可切換帳號', 'switchAccounts', '', '', '同帳號下其他管理員帳號，以逗號分隔（頂列「切換至」）'));
+
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: {
+				create: { type: 'POST', url: '{{baseUrl}}/ajax/AdminUser/save.do' },
+				edit:   { type: 'POST', url: '{{baseUrl}}/ajax/AdminUser/update.do?adminUserId=_id_' }
+			},
+			table: tableName,
+			idSrc: 'adminUserId',
+			fields: fields,
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n,
+		} );
+		editor.on('initCreate', function() {
+			editor.enable('account'); editor.show(['password', 'confirmPassword']);
+		});
+		editor.on('initEdit', function() {
+			editor.disable('account'); editor.hide(['password', 'confirmPassword']);
+		});
+
+		var pwdEditor = new $.fn.dataTable.Editor( {
+			ajax: { edit: { type: 'POST', url: '{{baseUrl}}/ajax/AdminUser/resetPassword.do?adminUserId=_id_' } },
+			table: tableName,
+			idSrc: 'adminUserId',
+			fields: [
+				{ type: 'password', label: '新密碼', name: 'password', fieldInfo: '6～20 字元；重設後該帳號所有登入會被登出' },
+				{ type: 'password', label: '確認密碼', name: 'confirmPassword' },
+			],
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n,
+		} ).on('submitSuccess', function() { displayAlertSuccess('密碼已重設'); });
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBfrtip',
+			processing: true,
+			scrollX: true,
+			ajax: { url: '{{baseUrl}}/ajax/AdminUser/list.do', type: 'POST' },
+			language: DataTableConfig.i18n,
+			columns: [
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('account'),
+				DataTableConfig.data_input('displayName'),
+				{ data: 'active', render: function(d) { return d ? '<span class="badge badge-success">啟用</span>' : '<span class="badge badge-secondary">停用</span>'; } },
+				DataTableConfig.data_input('permissionsString'),
+				DataTableConfig.data_input('switchAccounts'),
+				DataTableConfig.data_input('dateLastLoginString'),
+				DataTableConfig.data_input('dateCreatedString'),
+			],
+			order: [[ 7, 'asc' ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'create', editor: editor },
+				{ extend: 'edit', editor: editor },
+				{ extend: 'selectedSingle', text: '重設密碼', action: function() {
+					var row = table.row({ selected: true }).data();
+					if (row && row.self) { displayAlertWarning('請使用頂列「修改密碼」變更自己的密碼'); return; }
+					pwdEditor.title('重設密碼：' + $('<div>').text(row ? row.account : '').html())
+						.buttons({ label: '重設', className: 'btn-primary', fn: function() { this.submit(); } })
+						.edit(table.rows({ selected: true }).indexes());
+				} },
+			],
+			drawCallback: function() { $(".dataTables_scrollBody").floatingScroll(); }
+		} );
+		DataTableHelper.initEditorOnCallback(table, editor);
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">管理員帳號 <a class="btn btn-sm btn-outline-secondary float-right m-0" href="/backend/AdminUser/loginLog"><i class="fa-light fa-clock-rotate-left"></i> 登入日誌</a></div>
+<div class="card-body">
+	<div class="blue-grey lighten-5 small p-2">
+	<p>＊帳號為登入用（全站唯一），建立後不可修改；停用的帳號無法登入，已登入的連線會立即登出。</p>
+	<p>＊權限只能授予／移除自己擁有的項目；不能停用自己或拿掉自己的「管理員帳號」權限。</p>
+	<p class="mb-0">＊重設他人密碼後，該帳號所有登入會被登出；變更自己的密碼請用頂列「修改密碼」。</p>
+	</div>
+</div>
+<div class="card-body">
+	<table id="adminUserTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>帳號</th>
+				<th>顯示名稱</th>
+				<th>狀態</th>
+				<th>權限</th>
+				<th>可切換帳號</th>
+				<th>最後登入</th>
+				<th>建立日期</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
+</div>

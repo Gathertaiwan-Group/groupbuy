@@ -112,7 +112,7 @@ DB 函式（migration）：
 
 ## 已知缺口
 
-- 訂單列「加入黑名單」呼叫 `/backend/Blacklist/add`：黑名單屬 marketing（blacklist-list），目前尚無模組實作 → 404。
+- ~~訂單列「加入黑名單」`/backend/Blacklist/add` 404~~：marketing 已實作（`lib/modules/marketing/blacklist.ts`：`/backend/Blacklist/add` 回 openForm script → `/backend/Blacklist/addForm` 彈窗 → `POST /ajax/Blacklist/add`），2026-10-29 本機實測 200（PARITY_AUDIT #54）。
 - 原站 TPL 功能（`tplEnabled` 為 false）未實作：`/ajax/Tpl/createShipment`。POS 列印發票已補（補D）。
 - Email／簡訊／金流（虛擬帳號重新產生、信用卡重新授權）／物流（綠界取號、小白單、超商取貨條）／電子發票：未串接，只寫紀錄。
 - 匯入外部訂單 `.xls` 加密檔或 Excel 95 以前格式不支援（提示另存 .xlsx/.csv）。

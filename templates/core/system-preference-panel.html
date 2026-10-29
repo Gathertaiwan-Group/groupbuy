@@ -120,7 +120,9 @@ function spEscape(s) { return $.fn.dataTable.render.text().display(s == null ? '
 		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="email"><i class="fa-light fa-envelope"></i> 收/寄信設定</button>
 		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="bankFormat"><i class="fa-light fa-building-columns"></i> 自定義銀行對帳檔案格式</button>
 		<button type="button" class="btn btn-sm btn-outline-primary" data-sp="theme"><i class="fa-light fa-palette"></i> 主題顏色</button>
-		<a class="btn btn-sm btn-outline-secondary" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i> csv編輯器</a>
+		{{#if can.csvEditor}}<a class="btn btn-sm btn-outline-secondary" href="/backend/SystemPreference/csvEditor"><i class="fa-light fa-toolbox"></i> csv編輯器</a>{{/if}}
+		{{#if can.adminUser}}<a class="btn btn-sm btn-outline-secondary" href="/backend/AdminUser/list"><i class="fa-light fa-users-gear"></i> 管理員帳號</a>
+		<a class="btn btn-sm btn-outline-secondary" href="/backend/AdminUser/loginLog"><i class="fa-light fa-clock-rotate-left"></i> 登入日誌</a>{{/if}}
 	</div>
 	<p class="small text-muted mb-2">此處為整個帳號的預設值；團購「進階設定」未設定的項目會使用這裡的值（顯示「來自系統設定」）。金流／物流／電子發票服務商串接設定【未串接】，不在此設定。</p>
 	<table id="spTable" class="table table-hover table-sm" style="width:100%">

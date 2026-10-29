@@ -8,6 +8,7 @@ import { salesAnalysisRoutes } from "./sales-analysis";
 import { erpReportRoutes } from "./erp-report";
 import { exportRoutes } from "./exports";
 import { distributionRoutes } from "./distribution";
+import { customerPointSummaryRoutes } from "./customer-point-summary";
 
 export const routes: RouteDef[] = [
   ...dailyStatisticsRoutes,
@@ -16,4 +17,5 @@ export const routes: RouteDef[] = [
   ...erpReportRoutes,
   ...exportRoutes,
   ...distributionRoutes,
+  ...customerPointSummaryRoutes,
 ];

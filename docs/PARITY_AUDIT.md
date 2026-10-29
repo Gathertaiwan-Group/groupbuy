@@ -29,11 +29,13 @@
 |---|---|
 | 完整 | 67 |
 | 部分 | 24 |
-| 缺 | 9 |
-| 推導 | 28 |
+| 缺 | 5 |
+| 推導 | 32 |
 | **合計** | **128** |
 
 另有 7 個原站已註解停用的入口不計入（§5）。
+
+（補C 2026-10-29：#10、#11、#91、#123 由「缺」改「推導」，上表已反映。）
 
 ## 2. 對照表
 
@@ -52,8 +54,8 @@
 | 7 | core | 服務條款 `/backend/GroupBuy/terms.do` | 完整 | lib/modules/core/routes.ts:54；spec/html/groupbuy-terms.html | — |
 | 8 | core | 系統設定 `/backend/SystemPreference/panel`（帳務、收/寄信、銀行格式、主題、稅籍、寄件人、通知、愛心碼、管理員安全性） | 推導 | lib/modules/groupbuy/system-preference.ts；templates/core/system-preference-panel.html:1；spec/SPEC.md §9 #1（原站帳號無權限） | 取得有權限帳號後補擷取比對；M |
 | 9 | core | 系統設定的服務商金鑰編輯器 `/ajax/SystemPreference/einvoiceSettings\|lineSettings\|stripeSettings\|trustPaySettings\|otrackFrozenSettings` | 缺 | 原站 public/public/scripts/dataTable.api.min.js（`lineSettings`/`einvoiceSettings` 等物件）；複製站刻意不做 system-preference.ts:9（金鑰只放環境變數） | 若要讓租戶自填金鑰需加密存放＋各服務商帳號；L（外部帳號） |
-| 10 | core | 管理員帳號管理（子帳號新增/停用/權限）、登入日誌、商家帳戶（SPEC §9 #1 列出的系統設定子區） | 缺 | 路由表無 `/backend/AdminUser/list` 類頁面（只有 login/changePassword/switchAdmin）；spec/SPEC.md §9 #1 | 原站未擷取，需推導 UI；資料表 admin_users／admin_login_attempts 已有；L（推導） |
-| 11 | core | csv 編輯器 `/backend/SystemPreference/csvEditor` | 缺 | 空殼：templates/core/system-preference-csveditor.html:5（只有標題與一行字）；原站無權限未擷取 | 推導「訂單匯出 csv 欄位設定」UI＋儲存到 system_preferences；M（推導） |
+| 10 | core | 管理員帳號管理（子帳號新增/停用/權限）、登入日誌、商家帳戶（SPEC §9 #1 列出的系統設定子區） | 推導 | 補C：lib/modules/core/admin-users.ts（`/backend/AdminUser/list`、`/ajax/AdminUser/list\|save\|update\|resetPassword`、`/backend/AdminUser/loginLog`、`/ajax/AdminUser/loginLog`，需 `permissions.adminUser`）、templates/core/adminuser-list.html、adminloginlog-list.html；入口在系統設定頁。〔推導〕依據：原站未擷取（SPEC §9 #1），資料表沿用 admin_users（permissions jsonb）／admin_login_attempts（auth-api.ts 寫入的 reason 代碼）；版型沿用黑名單列表。實測：新增（帳號重複／密碼長度／可切換帳號驗證）、停用→該帳號 session 立即 401、停用帳號登入 403、重設他人密碼→舊密碼 401 新密碼 200、不能停用自己／拿掉自己 adminUser／重設自己密碼、無 adminUser 權限頁面「無權限」AJAX 403；登入日誌顯示成功／密碼錯誤／帳號已停用。另可設 `groupBuyRestricted`（#37 受限帳戶，不能改自己） | 「商家帳戶」子區仍未做（無原站資料）；與原站畫面一致需有權限帳號補擷取 |
+| 11 | core | csv 編輯器 `/backend/SystemPreference/csvEditor` | 推導 | 補C：templates/core/system-preference-csveditor.html（貼上格式→表格編排標頭/代碼→上下移/刪除→匯出兩行格式→複製；右側代碼按鈕沿用貨運標籤清單）、lib/modules/core/csv-editor.ts（樣板 `/ajax/SystemPreference/csvEditorTemplates`，存 system_preferences `CSV_EDITOR_TEMPLATES`）、csv-editor-logic.ts（與 shipping-export.ts resolveFormat 同規則）。〔推導〕依據：原站貨運標籤／進階設定代碼面板的連結說明「可透過csv編輯器，透過匯出功能複製貼回」（spec/html/shippingtag-list.html:740、groupbuypreference-list.html:964）。實測：載入→加代碼→移動→匯出得 `訂單階段,收件人,固定資料\norder.state,shipping.name.only,#1000`；樣板存/覆蓋/刪除；無 csvEditor 權限「無權限」 | 原站實際畫面未擷取 |
 | 12 | core | Email／簡訊寄送（訂單通知、驗證碼、測試信） | 部分 | lib/modules/core/delivery.ts；docs/ARCHITECTURE.md §12（`MESSAGE_DELIVERY_MODE=whitelist`、簡訊三竹未設定） | Email 轉 `live` 為設定變更；簡訊需三竹（或原站簡訊商）帳號；S（設定）＋外部帳號 |
 | 13 | core | 圖片上傳 `/json/uploadImage/*`、`/upload/images/*`（CKFinder 替代） | 完整 | lib/modules/core/routes.ts；docs/ARCHITECTURE.md §7 | — |
 
@@ -95,7 +97,7 @@
 | 40 | items | 組合商品管理／編輯器 `/backend/ItemBundleV2/list\|create\|edit` | 完整 | items/pages.ts:121、:128；spec/html/itembundlev2-*.html | — |
 | 41 | items | 複製其他團購品項彈窗 | 完整 | items/pages.ts:184；spec/html/modal-groupbuyitemset-import.html | — |
 | 42 | items | 匯入商品 XLS 彈窗、匯出商品 XLS／庫存 `/backend/ItemTemplate/*` | 完整 | items/pages.ts:174；items/routes.ts:86；spec/html/modal-itemtemplate-import.html | — |
-| 43 | items | 批次改名、綁定主庫存、盤點（商品）彈窗 | 完整 | items/pages.ts:189、:215；items/item-modals.ts:193（`/ajax/Item/getWarehouseItems` 實測 200，items.md「回 500」已過時） | 更新 docs/modules/items.md；S |
+| 43 | items | 批次改名、綁定主庫存、盤點（商品）彈窗 | 完整 | items/pages.ts:189、:215；items/item-modals.ts:193（`/ajax/Item/getWarehouseItems` 實測 200）；補C 已更新 docs/modules/items.md | — |
 | 44 | items | 新增商品精靈「從網站新增」`/ajax/Item/uploadFromUrl` | 部分 | lib/modules/items/item-modals.ts:182（回 501【未串接】） | 抓取外部商品頁有法律/穩定性風險，建議維持；—（不建議補） |
 | 45 | items | 排程 `/backend/Scheduler/list` | 完整 | lib/modules/items/scheduler.ts:491；spec/GAP_SPEC.md §6（scheduler.js 逐位元相同） | — |
 |  46 | items | 商品點數方案 `/ajax/ItemRoyaltyProgram/get\|save\|update\|delete`、會員卡 `/ajax/LoyaltyCard/lookup` | 推導 | items/item-extras.ts：`/ajax/ItemRoyaltyProgram/get|save|update|delete`（會員方案商品 item_type=RP ↔ 會員方案＋會員卡，item_royalty_programs.loyalty_card_id，migration 1101）、`/ajax/LoyaltyCard/lookup`；入口：RP 商品列展開「綁定會員方案」；item-extras.test.ts；補D 本機實測（補D） | 推導依據：原站 itemRoyaltyProgramManager（dataTable.api.min.js）欄位與 Lookup/item?itemType=RP；入口頁未擷取。前台購買 RP 商品後自動加入會員方案不在本項（storefront／會員後台 #123） |
@@ -111,7 +113,7 @@
 | 51 | marketing | 抽獎 `/backend/Lottery/lottery` | 完整 | marketing/lottery.ts:234；spec/html/lottery.html | — |
 | 52 | marketing | 商品銷售標籤／商品系統標籤 `/backend/GroupBuyItemCrmTag\|GroupBuyItemSysTag/list` | 完整 | marketing/item-tags.ts:188、:197；spec/html/groupbuyitemcrmtag-list.html、groupbuyitemsystag-list.html | — |
 | 53 | marketing | 團購關鍵字標籤 `/backend/GroupBuySysTagRef/list` | 完整 | marketing/sys-tag-ref.ts:182；spec/html/groupbuysystagref-list.html | — |
-| 54 | marketing | 黑名單 `/backend/Blacklist/list`＋訂單列「加入黑名單」`/backend/Blacklist/add` | 完整 | marketing/blacklist.ts:169、:194（orders.md「Blacklist/add 404」已過時） | 更新 docs/modules/orders.md；S |
+| 54 | marketing | 黑名單 `/backend/Blacklist/list`＋訂單列「加入黑名單」`/backend/Blacklist/add` | 完整 | marketing/blacklist.ts:169、:194（`/backend/Blacklist/add`、`addForm` 實測 200）；補C 已更新 docs/modules/orders.md | — |
 | 55 | marketing | 短網址 `/backend/ShortUrl/list`（原站走 uuo.io） | 部分 | marketing/shorturl.ts:2、:92（改本站 `/s/:code`） | uuo.io 為原站私有服務；—（外部） |
 
 ### 2.5 orders（訂單、退換貨、保留、自取、客服）
@@ -168,7 +170,7 @@
 | 88 | analytics | 商品銷售 `/backend/SalesAnalysis/show` | 推導 | sales-analysis.ts:433；docs/modules/analytics.md §6（原站示範帳號 0 筆，聚合方式無法比對） | — |
 | 89 | analytics | 團購銷售（月）`/backend/GroupBuyErpMonthlyStatistics/list` | 完整 | analytics/monthly-statistics.ts:288；spec/html/groupbuyerpmonthlystatistics-list.html | — |
 | 90 | analytics | 訂單統計 `/backend/SalesOrderMonthlyStatistics/list` | 完整 | monthly-statistics.ts:297；spec/html/salesordermonthlystatistics-list.html | — |
-| 91 | analytics | 每月消費統計下載 `/backend/CustomerPointSummary/download` | 缺 | 表單 action 在 templates/analytics/salesordermonthlystatistics-list.html:91，路由表無此路徑；觸發程式碼在原站被過濾（spec/html/salesordermonthlystatistics-list.html:661 缺段 3257 字元） | 依表單篩選欄位推導 xlsx 匯出；S–M（推導） |
+| 91 | analytics | 每月消費統計下載 `/backend/CustomerPointSummary/download` | 推導 | 補C：lib/modules/analytics/customer-point-summary.ts；頁面補「下載每月消費統計（Excel）」「CSV」鍵（templates/analytics/salesordermonthlystatistics-list.html）。〔推導〕依據：表單 `#queryForm` 的 action 與篩選欄位（SPEC 訂單統計頁），觸發段被過濾（spec/html/salesordermonthlystatistics-list.html:661）、下載內容未擷取（SPEC §9 #6）→ 輸出每月消費統計同一組篩選＋依路徑名附會員點數（會員ID、目前點數、當月獲得／使用）。實測：xlsx 與 csv（UTF-8 BOM）列數一致、月份篩選筆數＝列表 recordsFiltered、門檻篩選、缺 CSRF 403；docs/modules/analytics.md §4 | 原站檔案欄位未知 |
 | 92 | analytics | 每日銷售（全部／單一團購）`/backend/GroupBuyDailyStatistics/list` | 完整 | analytics/daily-statistics.ts:438；spec/html/groupbuydailystatistics-*.html | — |
 | 93 | analytics | 商品每日銷售 `/backend/ItemDailyStatistics/list` | 完整 | daily-statistics.ts:453；spec/html/itemdailystatistics-list.html | — |
 | 94 | analytics | 銷售分析（單一團購）`/backend/GroupBuy/analytics` | 完整 | sales-analysis.ts:439；spec/html/groupbuy-analytics.html | — |
@@ -215,7 +217,7 @@
 
 | # | 模組 | 原站功能/端點 | 狀態 | 證據 | 補齊建議/工作量 |
 |---|---|---|---|---|---|
-| 123 | orders/storefront | 後台會員管理：啟用/停用 `/ajax/Customer/activate\|deactivate`、Google Sheet 匯入貼標籤 `/ajax/Customer/importFromGoogleSheet`、會員點數方案（`customerRoyaltyProgramManager`） | 缺 | 原站 dataTable.api.min.js；複製站只有 `/ajax/Customer/displaySimpleInfo`（orders）；原站側欄無此頁（帳號權限外，未擷取） | 推導「會員」後台頁（列表、啟停用、標籤、點數）；L（推導） |
+| 123 | orders/storefront | 後台會員管理：啟用/停用 `/ajax/Customer/activate\|deactivate`、Google Sheet 匯入貼標籤 `/ajax/Customer/importFromGoogleSheet`、會員點數方案（`customerRoyaltyProgramManager`） | 推導 | 補C：lib/modules/core/customers.ts、customers-logic.ts、templates/core/customer-list.html、modal-customer-pointtransactions.html、migration 0110（`customer_points_adjust`）；需 `permissions.customer`，側欄「設定 > 會員」。〔推導〕依據：原站 dataTable.api.min.js 的 `#customerTable`、啟動會員方案 Editor（方案／到期日「留空白則為當前開始算一年」／「將激活中帳號設為已啟用」→ activate；remove → deactivate）、貼標籤 Editor（rowStart/rowEnd）；頁面本身、Sheet 欄位格式未擷取 → 第 1 列標頭，依會員ID→Email→電話比對，匯入標籤（附加）／點數（加減）／備註；Sheet 用公開分享網址轉 CSV 匯出（不需 API 金鑰），另可上傳 CSV（UTF-8／Big5）。實測：啟用（空白到期日＝方案天數，VIP→2027-10-29）、停用、編輯標籤、點數調整（不可扣成負數、5 筆並行 -30 對餘額 100 恰 3 筆成功）、點數紀錄彈窗、CSV 匯入（找不到列、非整數點數逐列回報）、公開 Sheet 實際下載解析、未公開 Sheet 回明確提示 | 停用為「取消會員方案」（customers 無停權欄位，前台登入屬 storefront）；原站畫面未擷取 |
 |  124 | groupbuy | 匯入欄位對應 `/ajax/XLSHeaderParser/parse`（XLS 表頭解析） | 推導 | groupbuy/groupbuy-extras.ts `POST /ajax/XLSHeaderParser/parse`（Editor upload，.xls／.xlsx／.csv → 表頭選項 value＝欄位索引，ImportExcelEditorManager 依此預選；列資料暫存 xls_header_uploads 24 小時，loadXlsHeaderUpload() 供匯入端讀取，migration 1021）；xls-header.test.ts；補D 本機實測（補D） | 推導依據：原站 ImportExcelEditorManager 只有前端（dataTable.api.min.js），使用頁面未擷取，最終送出端點不明 |
 | 125 | core | Google reCAPTCHA（後台登入、前台） | 缺 | auth-api.ts:292、templates/storefront/partials/recaptcha-stub.html:1 | Google reCAPTCHA 金鑰；S（外部帳號） |
 | 126 | core | 原站樣板文字：系統信樣板、通知信實際文字、進階設定完整鍵目錄 | 推導 | spec/SPEC.md §9 #9；migration 0103 寫通用文字（ARCHITECTURE.md §7） | 取得原站樣板後替換；S（推導） |
@@ -237,14 +239,14 @@
 | `/ajax/Item/syncAttrTo` | dataTable.api.min.js（`itemAttrNoteSyncManager`） | 自定義備註頁（原文被擋） | 26（補D 已補） |
 | `/ajax/ItemRoyaltyProgram/get\|save\|update\|delete`、`/ajax/LoyaltyCard/lookup` | dataTable.api.min.js | 未擷取 | 46（補D 已補） |
 | `/ajax/ItemKeywordTag/save` | dataTable.api.min.js | 未擷取 | 47（補D 已補） |
-| `/ajax/Customer/activate\|deactivate\|importFromGoogleSheet` | dataTable.api.min.js | 未擷取 | 123 |
+| `/ajax/Customer/activate\|deactivate\|importFromGoogleSheet` | dataTable.api.min.js | 未擷取 | 123（補C 已補） |
 | `/ajax/ShippingRecord/erpCreateOrder\|erpKeyLookup\|erpProviderInfo`、`/ajax/Lookup/shippingProvider` | dataTable.api.min.js | 未擷取 | 69 |
 | `/ajax/SystemPreference/einvoiceSettings\|lineSettings\|stripeSettings\|trustPaySettings\|otrackFrozenSettings` | dataTable.api.min.js | 系統設定（刻意不做） | 9 |
 | `/ajax/XLSHeaderParser/parse` | dataTable.api.min.js | 未擷取 | 124（補D 已補） |
 | `/ajax/GroupBuy/adminUserGroupBuys` | public/public/scripts/dataTable.min.js | 擷取頁未見 | 37（補D 已補） |
 | `/ajax/web/CustomerFacebook/auth`、`/ajax/FacebookAuthGroupBuy/auth`（FB 前段） | public/public/scripts/ias_v5.min.js | 有 | 122、17 |
 | `/ajax/SalesOrder/reauthCreditCardPeriod2` | public/scripts/salesOrder.js:131 | 無（列表用 `reauthPeriod`） | 66 |
-| `/backend/CustomerPointSummary/download` | 訂單統計頁表單 | 有表單、觸發段被擋 | 91 |
+| `/backend/CustomerPointSummary/download` | 訂單統計頁表單 | 有表單、觸發段被擋 | 91（補C 已補） |
 | `/api/lessons/_id_/password`、`/ajax/Theme/theme\|itemsView\|itemSetTopView` | public/scripts/gbutil.js、gbf_editor.js | 函式庫殘留，擷取頁未使用 | 不計 |
 
 其餘未命中屬擷取截斷殘段（如 `/guest_ep/ajax/GroupBuyItemCrmTag/updat`、`/ajax/Sales`、`/guest_ep/ajax/SalesOrderMon`），補全後都對應到已存在的路由。
@@ -253,10 +255,10 @@
 
 | 位置 | 情況 | 列 |
 |---|---|---|
-| templates/analytics/salesordermonthlystatistics-list.html:91 | `form action="/backend/CustomerPointSummary/download"`，路由不存在 | 91 |
+| templates/analytics/salesordermonthlystatistics-list.html:91 | `form action="/backend/CustomerPointSummary/download"`，路由不存在 | 91（補C 已補路由與下載鍵） |
 | templates/storefront/form.html:349 | 載入 bundle-modal.min.js，其端點不存在 | 107（補A 已補） |
 | templates/storefront/partials/web-foot-scripts.html:97 | 官網購物袋連結 `/{shortUrl}/bag` → 404 | 118（補B 已補） |
-| templates/core/system-preference-csveditor.html:5 | 只有標題與「csv 匯出欄位設定」一行字，無任何功能 | 11 |
+| templates/core/system-preference-csveditor.html:5 | 只有標題與「csv 匯出欄位設定」一行字，無任何功能 | 11（補C 已補） |
 | templates/orders/salesorderreturn-list.html:60–64、templates/orders/helpdesk-conversation-list.html:18 | Editor 的 create/edit 指向不存在的 `save.do`／`update.do`，但對應按鈕原站即已註解、畫面上沒有入口 | 不影響（59、62） |
 | 「【未串接】」回應（143 行） | 寄送、FB、reCAPTCHA、KOL、uuo.io、Geocoding、從網址解析商品、POS 發票機——按鈕有後端但只記錄或回提示 | 2、12、17、20、21、35、44、55、73、111、120、122、125 |
 
@@ -276,8 +278,7 @@
 標記：〔推導〕＝原站資料缺失，只能推導；〔外部〕＝需外部帳號/金鑰，程式補不了或補了也無法驗證；無標記＝可直接補。
 
 **core**
-- #11 csv 編輯器（目前空殼）— M〔推導〕
-- #10 管理員帳號管理、登入日誌 — L〔推導〕
+- ~~#11 csv 編輯器~~、~~#10 管理員帳號管理、登入日誌~~ — 補C 已補（推導，見 §2；「商家帳戶」子區仍無原站資料）
 - #8／#126 系統設定與系統信樣板與原站比對 — M〔推導〕
 - #12 Email 轉 `live`（設定）— S；簡訊服務商 — 〔外部〕
 - #9 服務商金鑰編輯器（綠界/LINE/Stripe/TrustPay/黑貓冷凍/發票）— L〔外部〕
@@ -285,18 +286,18 @@
 
 **groupbuy**
 - ~~#26 自定義備註同步到商品~~、~~#23 進階設定 feed 動作（商品 Feed）~~、~~#124 XLS 表頭解析~~ — 補D 已補（推導，見 §2）
-- #37 編輯團購管理員 — 補D 已補授權資料與編輯器；受限帳戶旗標待 #10 管理員頁可設定、目前只限制團購列表 — S〔推導〕
+- #37 編輯團購管理員 — 補D 已補授權資料與編輯器；受限帳戶旗標 `groupBuyRestricted` 補C 已可在管理員頁設定；目前只限制團購列表 — S〔推導〕
 - #17／#35 臉書授權、臉書社團 Graph API — L〔外部〕
 - #20 發送簡訊 — S〔外部〕；#21 KOL 平台 — 〔外部，原站私有服務，不能補〕
 
 **items**
 - ~~#46 會員方案商品綁定＋會員卡 lookup~~ — 補D 已補（推導）
 - #47 商品關鍵字標籤 — 補D 已補儲存；前台搜尋使用關鍵字待 storefront — S
-- #43 更新 items.md（getWarehouseItems 已正常）— S
+- ~~#43 更新 items.md（getWarehouseItems 已正常）~~ — 補C 已更新
 
 **marketing**
 - #48 優惠 29 類 — 補D 已逐類對照精靈欄位語意並補測試（修正組合包 BY_TAG）；與原站同購物車實測對照仍待原站資料〔推導〕
-- #54 更新 orders.md（Blacklist/add 已存在）— S
+- ~~#54 更新 orders.md（Blacklist/add 已存在）~~ — 補C 已更新
 - #55 uuo.io 短網址 — 〔外部，原站私有服務，不能補〕
 
 **orders**
@@ -315,7 +316,7 @@
 - ~~#83 調撥在途庫存~~ — 補D 已補（migration 4504）
 
 **analytics**
-- #91 每月消費統計下載 `/backend/CustomerPointSummary/download` — S–M〔推導〕
+- ~~#91 每月消費統計下載 `/backend/CustomerPointSummary/download`~~ — 補C 已補（推導，xlsx／csv）
 
 **accounting**
 - ~~#100 匯款對帳支援 xls/xlsx~~、~~#99 電子發票彈窗提示字~~ — 補D 已補；電子發票正式特店〔外部〕
@@ -328,7 +329,7 @@
 - #120 POS 刷卡機／發票機 — L〔外部〕
 
 **跨模組**
-- #123 後台會員管理（啟停用、Google Sheet 匯入、點數）— L〔推導〕
+- ~~#123 後台會員管理（啟停用、Google Sheet 匯入、點數）~~ — 補C 已補（推導，見 §2）
 
 ### 不能補（或補了無法對齊原站）的項目
 

@@ -8,7 +8,7 @@
 | 代號 | 路徑 | 狀態 | DOM 骨架相似度 |
 |---|---|---|---|
 | groupbuy-show-items | `/backend/GroupBuy/show(.do)?groupBuyId=` | 完成（品項分頁全功能；優惠條件／團購優惠卷分頁的資料與動作由 marketing 端點提供；同原站引用 `/scripts/salesRule.js`） | 可見骨架 293/294（98.0%） |
-| groupbuyitemset-show | `/backend/GroupBuyItemSet/show(.do)?groupBuyId=[&groupBuyItemSetId=\|uid=\|parentItemId=\|warehouseItem=]` | 完成（「盤點」彈窗的資料端點屬 warehouse，目前 500，見缺口） | 原站可見骨架 310/310 全覆蓋（相似度 91.7%，多出部分在缺段區） |
+| groupbuyitemset-show | `/backend/GroupBuyItemSet/show(.do)?groupBuyId=[&groupBuyItemSetId=\|uid=\|parentItemId=\|warehouseItem=]` | 完成（「盤點」彈窗的資料端點屬 warehouse，2026-10-29 實測 200） | 原站可見骨架 310/310 全覆蓋（相似度 91.7%，多出部分在缺段區） |
 | itembundlev2-list | `/backend/ItemBundleV2/list?groupBuyId=` | 完成 | 可見骨架 42/43（97.7%） |
 | itembundlev2-create | `/backend/ItemBundleV2/create?groupBuyId=[&groupBuyItemSetId=\|itemId=]`、`/backend/ItemBundleV2/edit(.do)?itemId=\|itemBundleV2Id=` | 完成 | 擷取檔缺段破壞解析，無法量化；依 itemBundle.min.js 推導 |
 | modal-itemtemplate-import | `/backend/ItemTemplate/importItemTemplate?groupBuyId=` | 完成 | 可見 14/16（缺段區不計） |
@@ -83,7 +83,7 @@ Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock
 
 ## 已知缺口
 
-- **盤點（商品）彈窗**：HTML 與 inventory.js 同原站，但其列表端點 `/ajax/Item/getWarehouseItems`（warehouse 模組）在本機與正式站都回 500：`wms_warehouse_items_v` 沒有 `id` 欄，而 `wmsList` 一律 `order("id")`。待 warehouse 修。
+- ~~**盤點（商品）彈窗**列表端點 `/ajax/Item/getWarehouseItems` 回 500~~：已由 warehouse 修正（`lib/modules/warehouse/inventory.ts`），2026-10-29 本機以 `itemId` 實測 200、回 DataTables 信封（PARITY_AUDIT #43）。
 - **從網址解析商品**：未串接外部網站（見推導 5）。
 - **綁定主庫存**：彈窗只列「主表單」團購的品項；測試租戶沒有主表單團購 → 列表為空，綁定本身以 API（同彈窗送出的 Editor remove 請求）驗證。
 - 組合商品「儲存上架」送出的 `status` 取自隱藏的 `#inputStatus`（預設 DRAFT），與原站前端行為相同。
@@ -92,7 +92,7 @@ Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock
 ## 給 core 的問題
 
 1. `scripts/dev/shot.mjs` 隨機除錯埠可能撞到別的 agent 的 headless Chrome，會連到並操作別人的頁面（實際發生過一次）→ 已以最小 `fix(core)` 修正：先確認埠未被占用、只接受自己啟動的 about:blank 頁。
-2. warehouse `/ajax/Item/getWarehouseItems` 500（見上）。
+2. ~~warehouse `/ajax/Item/getWarehouseItems` 500~~ — 已修（2026-10-29 實測 200）。
 3. `/ajax/Lookup/flatRateShipping` 仍無 shipping 實作，items 以低優先權暫代。
 
 ## 測試紀錄（2026-10-23）
@@ -100,7 +100,7 @@ Migration 1100：`item_stock_logs`（庫存異動紀錄）＋`items_adjust_stock
 本機（next dev）與正式站（groupbuy-delta.vercel.app）各跑一輪 headless Chrome 實際點按鈕（腳本放 scratchpad，不入庫）：
 
 - 團購品項頁：新增（含上傳圖片）、編輯、複製、複製品項至其他團購（建立新品項）、刪除、同步同名品項、重新排序、上架、下架、綁定主庫存（彈窗）、解除綁定主庫存、匯出商品庫存（XLSX）、匯入商品庫存（上傳）、匯出商品XLS、匯入商品XLS（改價＋新增商品）、複製其他團購品項（複製／複製(共用庫存)）、商品明細連結。
-- 商品明細：新增一般品（含圖片）、新增規格品（尺寸 S,M → 2 件）、從網址新增商品（自行新增 → 建立成功）、新增組合商品（導向編輯器）、編輯、複製、刪除、同步子商品、複製其他品項商品、複製商品至其他品項（itemCopy.js → 複製成功）、盤點（彈窗開啟；列表端點 500 屬 warehouse）、批次改名、上架、下架、重新排序、設為群組、取消群組。
+- 商品明細：新增一般品（含圖片）、新增規格品（尺寸 S,M → 2 件）、從網址新增商品（自行新增 → 建立成功）、新增組合商品（導向編輯器）、編輯、複製、刪除、同步子商品、複製其他品項商品、複製商品至其他品項（itemCopy.js → 複製成功）、盤點（彈窗開啟；列表端點當時 500，現已修正為 200）、批次改名、上架、下架、重新排序、設為群組、取消群組。
 - 優惠條件分頁（marketing 端點）：新增、編輯、複製、停用、啟用（狀態篩選切「全部」）、系統自動調整優先順序、測試優惠（模擬結果對話框）、複製優惠至其他表單、複製其他表單優惠、新增<精靈模式>（折扣 → 訂單折扣 → 逐步填寫 → 新增，建立成功）、綁定（另開 /backend/SalesRule/details）、刪除。
 - 團購優惠卷分頁（marketing 端點）：新增（不使用樣板）、編輯、停用、啟用、刪除；console 例外 0（已加與 marketing 相同的 `couponMeta[val]` 空值防護）。
 - 組合商品：新增（選類型、群組、搜尋候選商品、加入、儲存上架 → 成功彈窗）、列表 → 編輯 → 載入既有設定 → 儲存；template／getBundle／previewSyncNames／previewSyncContent／updateItemTag／updateBatchItemTags 端點。

@@ -218,6 +218,12 @@ background-image: url(/pups/img/Top1.jpg);
 									<span class="sv-slim sv-slim-3d">黑名單</span>
 									<span class="sv-normal">黑名單</span></a>
 							</li>
+{{#if can.customer}}{{!-- 推導：原站後台會員頁（帳號權限外，未擷取）；有 permissions.customer 才顯示 --}}
+							<li><a href="/backend/Customer/list" >
+									<span class="sv-slim">會員</span>
+									<span class="sv-normal">會員</span></a>
+							</li>
+{{/if}}
 							<li><a href="/backend/ShortUrl/list" >
 									<span class="sv-slim">短址</span>
 									<span class="sv-normal">短網址</span></a>

@@ -1,0 +1,233 @@
+{{!-- 會員 /backend/Customer/list（推導頁：原站後台會員頁帳號權限外、未擷取）。
+     依原站 dataTable.api.min.js：表格 id #customerTable、customerRoyaltyProgramManager（啟動會員方案 → /ajax/Customer/activate、/deactivate）、
+     customerImportManager（貼標籤 → /ajax/Customer/importFromGoogleSheet，rowStart/rowEnd）。
+     其餘（列表欄位、點數調整／紀錄、Sheet 網址設定、CSV 上傳）為本站推導，版型沿用黑名單列表。 --}}
+<!--#head-->
+{{> core/partials/dte-style.html}}
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var tableName = '#customerTable';
+		var ajaxPost = function(url, data) {
+			return $.ajax({ type: 'POST', url: url, data: data, dataType: 'json' });
+		};
+		var showFail = function(xhr) {
+			var j = xhr && xhr.responseJSON;
+			displayAlertWarning((j && (j.error || j.message)) || '操作失敗，請稍後再試');
+		};
+
+		var editor = new $.fn.dataTable.Editor( {
+			ajax: { edit: { type: 'POST', url: '{{baseUrl}}/ajax/Customer/update.do?customerId=_id_' } },
+			table: tableName,
+			idSrc: 'customerId',
+			fields: [
+				DataTableConfig.field_input('標籤', 'tags', '', '以逗號分隔'),
+				DataTableConfig.field_input('每日下單上限', 'dailyOrderLimits', '', '空白＝不限'),
+				DataTableConfig.field_textarea('備註', 'note', '', 4),
+			],
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n,
+		} );
+
+		var pointEditor = new $.fn.dataTable.Editor( {
+			ajax: { edit: { type: 'POST', url: '{{baseUrl}}/ajax/Customer/adjustPoints.do?customerId=_id_' } },
+			table: tableName,
+			idSrc: 'customerId',
+			fields: [
+				DataTableConfig.field_input('調整點數', 'adjustPoints', '', '例：100 或 -50', '正數＝加點、負數＝扣點；調整後點數不可小於 0'),
+				DataTableConfig.field_input('調整原因', 'adjustNote', '', '必填，會記錄在點數紀錄'),
+			],
+			formOptions: DataTableConfig.formOptions,
+			i18n: DataTableConfig.i18n,
+		} ).on('initEdit', function() {
+			pointEditor.field('adjustPoints').val('');
+			pointEditor.field('adjustNote').val('');
+		}).on('submitComplete', function(e, json) {
+			if (json && json.message) displayAlertWarning(json.message);
+			else if (json && json.data) displayAlertSuccess('點數已調整');
+		});
+
+		var table = $(tableName).DataTable( {
+			dom: 'lBrtip',
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			"lengthMenu": [10, 25, 50, 100, 250],
+			ajax: {
+				url: '{{baseUrl}}/ajax/Customer/list.do',
+				type: 'POST',
+				data: function(d) {
+					d.state = $('#filterState').val();
+					d.royaltyProgramId = $('#filterRoyaltyProgram').val();
+				}
+			},
+			language: DataTableConfig.i18n,
+			columns: [
+				DataTableConfig.data_select_checkbox,
+				DataTableConfig.data_input('uuid'),
+				DataTableConfig.data_input('firstname'),
+				DataTableConfig.data_input('email'),
+				DataTableConfig.data_input('telephone'),
+				{ data: 'activatedString', render: function(d, t, row) {
+					return row.activated ? '<span class="badge badge-success">已啟用</span>' : '<span class="badge badge-warning">驗證中</span>';
+				} },
+				DataTableConfig.data_input('royaltyProgramTitle'),
+				DataTableConfig.data_input('dateRoyaltyProgramExpiresString'),
+				{ data: 'points', className: 'text-right', render: function(d, t, row) {
+					if (t !== 'display') return d;
+					return '<a href="javascript:void(0)" class="btn-points" data-customer-id="' + Number(row.customerId) + '" title="點數紀錄">' + Number(d) + ' <i class="fa-light fa-list"></i></a>';
+				} },
+				DataTableConfig.data_input('tags'),
+				DataTableConfig.data_input('note'),
+				DataTableConfig.data_input('dateLastLoginString'),
+				DataTableConfig.data_input('dateCreatedString'),
+			],
+			order: [[ 12, 'desc' ]],
+			select: DataTableConfig.selectOptionsOS,
+			buttons: [
+				{ extend: 'edit', editor: editor, text: '編輯標籤/備註' },
+				{ extend: 'selected', text: '啟用（會員方案）', action: function() {
+					customerRoyaltyProgramManager.showEditor(tableName);
+				} },
+				{ extend: 'selected', text: '停用（取消方案）', action: function() {
+					var ids = table.rows({ selected: true }).data().toArray().map(function(r) { return r.customerId; });
+					if (!ids.length || !confirm('確定取消選取的 ' + ids.length + ' 位會員的會員方案？')) return;
+					var data = { action: 'remove' };
+					$.each(ids, function(i, id) { data['data[' + id + '][customerId]'] = id; });
+					ajaxPost('{{baseUrl}}/ajax/Customer/deactivate.do', data).done(function() {
+						displayAlertSuccess('已取消 ' + ids.length + ' 位會員的會員方案');
+						table.ajax.reload(null, false);
+					}).fail(showFail);
+				} },
+				{ extend: 'selected', text: '調整點數', action: function() {
+					pointEditor.title('調整點數（' + table.rows({ selected: true }).count() + ' 位會員）')
+						.buttons({ label: '調整', className: 'btn-primary', fn: function() { this.submit(); } })
+						.edit(table.rows({ selected: true }).indexes());
+				} },
+				{ text: '貼標籤（Google Sheet）', action: function() {
+					customerImportManager.showEditorGS(table);
+					if (!customerImportManager._gbMsgBound) {
+						customerImportManager._gbMsgBound = true;
+						customerImportManager.editorGS.on('submitComplete', function(e, json) {
+							if (json && json.code == 200 && json.message) displayAlertSuccess(json.message);
+						});
+					}
+				} },
+				'excel',
+			],
+			initComplete: function () {
+				DataTableConfig.initFooterSearch(this, [1, 2, 3, 4, 9, 10], [10, 12, 16, 12, 12, 12]);
+			},
+			drawCallback: function() { $(".dataTables_scrollBody").floatingScroll(); }
+		} );
+		DataTableHelper.initEditorOnCallback(table, editor);
+
+		$('#filterState, #filterRoyaltyProgram').on('change', function() { table.ajax.reload(); });
+
+		$(tableName).on('click', '.btn-points', function() {
+			openFormL('/backend/Customer/pointTransactions', 'customerId=' + Number($(this).data('customerId')));
+		});
+
+		// Google Sheet 網址
+		$.get('{{baseUrl}}/ajax/Customer/importSheetSettings.do').done(function(j) {
+			if (j && j.data) $('#sheetUrl').val(j.data.sheetUrl || '');
+		});
+		$('#btn-save-sheet').on('click', function() {
+			ajaxPost('{{baseUrl}}/ajax/Customer/importSheetSettings.do', { sheetUrl: $('#sheetUrl').val() })
+				.done(function(j) { displayAlertSuccess(j.message || '已儲存'); }).fail(showFail);
+		});
+
+		// 上傳 CSV
+		$('#btn-import-csv').on('click', function() {
+			var f = $('#importCsvFile')[0].files[0];
+			if (!f) { displayAlertWarning('請選擇 CSV 檔'); return; }
+			var fd = new FormData();
+			fd.append('file', f);
+			fd.append('rowStart', $('#csvRowStart').val());
+			fd.append('rowEnd', $('#csvRowEnd').val());
+			var $b = $(this).prop('disabled', true);
+			$.ajax({ type: 'POST', url: '{{baseUrl}}/ajax/Customer/importCsv.do', data: fd, processData: false, contentType: false, dataType: 'json' })
+				.done(function(j) { displayAlertSuccess(j.message || '匯入完成'); table.ajax.reload(null, false); })
+				.fail(showFail)
+				.always(function() { $b.prop('disabled', false); });
+		});
+	} ); // end ready
+</script>
+<!--#body--><div class="container-fluid ">
+	<div class="card mt-4">
+<div class="card-header">會員</div>
+<div class="card-body">
+	<div class="row">
+		<div class="input-group py-2 col-lg-4">
+			<div class="input-group-prepend"><span class="input-group-text md-addon">狀態</span></div>
+			<select id="filterState" class="browser-default custom-select custom-select-sm">
+				<option value="">全部</option>
+				<option value="activated">已啟用</option>
+				<option value="pending">驗證中</option>
+			</select>
+		</div>
+		<div class="input-group py-2 col-lg-4">
+			<div class="input-group-prepend"><span class="input-group-text md-addon">會員方案</span></div>
+			<select id="filterRoyaltyProgram" class="browser-default custom-select custom-select-sm">
+				<option value="">全部</option>
+				<option value="none">無會員方案</option>
+				{{#each royaltyPrograms}}<option value="{{id}}">{{title}}</option>{{/each}}
+			</select>
+		</div>
+	</div>
+	<div class="blue-grey lighten-5 small p-2 mt-2">
+		<p class="mb-1"><b>貼標籤／匯入</b>：第 1 列為標頭，以「會員ID」「Email」或「電話」比對會員（依序），可匯入「標籤」（附加，不會刪除既有標籤；空格或逗點可一次多個）、「點數」（正數加點、負數扣點）、「備註」（覆蓋）。找不到的會員不會新增。</p>
+		<p class="mb-1">Google Sheet：請將試算表設為「知道連結的任何人都可以檢視」（或「發布到網路」為 CSV），貼上網址儲存後按「貼標籤（Google Sheet）」並指定 Row 範圍（試算表上的列號，第 1 列標頭不匯入），每次最多 2000 列。</p>
+		<div class="input-group input-group-sm mt-2">
+			<div class="input-group-prepend"><span class="input-group-text">Google Sheet 網址</span></div>
+			<input type="text" id="sheetUrl" class="form-control" placeholder="https://docs.google.com/spreadsheets/d/…" autocomplete="off">
+			<div class="input-group-append"><button type="button" id="btn-save-sheet" class="btn btn-sm btn-primary m-0">儲存</button></div>
+		</div>
+		<div class="input-group input-group-sm mt-2">
+			<div class="input-group-prepend"><span class="input-group-text">或上傳 CSV</span></div>
+			<input type="file" id="importCsvFile" class="form-control" accept=".csv,text/csv">
+			<input type="text" id="csvRowStart" class="form-control" style="max-width:110px" placeholder="起始Row">
+			<input type="text" id="csvRowEnd" class="form-control" style="max-width:110px" placeholder="結束Row">
+			<div class="input-group-append"><button type="button" id="btn-import-csv" class="btn btn-sm btn-info m-0">匯入 CSV</button></div>
+		</div>
+	</div>
+</div>
+<div class="card-body">
+	<table id="customerTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th></th>
+				<th>會員ID</th>
+				<th>姓名</th>
+				<th>Email</th>
+				<th>電話</th>
+				<th>狀態</th>
+				<th>會員方案</th>
+				<th>方案到期日</th>
+				<th>點數</th>
+				<th>標籤</th>
+				<th>備註</th>
+				<th>最後登入</th>
+				<th>建立日期</th>
+			</tr>
+		</thead>
+		<tfoot>
+			<tr>
+				<th></th>
+				<th>會員ID</th>
+				<th>姓名</th>
+				<th>Email</th>
+				<th>電話</th>
+				<th>狀態</th>
+				<th>會員方案</th>
+				<th>方案到期日</th>
+				<th>點數</th>
+				<th>標籤</th>
+				<th>備註</th>
+				<th>最後登入</th>
+				<th>建立日期</th>
+			</tr>
+		</tfoot>
+	</table>
+</div>
+</div>
+</div>

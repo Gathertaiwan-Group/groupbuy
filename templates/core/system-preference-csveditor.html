@@ -1,9 +1,353 @@
+{{!-- csv 編輯器 /backend/SystemPreference/csvEditor（推導頁：原站本帳號無權限、未擷取）。
+     依據：原站「貨運標籤」「進階設定」代碼面板頂端的連結與說明「可透過csv編輯器，透過匯出功能複製貼回」
+     （spec/html/shippingtag-list.html:740、groupbuypreference-list.html:964）。
+     格式＝兩行（第 1 行標頭、第 2 行代碼，半形逗點分隔），與 shipping/shipping-export.ts resolveFormat 相同。
+     右側代碼按鈕沿用 templates/shipping/shippingtag-list.html 的代碼清單。 --}}
+<!--#head-->
+<style>
+.tag-container { max-height:calc(100vh - 200px);overflow-y:scroll; -webkit-box-shadow:none!important;box-shadow:none!important; }
+.tag-container .card-body {padding:0.25rem 0}
+.tag-container .btn {padding:0.5rem !important; margin:0.2rem !important; text-transform:none}
+#csvColumns input.form-control {min-width:120px}
+#csvColumns tr.active-col {background:#fff8e1}
+#csvPreview {font-size:.8rem}
+</style>
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		var cols = [];      // [{header, token}]
+		var active = -1;    // 目前選取的列（點代碼按鈕時改寫此列的代碼；未選取則新增一欄）
+
+		function parseFormat(text) {
+			var lines = String(text || '').split(/\r?\n/).map(function(l) { return l.trim(); }).filter(Boolean);
+			if (!lines.length) return [];
+			var sp = function(s) { return s.split(',').map(function(x) { return x.trim(); }); };
+			if (lines.length == 1) return sp(lines[0]).filter(Boolean).map(function(t) { return { header: t, token: t }; });
+			var h = sp(lines[0]), t = sp(lines[1]), out = [];
+			for (var i = 0; i < Math.max(t.length, 1); i++) out.push({ header: h[i] || '', token: t[i] || '' });
+			while (out.length && !out[out.length - 1].header && !out[out.length - 1].token) out.pop();
+			return out;
+		}
+		function serialize() {
+			var clean = function(s) { return String(s || '').replace(/[\r\n]+/g, ' ').replace(/,/g, '，').trim(); };
+			var use = cols.filter(function(c) { return clean(c.header) || clean(c.token); });
+			if (!use.length) return '';
+			return use.map(function(c) { return clean(c.header); }).join(',') + '\n' + use.map(function(c) { return clean(c.token).replace(/，/g, ''); }).join(',');
+		}
+		function esc(s) { return $('<div>').text(s == null ? '' : String(s)).html(); }
+		function render() {
+			var $tb = $('#csvColumns tbody').empty();
+			$.each(cols, function(i, c) {
+				$tb.append('<tr data-i="' + i + '"' + (i == active ? ' class="active-col"' : '') + '>'
+					+ '<td class="align-middle">' + (i + 1) + '</td>'
+					+ '<td><input type="text" class="form-control form-control-sm col-header" value="' + esc(c.header) + '"></td>'
+					+ '<td><input type="text" class="form-control form-control-sm col-token" value="' + esc(c.token) + '"></td>'
+					+ '<td class="text-nowrap align-middle">'
+					+ '<button type="button" class="btn btn-sm btn-flat p-1 m-0 col-up" title="上移"><i class="fa-light fa-arrow-up"></i></button>'
+					+ '<button type="button" class="btn btn-sm btn-flat p-1 m-0 col-down" title="下移"><i class="fa-light fa-arrow-down"></i></button>'
+					+ '<button type="button" class="btn btn-sm btn-flat p-1 m-0 text-danger col-del" title="刪除"><i class="fa-light fa-trash"></i></button>'
+					+ '</td></tr>');
+			});
+			$('#colCount').text(cols.length);
+			var $p = $('#csvPreview').empty();
+			if (cols.length) {
+				$p.append('<thead><tr>' + cols.map(function(c) { return '<th>' + esc(c.header) + '</th>'; }).join('') + '</tr></thead>');
+				$p.append('<tbody><tr>' + cols.map(function(c) { return '<td><code>' + esc(c.token) + '</code></td>'; }).join('') + '</tr></tbody>');
+			}
+		}
+
+		$('#csvColumns').on('input', '.col-header, .col-token', function() {
+			var i = Number($(this).closest('tr').data('i'));
+			cols[i][$(this).hasClass('col-header') ? 'header' : 'token'] = $(this).val();
+			var $p = $('#csvPreview');
+			$p.find('thead th').eq(i).text(cols[i].header);
+			$p.find('tbody td').eq(i).html('<code>' + esc(cols[i].token) + '</code>');
+		}).on('focus', 'input', function() {
+			active = Number($(this).closest('tr').data('i'));
+			$('#csvColumns tr').removeClass('active-col');
+			$(this).closest('tr').addClass('active-col');
+		}).on('click', '.col-up, .col-down, .col-del', function() {
+			var i = Number($(this).closest('tr').data('i'));
+			if ($(this).hasClass('col-del')) { cols.splice(i, 1); active = -1; }
+			else {
+				var j = $(this).hasClass('col-up') ? i - 1 : i + 1;
+				if (j < 0 || j >= cols.length) return;
+				var t = cols[i]; cols[i] = cols[j]; cols[j] = t; active = j;
+			}
+			render();
+		});
+
+		$('#btn-load').on('click', function() {
+			cols = parseFormat($('#csvFormat').val()); active = -1; render();
+			displayAlertInfo('已載入 ' + cols.length + ' 個欄位');
+		});
+		$('#btn-export').on('click', function() {
+			$('#csvFormat').val(serialize());
+			displayAlertInfo('已產生格式，可按「複製」貼回貨運標籤「匯出格式」或進階設定');
+		});
+		$('#btn-copy').on('click', function() {
+			var v = $('#csvFormat').val();
+			var fallback = function() { $('#csvFormat').select(); document.execCommand('copy'); displayAlertSuccess('已複製'); };
+			if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(v).then(function() { displayAlertSuccess('已複製'); }, fallback);
+			else fallback();
+		});
+		$('#btn-add').on('click', function() { cols.push({ header: '', token: '' }); active = cols.length - 1; render(); });
+		$('#btn-clear').on('click', function() { if (!cols.length || confirm('清除所有欄位？')) { cols = []; active = -1; render(); } });
+		$('#btn-deselect').on('click', function() { active = -1; render(); });
+
+		// 代碼按鈕：有選取的列 → 改寫該列代碼（標頭空白時一併帶入按鈕文字）；否則新增一欄
+		$('.btn-tag-export').on('click', function() {
+			var token = $(this).attr('id'), label = $.trim($(this).text());
+			if (token == '#') label = '固定資料';
+			if (active >= 0 && cols[active]) {
+				cols[active].token = token;
+				if (!cols[active].header) cols[active].header = label;
+			} else {
+				cols.push({ header: label, token: token });
+			}
+			render();
+		});
+
+		// 樣板（存在系統設定 CSV_EDITOR_TEMPLATES）
+		function loadTemplates(selected) {
+			$.get('{{baseUrl}}/ajax/SystemPreference/csvEditorTemplates.do').done(function(j) {
+				var $s = $('#tplSelect').empty().append('<option value="">— 選擇樣板 —</option>');
+				$.each((j && j.data) || [], function(i, t) {
+					$s.append($('<option>').val(t.name).text(t.name).data('format', t.format));
+				});
+				if (selected) $s.val(selected);
+			});
+		}
+		var tplFail = function(xhr) { var j = xhr.responseJSON; displayAlertWarning((j && j.error) || '操作失敗'); };
+		$('#tplSelect').on('change', function() {
+			var f = $(this).find('option:selected').data('format');
+			if (f) { $('#csvFormat').val(f); $('#tplName').val($(this).val()); cols = parseFormat(f); active = -1; render(); }
+		});
+		$('#btn-tpl-save').on('click', function() {
+			var name = $.trim($('#tplName').val());
+			var format = serialize() || $('#csvFormat').val();
+			$.post('{{baseUrl}}/ajax/SystemPreference/csvEditorTemplates.do', { op: 'save', name: name, format: format })
+				.done(function(j) { displayAlertSuccess(j.message); loadTemplates(name); }).fail(tplFail);
+		});
+		$('#btn-tpl-del').on('click', function() {
+			var name = $('#tplSelect').val();
+			if (!name || !confirm('刪除樣板「' + name + '」？')) return;
+			$.post('{{baseUrl}}/ajax/SystemPreference/csvEditorTemplates.do', { op: 'delete', name: name })
+				.done(function(j) { displayAlertSuccess(j.message); loadTemplates(); }).fail(tplFail);
+		});
+
+		render();
+		loadTemplates();
+	});
+</script>
 <!--#body--><div class="container-fluid ">
+<div class="row">
+<div class="col-md-8">
 	<div class="card mt-4">
 <div class="card-header">csv 編輯器</div>
 <div class="card-body">
-	<!-- 原站本帳號無權限，畫面未擷取（推導頁） -->
-	<p class="mb-0">csv 匯出欄位設定</p>
+	<div class="blue-grey lighten-5 small p-2 mb-3">
+	<p class="mb-1">用表格編排「匯出 csv 欄位」：第 1 行為標頭名稱、第 2 行為代碼（以半形逗點分隔），與貨運標籤「匯出格式」及進階設定的匯出欄位格式相同。</p>
+	<p class="mb-0">用法：把現有格式貼到下方 →「載入到表格」→ 調整欄位（點右側代碼按鈕新增欄位；先點某一列再按代碼則改寫該列）→「匯出格式」→「複製」後貼回原設定。</p>
+	</div>
+	<label for="csvFormat" class="small mb-1">格式（貼上／匯出）</label>
+	<textarea id="csvFormat" class="form-control" rows="4" spellcheck="false" style="font-family:monospace"></textarea>
+	<div class="mt-2">
+		<button type="button" id="btn-load" class="btn btn-sm btn-primary"><i class="fa-light fa-file-import"></i> 載入到表格</button>
+		<button type="button" id="btn-export" class="btn btn-sm btn-success"><i class="fa-light fa-file-export"></i> 匯出格式</button>
+		<button type="button" id="btn-copy" class="btn btn-sm btn-outline-secondary"><i class="fa-light fa-copy"></i> 複製</button>
+	</div>
+	<hr>
+	<div class="d-flex align-items-center flex-wrap">
+		<span class="mr-2">欄位（<span id="colCount">0</span>）</span>
+		<button type="button" id="btn-add" class="btn btn-sm btn-outline-primary"><i class="fa-light fa-plus"></i> 新增空白欄</button>
+		<button type="button" id="btn-deselect" class="btn btn-sm btn-outline-secondary">取消選取列</button>
+		<button type="button" id="btn-clear" class="btn btn-sm btn-outline-danger">清除全部</button>
+	</div>
+	<table id="csvColumns" class="table table-sm mt-2">
+		<thead><tr><th style="width:40px">#</th><th>標頭名稱</th><th>代碼</th><th style="width:110px"></th></tr></thead>
+		<tbody></tbody>
+	</table>
+	<div class="small text-muted mb-1">預覽</div>
+	<div style="overflow-x:auto"><table id="csvPreview" class="table table-bordered table-sm"></table></div>
+	<hr>
+	<div class="form-row align-items-center">
+		<div class="col-sm-5 my-1"><select id="tplSelect" class="browser-default custom-select custom-select-sm"></select></div>
+		<div class="col-sm-4 my-1"><input type="text" id="tplName" class="form-control form-control-sm" placeholder="樣板名稱" maxlength="50"></div>
+		<div class="col-sm-3 my-1">
+			<button type="button" id="btn-tpl-save" class="btn btn-sm btn-primary m-0">儲存樣板</button>
+			<button type="button" id="btn-tpl-del" class="btn btn-sm btn-outline-danger m-0">刪除</button>
+		</div>
+	</div>
+</div>
+</div>
+</div>
+<div class="col-md-4">
+<div class="card mt-4 tag-container sticky-top">
+	<div class="card-header">標籤</div>
+	<div class="card-header">訂單資訊</div>
+	<div class="card-body">
+	<button type="button" id="groupbuy.id" class="btn btn-blue-grey btn-sm btn-tag-export">團購ID</button>
+	<button type="button" id="groupbuy.title" class="btn btn-blue-grey btn-sm btn-tag-export">團購名稱</button>
+	<button type="button" id="groupbuy.title.short" class="btn btn-blue-grey btn-sm btn-tag-export">團購短名稱</button>
+	<button type="button" id="order.uuid" class="btn btn-blue-grey btn-sm btn-tag-export">訂單號碼</button>
+	<button type="button" id="apiOrderNo" class="btn btn-blue-grey btn-sm btn-tag-export">訂單號碼x4碼</button>
+	<button type="button" id="order.seq" class="btn btn-blue-grey btn-sm btn-tag-export">訂單流水號</button>
+	<button type="button" id="order.seq.groupbuy" class="btn btn-blue-grey btn-sm btn-tag-export">訂單流水號(團購短名稱+流水號)</button>
+	<button type="button" id="order.dateCreatedYYMMDD" class="btn btn-blue-grey btn-sm btn-tag-export">訂單日期(年月日)</button>
+	<button type="button" id="order.dateCreatedYMDHMS" class="btn btn-blue-grey btn-sm btn-tag-export">訂單時間日期(年月日時分秒)</button>
+	<!-- <button type="button" id="order.dateCreatedYYMMDDSlash" class="btn btn-blue-grey btn-sm btn-tag-export">訂單日期(格式：2017/07/07)</button> -->
+	<button type="button" id="order.state" class="btn btn-blue-grey btn-sm btn-tag-export">訂單階段</button>
+	<button type="button" id="order.status" class="btn btn-blue-grey btn-sm btn-tag-export">訂單狀態</button>
+	<button type="button" id="paymentMethod" class="btn btn-blue-grey btn-sm btn-tag-export">付款方式</button>
+	<button type="button" id="paymentMethodCode" class="btn btn-blue-grey btn-sm btn-tag-export">付款方式代號</button>
+	<button type="button" id="payStatus" class="btn btn-blue-grey btn-sm btn-tag-export">付款狀態</button>
+	<button type="button" id="order.datePaymentDue" class="btn btn-blue-grey btn-sm btn-tag-export">繳款截止日期</button>
+	<button type="button" id="order.datePaid" class="btn btn-blue-grey btn-sm btn-tag-export">付款日期</button>
+	<button type="button" id="order.grandTotal" class="btn btn-blue-grey btn-sm btn-tag-export">訂單總計(含運費)</button>
+	<button type="button" id="order.discount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單折扣金額</button>
+	<button type="button" id="order.itemTotalPriceWithoutDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總金額(未折扣)</button>
+	<button type="button" id="order.itemTotalCostPriceWithoutDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總成本(未折扣)</button>
+	<button type="button" id="order.totalPaid" class="btn btn-blue-grey btn-sm btn-tag-export">已付金額</button>
+	<button type="button" id="order.totalPaidBeforeSplit" class="btn btn-blue-grey btn-sm btn-tag-export">分割前已付金額</button>
+	<button type="button" id="order.shippingAmount" class="btn btn-blue-grey btn-sm btn-tag-export">運費（總金額）</button>
+	<button type="button" id="order.shippingFee" class="btn btn-blue-grey btn-sm btn-tag-export">運費（物流費）</button>
+	<button type="button" id="order.codFee" class="btn btn-blue-grey btn-sm btn-tag-export">運費（貨到付款費）</button>
+	<button type="button" id="payOnDelivery" class="btn btn-blue-grey btn-sm btn-tag-export">代收金額</button>
+	<button type="button" id="order.coupon" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷（標題＋折扣碼）</button>
+	<button type="button" id="order.coupon.title" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷標題</button>
+	<button type="button" id="order.coupon.code" class="btn btn-blue-grey btn-sm btn-tag-export">優惠卷折扣碼</button>
+	<button type="button" id="order.salesRules" class="btn btn-blue-grey btn-sm btn-tag-export">優惠條件</button>
+	<button type="button" id="apiTradeNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方金流訂單編號</button>
+	<button type="button" id="cvsTradeNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商取貨訂單編號</button>
+	<button type="button" id="cvsStoreId" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商代號</button>
+	<button type="button" id="cvsStoreName" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商名稱</button>
+	<button type="button" id="cvsShipmentNo" class="btn btn-blue-grey btn-sm btn-tag-export">第三方超商出貨單號</button>
+	<button type="button" id="order.totalSuccessTimes" class="btn btn-blue-grey btn-sm btn-tag-export">定期]扣款次數</button>
+	<button type="button" id="order.frequency" class="btn btn-blue-grey btn-sm btn-tag-export">定期]配送週期</button>
+	<button type="button" id="order.dns" class="btn btn-blue-grey btn-sm btn-tag-export">定期]下次扣款日</button>
+	<button type="button" id="order.dnd" class="btn btn-blue-grey btn-sm btn-tag-export">定期]下次配達日</button>
+	</div>
+	<div class="card-header">客戶資訊</div>
+	<div class="card-body">
+	<button type="button" id="billing.name" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人姓名</button>
+	<button type="button" id="billing.fbNickname" class="btn btn-blue-grey btn-sm btn-tag-export">臉書暱稱</button>
+	<button type="button" id="billing.postcode" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人郵遞區號</button>
+	<button type="button" id="billing.address" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人地址</button>
+	<button type="button" id="billing.email" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人Email</button>
+	<button type="button" id="billing.phone" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人電話</button>
+	<button type="button" id="billing.birthday" class="btn btn-blue-grey btn-sm btn-tag-export">訂購人生日</button>
+	<button type="button" id="shipping.name.only" class="btn btn-blue-grey btn-sm btn-tag-export">收件人姓名</button>
+	<button type="button" id="shipping.name" class="btn btn-blue-grey btn-sm btn-tag-export">收件人姓名(訂購人不同時顯示)</button>
+	<button type="button" id="shipping.postcode" class="btn btn-blue-grey btn-sm btn-tag-export">收件人郵遞區號</button>
+	<button type="button" id="shipping.address" class="btn btn-blue-grey btn-sm btn-tag-export">收件人地址</button>
+	<button type="button" id="shipping.email" class="btn btn-blue-grey btn-sm btn-tag-export">收件人Email</button>
+	<button type="button" id="shipping.phone" class="btn btn-blue-grey btn-sm btn-tag-export">收件人電話</button>
+	<button type="button" id="sender.name" class="btn btn-blue-grey btn-sm btn-tag-export" title="系統設定→寄件人設定">寄件人名稱</button>
+	<button type="button" id="sender.phone" class="btn btn-blue-grey btn-sm btn-tag-export" title="系統設定→寄件人設定">寄件人電話</button>
+	<button type="button" id="sender.address" class="btn btn-blue-grey btn-sm btn-tag-export" title="系統設定→寄件人設定">寄件人地址</button>
+	<button type="button" id="note" class="btn btn-blue-grey btn-sm btn-tag-export">客戶備註</button>
+	<button type="button" id="staff.note" class="btn btn-blue-grey btn-sm btn-tag-export">員工備註</button>
+	<button type="button" id="billing.bank.name" class="btn btn-blue-grey btn-sm btn-tag-export">銀行名稱</button>
+	<button type="button" id="billing.bank.account" class="btn btn-blue-grey btn-sm btn-tag-export">虛擬帳號/後五碼</button>
+	</div>
+	<div class="card-header">客戶(登入)資訊</div>
+	<div class="card-body">
+	<button type="button" id="customer.firstname" class="btn btn-blue-grey btn-sm btn-tag-export">姓名</button>
+	<button type="button" id="customer.username" class="btn btn-blue-grey btn-sm btn-tag-export">會員ID</button>
+	<button type="button" id="customer.merchantUserId" class="btn btn-blue-grey btn-sm btn-tag-export">第三方會員ID</button>
+	<button type="button" id="customer.nid" class="btn btn-blue-grey btn-sm btn-tag-export">身分證字號</button>
+	<button type="button" id="order.pointAmount" class="btn btn-blue-grey btn-sm btn-tag-export">點數折抵訂單金額</button>
+	<button type="button" id="order.point.gain" class="btn btn-blue-grey btn-sm btn-tag-export">訂單獲取點數</button>
+	<button type="button" id="order.point.use" class="btn btn-blue-grey btn-sm btn-tag-export">訂單使用點數</button>
+	</div>
+	<div class="card-header">發票資訊</div>
+	<div class="card-body">
+	<button type="button" id="receiptType" class="btn btn-blue-grey btn-sm btn-tag-export">發票類型(二/三聯)</button>
+	<button type="button" id="receiptCategory" class="btn btn-blue-grey btn-sm btn-tag-export">發票種類(電子/紙本/捐贈)</button>
+	<button type="button" id="receiptTitle" class="btn btn-blue-grey btn-sm btn-tag-export">發票抬頭</button>
+	<button type="button" id="receiptTitleOrFirstname" class="btn btn-blue-grey btn-sm btn-tag-export">發票抬頭(無時改顯示訂購人姓名)</button>
+	<button type="button" id="receiptVatId" class="btn btn-blue-grey btn-sm btn-tag-export">統一編號</button>
+	<button type="button" id="invoiceNumber" class="btn btn-blue-grey btn-sm btn-tag-export">發票號碼</button>
+	<button type="button" id="dateEinvoice" class="btn btn-blue-grey btn-sm btn-tag-export">預約發票日期</button>
+	<button type="button" id="card4No" class="btn btn-blue-grey btn-sm btn-tag-export">信用卡號</button>
+	<button type="button" id="invoice.barcode" class="btn btn-blue-grey btn-sm btn-tag-export">手機載具</button>
+	<button type="button" id="invoice.taxType" class="btn btn-blue-grey btn-sm btn-tag-export">稅別</button>
+	<button type="button" id="invoice.amount.beforeTax" class="btn btn-blue-grey btn-sm btn-tag-export">訂單稅前金額</button>
+	<button type="button" id="invoice.amount.b2borb2c" class="btn btn-blue-grey btn-sm btn-tag-export">訂單(三聯：稅前金額/二聯：含稅金額)</button>
+	<button type="button" id="invoice.taxAmount" class="btn btn-blue-grey btn-sm btn-tag-export">稅額</button>
+	</div>
+	<div class="card-header">貨運資訊</div>
+	<div class="card-body">
+	<button type="button" id="order.shippingProvider" class="btn btn-blue-grey btn-sm btn-tag-export">貨運公司</button>
+	<button type="button" id="order.shippingTag" class="btn btn-blue-grey btn-sm btn-tag-export">貨運標籤</button>
+	<button type="button" id="shippingReceiptNumber" class="btn btn-blue-grey btn-sm btn-tag-export">貨運單號</button>
+	<button type="button" id="deliver.time" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(代號)</button>
+	<button type="button" id="deliver.time.shortCode" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(文字)</button>
+	<button type="button" id="deliver.time.custom" class="btn btn-blue-grey btn-sm btn-tag-export">配送時段(自定義)</button>
+	<button type="button" id="shipping.shippingType" class="btn btn-blue-grey btn-sm btn-tag-export">配送種類(宅配/超取/自取)</button>
+	<button type="button" id="order.preferredDeliveryDates" class="btn btn-blue-grey btn-sm btn-tag-export">期望配達日期</button>
+	<button type="button" id="order.restrictedDeliveryDates" class="btn btn-blue-grey btn-sm btn-tag-export">不期望配達日期</button>
+	<button type="button" id="order.dateShipped" class="btn btn-blue-grey btn-sm btn-tag-export">出貨日期</button>
+	</div>
+	<div class="card-header">商品資訊</div>
+	<div class="card-body">
+	<button type="button" id="order.itemsList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要</button>
+	<button type="button" id="order.itemsList.br" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(斷行)</button>
+	<button type="button" id="order.itemsList.100.1" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-1)</button>
+	<button type="button" id="order.itemsList.100.2" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-2)</button>
+	<button type="button" id="order.itemsList.100.3" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-3)</button>
+	<button type="button" id="order.itemsList.100.4" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-4)</button>
+	<button type="button" id="order.itemsList.100.5" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(100字-5)</button>
+	<button type="button" id="order.itemsListAndNote" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要＋客戶備註</button>
+	<button type="button" id="order.itemsUidList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(商品代碼)</button>
+	<button type="button" id="order.itemsTitleList" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品摘要(完整名稱)</button>
+	<button type="button" id="order.itemsTotal" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總數量</button>
+	<button type="button" id="order.itemKinds" class="btn btn-blue-grey btn-sm btn-tag-export">訂單商品總類數</button>
+	<button type="button" id="items.uid.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品代號(逗點隔開)</button>
+	<button type="button" id="items.shortName.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品出貨短名稱(逗點隔開)</button>
+	<button type="button" id="items.total.ex1" class="btn btn-blue-grey btn-sm btn-tag-export">各商品數量(逗點隔開)</button>
+	</div>
+	<div class="card-header">其他（固定資料用法：#符號加上內容，如：#1000。每一行該欄位均會顯示1000</div>
+	<div class="card-body">
+	<button type="button" id="#" class="btn btn-blue-grey btn-sm btn-tag-export">固定資料欄位</button>
+	</div>
+	<div class="card-header">樣式二（當選擇樣式二標籤時，訂單將依各商品將獨立顯示)</div>
+	<div class="card-body">
+	<button type="button" id="item.uid" class="btn btn-blue-grey btn-sm btn-tag-export">商品代碼</button>
+	<button type="button" id="item.upc" class="btn btn-blue-grey btn-sm btn-tag-export">國際條碼</button>
+	<button type="button" id="item.title" class="btn btn-blue-grey btn-sm btn-tag-export">商品名稱</button>
+	<button type="button" id="item.shortName" class="btn btn-blue-grey btn-sm btn-tag-export">商品出貨短名稱</button>
+	<button type="button" id="item.cateTag" class="btn btn-blue-grey btn-sm btn-tag-export">商品分類</button>
+	<button type="button" id="item.total" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量</button>
+	<button type="button" id="item.retailPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品原價</button>
+	<button type="button" id="item.price" class="btn btn-blue-grey btn-sm btn-tag-export">商品團購價</button>
+	<button type="button" id="item.costPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品成本</button>
+	<button type="button" id="item.discount.price" class="btn btn-blue-grey btn-sm btn-tag-export">商品單價折扣後</button>
+	<button type="button" id="item.discount" class="btn btn-blue-grey btn-sm btn-tag-export">商品折價</button>
+	<button type="button" id="item.totalPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品金額小計</button>
+	<button type="button" id="item.totalPriceNoneDiscount" class="btn btn-blue-grey btn-sm btn-tag-export">商品金額小計(未折扣)</button>
+	<button type="button" id="item.totalCostPrice" class="btn btn-blue-grey btn-sm btn-tag-export">商品成本小計</button>
+	<button type="button" id="item.grossMargin" class="btn btn-blue-grey btn-sm btn-tag-export">毛利率(%)</button>
+	<button type="button" id="item.grossMargin.amount" class="btn btn-blue-grey btn-sm btn-tag-export">毛利金額</button>
+	<button type="button" id="item.shipping.status" class="btn btn-blue-grey btn-sm btn-tag-export">商品出貨狀態</button>
+	<button type="button" id="item.backOrderStatus" class="btn btn-blue-grey btn-sm btn-tag-export">商品預購狀態</button>
+	<button type="button" id="item.virtualCode" class="btn btn-blue-grey btn-sm btn-tag-export">商品虛擬序號</button>
+	<button type="button" id="item.shippingTag" class="btn btn-blue-grey btn-sm btn-tag-export">商品貨運標籤</button>
+	<button type="button" id="item.dateExpired" class="btn btn-blue-grey btn-sm btn-tag-export">有效期限</button>
+	<button type="button" id="item.taxType" class="btn btn-blue-grey btn-sm btn-tag-export">商品稅別</button>
+	<button type="button" id="item.commission" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤總金額</button>
+	<button type="button" id="item.commissionRate" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤(%)</button>
+	<button type="button" id="item.commissionDollar" class="btn btn-blue-grey btn-sm btn-tag-export">商品分潤(單件$)</button>
+	<button type="button" id="item.weight" class="btn btn-blue-grey btn-sm btn-tag-export">商品重量</button>
+	<button type="button" id="item.note" class="btn btn-blue-grey btn-sm btn-tag-export">商品備註</button>
+	</div>
+	<div class="card-header">特殊標籤（僅限xls使用，第一行及第二行均須使用標籤）</div>
+	<div class="card-body">
+	<button type="button" id="itemset.cols" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量明細(僅顯示有出貨商品)</button>
+	<button type="button" id="itemset.cols.all" class="btn btn-blue-grey btn-sm btn-tag-export">商品數量明細(顯示所有商品)</button>
+	<button type="button" id="uid.cols" class="btn btn-blue-grey btn-sm btn-tag-export">商品貨號數量明細</button>
+	</div>
+</div>
 </div>
 </div>
 </div>

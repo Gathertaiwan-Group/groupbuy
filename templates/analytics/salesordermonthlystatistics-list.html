@@ -76,6 +76,12 @@
 		$('#btn-search').click(function() {
 			table.ajax.reload();
 		});
+		{{!-- 推導：下載＝以同一組篩選送出 #queryForm（csrf.js 會自動補隱藏欄位 _csrf） --}}
+		$('.btn-download').click(function() {
+			$('#downloadFormat').val($(this).data('format'));
+			$('#query').val(table.search() || '');
+			$('#queryForm').submit();
+		});
 		$('#queryForm .filters').on('keypress', function(e) {
 			if (e.which == 13) {
 				e.preventDefault();
@@ -116,6 +122,12 @@
 				<div class="input-group-append">
 					<button id="btn-search" type="button" class="btn btn-primary btn-search m-0"><i class="fa fa-regular fa-search"></i></button>
 				</div>
+			</div>
+			<div class="input-group py-2 col-lg-6">
+				{{!-- 推導：表單 action 指向 /backend/CustomerPointSummary/download，原站觸發按鈕被擷取過濾；本站補「下載」按鈕（xlsx／csv） --}}
+				<input type="hidden" name="format" id="downloadFormat" value="xlsx">
+				<button type="button" class="btn btn-sm btn-success m-0 mr-2 btn-download" data-format="xlsx"><i class="fa-light fa-file-excel"></i> 下載每月消費統計（Excel）</button>
+				<button type="button" class="btn btn-sm btn-outline-success m-0 btn-download" data-format="csv"><i class="fa-light fa-file-csv"></i> CSV</button>
 			</div>
 		</div>
 	</form>

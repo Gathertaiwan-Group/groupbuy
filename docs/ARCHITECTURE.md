@@ -82,6 +82,8 @@ Request ─► app/[[...path]]/route.ts ─► dispatch(req)
 - 登出 `GET /backend/AdminUser/logout` → 刪 session、清 cookie、導回 `/backend/panel.do`。
 - `keepalive`（每 120 秒，原站 gbs_api）、`/ajax/AdminUser/info`（徽章/鈴鐺/公告，彙整各模組 `ModuleDef`）、`switchAdmin`（**只收 POST**；僅限 `permissions.switchAccounts` 內的同租戶帳號）、`changePassword`（Editor：舊密碼驗證、6–20 碼、確認一致；成功後踢掉其他 session）。
 - 切換身分：`admin_sessions.login_admin_user_id`（migration 0101）記住原本輸入帳密的人；原登入者被停用 → 該 session 失效；原登入者改密碼 → `destroyOtherSessions` 一併清掉。管理者重設他人密碼或停用帳號時呼叫 `destroyAllSessions(adminUserId)`。
+- **管理員帳號／登入日誌**（補C，推導，`lib/modules/core/admin-users.ts`，需 `permissions.adminUser`；入口：系統設定頁按鈕）：`/backend/AdminUser/list`（新增／編輯／停用／權限勾選／可切換帳號／重設他人密碼）、`/backend/AdminUser/loginLog`（`admin_login_attempts` 本租戶紀錄，結果篩選）。權限旗標：`systemPreference`、`csvEditor`、`refundRequisition`、`customer`、`adminUser`（`lib/core/render/vars.ts PERMISSION_KEYS`，模板可用 `{{#if can.<旗標>}}`）；只能授予／移除自己擁有的旗標；限制旗標 `groupBuyRestricted`（團購受限帳戶，groupbuy #37）可設定他人、不能改自己；不能停用自己、不能拿掉自己的 `adminUser`、不能重設自己的密碼（用修改密碼）；停用與重設密碼呼叫 `destroyAllSessions`。帳號全域唯一。
+- **後台會員**（補C，推導，`lib/modules/core/customers.ts`，需 `permissions.customer`；側欄「設定 > 會員」只對有權限者顯示）：`/backend/Customer/list`，原站 `customerRoyaltyProgramManager`（啟用＝設定會員方案＋到期日、可同時把驗證中帳號設為已啟用；停用＝取消會員方案）、`customerImportManager`（貼標籤：Google Sheet 公開分享網址 → `docs.google.com/.../export?format=csv`，不需 API 金鑰；或上傳 CSV，UTF-8／Big5）、點數調整（migration 0110 `customer_points_adjust`：條件式更新不可扣成負數＋寫 `point_transactions` ADJUST_POINT）與點數紀錄彈窗。
 - Google reCAPTCHA、Facebook 登入、二階段驗證碼：**未串接**（畫面照原站；`/ajax/GoogleRecaptcha/verify` 直接通過、FB 按鈕顯示未串接訊息）。
 - 頂列顯示 `[租戶代碼]帳號`（例 `[guest_ep]guest1_a`）；`GBF.baseUrl = '/{租戶代碼}'`（未登入時 `/demo`，同原站）。
 

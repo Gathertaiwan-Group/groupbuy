@@ -1,4 +1,4 @@
-// core 模組路由：登入/登出、後台首頁、頂列共用彈窗、服務條款、系統設定（無權限）、select2 共用查詢。
+// core 模組路由：登入/登出、後台首頁、頂列共用彈窗、服務條款、系統設定、csv 編輯器、管理員帳號／登入日誌、後台會員、select2 共用查詢。
 import type { RouteDef } from "@/lib/core/http/types";
 import { any, fragment, get, page, post, route } from "@/lib/core/http/route-helpers";
 import { json, redirect } from "@/lib/core/http/responses";
@@ -9,6 +9,9 @@ import { uploadedImage } from "./uploads";
 import { uploadImage } from "./upload-api";
 import { getServiceClient } from "@/lib/supabase/server";
 import { cronRun } from "./cron";
+import { adminUserRoutes } from "./admin-users";
+import { customerRoutes } from "./customers";
+import { csvEditorRoutes } from "./csv-editor";
 
 export const routes: RouteDef[] = [
   // ── 排程端點（Vercel Cron 每日；CRON_SECRET 驗證，見 cron.ts）──
@@ -63,7 +66,13 @@ export const routes: RouteDef[] = [
     title: "csv 編輯器",
     permission: "csvEditor",
     groupBuy: "none",
+    activeHref: "/backend/SystemPreference/panel",
   }),
+  ...csvEditorRoutes,
+
+  // ── 管理員帳號／登入日誌（推導，需 permissions.adminUser）、後台會員管理（推導，需 permissions.customer）──
+  ...adminUserRoutes,
+  ...customerRoutes,
 
   // ── Editor 相容 shim 自我測試頁（不寫資料庫；驗證欄位型別/API/事件/Buttons 整合）──
   // 除錯：路由表與重疊清單（JSON）。新增端點後可開這頁確認沒有和別的模組重疊

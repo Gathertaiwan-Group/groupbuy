@@ -32,7 +32,16 @@ export interface CommonVars {
   switchableAdmins: { account: string }[];
   /** 瀏覽器偏好英文（原站依 Accept-Language 切換登入頁/頁尾少數字串） */
   en: boolean;
+  /** 權限旗標（與 dispatch 的 route.permission 同一判斷）：模板用 {{#if can.customer}} 決定是否顯示入口 */
+  can: Record<string, boolean>;
   [key: string]: unknown;
+}
+
+/** 後台可授權的權限旗標（管理員帳號頁的勾選項；與 admin_users.permissions 同名） */
+export const PERMISSION_KEYS = ["systemPreference", "csvEditor", "refundRequisition", "customer", "adminUser"] as const;
+
+export function permissionOn(v: unknown): boolean {
+  return v === true || v === 1 || v === "1" || v === "true";
 }
 
 export function commonVars(ctx: RequestContext): CommonVars {
@@ -54,6 +63,7 @@ export function commonVars(ctx: RequestContext): CommonVars {
     assetVersion: ASSET_VERSION,
     query,
     en: prefersEnglish(ctx.req),
+    can: Object.fromEntries(PERMISSION_KEYS.map((k) => [k, permissionOn(s?.permissions?.[k])])),
     switchableAdmins: switchAccounts.filter((a) => typeof a === "string" && a !== s?.account).map((a) => ({ account: String(a) })),
   };
 }

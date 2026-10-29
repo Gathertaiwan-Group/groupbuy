@@ -1,0 +1,47 @@
+{{!-- 會員點數紀錄彈窗（推導；openFormL('/backend/Customer/pointTransactions','customerId=…')） --}}
+<script type="text/javascript" class="init">
+	$(document).ready(function() {
+		$('#pointTransactionTable').DataTable( {
+			dom: 'rtip',
+			serverSide: true,
+			processing: true,
+			scrollX: true,
+			pageLength: 10,
+			ajax: {
+				url: '{{baseUrl}}/ajax/PointTransaction/list.do',
+				type: 'POST',
+				data: function(d) { d.customerId = {{json customer.customerId}}; }
+			},
+			language: DataTableConfig.i18n,
+			columns: [
+				DataTableConfig.data_input('dateCreatedString'),
+				DataTableConfig.data_input('reasonString'),
+				{ data: 'points', className: 'text-right', render: function(d) {
+					var n = Number(d);
+					return n < 0 ? '<span class="text-danger">' + n + '</span>' : '<span class="text-success">+' + n + '</span>';
+				} },
+				DataTableConfig.data_input('balanceAfter'),
+				DataTableConfig.data_input('salesOrderUuid'),
+				DataTableConfig.data_input('note'),
+			],
+			order: [[ 0, 'desc' ]],
+			select: false,
+		} );
+	} );
+</script><div class="card mt-4">
+<div class="card-header">點數紀錄：{{customer.firstname}}（{{customer.uuid}}）目前點數 {{customer.points}}</div>
+<div class="card-body">
+	<table id="pointTransactionTable" class="table table-striped display nowrap" width="100%">
+		<thead>
+			<tr>
+				<th>時間</th>
+				<th>類型</th>
+				<th>點數</th>
+				<th>異動後餘額</th>
+				<th>訂單編號</th>
+				<th>備註</th>
+			</tr>
+		</thead>
+	</table>
+</div>
+</div>
