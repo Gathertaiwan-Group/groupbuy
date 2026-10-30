@@ -1,5 +1,33 @@
-{{!-- 未串接 Google reCAPTCHA：原站載入 https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit。
-     原站 sitekey 綁原站網域，本系統改用相容樁：render 後立即回呼（顯示送出鈕），防濫用改由伺服器端限流負責。 --}}
+{{#if recaptchaV2SiteKey}}
+{{!-- #125：有設定 RECAPTCHA_SITE_KEY → 載入 Google reCAPTCHA v2（原站 api.js?onload=onloadCallback&render=explicit）。
+     頁面 render 呼叫寫的是原站 sitekey（綁原站網域），這裡把 render 換成本站 sitekey；伺服器端以 RECAPTCHA_SECRET_KEY 驗證 g-recaptcha-response。 --}}
+<script>
+var GB_RC_V2 = {{json recaptchaV2SiteKey}};
+window.gbRecaptchaOnload = function() {
+	if (!grecaptcha.gbPatched) {
+		var render = grecaptcha.render;
+		grecaptcha.render = function(id, o) { return render.call(grecaptcha, id, $.extend({}, o, { sitekey: GB_RC_V2 })); };
+		grecaptcha.gbPatched = true;
+	}
+	if (typeof onloadCallback === 'function') { onloadCallback(); }
+};
+if (window.grecaptcha && window.grecaptcha.render) {
+	// 已載入過（例如再次開啟彈窗）：等頁面 script 定義 onloadCallback 後直接執行
+	$(function() { setTimeout(window.gbRecaptchaOnload, 0); });
+} else {
+	(function() {
+		var s = document.createElement('script');
+		s.src = 'https://www.google.com/recaptcha/api.js?onload=gbRecaptchaOnload&render=explicit';
+		s.async = true;
+		s.defer = true;
+		document.head.appendChild(s);
+	})();
+}
+</script>
+{{else}}
+{{!-- 未設定 Google reCAPTCHA 金鑰：原站載入 https://www.google.com/recaptcha/api.js?onload=onloadCallback&render=explicit。
+     原站 sitekey 綁原站網域，本系統改用相容樁：render 後立即回呼（顯示送出鈕），防濫用改由伺服器端限流負責。
+     設定 RECAPTCHA_SITE_KEY／RECAPTCHA_SECRET_KEY 後改載入真的 reCAPTCHA（見上方分支，#125）。 --}}
 <script>
 var grecaptcha = window.grecaptcha || {
 	render: function(id, o) { if (o && typeof o.callback === 'function') { setTimeout(function() { o.callback(''); }, 0); } return 0; },
@@ -8,3 +36,4 @@ var grecaptcha = window.grecaptcha || {
 };
 $(function() { if (typeof onloadCallback === 'function') { onloadCallback(); } });
 </script>
+{{/if}}

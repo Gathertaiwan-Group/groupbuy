@@ -141,6 +141,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - Vercel：`vercel.json` regions `hnd1`；push main 自動部署；函式 `maxDuration 60s`；**請求本體上限 4.5MB**。
 - 排程：`vercel.json` crons 每日 16:05 UTC（台灣 00:05，Hobby 方案每日上限一次）呼叫 `/api/cron/run`（`lib/modules/core/cron.ts`）；以 Vercel env `CRON_SECRET` 驗證（`Authorization: Bearer`，未設定回 503）。工作（皆冪等）：跨租戶到期上下架/變價排程、排程發布文章、未完成線上付款的逾期確認（gatewayExpire，§13）、團購勾「自動取消逾期訂單」的逾期未付款訂單取消（歷程 [系統]）、通知（未付款提醒／低庫存）、Email／簡訊寄送（delivery，§12）、過期 session／90 天前登入紀錄清理。手動：`curl -H "Authorization: Bearer $CRON_SECRET" https://groupbuy-delta.vercel.app/api/cron/run[?jobs=schedulers,posts,gatewayExpire,autoCancel,notifications,delivery,einvoice,housekeeping]`。排程另由各頁惰性執行補足當日內的時間精度。
 - GitHub Actions `CI`：`npm ci` → `npm run typecheck` → `npm run build`（不帶 Supabase env，build 不得連 DB）；main push 時套用 migration（需 secrets）。
+- 補H：job `fresh-db` 以 CI 暫時 Postgres 17 從空庫一次套完全部 migration（`scripts/dev/fresh-db-apply.sh`，順序＝`node scripts/apply-migrations.mjs --print-order`，每檔一個交易）。`apply-migrations.mjs` 在檔名排序之外有明確依賴表 `DEPENDS_ON`（目前只有 0109 必須排在 3501 之後：0109 用到 3500 的表且覆寫 3501 的函式；依正式庫帳本 `applied_at` 的實際順序），只影響尚未套用的檔案，正式庫不受影響；已套用的檔不可改名／改內容，日後若再出現「小編號依賴大編號」就在 `DEPENDS_ON` 補一筆（單元測試 `lib/modules/core/tests/migration-order.test.mjs`）。
 - 本機 build 不覆蓋 dev：`NEXT_DIST_DIR=.next-build npm run build`（`next.config.mjs` 的 `distDir`），**build 完立刻 `rm -rf .next-build`**（多 agent 共用磁碟；守則見 MODULE_GUIDE §2）。
 
 ## 11. 安全注意
@@ -154,7 +155,7 @@ repo 內不含任何商業授權檔（檢查方式：grep `Editor-1.`、`dataTab
 - 請求解析：巢狀鍵只寫自有屬性（`toString[x]` 之類不會改到內建物件）、擋 `__proto__/prototype/constructor`；DataTables `iColumns`≤500、`iSortingCols`≤50。
 - crudRoutes：save/update/delete 端點只接受各自的 Editor action（沒有專屬端點的動作才由其他端點代收；可用 `actions` 收緊）。樂觀鎖條件放進 UPDATE（並行編輯只有一個成功）；列表排序最後補唯一鍵。
 - 密碼只存 bcrypt；登入失敗鎖定；帳號不存在時仍跑一次 bcrypt（避免時間差探測）。
-- 對外服務：收款預設 PChomePay 支付連（fix25），綠界收款可選；物流／電子發票串綠界（見 §13，皆預設沙盒）；Email／簡訊見 §12（未設定服務商時同樣不寄出）；FB、reCAPTCHA 未串接，回應帶 `【未串接】`。
+- 對外服務：收款預設 PChomePay 支付連（fix25），綠界收款可選；物流／電子發票串綠界（見 §13，皆預設沙盒）；Email／簡訊見 §12（未設定服務商時同樣不寄出）；FB 未串接，回應帶 `【未串接】`。Google reCAPTCHA（補H，`lib/integrations/recaptcha.ts`）：環境變數 `RECAPTCHA_SITE_KEY／RECAPTCHA_SECRET_KEY`（v2）、`RECAPTCHA_V3_SITE_KEY／RECAPTCHA_V3_SECRET_KEY`、`RECAPTCHA_V3_MIN_SCORE`（預設 0.5）有設定才檢查——後台登入（v3 環境檢測 → 不通過改 v2；通過發 10 分鐘 HMAC 憑證 cookie `gb_rcpass`）、前台訂單查詢兩個表單與「我想問問題」（v2）；未設定＝相容樁直接通過；已設定時 Google 連不上＝不通過（fail closed）。目前 Vercel 未設定（正式金鑰需 user 申請）。
 
 ## 12. Email／簡訊寄送（fix20，`lib/modules/core/delivery*.ts`）
 

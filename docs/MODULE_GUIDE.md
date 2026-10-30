@@ -412,6 +412,8 @@ const mod: ModuleDef = {
 - 編號區段：core `0100–0199`｜groupbuy `1000–1099`｜items `1100–1199`｜marketing `2000–2099`｜orders `3000–3099`｜accounting `3500–3599`｜shipping `4000–4099`｜warehouse `4500–4599`｜analytics `5000–5099`｜storefront `6000–6099`｜datamodel `0002–0099`。
 - 檔名 `supabase/migrations/<編號>_<名稱>.sql`；只動 `groupbuy` schema；**禁止 `supabase db push`**。寫完立刻本機套用：
   `set -a; . /private/tmp/claude-501/-Users-aimand--gemini-File/9ac28e44-feb6-4a4c-ac9a-183a8a62e2e5/scratchpad/secrets.env; set +a; node scripts/apply-migrations.mjs`
+- 套用順序＝檔名排序；某檔必須排在「編號較大」的另一檔之後（例：0109 用到 3500 的表、覆寫 3501 的函式）→ 在 `scripts/apply-migrations.mjs` 的 `DEPENDS_ON` 補一筆（不要改已套用檔的檔名）。CI job `fresh-db` 會從空庫一次套完全部 migration；本機：`PGHOST=<暫時 Postgres socket> PGPORT=<port> PGUSER=postgres scripts/dev/fresh-db-apply.sh`。
+- 回填既有資料的語句要冪等（只命中尚未回填的列）；「把 A 欄改成 B 欄現值」這類重跑會覆蓋新資料的寫法要另加守門（例：8106 擋重跑 4504 的回填）。
 - 新表：`enable row level security`、`revoke all … from anon, authenticated`、`grant all … to service_role`（sequence 也要），檔尾 `notify pgrst, 'reload schema';`。已套用的檔不可再改，改用新編號。
 - 加欄位/新表前先看 DATA_MODEL.md，避免和 datamodel 重複；新增的實體定義放在**你自己的目錄**（例 `lib/modules/orders/entities.ts`，型別用 `EntityDef`），不要改 `lib/db/entities/index.ts`。
 

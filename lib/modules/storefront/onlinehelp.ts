@@ -10,6 +10,7 @@ import { getServiceClient } from "@/lib/supabase/server";
 import { feVars, scopeFromTenantPath } from "./site";
 import { readCustomerSession } from "./customer-session";
 import { clean, ipOf, isEmail, rateLimit } from "./guard";
+import { RECAPTCHA_REQUIRED_MESSAGE, storefrontRecaptchaOk } from "@/lib/modules/core/recaptcha";
 
 async function showForm(ctx: RequestContext): Promise<Response> {
   const { tenant, groupBuy } = await scopeFromTenantPath(ctx);
@@ -39,6 +40,8 @@ async function send(ctx: RequestContext): Promise<Response> {
   const ip = ipOf(ctx);
   await rateLimit(`help:ip:${ip}`, 600, 5, "訊息送出太頻繁，請稍後再試");
   await rateLimit(`help:day:${tenant.id}:${ip}`, 86400, 30, "今日訊息已達上限，請明天再試");
+  // reCAPTCHA v2（#125；有設定金鑰才檢查）
+  if (!(await storefrontRecaptchaOk(ctx, f("g-recaptcha-response")))) throw badRequest(RECAPTCHA_REQUIRED_MESSAGE);
 
   const customer = await readCustomerSession(ctx, tenant.id);
   const db = getServiceClient();

@@ -63,11 +63,34 @@
 </div>
 
 <script>
-// 原站以 Google reCAPTCHA v3 做「環境檢測」；本系統未串接 Google reCAPTCHA，
-// 改由本站 /ajax/GoogleRecaptcha/verify 直接回應通過，流程與畫面相同。
+// 原站以 Google reCAPTCHA v3 做「環境檢測」，不通過才顯示 v2「我不是機器人」。
+// 本系統（#125）：環境變數有設定金鑰才載入 Google reCAPTCHA（RECAPTCHA_V3_SITE_KEY／RECAPTCHA_SITE_KEY），
+// 都未設定時 /ajax/GoogleRecaptcha/verify 直接回應通過（相容樁），流程與畫面相同。
 var login_recaptcha;
+var GB_RC_V3 = {{json recaptchaV3SiteKey}};
+var GB_RC_V2 = {{json recaptchaV2SiteKey}};
+var gbLoadRecaptcha = function(cb) {
+	if (window.grecaptcha && window.grecaptcha.render) { cb(); return; }
+	if (window.gbRecaptchaQueue) { window.gbRecaptchaQueue.push(cb); return; }
+	window.gbRecaptchaQueue = [cb];
+	window.gbRecaptchaLoaded = function() { var q = window.gbRecaptchaQueue; window.gbRecaptchaQueue = []; q.forEach(function(f) { f(); }); };
+	var s = document.createElement('script');
+	s.src = 'https://www.google.com/recaptcha/api.js?onload=gbRecaptchaLoaded&render=' + (GB_RC_V3 ? encodeURIComponent(GB_RC_V3) : 'explicit');
+	s.async = true;
+	s.defer = true;
+	document.head.appendChild(s);
+};
 var initReCaptchaV3 = function() {
-	verifyV3('not-integrated');
+	if (!GB_RC_V3) {
+		// 未設定 v3：未設定任何金鑰 → 伺服器直接通過；只有 v2 → 伺服器回 400 → 顯示 v2
+		verifyV3(GB_RC_V2 ? '' : 'not-integrated');
+		return;
+	}
+	gbLoadRecaptcha(function() {
+		grecaptcha.ready(function() {
+			grecaptcha.execute(GB_RC_V3, { action: 'login' }).then(verifyV3, function() { verifyV3(''); });
+		});
+	});
 }
 var verifyV3 = function(token) {
 	$('input[name=g-recaptcha-response-v3]').val('');
@@ -84,7 +107,9 @@ var verifyV3 = function(token) {
 		},
 		error: function(data, textStatus, jqXHR) {
 			initReCaptchaV2();
-			$('#AdminUserForm button[type=submit]').show();
+			if (!GB_RC_V2) {
+				$('#AdminUserForm button[type=submit]').show();
+			}
 		},
 		complete:function(jqXHR,textStatus) {
 			$('.div-env-check').remove();
@@ -94,8 +119,29 @@ var verifyV3 = function(token) {
 }
 
 var initReCaptchaV2 = function() {
-	// 未串接 Google reCAPTCHA v2
-	$('#AdminUserForm button[type=submit]').show();
+	if (!GB_RC_V2) {
+		// 未設定 v2 金鑰
+		$('#AdminUserForm button[type=submit]').show();
+		return;
+	}
+	$('#AdminUserForm button[type=submit]').hide();
+	gbLoadRecaptcha(function() {
+		if (login_recaptcha !== undefined) {
+			grecaptcha.reset(login_recaptcha);
+			return;
+		}
+		login_recaptcha = grecaptcha.render('login_recaptcha', {
+			'sitekey' : GB_RC_V2,
+			'theme' : 'light',
+			'callback' : function(response) {
+				$('#AdminUserForm button[type=submit]').show();
+			},
+			'expired-callback' : function() {
+				$('#AdminUserForm button[type=submit]').hide();
+			}
+		});
+		$('#login_recaptcha div').css('width', 'auto');
+	});
 };
 
 var onloadCallback = function() {
@@ -129,6 +175,9 @@ $(document).ready(function() {
 			countdownSubmit(json.data);
 		} else if (json.code == 400 && login_recaptcha == undefined) {
 			$('input[name=g-recaptcha-response-v3]').val('');
+			initReCaptchaV2();
+			return;
+		} else if (json.code == 400 && GB_RC_V2) {
 			initReCaptchaV2();
 			return;
 		}

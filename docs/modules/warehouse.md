@@ -107,6 +107,7 @@ DOM 骨架自查（主內容區，`node lib/modules/warehouse/tools/dom-compare.
 ## 補D（2026-10-29）：調撥在途庫存（PARITY #83）
 
 - migration `4504_wms_requisition_in_transit.sql`：`warehouse_requisition_items.received_quantity`（既有資料回填＝已調撥）、`warehouse_requisitions.date_received`、異動類型加 `TRANSFER_CANCEL`。
+  - **操作禁忌（補H）**：4504 的回填句 `update … set received_quantity = transferred_quantity where received_quantity <> transferred_quantity` 只在上線當下正確；上線後手動重跑會把所有在途數量直接標成已收貨、卻沒有加進調入倉＝**庫存消失**。CI 帳本 `schema_migrations` 會擋重複套用，但 SQL Editor 手動重跑擋不住 → migration `8106_buh_wms_received_quantity_guard.sql` 加守門觸發器：`received_quantity` 只能由 `wms_receive_requisition`（同交易設定 `groupbuy.wms_receive_requisition`＝調撥單 id）變更，其他任何 UPDATE（含重跑回填）拋錯回滾。若連 4504 的函式定義也被重跑（收貨函式換回舊版）→ 收貨會被守門擋下報錯（不壞帳），重跑 8106 即恢復。之後的回填一律寫成冪等（只命中「尚未回填」的列）。測試：`supabase/tests/buh_wms_guard_test.sql`。
 - `wms_transfer_requisition`：只扣調出倉（TRANSFER_OUT），數量成為在途（已調撥−已收貨）。
 - `wms_receive_requisition`（收貨）：在途數量加入調入倉（TRANSFER_IN），可分批；全數調撥且全數收貨 → 已收到（RECEIVED），否則維持調撥中。
 - `wms_cancel_requisition`（取消）：新申請／審核中／已批准／已駁回直接取消；調撥中且尚無收貨 → 在途退回調出倉（TRANSFER_CANCEL）後取消；已有收貨 → 拒絕（改用逆向調撥）。

@@ -31,8 +31,36 @@ jobs:
       # 不帶 Supabase env：頁面不得在 build 階段連 DB
       - run: npm run build
 
+  fresh-db:
+    # 全新 DB 一次套完全部 migration（scripts/apply-migrations.mjs 的順序、每檔一個交易；只用 CI 暫時 Postgres，不連正式庫）
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: bash scripts/dev/fresh-db-apply.sh
+
   migrate:
     # 只在 main 的 push 上、且 supabase/migrations/** 有變更時套用；secrets 不存在則各步驟跳過（job 不會失敗）
+    # 補H：build 與全新 DB 套用（fresh-db）都通過才套正式庫
+    needs: [build, fresh-db]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:

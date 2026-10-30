@@ -10,6 +10,7 @@ import { PLATFORM_THEME, TENANT_THEME, resolveTheme, type ThemePalette } from ".
 import type { CustomerSession } from "./customer-session";
 import { customerMenuHtml } from "./customer-menu";
 import { UI_TEXT, uiLang } from "./i18n";
+import { recaptchaVars } from "@/lib/modules/core/recaptcha";
 
 export interface SfTenant {
   id: number;
@@ -231,5 +232,6 @@ export function feVars(ctx: RequestContext, o: FeVarsOpts): Record<string, unkno
     customerMenuHtml: o.customer ? customerMenuHtml(gbfBaseUrl, o.customer) : "",
     uiLang: lang,
     ui: UI_TEXT[lang],
+    ...recaptchaVars(),
   };
 }

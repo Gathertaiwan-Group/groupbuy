@@ -28,8 +28,8 @@
 | 狀態 | 項數 |
 |---|---|
 | 完整 | 67 |
-| 部分 | 22 |
-| 缺 | 5 |
+| 部分 | 23 |
+| 缺 | 4 |
 | 推導 | 34 |
 | **合計** | **128** |
 
@@ -38,6 +38,7 @@
 （補C 2026-10-29：#10、#11、#91、#123 由「缺」改「推導」，上表已反映。）
 （補E 2026-10-29：#47 由「部分」改「推導」；#37、#46、#117、#123 補充內容但狀態不變；其餘「部分」逐項盤點結果見 §7「補E 盤點」。上表已反映。）
 （補F 2026-10-29：#37 由「部分」改「推導」（受限帳戶擴及全部後台請求與跨團購列表）；#91、#117、#123 補充內容但狀態不變。上表已反映。）
+（補H 2026-10-30：#125 由「缺」改「部分」（Google reCAPTCHA v2／v3 已串接，設定金鑰即生效，以 Google 測試金鑰本機實測；正式金鑰需 user 申請）；#2 補充內容但狀態不變（Facebook 登入仍未串接）；其餘「部分 22／缺 4」逐項重新盤點見 §7「補H 盤點」。上表已反映。）
 
 ## 2. 對照表
 
@@ -48,7 +49,7 @@
 | # | 模組 | 原站功能/端點 | 狀態 | 證據 | 補齊建議/工作量 |
 |---|---|---|---|---|---|
 | 1 | core | 後台首頁 `/backend/panel.do`（六張卡片、最新公告） | 完整 | lib/modules/core/routes.ts:20；spec/html/panel.html | — |
-| 2 | core | 登入／登出／keepalive／切換身分 `/ajax/AdminUser/login\|switchAdmin\|keepalive`、`/backend/AdminUser/logout` | 部分 | lib/modules/core/auth-api.ts:149；reCAPTCHA 直接通過 auth-api.ts:292；FB 登入 templates/core/login.html:110 | Google reCAPTCHA v3、Facebook 登入需外部帳號；L（外部） |
+| 2 | core | 登入／登出／keepalive／切換身分 `/ajax/AdminUser/login\|switchAdmin\|keepalive`、`/backend/AdminUser/logout` | 部分 | lib/modules/core/auth-api.ts:149；reCAPTCHA 補H 已串接（見 #125，未設定金鑰時直接通過）；FB 登入 templates/core/login.html | Facebook 登入需外部帳號；L（外部）；reCAPTCHA 正式金鑰〔外部〕 |
 | 3 | core | 登入認證碼（wtoken，管理員登入安全性設定） | 部分 | lib/modules/core/login-wtoken.ts；防呆 auth-api.ts:190 | 依賴 Email/簡訊實際可寄（見 #12）；S（設定） |
 | 4 | core | 修改密碼彈窗 `/backend/AdminUser/changePassword` | 完整 | lib/modules/core/routes.ts:41；spec/html/modal-adminuser-changepassword.html | — |
 | 5 | core | 系統通知彈窗 `/backend/SystemNotification/list`、`/ajax/AdminUser/info` | 完整 | lib/modules/core/routes.ts:45；spec/html/modal-systemnotification-list.html | — |
@@ -221,7 +222,7 @@
 |---|---|---|---|---|---|
 | 123 | orders/storefront | 後台會員管理：啟用/停用 `/ajax/Customer/activate\|deactivate`、Google Sheet 匯入貼標籤 `/ajax/Customer/importFromGoogleSheet`、會員點數方案（`customerRoyaltyProgramManager`） | 推導 | 補C：lib/modules/core/customers.ts、customers-logic.ts、templates/core/customer-list.html、modal-customer-pointtransactions.html、migration 0110（`customer_points_adjust`）；需 `permissions.customer`，側欄「設定 > 會員」。〔推導〕依據：原站 dataTable.api.min.js 的 `#customerTable`、啟動會員方案 Editor（方案／到期日「留空白則為當前開始算一年」／「將激活中帳號設為已啟用」→ activate；remove → deactivate）、貼標籤 Editor（rowStart/rowEnd）；頁面本身、Sheet 欄位格式未擷取 → 第 1 列標頭，依會員ID→Email→電話比對，匯入標籤（附加）／點數（加減）／備註；Sheet 用公開分享網址轉 CSV 匯出（不需 API 金鑰），另可上傳 CSV（UTF-8／Big5）。實測：啟用（空白到期日＝方案天數，VIP→2027-10-29）、停用、編輯標籤、點數調整（不可扣成負數、5 筆並行 -30 對餘額 100 恰 3 筆成功）、點數紀錄彈窗、CSV 匯入（找不到列、非整數點數逐列回報）、公開 Sheet 實際下載解析、未公開 Sheet 回明確提示。補E：購買會員方案商品自動加入會員方案——supabase/migrations/8102_bue_membership_purchase.sql（帳本 customer_royalty_grants；訂單付款完成／已完成且有會員 → 加入，同方案未到期從原到期日延長「天數×數量」、否則從參考時間〔第一次加入〕起算並改成此方案；取消／刪除／退貨完成／退款後未付清／改綁會員 → 撤銷並依帳本鏈重算，數量改變補扣差額，追加金額與退貨申請中不撤銷；0 元暫時狀態與上線前舊單不加入；重複 callback 不重複延長；訂單歷程寫 [會員方案]）；前台訪客購物袋含 RP 商品結帳前擋下請先登入（storefront/membership-logic.ts）；本機暫時 Postgres 測試 supabase/tests/bue_membership_test.sh（59 項斷言＋6 連線 20 秒壓力 0 死鎖）；正式庫 localhost 實測見 storefront.md「補E」。補F：點數調整單次上限 ±1,000,000（前端 Editor、parsePoints、DB customer_points_adjust 三層；原本 9 位數加點整數溢位 500），負餘額（回饋扣回）可加點、不可再扣點（migration 8104） | 停用為「取消會員方案」（customers 無停權欄位，前台登入屬 storefront）；原站畫面未擷取；購買後自動加入的時點與延長／撤銷規則為推導（原站送出訂單後流程未擷取） |
 |  124 | groupbuy | 匯入欄位對應 `/ajax/XLSHeaderParser/parse`（XLS 表頭解析） | 推導 | groupbuy/groupbuy-extras.ts `POST /ajax/XLSHeaderParser/parse`（Editor upload，.xls／.xlsx／.csv → 表頭選項 value＝欄位索引，ImportExcelEditorManager 依此預選；列資料暫存 xls_header_uploads 24 小時，loadXlsHeaderUpload() 供匯入端讀取，migration 1021）；xls-header.test.ts；補D 本機實測（補D） | 推導依據：原站 ImportExcelEditorManager 只有前端（dataTable.api.min.js），使用頁面未擷取，最終送出端點不明 |
-| 125 | core | Google reCAPTCHA（後台登入、前台） | 缺 | auth-api.ts:292、templates/storefront/partials/recaptcha-stub.html:1 | Google reCAPTCHA 金鑰；S（外部帳號） |
+| 125 | core | Google reCAPTCHA（後台登入、前台） | 部分 | 補H：lib/integrations/recaptcha.ts（siteverify、v3 分數門檻、登入短效憑證 HMAC）、lib/modules/core/recaptcha.ts、recaptcha.test.ts；後台登入 templates/core/login.html（v3 環境檢測 `/ajax/GoogleRecaptcha/verify` → 不通過改 v2「我不是機器人」，同原站流程；伺服器 `/ajax/AdminUser/login` 需憑證或 v2 結果，不計入登入失敗次數）；前台 templates/storefront/partials/recaptcha-stub.html（訂單查詢兩個表單、我想問問題；伺服器 order-query.ts、onlinehelp.ts 驗 `g-recaptcha-response`）。環境變數 `RECAPTCHA_SITE_KEY／RECAPTCHA_SECRET_KEY`（v2）、`RECAPTCHA_V3_SITE_KEY／RECAPTCHA_V3_SECRET_KEY`、`RECAPTCHA_V3_MIN_SCORE`；未設定＝維持相容樁。本機以 Google 公開測試金鑰實測：v2 勾選後登入成功、未勾選 400、v3 失敗自動改 v2、前台三個端點無 token 400／有 token 正常；無金鑰時行為與之前相同 | 正式 site key／secret 需 user 在 Google reCAPTCHA 後台申請並綁 groupbuy-delta 網域〔外部〕 |
 | 126 | core | 原站樣板文字：系統信樣板、通知信實際文字、進階設定完整鍵目錄 | 推導 | spec/SPEC.md §9 #9；migration 0103 寫通用文字（ARCHITECTURE.md §7） | 取得原站樣板後替換；S（推導） |
 | 127 | core | CSRF／session／租戶隔離（原站無對應，本系統補強） | 完整 | lib/core/http/csrf.ts；ARCHITECTURE.md §11 | — |
 | 128 | analytics | 統計表 Editor 新增/修改/刪除（原站按鈕已註解，端點保留） | 完整 | analytics.md §6；路由 `/ajax/ItemDailyStatistics\|SalesOrderMonthlyStatistics/save\|update\|delete` | — |
@@ -284,7 +285,7 @@
 - #8／#126 系統設定與系統信樣板與原站比對 — M〔推導〕
 - #12 Email 轉 `live`（設定）— S；簡訊服務商 — 〔外部〕
 - #9 服務商金鑰編輯器（綠界/LINE/Stripe/TrustPay/黑貓冷凍/發票）— L〔外部〕
-- #2／#125 reCAPTCHA、Facebook 登入 — S／M〔外部〕
+- ~~#125 reCAPTCHA~~ — 補H 已串接（設定金鑰即生效；正式金鑰〔外部〕）；#2 Facebook 登入 — M〔外部〕
 
 **groupbuy**
 - ~~#26 自定義備註同步到商品~~、~~#23 進階設定 feed 動作（商品 Feed）~~、~~#124 XLS 表頭解析~~ — 補D 已補（推導，見 §2）
@@ -352,12 +353,36 @@
 | 73 | 不能補 | Google Geocoding 金鑰 |
 | 99、101、103、120 | 不能補 | 正式金流／發票特店、其他金流服務商、POS 硬體 |
 
+**補H 盤點（「部分 22／缺 5」逐項重判，2026-10-30）**
+
+判準：能用既有沙盒（PChomePay sandbox、綠界 Stage）、本機可模擬、或純前端／後台 UI 完成的就補；需外部 live 金鑰、原站私有服務、原站高權限擷取的維持原狀。
+
+| # | 狀態 | 結論 | 原因／證據 |
+|---|---|---|---|
+| 125 | 缺 → 部分 | **已補** | reCAPTCHA v2／v3 程式串接完成，Google 公開測試金鑰可本機模擬全流程（見 #125）；只差 user 的正式金鑰 |
+| 2 | 部分 | reCAPTCHA 部分已補；其餘不能補 | Facebook 登入需 Facebook App（外部帳號＋平台審核） |
+| 3、12、111 | 部分 | 不能補（設定） | 白名單外寄信須 user 決定轉 `live`（規則：不寄白名單外信件）；簡訊需服務商帳號 |
+| 17、35、122 | 部分／缺 | 不能補 | Facebook App＋社團權限〔外部〕 |
+| 20、77、78 | 部分 | 不能補 | 簡訊服務商帳號〔外部〕；後台介面與紀錄已完整 |
+| 21、55 | 部分 | 不能補 | 原站私有服務（kol.gbf.tw、uuo.io） |
+| 22 | 部分 | 不能補 | 25 處推導段需原站被擷取過濾擋下的 inline script（需原站高權限擷取，不可繞過） |
+| 44 | 部分 | 不建議補 | 抓取外部商品頁有法律／穩定性風險（技術上可做，但非沙盒可驗證的原站行為） |
+| 56 | 部分 | 隨 #12、#80 | 本身無缺口，寄信／取號依賴外部服務 |
+| 66 | 部分 | 不能補 | ReAuth 已接綠界 Stage；正式特店〔外部〕；`reauthCreditCardPeriod2` 原站沒有 UI 呼叫 |
+| 73 | 部分 | 不能補 | Google Geocoding 金鑰〔外部〕（改用免金鑰的 OSM 會偏離原站且台灣地址品質差） |
+| 80、108 | 部分 | 不能補 | 已接綠界 Stage；正式物流特店〔外部〕 |
+| 99 | 部分 | 不能補 | 已接綠界 Stage 開立／作廢／折讓；正式發票特店〔外部〕 |
+| 101、103 | 部分 | 不能補 | PChomePay／綠界皆沙盒；PChomePay sandbox 退款成功路徑本次因可提領餘額 0（`/v1/balance`：all 300、available 0、processing 300）無法實測（每筆退款需 ≥ 退款金額＋15 元手續費）；其他金流服務商〔外部〕 |
+| 120 | 部分 | 不能補 | POS 刷卡機／發票機硬體與發票服務商〔外部〕 |
+| 9 | 缺 | 不能補 | 讓租戶自填服務商金鑰需加密存放＋各服務商正式帳號；目前刻意只放環境變數（安全設計），且無原站畫面（系統設定原站無權限） |
+| 67、69 | 缺 | 不能補 | TPL 物流平台、ERP 平台帳號〔外部〕；#69 入口未擷取 |
+
 ### 不能補（或補了無法對齊原站）的項目
 
 | 項目 | 原因 |
 |---|---|
 | KOL 平台（kol.gbf.tw）、uuo.io 短網址、原站 CDN/FB App | 原站業者私有服務，無法取得帳號 |
-| Facebook 登入／Graph API、Google reCAPTCHA、Google Geocoding | 需 user 自己申請 App/金鑰並通過平台審核 |
+| Facebook 登入／Graph API、Google Geocoding；Google reCAPTCHA 正式金鑰（程式已串接，補H） | 需 user 自己申請 App/金鑰並通過平台審核 |
 | 金流正式收款（PChomePay 正式、綠界正式特店、藍新/玉山/Stripe/TrustPay/LINE Pay 正式）、悠遊付 | 需商店正式帳號；悠遊付無公開 API |
 | 綠界正式物流、TPL、ERP 建單、黑貓冷凍（otrack） | 需物流/ERP 平台帳號 |
 | 電子發票正式開立、POS 發票機/刷卡機 | 需發票服務商正式特店與硬體 |

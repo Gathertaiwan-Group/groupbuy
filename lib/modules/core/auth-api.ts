@@ -19,6 +19,7 @@ import { parseEditorRequest, editorResponse } from "@/lib/core/editor/protocol";
 import { getAdminSecurity } from "./system-settings";
 import { MESSAGE_DELIVERY, needsWtoken, wtokenDeliverable, type MessageDelivery } from "./system-settings-logic";
 import { addIpWhitelist, ipWhitelisted, issueWtoken, verifyWtoken } from "./login-wtoken";
+import { RECAPTCHA_REQUIRED_MESSAGE, adminLoginRecaptchaOk, recaptchaVerifyHandler } from "./recaptcha";
 import { deliveryStatus } from "./delivery";
 
 const MAX_FAILURES = 5; // 同帳號 15 分鐘內失敗上限
@@ -155,6 +156,10 @@ export async function login(ctx: RequestContext): Promise<Response> {
   if (!username || !password) {
     return json({ code: 401, error: "請輸入帳號及密碼" }, { status: 401 });
   }
+  // reCAPTCHA（#125；有設定金鑰才檢查）：未通過 → 400（登入頁改顯示 v2「我不是機器人」）；不計入登入失敗次數
+  if (!(await adminLoginRecaptchaOk(ctx))) {
+    return json({ code: 400, error: RECAPTCHA_REQUIRED_MESSAGE }, { status: 400 });
+  }
   const gate = await openAttempt(ctx, username);
   if (gate.attemptId === null) {
     return json({ code: 429, error: `登入失敗次數過多，請於 ${gate.wait} 秒後再試`, data: gate.wait }, { status: 429 });
@@ -289,9 +294,9 @@ export async function resendWtoken(ctx: RequestContext): Promise<Response> {
   return json({ code: 485, error: r.issued ? wtokenIssuedMsg(r.sent) : `已產生認證碼，請於 ${r.wait} 秒後再重送`, data: r.wait }, { status: 485 });
 }
 
-/** POST /ajax/GoogleRecaptcha/verify（未串接 Google reCAPTCHA：直接通過） */
-export async function recaptchaVerify(): Promise<Response> {
-  return json({ success: true, notIntegrated: true });
+/** POST /ajax/GoogleRecaptcha/verify（#125：未設定金鑰＝直接通過；有 v3 金鑰＝驗分數，見 ./recaptcha.ts） */
+export async function recaptchaVerify(ctx: RequestContext): Promise<Response> {
+  return recaptchaVerifyHandler(ctx);
 }
 
 /**

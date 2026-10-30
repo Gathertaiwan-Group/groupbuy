@@ -10,6 +10,7 @@ import { readCustomerSession } from "./customer-session";
 import { clean, ipOf, isEmail, rateAllowed, rateLimit, rateRecord } from "./guard";
 import { grantOrderView, hasOrderViewGrant } from "./order-grant";
 import { renderOrderDetail } from "./order-detail";
+import { RECAPTCHA_REQUIRED_MESSAGE, storefrontRecaptchaOk } from "@/lib/modules/core/recaptcha";
 
 export async function renderOrderQueryPage(
   ctx: RequestContext,
@@ -58,6 +59,10 @@ async function showPost(ctx: RequestContext): Promise<Response> {
   if (!(await rateAllowed(failKey, 900, 10))) {
     return renderOrderQueryPage(ctx, gb, { message: "查詢失敗次數過多，請 15 分鐘後再試", prefillUuid: uuid, status: 429 });
   }
+  // reCAPTCHA v2（#125；有設定金鑰才檢查）
+  if (!(await storefrontRecaptchaOk(ctx, b.flat.get("g-recaptcha-response")?.[0]))) {
+    return renderOrderQueryPage(ctx, gb, { message: RECAPTCHA_REQUIRED_MESSAGE, prefillUuid: uuid, status: 400 });
+  }
   const order = uuid && UUID_RE.test(uuid) ? await findOrder(tenant.id, uuid) : null;
   const ok = !!order && digits(tel).length >= 6 && digits(order.customer_telephone) === digits(tel);
   if (!ok) {
@@ -100,6 +105,7 @@ async function queryUuid(ctx: RequestContext): Promise<Response> {
   if (!name || !email) throw badRequest("請輸入顧客姓名與顧客Email");
   if (!isEmail(email)) throw badRequest("email格式不正確，是否拼錯字，或是沒有帶小老鼠@呢？");
   await rateLimit(`queryuuid:ip:${ipOf(ctx)}`, 900, 10, "查詢太頻繁，請 15 分鐘後再試");
+  if (!(await storefrontRecaptchaOk(ctx, await ctx.param("g-recaptcha-response")))) throw badRequest(RECAPTCHA_REQUIRED_MESSAGE);
   const since = new Date(Date.now() - 92 * 24 * 3600 * 1000).toISOString();
   const db = getServiceClient();
   const out = new Set<string>();
